@@ -1,0 +1,651 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 63;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		ED3CAF892BEE94DB00C81D65 /* SimpleBitcoinWalletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3CAF882BEE94DB00C81D65 /* SimpleBitcoinWalletApp.swift */; };
+		ED3CAF8B2BEE94DB00C81D65 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3CAF8A2BEE94DB00C81D65 /* ContentView.swift */; };
+		ED3CAF8D2BEE94DB00C81D65 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ED3CAF8C2BEE94DB00C81D65 /* Assets.xcassets */; };
+		ED3CAF912BEE94DB00C81D65 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ED3CAF902BEE94DB00C81D65 /* Preview Assets.xcassets */; };
+		ED3CAF9B2BEE94DB00C81D65 /* SimpleBitcoinWalletTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3CAF9A2BEE94DB00C81D65 /* SimpleBitcoinWalletTests.swift */; };
+		ED3CAFA52BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3CAFA42BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.swift */; };
+		ED3CAFA72BEE94DC00C81D65 /* SimpleBitcoinWalletUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED3CAFA62BEE94DC00C81D65 /* SimpleBitcoinWalletUITestsLaunchTests.swift */; };
+		ED3CAFB52BEE9B3D00C81D65 /* BitcoinDevKit in Frameworks */ = {isa = PBXBuildFile; productRef = ED3CAFB42BEE9B3D00C81D65 /* BitcoinDevKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		ED3CAF972BEE94DB00C81D65 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED3CAF7D2BEE94DB00C81D65 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ED3CAF842BEE94DB00C81D65;
+			remoteInfo = SimpleBitcoinWallet;
+		};
+		ED3CAFA12BEE94DB00C81D65 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED3CAF7D2BEE94DB00C81D65 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ED3CAF842BEE94DB00C81D65;
+			remoteInfo = SimpleBitcoinWallet;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		ED3CAF852BEE94DB00C81D65 /* SimpleBitcoinWallet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SimpleBitcoinWallet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED3CAF882BEE94DB00C81D65 /* SimpleBitcoinWalletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleBitcoinWalletApp.swift; sourceTree = "<group>"; };
+		ED3CAF8A2BEE94DB00C81D65 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		ED3CAF8C2BEE94DB00C81D65 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		ED3CAF8E2BEE94DB00C81D65 /* SimpleBitcoinWallet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SimpleBitcoinWallet.entitlements; sourceTree = "<group>"; };
+		ED3CAF902BEE94DB00C81D65 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		ED3CAF962BEE94DB00C81D65 /* SimpleBitcoinWalletTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SimpleBitcoinWalletTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED3CAF9A2BEE94DB00C81D65 /* SimpleBitcoinWalletTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleBitcoinWalletTests.swift; sourceTree = "<group>"; };
+		ED3CAFA02BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SimpleBitcoinWalletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED3CAFA42BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleBitcoinWalletUITests.swift; sourceTree = "<group>"; };
+		ED3CAFA62BEE94DC00C81D65 /* SimpleBitcoinWalletUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleBitcoinWalletUITestsLaunchTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		ED3CAF822BEE94DB00C81D65 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED3CAFB52BEE9B3D00C81D65 /* BitcoinDevKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED3CAF932BEE94DB00C81D65 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED3CAF9D2BEE94DB00C81D65 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ED3CAF7C2BEE94DB00C81D65 = {
+			isa = PBXGroup;
+			children = (
+				ED3CAF872BEE94DB00C81D65 /* SimpleBitcoinWallet */,
+				ED3CAF992BEE94DB00C81D65 /* SimpleBitcoinWalletTests */,
+				ED3CAFA32BEE94DB00C81D65 /* SimpleBitcoinWalletUITests */,
+				ED3CAF862BEE94DB00C81D65 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		ED3CAF862BEE94DB00C81D65 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				ED3CAF852BEE94DB00C81D65 /* SimpleBitcoinWallet.app */,
+				ED3CAF962BEE94DB00C81D65 /* SimpleBitcoinWalletTests.xctest */,
+				ED3CAFA02BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		ED3CAF872BEE94DB00C81D65 /* SimpleBitcoinWallet */ = {
+			isa = PBXGroup;
+			children = (
+				ED3CAF882BEE94DB00C81D65 /* SimpleBitcoinWalletApp.swift */,
+				ED3CAF8A2BEE94DB00C81D65 /* ContentView.swift */,
+				ED3CAF8C2BEE94DB00C81D65 /* Assets.xcassets */,
+				ED3CAF8E2BEE94DB00C81D65 /* SimpleBitcoinWallet.entitlements */,
+				ED3CAF8F2BEE94DB00C81D65 /* Preview Content */,
+			);
+			path = SimpleBitcoinWallet;
+			sourceTree = "<group>";
+		};
+		ED3CAF8F2BEE94DB00C81D65 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				ED3CAF902BEE94DB00C81D65 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		ED3CAF992BEE94DB00C81D65 /* SimpleBitcoinWalletTests */ = {
+			isa = PBXGroup;
+			children = (
+				ED3CAF9A2BEE94DB00C81D65 /* SimpleBitcoinWalletTests.swift */,
+			);
+			path = SimpleBitcoinWalletTests;
+			sourceTree = "<group>";
+		};
+		ED3CAFA32BEE94DB00C81D65 /* SimpleBitcoinWalletUITests */ = {
+			isa = PBXGroup;
+			children = (
+				ED3CAFA42BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.swift */,
+				ED3CAFA62BEE94DC00C81D65 /* SimpleBitcoinWalletUITestsLaunchTests.swift */,
+			);
+			path = SimpleBitcoinWalletUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		ED3CAF842BEE94DB00C81D65 /* SimpleBitcoinWallet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED3CAFAA2BEE94DC00C81D65 /* Build configuration list for PBXNativeTarget "SimpleBitcoinWallet" */;
+			buildPhases = (
+				ED3CAF812BEE94DB00C81D65 /* Sources */,
+				ED3CAF822BEE94DB00C81D65 /* Frameworks */,
+				ED3CAF832BEE94DB00C81D65 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SimpleBitcoinWallet;
+			packageProductDependencies = (
+				ED3CAFB42BEE9B3D00C81D65 /* BitcoinDevKit */,
+			);
+			productName = SimpleBitcoinWallet;
+			productReference = ED3CAF852BEE94DB00C81D65 /* SimpleBitcoinWallet.app */;
+			productType = "com.apple.product-type.application";
+		};
+		ED3CAF952BEE94DB00C81D65 /* SimpleBitcoinWalletTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED3CAFAD2BEE94DC00C81D65 /* Build configuration list for PBXNativeTarget "SimpleBitcoinWalletTests" */;
+			buildPhases = (
+				ED3CAF922BEE94DB00C81D65 /* Sources */,
+				ED3CAF932BEE94DB00C81D65 /* Frameworks */,
+				ED3CAF942BEE94DB00C81D65 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ED3CAF982BEE94DB00C81D65 /* PBXTargetDependency */,
+			);
+			name = SimpleBitcoinWalletTests;
+			productName = SimpleBitcoinWalletTests;
+			productReference = ED3CAF962BEE94DB00C81D65 /* SimpleBitcoinWalletTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		ED3CAF9F2BEE94DB00C81D65 /* SimpleBitcoinWalletUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED3CAFB02BEE94DC00C81D65 /* Build configuration list for PBXNativeTarget "SimpleBitcoinWalletUITests" */;
+			buildPhases = (
+				ED3CAF9C2BEE94DB00C81D65 /* Sources */,
+				ED3CAF9D2BEE94DB00C81D65 /* Frameworks */,
+				ED3CAF9E2BEE94DB00C81D65 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ED3CAFA22BEE94DB00C81D65 /* PBXTargetDependency */,
+			);
+			name = SimpleBitcoinWalletUITests;
+			productName = SimpleBitcoinWalletUITests;
+			productReference = ED3CAFA02BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		ED3CAF7D2BEE94DB00C81D65 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1530;
+				LastUpgradeCheck = 1530;
+				TargetAttributes = {
+					ED3CAF842BEE94DB00C81D65 = {
+						CreatedOnToolsVersion = 15.3;
+					};
+					ED3CAF952BEE94DB00C81D65 = {
+						CreatedOnToolsVersion = 15.3;
+						TestTargetID = ED3CAF842BEE94DB00C81D65;
+					};
+					ED3CAF9F2BEE94DB00C81D65 = {
+						CreatedOnToolsVersion = 15.3;
+						TestTargetID = ED3CAF842BEE94DB00C81D65;
+					};
+				};
+			};
+			buildConfigurationList = ED3CAF802BEE94DB00C81D65 /* Build configuration list for PBXProject "SimpleBitcoinWallet" */;
+			compatibilityVersion = "Xcode 15.3";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = ED3CAF7C2BEE94DB00C81D65;
+			packageReferences = (
+				ED3CAFB32BEE9B3D00C81D65 /* XCRemoteSwiftPackageReference "bdk-swift" */,
+			);
+			productRefGroup = ED3CAF862BEE94DB00C81D65 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				ED3CAF842BEE94DB00C81D65 /* SimpleBitcoinWallet */,
+				ED3CAF952BEE94DB00C81D65 /* SimpleBitcoinWalletTests */,
+				ED3CAF9F2BEE94DB00C81D65 /* SimpleBitcoinWalletUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		ED3CAF832BEE94DB00C81D65 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED3CAF912BEE94DB00C81D65 /* Preview Assets.xcassets in Resources */,
+				ED3CAF8D2BEE94DB00C81D65 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED3CAF942BEE94DB00C81D65 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED3CAF9E2BEE94DB00C81D65 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		ED3CAF812BEE94DB00C81D65 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED3CAF8B2BEE94DB00C81D65 /* ContentView.swift in Sources */,
+				ED3CAF892BEE94DB00C81D65 /* SimpleBitcoinWalletApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED3CAF922BEE94DB00C81D65 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED3CAF9B2BEE94DB00C81D65 /* SimpleBitcoinWalletTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED3CAF9C2BEE94DB00C81D65 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED3CAFA72BEE94DC00C81D65 /* SimpleBitcoinWalletUITestsLaunchTests.swift in Sources */,
+				ED3CAFA52BEE94DB00C81D65 /* SimpleBitcoinWalletUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ED3CAF982BEE94DB00C81D65 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ED3CAF842BEE94DB00C81D65 /* SimpleBitcoinWallet */;
+			targetProxy = ED3CAF972BEE94DB00C81D65 /* PBXContainerItemProxy */;
+		};
+		ED3CAFA22BEE94DB00C81D65 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ED3CAF842BEE94DB00C81D65 /* SimpleBitcoinWallet */;
+			targetProxy = ED3CAFA12BEE94DB00C81D65 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		ED3CAFA82BEE94DC00C81D65 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		ED3CAFA92BEE94DC00C81D65 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		ED3CAFAB2BEE94DC00C81D65 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SimpleBitcoinWallet/SimpleBitcoinWallet.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"SimpleBitcoinWallet/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BitcoinPPL.org.SimpleBitcoinWallet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ED3CAFAC2BEE94DC00C81D65 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SimpleBitcoinWallet/SimpleBitcoinWallet.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"SimpleBitcoinWallet/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BitcoinPPL.org.SimpleBitcoinWallet;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		ED3CAFAE2BEE94DC00C81D65 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BitcoinPPL.org.SimpleBitcoinWalletTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SimpleBitcoinWallet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SimpleBitcoinWallet";
+			};
+			name = Debug;
+		};
+		ED3CAFAF2BEE94DC00C81D65 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BitcoinPPL.org.SimpleBitcoinWalletTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SimpleBitcoinWallet.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SimpleBitcoinWallet";
+			};
+			name = Release;
+		};
+		ED3CAFB12BEE94DC00C81D65 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BitcoinPPL.org.SimpleBitcoinWalletUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SimpleBitcoinWallet;
+			};
+			name = Debug;
+		};
+		ED3CAFB22BEE94DC00C81D65 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MACOSX_DEPLOYMENT_TARGET = 14.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = BitcoinPPL.org.SimpleBitcoinWalletUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = SimpleBitcoinWallet;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		ED3CAF802BEE94DB00C81D65 /* Build configuration list for PBXProject "SimpleBitcoinWallet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED3CAFA82BEE94DC00C81D65 /* Debug */,
+				ED3CAFA92BEE94DC00C81D65 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED3CAFAA2BEE94DC00C81D65 /* Build configuration list for PBXNativeTarget "SimpleBitcoinWallet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED3CAFAB2BEE94DC00C81D65 /* Debug */,
+				ED3CAFAC2BEE94DC00C81D65 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED3CAFAD2BEE94DC00C81D65 /* Build configuration list for PBXNativeTarget "SimpleBitcoinWalletTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED3CAFAE2BEE94DC00C81D65 /* Debug */,
+				ED3CAFAF2BEE94DC00C81D65 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED3CAFB02BEE94DC00C81D65 /* Build configuration list for PBXNativeTarget "SimpleBitcoinWalletUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED3CAFB12BEE94DC00C81D65 /* Debug */,
+				ED3CAFB22BEE94DC00C81D65 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		ED3CAFB32BEE9B3D00C81D65 /* XCRemoteSwiftPackageReference "bdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/bitcoindevkit/bdk-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.31.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ED3CAFB42BEE9B3D00C81D65 /* BitcoinDevKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ED3CAFB32BEE9B3D00C81D65 /* XCRemoteSwiftPackageReference "bdk-swift" */;
+			productName = BitcoinDevKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = ED3CAF7D2BEE94DB00C81D65 /* Project object */;
+}
