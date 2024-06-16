@@ -1,0 +1,7 @@
+[bindings.swift]
+cdylib_name = "coveffi"
+
+[bindings.kotlin]
+package_name = "org.bitcoinppl.cove"
+cdylib_name = "coveffi"
+
