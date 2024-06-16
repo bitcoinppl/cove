@@ -9,14 +9,13 @@ import SwiftUI
 
 @main
 struct CoveApp: App {
-    @State var rust: ViewModel;
-    
+    @State var rust: MainViewModel
+
     public init() {
-        self.rust = ViewModel()
+        self.rust = MainViewModel()
     }
 
     var body: some Scene {
-
         WindowGroup {
             HStack {
                 Button(action: {
@@ -24,19 +23,12 @@ struct CoveApp: App {
                 }) {
                     Text("Cove")
                 }
-                Button(action: {
-                    self.rust.dispatch(event: .setRoute(route: Route.timer))
-                }) {
-                    Text("Timer")
-                }
             }
             Text(String(describing: self.rust.router.route))
 
             switch rust.router.route {
             case .cove:
                 Cove(rust: self.rust)
-            case .timer:
-                Timer(rust: self.rust)
             }
         }
     }

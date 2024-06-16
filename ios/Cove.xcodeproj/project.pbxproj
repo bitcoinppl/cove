@@ -13,8 +13,7 @@
 		D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F512C0F7B4E0042B447 /* CoveView.swift */; };
 		D0245F542C0F7B500042B447 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0245F532C0F7B500042B447 /* Assets.xcassets */; };
 		D0245F572C0F7B500042B447 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0245F562C0F7B500042B447 /* Preview Assets.xcassets */; };
-		D0BE2EBC2C1613F20055FCBE /* Timer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BE2EBB2C1613F20055FCBE /* Timer.swift */; };
-		D0BE2EBE2C1614150055FCBE /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BE2EBD2C1614150055FCBE /* ViewModel.swift */; };
+		D0BE2EBE2C1614150055FCBE /* MainViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,8 +24,7 @@
 		D0245F512C0F7B4E0042B447 /* CoveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoveView.swift; sourceTree = "<group>"; };
 		D0245F532C0F7B500042B447 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D0245F562C0F7B500042B447 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		D0BE2EBB2C1613F20055FCBE /* Timer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timer.swift; sourceTree = "<group>"; };
-		D0BE2EBD2C1614150055FCBE /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
+		D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,13 +59,12 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
-				D0BE2EBB2C1613F20055FCBE /* Timer.swift */,
 				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
 				D0245F552C0F7B500042B447 /* Preview Content */,
-				D0BE2EBD2C1614150055FCBE /* ViewModel.swift */,
+				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 			);
 			indentWidth = 4;
 			path = Cove;
@@ -173,11 +170,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D0BE2EBE2C1614150055FCBE /* ViewModel.swift in Sources */,
+				D0BE2EBE2C1614150055FCBE /* MainViewModel.swift in Sources */,
 				D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */,
 				D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */,
 				D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */,
-				D0BE2EBC2C1613F20055FCBE /* Timer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 crate_type = ["cdylib", "staticlib"]
-name = "coveffi"
+name = "cove"
 
 [[bin]]
 name = "uniffi-bindgen"
@@ -26,7 +26,6 @@ tokio = { version = "1.38", features = ["rt"] }
 env_logger = "0.11.0"
 log = "0.4.21"
 
-
 # bindings
 uniffi = { version = "=0.28" }
 
@@ -34,4 +33,4 @@ uniffi = { version = "=0.28" }
 uniffi = { version = "=0.28", features = ["build"] }
 
 [dev-dependencies]
-uniffi = { version = "=0.28", features = ["bindgen-tests", "cli"] }
+uniffi = { version = "=0.28", features = ["bindgen-tests"] }

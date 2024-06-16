@@ -18,7 +18,6 @@ pub enum Event {
 
 #[derive(uniffi::Enum)]
 pub enum Update {
-    CountChanged { count: i32 },
     RouterUpdate { router: Router },
 }
 
@@ -66,7 +65,6 @@ impl Router {
 
 #[derive(Clone, uniffi::Record)]
 pub struct AppState {
-    count: i32,
     router: Router,
 }
 
@@ -74,7 +72,6 @@ impl_default_for!(AppState);
 impl AppState {
     pub fn new() -> Self {
         Self {
-            count: 0,
             router: Router::new(),
         }
     }
@@ -96,6 +93,7 @@ impl App {
         // one time init
         init_logging();
 
+        // Set up the updater channel
         let (sender, receiver): (Sender<Update>, Receiver<Update>) =
             crossbeam::channel::bounded(1000);
 
@@ -140,6 +138,7 @@ impl App {
         match event {
             Event::SetRoute { route } => {
                 let mut state = state.write().unwrap();
+
                 state.router.route = route;
                 Updater::send_update(Update::RouterUpdate {
                     router: state.router.clone(),
@@ -150,6 +149,7 @@ impl App {
 
     pub fn listen_for_updates(&self, updater: Box<dyn FfiUpdater>) {
         let update_receiver = self.update_receiver.clone();
+
         std::thread::spawn(move || {
             while let Ok(field) = update_receiver.recv() {
                 updater.update(field);
@@ -191,6 +191,7 @@ impl FfiApp {
 impl FfiApp {
     /// Fetch global instance of the app, or create one if it doesn't exist
     fn inner(&self) -> &App {
+        log::debug!("[rust] inner");
         App::global()
     }
 }

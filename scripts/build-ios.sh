@@ -9,8 +9,10 @@ BUILD_TYPE=$1
 echo "Building for $BUILD_TYPE"
 if [ "$BUILD_TYPE" == "release" ] || [ "$BUILD_TYPE" == "--release" ]; then
     BUILD_FLAG="--release"
+    BUILD_TYPE="release"
 elif [ "$BUILD_TYPE" == "debug" ] || [ "$BUILD_TYPE" == "--debug" ] ; then
     BUILD_FLAG=""
+    BUILD_TYPE="debug"
 else
     BUILD_FLAG="--profile $BUILD_TYPE"
 fi
@@ -47,7 +49,7 @@ mv ./bindings/cove.swift ./ios/Cove/Cove.swift
 rm -rf "ios/Cove.xcframework" || true
         # -library ./target/aarch64-apple-ios/release/libcove.a -headers ./bindings \
 xcodebuild -create-xcframework \
-        -library ./target/aarch64-apple-ios-sim/release/libcove.a -headers ./bindings \
+        -library ./target/aarch64-apple-ios-sim/$BUILD_TYPE/libcove.a -headers ./bindings \
         -output "ios/Cove.xcframework"
  
 # Cleanup
