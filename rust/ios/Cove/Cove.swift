@@ -442,6 +442,10 @@ private struct FfiConverterString: FfiConverter {
 
 public protocol DatabaseProtocol: AnyObject {
     func getBoolConfig(key: GlobalBoolConfigKey) throws -> Bool
+
+    func setBoolConfig(key: GlobalBoolConfigKey, value: Bool) throws
+
+    func toggleBoolConfig(key: GlobalBoolConfigKey) throws
 }
 
 open class Database:
@@ -496,6 +500,19 @@ open class Database:
             uniffi_cove_fn_method_database_get_bool_config(self.uniffiClonePointer(),
                                                            FfiConverterTypeGlobalBoolConfigKey.lower(key), $0)
         })
+    }
+
+    open func setBoolConfig(key: GlobalBoolConfigKey, value: Bool) throws { try rustCallWithError(FfiConverterTypeError.lift) {
+        uniffi_cove_fn_method_database_set_bool_config(self.uniffiClonePointer(),
+                                                       FfiConverterTypeGlobalBoolConfigKey.lower(key),
+                                                       FfiConverterBool.lower(value), $0)
+    }
+    }
+
+    open func toggleBoolConfig(key: GlobalBoolConfigKey) throws { try rustCallWithError(FfiConverterTypeError.lift) {
+        uniffi_cove_fn_method_database_toggle_bool_config(self.uniffiClonePointer(),
+                                                          FfiConverterTypeGlobalBoolConfigKey.lower(key), $0)
+    }
     }
 }
 
@@ -849,7 +866,7 @@ extension Event: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum GlobalBoolConfigKey {
-    case firstTimeLaunch
+    case completedOnboarding
 }
 
 public struct FfiConverterTypeGlobalBoolConfigKey: FfiConverterRustBuffer {
@@ -858,7 +875,7 @@ public struct FfiConverterTypeGlobalBoolConfigKey: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GlobalBoolConfigKey {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .firstTimeLaunch
+        case 1: return .completedOnboarding
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -866,7 +883,7 @@ public struct FfiConverterTypeGlobalBoolConfigKey: FfiConverterRustBuffer {
 
     public static func write(_ value: GlobalBoolConfigKey, into buf: inout [UInt8]) {
         switch value {
-        case .firstTimeLaunch:
+        case .completedOnboarding:
             writeInt(&buf, Int32(1))
         }
     }
@@ -925,6 +942,7 @@ extension Route: Equatable, Hashable {}
 public enum Update {
     case routerUpdate(router: Router
     )
+    case databaseUpdate
 }
 
 public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
@@ -936,6 +954,8 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
         case 1: return try .routerUpdate(router: FfiConverterTypeRouter.read(from: &buf)
             )
 
+        case 2: return .databaseUpdate
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -945,6 +965,9 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
         case let .routerUpdate(router):
             writeInt(&buf, Int32(1))
             FfiConverterTypeRouter.write(router, into: &buf)
+
+        case .databaseUpdate:
+            writeInt(&buf, Int32(2))
         }
     }
 }
@@ -1068,6 +1091,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_database_get_bool_config() != 51514 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_database_set_bool_config() != 60463 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_database_toggle_bool_config() != 31033 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_dispatch() != 2014 {

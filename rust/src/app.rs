@@ -36,7 +36,7 @@ impl App {
     /// Create a new instance of the app
     pub fn new() -> Self {
         //TODO: set manually in code for now
-        std::env::set_var("RUST_LOG", "kube_viewer=debug");
+        std::env::set_var("RUST_LOG", "cove=debug");
 
         // one time init
         crate::logging::init();

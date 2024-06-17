@@ -15,9 +15,14 @@ path = "src/bin/uniffi-bindgen.rs"
 default = ["uniffi/cli"]
 
 [dependencies]
+# concurrency
 crossbeam = "0.8.4"
 parking_lot = {version = "0.12.1", features = ["deadlock_detection"]}
 once_cell = "1.19.0"
+
+# error handling
+eyre = "0.6"
+thiserror = "1.0"
 
 # async
 tokio = { version = "1.38", features = ["rt"] }
@@ -31,6 +36,10 @@ dirs = "5.0.1"
 
 # database
 redb = "2.1"
+
+# derive stuff
+derive_more = "0.99.18"
+strum = {version = "0.26", features = ["derive"]}
 
 # bindings
 uniffi = { version = "=0.28" }

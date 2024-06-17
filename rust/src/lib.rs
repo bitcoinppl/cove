@@ -1,5 +1,6 @@
+pub mod database;
+
 pub(crate) mod app;
-pub(crate) mod database;
 pub(crate) mod event;
 pub(crate) mod logging;
 pub(crate) mod macros;

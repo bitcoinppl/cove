@@ -6,6 +6,7 @@ use crate::router::Router;
 #[derive(uniffi::Enum)]
 pub enum Update {
     RouterUpdate { router: Router },
+    DatabaseUpdate,
 }
 
 pub static UPDATER: OnceCell<Updater> = OnceCell::new();
@@ -17,10 +18,12 @@ impl Updater {
         UPDATER.get_or_init(|| Updater(sender));
     }
 
+    pub fn global() -> &'static Self {
+        UPDATER.get().expect("updater is not initialized")
+    }
+
     pub fn send_update(update: Update) {
-        UPDATER
-            .get()
-            .expect("updater is not initialized")
+        Self::global()
             .0
             .send(update)
             .expect("failed to send update");
