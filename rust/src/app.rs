@@ -85,13 +85,14 @@ impl App {
         // Handle event
         let state = self.state.clone();
         match event {
-            Event::SetRoute { route } => {
-                let mut state = state.write().unwrap();
+            Event::RouteChanged { routes } => {
+                log::debug!(
+                    "Route change OLD: {:?}, NEW: {:?}",
+                    state.read().unwrap().router.routes,
+                    routes
+                );
 
-                state.router.route = route;
-                Updater::send_update(Update::RouterUpdate {
-                    router: state.router.clone(),
-                });
+                state.write().unwrap().router.routes = routes;
             }
         }
     }
@@ -112,7 +113,7 @@ impl App {
 }
 
 /// Representation of our app over FFI. Essentially a wrapper of [`App`].
-#[derive(uniffi::Object)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct FfiApp;
 
 #[uniffi::export]

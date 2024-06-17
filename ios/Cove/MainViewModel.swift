@@ -16,13 +16,33 @@ import SwiftUI
         self.rust.listenForUpdates(updater: self)
     }
 
+    func pushRoute(_ route: Route) {
+        self.router.routes.append(route)
+    }
+
+    func popRoute() {
+        self.router.routes.removeLast()
+    }
+
+    func setRoute(_ routes: [Route]) {
+        self.router.routes = routes
+    }
+
     func update(update: Update) {
         print("[swift] update: \(update)")
-        switch update {
-        case .routerUpdate(router: let router):
-            self.router = router
-        case .databaseUpdate:
-            self.database = Database()
+        print("Update Outer: \(Thread.current)")
+        Task {
+            await MainActor.run {
+                print("Inner: \(Thread.current)")
+                switch update {
+                case .routerUpdate(router: let router):
+                    self.router = router
+                case .databaseUpdate:
+                    self.database = Database()
+                case .sendCurrentRouter:
+                    self.dispatch(event: Event.routeChanged(routes: self.router.routes))
+                }
+            }
         }
     }
 

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		ACC301652C207787006790DF /* NewWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301642C207787006790DF /* NewWalletView.swift */; };
+		ACC3016A2C20C9D4006790DF /* Router.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301692C20C9D4006790DF /* Router.swift */; };
 		D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
@@ -19,6 +20,7 @@
 
 /* Begin PBXFileReference section */
 		ACC301642C207787006790DF /* NewWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWalletView.swift; sourceTree = "<group>"; };
+		ACC301692C20C9D4006790DF /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Router.swift; sourceTree = "<group>"; };
 		D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Cove.xcframework; path = ../rust/ios/Cove.xcframework; sourceTree = "<group>"; };
 		D000B2F12C0F7BB100E32143 /* Cove.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Cove.swift; path = ../../rust/ios/Cove/Cove.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -41,6 +43,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		ACC301662C20C11D006790DF /* Extention */ = {
+			isa = PBXGroup;
+			children = (
+				ACC301692C20C9D4006790DF /* Router.swift */,
+			);
+			path = Extention;
+			sourceTree = "<group>";
+		};
 		D0245F432C0F7B4E0042B447 = {
 			isa = PBXGroup;
 			children = (
@@ -61,6 +71,7 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				ACC301662C20C11D006790DF /* Extention */,
 				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				ACC301642C207787006790DF /* NewWalletView.swift */,
@@ -156,6 +167,7 @@
 				D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */,
 				D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */,
 				D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */,
+				ACC3016A2C20C9D4006790DF /* Router.swift in Sources */,
 				ACC301652C207787006790DF /* NewWalletView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

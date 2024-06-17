@@ -691,19 +691,6 @@ public struct AppState {
     }
 }
 
-extension AppState: Equatable, Hashable {
-    public static func == (lhs: AppState, rhs: AppState) -> Bool {
-        if lhs.router != rhs.router {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(router)
-    }
-}
-
 public struct FfiConverterTypeAppState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppState {
         return
@@ -726,25 +713,14 @@ public func FfiConverterTypeAppState_lower(_ value: AppState) -> RustBuffer {
 }
 
 public struct Router {
-    public var route: Route
+    public var app: FfiApp
+    public var routes: [Route]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(route: Route) {
-        self.route = route
-    }
-}
-
-extension Router: Equatable, Hashable {
-    public static func == (lhs: Router, rhs: Router) -> Bool {
-        if lhs.route != rhs.route {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(route)
+    public init(app: FfiApp, routes: [Route]) {
+        self.app = app
+        self.routes = routes
     }
 }
 
@@ -752,12 +728,14 @@ public struct FfiConverterTypeRouter: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Router {
         return
             try Router(
-                route: FfiConverterTypeRoute.read(from: &buf)
+                app: FfiConverterTypeFfiApp.read(from: &buf),
+                routes: FfiConverterSequenceTypeRoute.read(from: &buf)
             )
     }
 
     public static func write(_ value: Router, into buf: inout [UInt8]) {
-        FfiConverterTypeRoute.write(value.route, into: &buf)
+        FfiConverterTypeFfiApp.write(value.app, into: &buf)
+        FfiConverterSequenceTypeRoute.write(value.routes, into: &buf)
     }
 }
 
@@ -768,6 +746,49 @@ public func FfiConverterTypeRouter_lift(_ buf: RustBuffer) throws -> Router {
 public func FfiConverterTypeRouter_lower(_ value: Router) -> RustBuffer {
     return FfiConverterTypeRouter.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ColdWalletRoute {
+    case create
+    case `import`
+}
+
+public struct FfiConverterTypeColdWalletRoute: FfiConverterRustBuffer {
+    typealias SwiftType = ColdWalletRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColdWalletRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .create
+
+        case 2: return .import
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ColdWalletRoute, into buf: inout [UInt8]) {
+        switch value {
+        case .create:
+            writeInt(&buf, Int32(1))
+
+        case .import:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeColdWalletRoute_lift(_ buf: RustBuffer) throws -> ColdWalletRoute {
+    return try FfiConverterTypeColdWalletRoute.lift(buf)
+}
+
+public func FfiConverterTypeColdWalletRoute_lower(_ value: ColdWalletRoute) -> RustBuffer {
+    return FfiConverterTypeColdWalletRoute.lower(value)
+}
+
+extension ColdWalletRoute: Equatable, Hashable {}
 
 public enum Error {
     case DatabaseAccessError(String
@@ -826,7 +847,7 @@ extension Error: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Event {
-    case setRoute(route: Route
+    case routeChanged(routes: [Route]
     )
 }
 
@@ -836,7 +857,7 @@ public struct FfiConverterTypeEvent: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Event {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .setRoute(route: FfiConverterTypeRoute.read(from: &buf)
+        case 1: return try .routeChanged(routes: FfiConverterSequenceTypeRoute.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -845,9 +866,9 @@ public struct FfiConverterTypeEvent: FfiConverterRustBuffer {
 
     public static func write(_ value: Event, into buf: inout [UInt8]) {
         switch value {
-        case let .setRoute(route):
+        case let .routeChanged(routes):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeRoute.write(route, into: &buf)
+            FfiConverterSequenceTypeRoute.write(routes, into: &buf)
         }
     }
 }
@@ -902,8 +923,108 @@ extension GlobalBoolConfigKey: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum HotWalletRoute {
+    case create
+    case `import`
+}
+
+public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
+    typealias SwiftType = HotWalletRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HotWalletRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .create
+
+        case 2: return .import
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HotWalletRoute, into buf: inout [UInt8]) {
+        switch value {
+        case .create:
+            writeInt(&buf, Int32(1))
+
+        case .import:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeHotWalletRoute_lift(_ buf: RustBuffer) throws -> HotWalletRoute {
+    return try FfiConverterTypeHotWalletRoute.lift(buf)
+}
+
+public func FfiConverterTypeHotWalletRoute_lower(_ value: HotWalletRoute) -> RustBuffer {
+    return FfiConverterTypeHotWalletRoute.lower(value)
+}
+
+extension HotWalletRoute: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum NewWalletRoute {
+    case select
+    case hotWallet(route: HotWalletRoute
+    )
+    case coldWallet(route: ColdWalletRoute
+    )
+}
+
+public struct FfiConverterTypeNewWalletRoute: FfiConverterRustBuffer {
+    typealias SwiftType = NewWalletRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NewWalletRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .select
+
+        case 2: return try .hotWallet(route: FfiConverterTypeHotWalletRoute.read(from: &buf)
+            )
+
+        case 3: return try .coldWallet(route: FfiConverterTypeColdWalletRoute.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NewWalletRoute, into buf: inout [UInt8]) {
+        switch value {
+        case .select:
+            writeInt(&buf, Int32(1))
+
+        case let .hotWallet(route):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeHotWalletRoute.write(route, into: &buf)
+
+        case let .coldWallet(route):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeColdWalletRoute.write(route, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeNewWalletRoute_lift(_ buf: RustBuffer) throws -> NewWalletRoute {
+    return try FfiConverterTypeNewWalletRoute.lift(buf)
+}
+
+public func FfiConverterTypeNewWalletRoute_lower(_ value: NewWalletRoute) -> RustBuffer {
+    return FfiConverterTypeNewWalletRoute.lower(value)
+}
+
+extension NewWalletRoute: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum Route {
     case cove
+    case newWallet(route: NewWalletRoute
+    )
 }
 
 public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
@@ -914,6 +1035,9 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         switch variant {
         case 1: return .cove
 
+        case 2: return try .newWallet(route: FfiConverterTypeNewWalletRoute.read(from: &buf)
+            )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -922,6 +1046,10 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         switch value {
         case .cove:
             writeInt(&buf, Int32(1))
+
+        case let .newWallet(route):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeNewWalletRoute.write(route, into: &buf)
         }
     }
 }
@@ -943,6 +1071,10 @@ public enum Update {
     case routerUpdate(router: Router
     )
     case databaseUpdate
+    /**
+     * Ask the frontend to send the current router
+     */
+    case sendCurrentRouter
 }
 
 public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
@@ -956,6 +1088,8 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
 
         case 2: return .databaseUpdate
 
+        case 3: return .sendCurrentRouter
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -968,6 +1102,9 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
 
         case .databaseUpdate:
             writeInt(&buf, Int32(2))
+
+        case .sendCurrentRouter:
+            writeInt(&buf, Int32(3))
         }
     }
 }
@@ -979,8 +1116,6 @@ public func FfiConverterTypeUpdate_lift(_ buf: RustBuffer) throws -> Update {
 public func FfiConverterTypeUpdate_lower(_ value: Update) -> RustBuffer {
     return FfiConverterTypeUpdate.lower(value)
 }
-
-extension Update: Equatable, Hashable {}
 
 public protocol FfiUpdater: AnyObject {
     /**
@@ -1062,6 +1197,28 @@ extension FfiConverterCallbackInterfaceFfiUpdater: FfiConverter {
 
     public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
         writeInt(&buf, lower(v))
+    }
+}
+
+private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
+    typealias SwiftType = [Route]
+
+    public static func write(_ value: [Route], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoute.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Route] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Route]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeRoute.read(from: &buf))
+        }
+        return seq
     }
 }
 
