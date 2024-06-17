@@ -3,6 +3,7 @@ import SwiftUI
 @Observable class MainViewModel: FfiUpdater {
     var rust: FfiApp
     var router: Router
+    var database: Database
 
     public init() {
         let rust = FfiApp()
@@ -10,6 +11,7 @@ import SwiftUI
 
         self.router = state.router
         self.rust = rust
+        self.database = Database()
 
         self.rust.listenForUpdates(updater: self)
     }
@@ -19,6 +21,8 @@ import SwiftUI
         switch update {
         case .routerUpdate(router: let router):
             self.router = router
+        case .databaseUpdate:
+            self.database = Database()
         }
     }
 
