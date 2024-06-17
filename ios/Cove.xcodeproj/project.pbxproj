@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		ACC301652C207787006790DF /* NewWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301642C207787006790DF /* NewWalletView.swift */; };
 		D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
@@ -17,6 +18,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		ACC301642C207787006790DF /* NewWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWalletView.swift; sourceTree = "<group>"; };
 		D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Cove.xcframework; path = ../rust/ios/Cove.xcframework; sourceTree = "<group>"; };
 		D000B2F12C0F7BB100E32143 /* Cove.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Cove.swift; path = ../../rust/ios/Cove/Cove.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -61,6 +63,7 @@
 			children = (
 				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
+				ACC301642C207787006790DF /* NewWalletView.swift */,
 				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
 				D0245F552C0F7B500042B447 /* Preview Content */,
@@ -87,7 +90,6 @@
 			buildConfigurationList = D0245F5A2C0F7B500042B447 /* Build configuration list for PBXNativeTarget "Cove" */;
 			buildPhases = (
 				D0245F482C0F7B4E0042B447 /* Sources */,
-				ACC301622C1F39E2006790DF /* ShellScript */,
 				D0245F492C0F7B4E0042B447 /* Frameworks */,
 				D0245F4A2C0F7B4E0042B447 /* Resources */,
 			);
@@ -145,26 +147,6 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		ACC301622C1F39E2006790DF /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/bash;
-			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\nexport PATH=\"$PATH:$HOME/.cargo/bin:/opt/homebrew/bin\"\ncd ../\n\nif [ ! which cargo ]; then\n echo \"Cargo not available in path\" >> log.txt\nfi\n\nif [ ! which just ]; then\n echo \"Just not available in path\" >> log.txt\nfi\n\nif [ ! which rustup ]; then\n echo \"Rustup not available in path\" >> log.txt\nfi\n\n# Redirect all stdout and stderr to the log file for debugging\nLOG_FILE=\"log.txt\"\nexec > >(tee -a \"$LOG_FILE\")\nexec 2>&1\n\nbash scripts/build-ios.sh debug\n";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		D0245F482C0F7B4E0042B447 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -174,6 +156,7 @@
 				D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */,
 				D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */,
 				D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */,
+				ACC301652C207787006790DF /* NewWalletView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

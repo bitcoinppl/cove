@@ -28,7 +28,7 @@ struct CoveApp: App {
 
             switch rust.router.route {
             case .cove:
-                Cove(rust: self.rust)
+                Cove(model: self.rust)
             }
         }
     }
