@@ -18,3 +18,6 @@ build-ios profile="debug":
 
 run-ios: build-ios
     bash scripts/run-ios.sh
+
+watch: 
+    watchexec --exts rs just build-ios
