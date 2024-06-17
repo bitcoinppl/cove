@@ -29,6 +29,9 @@ log = "0.4.21"
 # dirs
 dirs = "5.0.1"
 
+# database
+redb = "2.1"
+
 # bindings
 uniffi = { version = "=0.28" }
 
