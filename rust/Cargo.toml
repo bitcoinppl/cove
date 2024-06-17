@@ -26,6 +26,9 @@ tokio = { version = "1.38", features = ["rt"] }
 env_logger = "0.11.0"
 log = "0.4.21"
 
+# dirs
+dirs = "5.0.1"
+
 # bindings
 uniffi = { version = "=0.28" }
 
