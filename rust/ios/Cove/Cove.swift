@@ -681,6 +681,126 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
     return FfiConverterTypeFfiApp.lower(value)
 }
 
+public protocol RouteFactoryProtocol: AnyObject {
+    func `default`() -> Route
+
+    func newWalletColdWallet() -> Route
+
+    func newWalletDefault() -> Route
+
+    func newWalletHotWallet() -> Route
+}
+
+open class RouteFactory:
+    RouteFactoryProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_routefactory(self.pointer, $0) }
+    }
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_routefactory_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_routefactory(pointer, $0) }
+    }
+
+    open func `default`() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_default(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func newWalletColdWallet() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_new_wallet_cold_wallet(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func newWalletDefault() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_new_wallet_default(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func newWalletHotWallet() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_new_wallet_hot_wallet(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeRouteFactory: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = RouteFactory
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> RouteFactory {
+        return RouteFactory(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: RouteFactory) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RouteFactory {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: RouteFactory, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeRouteFactory_lift(_ pointer: UnsafeMutableRawPointer) throws -> RouteFactory {
+    return try FfiConverterTypeRouteFactory.lift(pointer)
+}
+
+public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeRouteFactory.lower(value)
+}
+
 public struct AppState {
     public var router: Router
 
@@ -1071,10 +1191,6 @@ public enum Update {
     case routerUpdate(router: Router
     )
     case databaseUpdate
-    /**
-     * Ask the frontend to send the current router
-     */
-    case sendCurrentRouter
 }
 
 public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
@@ -1088,8 +1204,6 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
 
         case 2: return .databaseUpdate
 
-        case 3: return .sendCurrentRouter
-
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -1102,9 +1216,6 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
 
         case .databaseUpdate:
             writeInt(&buf, Int32(2))
-
-        case .sendCurrentRouter:
-            writeInt(&buf, Int32(3))
         }
     }
 }
@@ -1265,10 +1376,25 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 45338 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_routefactory_default() != 64785 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_new_wallet_cold_wallet() != 47198 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_new_wallet_default() != 19641 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_new_wallet_hot_wallet() != 16284 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_constructor_database_new() != 41458 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_ffiapp_new() != 11955 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_routefactory_new() != 4959 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiupdater_update() != 21755 {

@@ -39,8 +39,6 @@ import SwiftUI
                     self.router = router
                 case .databaseUpdate:
                     self.database = Database()
-                case .sendCurrentRouter:
-                    self.dispatch(event: Event.routeChanged(routes: self.router.routes))
                 }
             }
         }

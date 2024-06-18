@@ -19,7 +19,7 @@ struct CoveApp: App {
         WindowGroup {
             NavigationStack(path: $model.router.routes) {
                 VStack(spacing: 20) {
-                    Button(action: { model.pushRoute(Route.newWallet(route: NewWalletRoute.select)) }) {
+                    Button(action: { model.pushRoute(RouteFactory().newWalletDefault()) }) {
                         Text("Push Route NewWallet")
                     }
 
@@ -27,7 +27,7 @@ struct CoveApp: App {
                         Text("Push Route Cove")
                     }
 
-                    Button(action: { model.setRoute([Route.newWallet(route: NewWalletRoute.select)]) }) {
+                    Button(action: { model.setRoute([RouteFactory().newWalletDefault()]) }) {
                         Text("Set Route")
                     }
 

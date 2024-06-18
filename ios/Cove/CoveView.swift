@@ -5,11 +5,11 @@ struct CoveView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Button(action: { model.pushRoute(Route.newWallet(route: NewWalletRoute.select)) }) {
+            Button(action: { model.pushRoute(RouteFactory().newWalletDefault()) }) {
                 Text("Push Route")
             }
 
-            Button(action: { model.setRoute([Route.newWallet(route: NewWalletRoute.select)]) }) {
+            Button(action: { model.setRoute([RouteFactory().newWalletColdWallet()]) }) {
                 Text("Set Route")
             }
 

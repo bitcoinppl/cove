@@ -50,3 +50,40 @@ impl Router {
         }
     }
 }
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
+pub struct RouteFactory;
+
+#[uniffi::export]
+impl RouteFactory {
+    #[uniffi::constructor]
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn default(&self) -> Route {
+        Route::Cove
+    }
+
+    pub fn new_wallet_default(&self) -> Route {
+        Route::NewWallet {
+            route: Default::default(),
+        }
+    }
+
+    pub fn new_wallet_hot_wallet(&self) -> Route {
+        Route::NewWallet {
+            route: NewWalletRoute::HotWallet {
+                route: Default::default(),
+            },
+        }
+    }
+
+    pub fn new_wallet_cold_wallet(&self) -> Route {
+        Route::NewWallet {
+            route: NewWalletRoute::ColdWallet {
+                route: Default::default(),
+            },
+        }
+    }
+}
