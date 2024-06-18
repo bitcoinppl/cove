@@ -86,4 +86,10 @@ impl RouteFactory {
             },
         }
     }
+
+    pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
+        Route::NewWallet {
+            route: NewWalletRoute::HotWallet { route },
+        }
+    }
 }
