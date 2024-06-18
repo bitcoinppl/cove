@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
 use crate::{app::FfiApp, impl_default_for};
+use derive_more::From;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
     Cove,
     NewWallet { route: NewWalletRoute },
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum NewWalletRoute {
     #[default]
     Select,
@@ -21,14 +22,16 @@ pub enum NewWalletRoute {
     },
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum HotWalletRoute {
     #[default]
+    Select,
+
     Create,
     Import,
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum ColdWalletRoute {
     #[default]
     Create,
