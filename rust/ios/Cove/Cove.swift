@@ -684,6 +684,8 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
 public protocol RouteFactoryProtocol: AnyObject {
     func `default`() -> Route
 
+    func hotWallet(route: HotWalletRoute) -> Route
+
     func newColdWallet() -> Route
 
     func newHotWallet() -> Route
@@ -741,6 +743,13 @@ open class RouteFactory:
     open func `default`() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_default(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func hotWallet(route: HotWalletRoute) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_hot_wallet(self.uniffiClonePointer(),
+                                                          FfiConverterTypeHotWalletRoute.lower(route), $0)
         })
     }
 
@@ -1044,6 +1053,7 @@ extension GlobalBoolConfigKey: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum HotWalletRoute {
+    case select
     case create
     case `import`
 }
@@ -1054,9 +1064,11 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HotWalletRoute {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .create
+        case 1: return .select
 
-        case 2: return .import
+        case 2: return .create
+
+        case 3: return .import
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1064,11 +1076,14 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
 
     public static func write(_ value: HotWalletRoute, into buf: inout [UInt8]) {
         switch value {
-        case .create:
+        case .select:
             writeInt(&buf, Int32(1))
 
-        case .import:
+        case .create:
             writeInt(&buf, Int32(2))
+
+        case .import:
+            writeInt(&buf, Int32(3))
         }
     }
 }
@@ -1377,6 +1392,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_default() != 64785 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_new_cold_wallet() != 14639 {
