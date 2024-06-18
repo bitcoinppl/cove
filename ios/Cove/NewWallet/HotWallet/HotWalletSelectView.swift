@@ -8,14 +8,24 @@
 import SwiftUI
 
 struct HotWalletSelectView: View {
+    @State private var isSheetShown = false
+
     var body: some View {
         VStack {
-            NavigationLink(value: HotWalletRoute.create.intoRoute()) {
+            Button(action: { isSheetShown = true }) {
                 Text("Create Wallet")
                     .font(.title3)
                     .bold()
                     .foregroundStyle(.white)
-                    .frame(minWidth: 250, minHeight: 100)
+                    .frame(minWidth: 250, minHeight: 90)
+                    .confirmationDialog("Background Color", isPresented: $isSheetShown) {
+                        NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twelve).intoRoute()) {
+                            Text("12 Words")
+                        }
+                        NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twentyFour).intoRoute()) {
+                            Text("24 Words")
+                        }
+                    }
             }
             .background(
                 RoundedRectangle(cornerRadius: 15)
@@ -33,7 +43,7 @@ struct HotWalletSelectView: View {
                     .font(.title3)
                     .bold()
                     .foregroundStyle(.black)
-                    .frame(minWidth: 250, minHeight: 100)
+                    .frame(minWidth: 250, minHeight: 90)
             }
             .overlay(
                 RoundedRectangle(cornerRadius: 15)

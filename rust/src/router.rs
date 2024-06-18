@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{app::FfiApp, impl_default_for};
+use crate::{app::FfiApp, impl_default_for, wallet::NumberOfBip39Words};
 use derive_more::From;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
@@ -27,7 +27,10 @@ pub enum HotWalletRoute {
     #[default]
     Select,
 
-    Create,
+    Create {
+        words: NumberOfBip39Words,
+    },
+
     Import,
 }
 

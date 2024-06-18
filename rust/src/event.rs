@@ -1,4 +1,5 @@
 //! Event types that the frontend can send to the rust app
+//! MainViewModel event
 
 use crate::router::Route;
 
