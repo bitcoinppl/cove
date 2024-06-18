@@ -1,9 +1,12 @@
+//! Send updates from rust to the frontend
+
 use crossbeam::channel::Sender;
 use once_cell::sync::OnceCell;
 
 use crate::router::Router;
 
 #[derive(uniffi::Enum)]
+#[allow(clippy::enum_variant_names)]
 pub enum Update {
     RouterUpdate { router: Router },
     DatabaseUpdate,

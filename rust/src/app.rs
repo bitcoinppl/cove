@@ -7,6 +7,7 @@ use crate::{
     update::{FfiUpdater, Update, Updater},
 };
 use crossbeam::channel::{Receiver, Sender};
+use log::error;
 use once_cell::sync::OnceCell;
 
 pub static APP: OnceCell<App> = OnceCell::new();
@@ -41,8 +42,6 @@ impl App {
         // one time init
         crate::logging::init();
 
-        println!("{:?}", dirs::home_dir());
-
         // Set up the updater channel
         let (sender, receiver): (Sender<Update>, Receiver<Update>) =
             crossbeam::channel::bounded(1000);
@@ -60,12 +59,12 @@ impl App {
                 continue;
             }
 
-            println!("{} deadlocks detected", deadlocks.len());
+            error!("{} deadlocks detected", deadlocks.len());
             for (i, threads) in deadlocks.iter().enumerate() {
-                println!("Deadlock #{}", i);
+                error!("Deadlock #{}", i);
                 for t in threads {
-                    println!("Thread Id {:#?}", t.thread_id());
-                    println!("{:#?}", t.backtrace());
+                    error!("Thread Id {:#?}", t.thread_id());
+                    error!("{:#?}", t.backtrace());
                 }
             }
         });
@@ -86,13 +85,14 @@ impl App {
         // Handle event
         let state = self.state.clone();
         match event {
-            Event::SetRoute { route } => {
-                let mut state = state.write().unwrap();
+            Event::RouteChanged { routes } => {
+                log::debug!(
+                    "Route change OLD: {:?}, NEW: {:?}",
+                    state.read().unwrap().router.routes,
+                    routes
+                );
 
-                state.router.route = route;
-                Updater::send_update(Update::RouterUpdate {
-                    router: state.router.clone(),
-                });
+                state.write().unwrap().router.routes = routes;
             }
         }
     }
@@ -113,7 +113,7 @@ impl App {
 }
 
 /// Representation of our app over FFI. Essentially a wrapper of [`App`].
-#[derive(uniffi::Object)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct FfiApp;
 
 #[uniffi::export]
@@ -141,7 +141,6 @@ impl FfiApp {
 impl FfiApp {
     /// Fetch global instance of the app, or create one if it doesn't exist
     fn inner(&self) -> &App {
-        log::debug!("[rust] inner");
         App::global()
     }
 }

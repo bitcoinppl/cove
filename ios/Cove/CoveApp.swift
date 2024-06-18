@@ -2,34 +2,38 @@
 //  CoveApp.swift
 //  Cove
 //
-//  Created by Justin  on 6/4/24.
+//  Created by Praveen Perera  on 6/17/24.
 //
 
 import SwiftUI
 
 @main
 struct CoveApp: App {
-    @State var rust: MainViewModel
+    @State var model: MainViewModel
 
     public init() {
-        self.rust = MainViewModel()
+        self.model = MainViewModel()
     }
 
     var body: some Scene {
         WindowGroup {
-            HStack {
-                Button(action: {
-                    self.rust.dispatch(event: .setRoute(route: Route.cove))
-                }) {
-                    Text("Cove")
-                }
+            NavigationStack(path: $model.router.routes) {
+                NewWalletView(route: NewWalletRoute.select)
+                    .navigationDestination(for: Route.self, destination: { route in
+                        switch route {
+                        case .cove:
+                            CoveView(model: model)
+                                .onAppear {
+                                    print("in main view, router is: \(model.router.routes)")
+                                }
+                        case .newWallet(route: let route):
+                            NewWalletView(route: route)
+                        }
+                    })
+                    .onChange(of: model.router.routes) { _, new in
+                        model.dispatch(event: Event.routeChanged(routes: new))
+                    }
             }
-            Text(String(describing: self.rust.router.route))
-
-            switch rust.router.route {
-            case .cove:
-                Cove(rust: self.rust)
-            }
-        }
+        }.environment(model)
     }
 }
