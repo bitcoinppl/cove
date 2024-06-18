@@ -8,8 +8,6 @@
 import SwiftUI
 
 struct NewWalletSelect: View {
-    var mainViewModel: MainViewModel
-
     var body: some View {
         VStack {
             HStack {
@@ -21,7 +19,7 @@ struct NewWalletSelect: View {
                 .padding(.bottom, 20)
                 .padding(.horizontal, 30)
             Spacer()
-            Button(action: { mainViewModel.pushRoute(RouteFactory().newHotWallet()) }) {
+            NavigationLink(value: RouteFactory().newHotWallet()) {
                 Spacer()
                 Text("On This Device").font(.title)
                 Spacer()
@@ -37,7 +35,7 @@ struct NewWalletSelect: View {
             .padding(.horizontal, 40)
             .foregroundColor(.white)
             Spacer()
-            Button(action: { mainViewModel.pushRoute(RouteFactory().newColdWallet()) }) {
+            NavigationLink(value: RouteFactory().newColdWallet()) {
                 Spacer()
                 Text("On Hardware Wallet").font(.title)
                 Spacer()
@@ -57,5 +55,5 @@ struct NewWalletSelect: View {
 }
 
 #Preview {
-    NewWalletSelect(mainViewModel: MainViewModel())
+    NewWalletSelect()
 }
