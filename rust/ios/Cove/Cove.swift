@@ -684,11 +684,11 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
 public protocol RouteFactoryProtocol: AnyObject {
     func `default`() -> Route
 
-    func newWalletColdWallet() -> Route
+    func newColdWallet() -> Route
 
-    func newWalletDefault() -> Route
+    func newHotWallet() -> Route
 
-    func newWalletHotWallet() -> Route
+    func newWalletSelect() -> Route
 }
 
 open class RouteFactory:
@@ -744,21 +744,21 @@ open class RouteFactory:
         })
     }
 
-    open func newWalletColdWallet() -> Route {
+    open func newColdWallet() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
-            uniffi_cove_fn_method_routefactory_new_wallet_cold_wallet(self.uniffiClonePointer(), $0)
+            uniffi_cove_fn_method_routefactory_new_cold_wallet(self.uniffiClonePointer(), $0)
         })
     }
 
-    open func newWalletDefault() -> Route {
+    open func newHotWallet() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
-            uniffi_cove_fn_method_routefactory_new_wallet_default(self.uniffiClonePointer(), $0)
+            uniffi_cove_fn_method_routefactory_new_hot_wallet(self.uniffiClonePointer(), $0)
         })
     }
 
-    open func newWalletHotWallet() -> Route {
+    open func newWalletSelect() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
-            uniffi_cove_fn_method_routefactory_new_wallet_hot_wallet(self.uniffiClonePointer(), $0)
+            uniffi_cove_fn_method_routefactory_new_wallet_select(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -1379,13 +1379,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_routefactory_default() != 64785 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_routefactory_new_wallet_cold_wallet() != 47198 {
+    if uniffi_cove_checksum_method_routefactory_new_cold_wallet() != 14639 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_routefactory_new_wallet_default() != 19641 {
+    if uniffi_cove_checksum_method_routefactory_new_hot_wallet() != 51032 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_routefactory_new_wallet_hot_wallet() != 16284 {
+    if uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_database_new() != 41458 {

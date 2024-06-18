@@ -65,13 +65,13 @@ impl RouteFactory {
         Route::Cove
     }
 
-    pub fn new_wallet_default(&self) -> Route {
+    pub fn new_wallet_select(&self) -> Route {
         Route::NewWallet {
             route: Default::default(),
         }
     }
 
-    pub fn new_wallet_hot_wallet(&self) -> Route {
+    pub fn new_hot_wallet(&self) -> Route {
         Route::NewWallet {
             route: NewWalletRoute::HotWallet {
                 route: Default::default(),
@@ -79,7 +79,7 @@ impl RouteFactory {
         }
     }
 
-    pub fn new_wallet_cold_wallet(&self) -> Route {
+    pub fn new_cold_wallet(&self) -> Route {
         Route::NewWallet {
             route: NewWalletRoute::ColdWallet {
                 route: Default::default(),
