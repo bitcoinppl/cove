@@ -7,4 +7,9 @@
 
 import Foundation
 
-class Security: Keychain {}
+class Security: Keychain {
+    func encrypt(data: Data) throws -> Data {
+        // TODO: implement
+        return Data()
+    }
+}

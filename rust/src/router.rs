@@ -6,20 +6,15 @@ use derive_more::From;
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
     Cove,
-    NewWallet { route: NewWalletRoute },
+    NewWallet(NewWalletRoute),
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum NewWalletRoute {
     #[default]
     Select,
-
-    HotWallet {
-        route: HotWalletRoute,
-    },
-    ColdWallet {
-        route: ColdWalletRoute,
-    },
+    HotWallet(HotWalletRoute),
+    ColdWallet(ColdWalletRoute),
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -72,30 +67,18 @@ impl RouteFactory {
     }
 
     pub fn new_wallet_select(&self) -> Route {
-        Route::NewWallet {
-            route: Default::default(),
-        }
+        Route::NewWallet(Default::default())
     }
 
     pub fn new_hot_wallet(&self) -> Route {
-        Route::NewWallet {
-            route: NewWalletRoute::HotWallet {
-                route: Default::default(),
-            },
-        }
+        Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
     }
 
     pub fn new_cold_wallet(&self) -> Route {
-        Route::NewWallet {
-            route: NewWalletRoute::ColdWallet {
-                route: Default::default(),
-            },
-        }
+        Route::NewWallet(NewWalletRoute::ColdWallet(Default::default()))
     }
 
     pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
-        Route::NewWallet {
-            route: NewWalletRoute::HotWallet { route },
-        }
+        Route::NewWallet(NewWalletRoute::HotWallet(route))
     }
 }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
+		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
 		ACC301652C207787006790DF /* NewWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301642C207787006790DF /* NewWalletView.swift */; };
 		ACC3016A2C20C9D4006790DF /* Routes.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301692C20C9D4006790DF /* Routes.swift */; };
 		ACC3016D2C210978006790DF /* NewHotWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC3016C2C210978006790DF /* NewHotWalletView.swift */; };
@@ -52,6 +53,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
 				D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -149,6 +151,9 @@
 			dependencies = (
 			);
 			name = Cove;
+			packageProductDependencies = (
+				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
+			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
 			productType = "com.apple.product-type.application";
@@ -177,6 +182,9 @@
 				Base,
 			);
 			mainGroup = D0245F432C0F7B4E0042B447;
+			packageReferences = (
+				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
+			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -422,6 +430,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/evgenyneu/keychain-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 24.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ACA4CBEE2C2365430008F63E /* KeychainSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */;
+			productName = KeychainSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D0245F442C0F7B4E0042B447 /* Project object */;
 }
