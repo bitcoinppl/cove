@@ -29,12 +29,17 @@ struct TwelveWordsView: View {
 
     var body: some View {
         VStack {
-            Text("12")
-            Button(action: {
-                model.dispatch(action: .updateWords(.twentyFour))
-            }) {
-                Text("Change Words")
+            HStack {
+                Button("12 Words") {
+                    model.dispatch(action: .updateWords(.twentyFour))
+                }
             }
+            .padding(.top, 50)
+            .padding(.bottom, 20)
+
+            Text("Please write these words down")
+
+            Spacer()
         }
     }
 }
@@ -44,16 +49,23 @@ struct TwentyFourWordsView: View {
 
     var body: some View {
         VStack {
-            Text("24")
-            Button(action: {
+            Button("24 Words") {
                 model.dispatch(action: .updateWords(.twelve))
-            }) {
-                Text("Change Words")
             }
+            .padding(.top, 50)
+            .padding(.bottom, 20)
+
+            Text("Please write these words down")
+
+            Spacer()
         }
     }
 }
 
-#Preview {
+#Preview("12 Words") {
     HotWalletCreateView(words: .twelve)
+}
+
+#Preview("24 Words") {
+    HotWalletCreateView(words: .twentyFour)
 }
