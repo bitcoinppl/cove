@@ -8,3 +8,4 @@ use crate::router::Route;
 pub enum Event {
     RouteChanged { routes: Vec<Route> },
 }
+

@@ -52,21 +52,12 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn update_words(&self, words: NumberOfBip39Words) {
-        self.state.write().words = words;
-
-        self.reconciler
-            .send(WalletViewModelReconcileMessage::Words(words))
-            .expect("failed to send update");
-    }
-
-    #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
         std::thread::spawn(move || {
             while let Ok(field) = reconcile_receiver.recv() {
-                log::debug!("received update: {:?}", field);
+                // call the reconcile method on the frontend
                 reconciler.reconcile(field);
             }
         });
@@ -75,7 +66,6 @@ impl RustWalletViewModel {
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
-        // Handle event
         let state = self.state.clone();
 
         match action {
