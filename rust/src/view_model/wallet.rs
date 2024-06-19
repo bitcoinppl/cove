@@ -10,6 +10,12 @@ pub enum WalletViewModelReconcileMessage {
     Words(NumberOfBip39Words),
 }
 
+#[derive(Debug)]
+pub enum WalletState {
+    Creating,
+    Created(bdk_wallet::Wallet),
+}
+
 #[uniffi::export(callback_interface)]
 pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the view model changes
@@ -25,7 +31,7 @@ pub struct RustWalletViewModel {
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct WalletViewModelState {
-    pub words: NumberOfBip39Words,
+    pub number_of_words: NumberOfBip39Words,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -51,6 +57,7 @@ impl RustWalletViewModel {
         self.state.read().clone()
     }
 
+    // boilerplate methods
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
@@ -70,7 +77,7 @@ impl RustWalletViewModel {
 
         match action {
             WalletViewModelAction::UpdateWords(words) => {
-                state.write().words = words;
+                state.write().number_of_words = words;
 
                 self.reconciler
                     .send(WalletViewModelReconcileMessage::Words(words))
@@ -82,6 +89,8 @@ impl RustWalletViewModel {
 
 impl WalletViewModelState {
     pub fn new(words: NumberOfBip39Words) -> Self {
-        Self { words }
+        Self {
+            number_of_words: words,
+        }
     }
 }

@@ -996,25 +996,25 @@ public func FfiConverterTypeRouter_lower(_ value: Router) -> RustBuffer {
 }
 
 public struct WalletViewModelState {
-    public var words: NumberOfBip39Words
+    public var numberOfWords: NumberOfBip39Words
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(words: NumberOfBip39Words) {
-        self.words = words
+    public init(numberOfWords: NumberOfBip39Words) {
+        self.numberOfWords = numberOfWords
     }
 }
 
 extension WalletViewModelState: Equatable, Hashable {
     public static func == (lhs: WalletViewModelState, rhs: WalletViewModelState) -> Bool {
-        if lhs.words != rhs.words {
+        if lhs.numberOfWords != rhs.numberOfWords {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(words)
+        hasher.combine(numberOfWords)
     }
 }
 
@@ -1022,12 +1022,12 @@ public struct FfiConverterTypeWalletViewModelState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletViewModelState {
         return
             try WalletViewModelState(
-                words: FfiConverterTypeNumberOfBip39Words.read(from: &buf)
+                numberOfWords: FfiConverterTypeNumberOfBip39Words.read(from: &buf)
             )
     }
 
     public static func write(_ value: WalletViewModelState, into buf: inout [UInt8]) {
-        FfiConverterTypeNumberOfBip39Words.write(value.words, into: &buf)
+        FfiConverterTypeNumberOfBip39Words.write(value.numberOfWords, into: &buf)
     }
 }
 
