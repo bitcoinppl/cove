@@ -25,7 +25,7 @@ pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustWalletViewModel {
-    pub state: Arc<Mutex<WalletViewModelState>>,
+    pub state: Arc<RwLock<WalletViewModelState>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
 }
@@ -54,7 +54,7 @@ impl RustWalletViewModel {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
-            state: Arc::new(RwLock::new(WalletViewModelState::new(words))),
+            state: Arc::new(RwLock::new(WalletViewModelState::new(number_of_words))),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
@@ -89,7 +89,7 @@ impl RustWalletViewModel {
         match action {
             WalletViewModelAction::UpdateWords(words) => {
                 {
-                    let mut state = self.state.lock();
+                    let mut state = self.state.write();
                     state.wallet = Wallet::new(words, Network::Bitcoin, None);
                     state.number_of_words = words;
                 }
