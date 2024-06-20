@@ -19,7 +19,7 @@ struct HotWalletCreateView: View {
         case .twelve:
             TwelveWordsView(model: model, words: model.rust.bip39Words())
         case .twentyFour:
-            TwentyFourWordsView(model: model)
+            TwentyFourWordsView(model: model, words: model.rust.bip39Words())
         }
     }
 }
@@ -38,14 +38,13 @@ struct TwelveWordsView: View {
             .padding(.top, 50)
             .padding(.bottom, 20)
 
-            Button("log") {
-                print(words)
-            }
-
             VStack {
-                Text("Please write these words down").padding(.bottom, 30)
-                ForEach(words, id: \.self) { word in
-                    Text(word)
+                Text("Please write these words down").padding(.bottom, 20)
+                ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                    HStack {
+                        Text("\(String(index + 1)). ")
+                        Text(word)
+                    }
                 }
             }
 
@@ -56,6 +55,7 @@ struct TwelveWordsView: View {
 
 struct TwentyFourWordsView: View {
     var model: WalletViewModel
+    var words: [String]
 
     var body: some View {
         VStack {
@@ -65,14 +65,13 @@ struct TwentyFourWordsView: View {
             .padding(.top, 50)
             .padding(.bottom, 20)
 
-            Button("log") {
-                print(model.rust.bip39Words())
-            }
-
             VStack {
-                Text("Please write these words down").padding(.bottom, 30)
-                ForEach(model.rust.bip39Words(), id: \.self) { word in
-                    Text(word)
+                Text("Please write these words down").padding(.bottom, 20)
+                ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                    HStack {
+                        Text("\(String(index + 1)). ")
+                        Text(word)
+                    }
                 }
             }
 
