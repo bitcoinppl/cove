@@ -785,6 +785,87 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
     return FfiConverterTypeFfiApp.lower(value)
 }
 
+public protocol PendingWalletProtocol: AnyObject {}
+
+open class PendingWallet:
+    PendingWalletProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_pendingwallet(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_pendingwallet(pointer, $0) }
+    }
+}
+
+public struct FfiConverterTypePendingWallet: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PendingWallet
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PendingWallet {
+        return PendingWallet(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PendingWallet) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PendingWallet {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PendingWallet, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypePendingWallet_lift(_ pointer: UnsafeMutableRawPointer) throws -> PendingWallet {
+    return try FfiConverterTypePendingWallet.lift(pointer)
+}
+
+public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePendingWallet.lower(value)
+}
+
 public protocol RouteFactoryProtocol: AnyObject {
     func `default`() -> Route
 
@@ -915,7 +996,7 @@ public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeM
 }
 
 public protocol RustWalletViewModelProtocol: AnyObject {
-    func createNewWallet() throws
+    func bip39Words() -> String
 
     /**
      * Action from the frontend to change the state of the view model
@@ -975,9 +1056,10 @@ open class RustWalletViewModel:
         try! rustCall { uniffi_cove_fn_free_rustwalletviewmodel(pointer, $0) }
     }
 
-    open func createNewWallet() throws { try rustCallWithError(FfiConverterTypeWalletCreationError.lift) {
-        uniffi_cove_fn_method_rustwalletviewmodel_create_new_wallet(self.uniffiClonePointer(), $0)
-    }
+    open func bip39Words() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words(self.uniffiClonePointer(), $0)
+        })
     }
 
     /**
@@ -1040,10 +1122,10 @@ public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewMod
     return FfiConverterTypeRustWalletViewModel.lower(value)
 }
 
-public protocol WalletProtocol: AnyObject {}
+public protocol SavedWalletProtocol: AnyObject {}
 
-open class Wallet:
-    WalletProtocol
+open class SavedWallet:
+    SavedWalletProtocol
 {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
@@ -1069,7 +1151,7 @@ open class Wallet:
     }
 
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_fn_clone_wallet(self.pointer, $0) }
+        return try! rustCall { uniffi_cove_fn_clone_savedwallet(self.pointer, $0) }
     }
 
     // No primary constructor declared for this class.
@@ -1079,23 +1161,23 @@ open class Wallet:
             return
         }
 
-        try! rustCall { uniffi_cove_fn_free_wallet(pointer, $0) }
+        try! rustCall { uniffi_cove_fn_free_savedwallet(pointer, $0) }
     }
 }
 
-public struct FfiConverterTypeWallet: FfiConverter {
+public struct FfiConverterTypeSavedWallet: FfiConverter {
     typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = Wallet
+    typealias SwiftType = SavedWallet
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Wallet {
-        return Wallet(unsafeFromRawPointer: pointer)
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SavedWallet {
+        return SavedWallet(unsafeFromRawPointer: pointer)
     }
 
-    public static func lower(_ value: Wallet) -> UnsafeMutableRawPointer {
+    public static func lower(_ value: SavedWallet) -> UnsafeMutableRawPointer {
         return value.uniffiClonePointer()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Wallet {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SavedWallet {
         let v: UInt64 = try readInt(&buf)
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
@@ -1106,19 +1188,19 @@ public struct FfiConverterTypeWallet: FfiConverter {
         return try lift(ptr!)
     }
 
-    public static func write(_ value: Wallet, into buf: inout [UInt8]) {
+    public static func write(_ value: SavedWallet, into buf: inout [UInt8]) {
         // This fiddling is because `Int` is the thing that's the same size as a pointer.
         // The Rust code won't compile if a pointer won't fit in a `UInt64`.
         writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
     }
 }
 
-public func FfiConverterTypeWallet_lift(_ pointer: UnsafeMutableRawPointer) throws -> Wallet {
-    return try FfiConverterTypeWallet.lift(pointer)
+public func FfiConverterTypeSavedWallet_lift(_ pointer: UnsafeMutableRawPointer) throws -> SavedWallet {
+    return try FfiConverterTypeSavedWallet.lift(pointer)
 }
 
-public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeWallet.lower(value)
+public func FfiConverterTypeSavedWallet_lower(_ value: SavedWallet) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSavedWallet.lower(value)
 }
 
 public struct AppState {
@@ -1189,24 +1271,13 @@ public func FfiConverterTypeRouter_lower(_ value: Router) -> RustBuffer {
 
 public struct WalletViewModelState {
     public var numberOfWords: NumberOfBip39Words
+    public var wallet: Wallet
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(numberOfWords: NumberOfBip39Words) {
+    public init(numberOfWords: NumberOfBip39Words, wallet: Wallet) {
         self.numberOfWords = numberOfWords
-    }
-}
-
-extension WalletViewModelState: Equatable, Hashable {
-    public static func == (lhs: WalletViewModelState, rhs: WalletViewModelState) -> Bool {
-        if lhs.numberOfWords != rhs.numberOfWords {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(numberOfWords)
+        self.wallet = wallet
     }
 }
 
@@ -1214,12 +1285,14 @@ public struct FfiConverterTypeWalletViewModelState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletViewModelState {
         return
             try WalletViewModelState(
-                numberOfWords: FfiConverterTypeNumberOfBip39Words.read(from: &buf)
+                numberOfWords: FfiConverterTypeNumberOfBip39Words.read(from: &buf),
+                wallet: FfiConverterTypeWallet.read(from: &buf)
             )
     }
 
     public static func write(_ value: WalletViewModelState, into buf: inout [UInt8]) {
         FfiConverterTypeNumberOfBip39Words.write(value.numberOfWords, into: &buf)
+        FfiConverterTypeWallet.write(value.wallet, into: &buf)
     }
 }
 
@@ -1680,6 +1753,47 @@ public func FfiConverterTypeUpdate_lower(_ value: Update) -> RustBuffer {
     return FfiConverterTypeUpdate.lower(value)
 }
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Creates a new wallet with mnemonic words
+ */
+
+public enum Wallet {
+    case pending(PendingWallet
+    )
+}
+
+public struct FfiConverterTypeWallet: FfiConverterRustBuffer {
+    typealias SwiftType = Wallet
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Wallet {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .pending(FfiConverterTypePendingWallet.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Wallet, into buf: inout [UInt8]) {
+        switch value {
+        case let .pending(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypePendingWallet.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeWallet_lift(_ buf: RustBuffer) throws -> Wallet {
+    return try FfiConverterTypeWallet.lift(buf)
+}
+
+public func FfiConverterTypeWallet_lower(_ value: Wallet) -> RustBuffer {
+    return FfiConverterTypeWallet.lower(value)
+}
+
 public enum WalletCreationError {
     case BdkError(String
     )
@@ -2107,7 +2221,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_create_new_wallet() != 33948 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words() != 13481 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {

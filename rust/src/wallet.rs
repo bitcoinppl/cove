@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bdk_wallet::{bitcoin::Network, KeychainKind};
 use bip39::Mnemonic;
 use rand::Rng as _;
@@ -8,11 +10,6 @@ use crate::keys::{Descriptor, DescriptorSecretKey};
 pub enum NumberOfBip39Words {
     Twelve,
     TwentyFour,
-}
-
-enum Bip39WordsEntropy {
-    Twelve = 128,
-    TwentyFour = 256,
 }
 
 impl NumberOfBip39Words {
@@ -50,9 +47,21 @@ impl NumberOfBip39Words {
     }
 }
 
+/// Creates a new wallet with mnemonic words
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum Wallet {
+    Pending(Arc<PendingWallet>),
+}
+
 #[derive(Debug, uniffi::Object)]
-pub struct Wallet {
-    pub wallet: bdk_wallet::Wallet,
+pub struct PendingWallet {
+    pub bdk: bdk_wallet::Wallet,
+    mnemonic: Mnemonic,
+}
+
+#[derive(Debug, uniffi::Object)]
+pub struct SavedWallet {
+    pub bdk: bdk_wallet::Wallet,
 }
 
 impl Wallet {
@@ -61,8 +70,28 @@ impl Wallet {
         network: Network,
         passphrase: Option<String>,
     ) -> Self {
+        Self::Pending(Arc::new(PendingWallet::new(
+            number_of_words,
+            network,
+            passphrase,
+        )))
+    }
+
+    pub fn words(&self) -> String {
+        match self {
+            Self::Pending(pending_wallet) => pending_wallet.mnemonic.to_string(),
+        }
+    }
+}
+
+impl PendingWallet {
+    fn new(
+        number_of_words: NumberOfBip39Words,
+        network: Network,
+        passphrase: Option<String>,
+    ) -> Self {
         let mnemonic = number_of_words.to_mnemonic();
-        let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic, passphrase);
+        let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
 
         let descriptor =
             Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::External, network);
@@ -70,10 +99,14 @@ impl Wallet {
         let change_descriptor =
             Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::Internal, network);
 
-        let wallet = bdk_wallet::Wallet::new(descriptor, change_descriptor, network)
-            .expect("failed to create wallet");
+        let wallet =
+            bdk_wallet::Wallet::new(descriptor.to_tuple(), change_descriptor.to_tuple(), network)
+                .expect("failed to create wallet");
 
-        Self { wallet }
+        Self {
+            bdk: wallet,
+            mnemonic,
+        }
     }
 }
 

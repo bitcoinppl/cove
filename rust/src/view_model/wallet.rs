@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bdk_wallet::bitcoin::Network;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
@@ -29,9 +30,10 @@ pub struct RustWalletViewModel {
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct WalletViewModelState {
     pub number_of_words: NumberOfBip39Words,
+    pub wallet: Wallet,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -58,17 +60,14 @@ impl RustWalletViewModel {
         }
     }
 
-    pub fn create_new_wallet(&self) -> Result<(), WalletCreationError> {
-        let state = self.state.read().clone();
-
-        let wallet = Wallet::new(state.number_of_words);
-
-        Ok(())
-    }
-
     #[uniffi::method]
     pub fn get_state(&self) -> WalletViewModelState {
         self.state.read().clone()
+    }
+
+    #[uniffi::method]
+    pub fn bip_39_words(&self) -> String {
+        self.state.read().wallet.words()
     }
 
     // boilerplate methods
@@ -87,11 +86,12 @@ impl RustWalletViewModel {
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
-        let state = self.state.clone();
-
         match action {
             WalletViewModelAction::UpdateWords(words) => {
-                state.write().number_of_words = words;
+                let mut state = self.state.write();
+
+                state.number_of_words = words;
+                state.wallet = Wallet::new(words, Network::Bitcoin, None);
 
                 self.reconciler
                     .send(WalletViewModelReconcileMessage::Words(words))
@@ -105,6 +105,7 @@ impl WalletViewModelState {
     pub fn new(words: NumberOfBip39Words) -> Self {
         Self {
             number_of_words: words,
+            wallet: Wallet::new(words, Network::Bitcoin, None),
         }
     }
 }

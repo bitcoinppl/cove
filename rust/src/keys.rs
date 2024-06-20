@@ -17,41 +17,6 @@ pub type Seed = [u8; 64];
 #[derive(Debug)]
 pub struct DescriptorSecretKey(pub(crate) BdkDescriptorSecretKey);
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
-pub enum Bip32Error {
-    #[error("cannot derive from a hardened key")]
-    CannotDeriveFromHardenedKey,
-
-    #[error("secp256k1 error: {0}")]
-    Secp256k1(String),
-
-    #[error("invalid child number: {0}")]
-    InvalidChildNumber(u32),
-
-    #[error("invalid format for child number")]
-    InvalidChildNumberFormat,
-
-    #[error("invalid derivation path format")]
-    InvalidDerivationPathFormat,
-
-    #[error("unknown version: {0}")]
-    UnknownVersion(String),
-
-    #[error("wrong extended key length: {0}")]
-    WrongExtendedKeyLength(u32),
-
-    #[error("base58 error: {0}")]
-    Base58(String),
-
-    #[error("hexadecimal conversion error: {0}")]
-    Hex(String),
-
-    #[error("invalid public key hex length: {0}")]
-    InvalidPublicKeyHexLength(u32),
-
-    #[error("unknown error: {0}")]
-    UnknownError(String),
-}
 #[derive(Debug)]
 pub struct Descriptor {
     pub extended_descriptor: ExtendedDescriptor,
@@ -72,6 +37,7 @@ impl Descriptor {
                 let derivable_key = descriptor_x_key.xkey;
                 let (extended_descriptor, key_map, _) =
                     Bip84(derivable_key, keychain_kind).build(network).unwrap();
+
                 Self {
                     extended_descriptor,
                     key_map,
@@ -89,6 +55,7 @@ impl Descriptor {
     }
 
     /// BIP84 for P2WPKH (Segwit)
+    #[allow(dead_code)]
     pub(crate) fn new_bip84_public(
         public_key: &BdkDescriptorPublicKey,
         fingerprint: String,
@@ -119,6 +86,10 @@ impl Descriptor {
                 unreachable!()
             }
         }
+    }
+
+    pub fn to_tuple(self) -> (ExtendedDescriptor, KeyMap) {
+        (self.extended_descriptor, self.key_map)
     }
 }
 

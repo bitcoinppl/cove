@@ -37,7 +37,10 @@ struct TwelveWordsView: View {
             .padding(.top, 50)
             .padding(.bottom, 20)
 
-            Text("Please write these words down")
+            VStack {
+                Text("Please write these words down").padding(.bottom, 30)
+                Text(model.rust.bip39Words())
+            }
 
             Spacer()
         }
@@ -55,7 +58,10 @@ struct TwentyFourWordsView: View {
             .padding(.top, 50)
             .padding(.bottom, 20)
 
-            Text("Please write these words down")
+            VStack {
+                Text("Please write these words down").padding(.bottom, 30)
+                Text(model.rust.bip39Words())
+            }
 
             Spacer()
         }
