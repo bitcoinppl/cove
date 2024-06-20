@@ -996,7 +996,7 @@ public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeM
 }
 
 public protocol RustWalletViewModelProtocol: AnyObject {
-    func bip39Words() -> String
+    func bip39Words() -> [String]
 
     /**
      * Action from the frontend to change the state of the view model
@@ -1056,8 +1056,8 @@ open class RustWalletViewModel:
         try! rustCall { uniffi_cove_fn_free_rustwalletviewmodel(pointer, $0) }
     }
 
-    open func bip39Words() -> String {
-        return try! FfiConverterString.lift(try! rustCall {
+    open func bip39Words() -> [String] {
+        return try! FfiConverterSequenceString.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words(self.uniffiClonePointer(), $0)
         })
     }
@@ -2141,6 +2141,28 @@ extension FfiConverterCallbackInterfaceWalletViewModelReconciler: FfiConverter {
     }
 }
 
+private struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     typealias SwiftType = [Route]
 
@@ -2221,7 +2243,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words() != 13481 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words() != 30749 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {

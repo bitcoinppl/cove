@@ -66,7 +66,7 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn bip_39_words(&self) -> String {
+    pub fn bip_39_words(&self) -> Vec<String> {
         self.state.read().wallet.words()
     }
 

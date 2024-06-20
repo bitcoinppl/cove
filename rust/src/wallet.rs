@@ -77,9 +77,13 @@ impl Wallet {
         )))
     }
 
-    pub fn words(&self) -> String {
+    pub fn words(&self) -> Vec<String> {
         match self {
-            Self::Pending(pending_wallet) => pending_wallet.mnemonic.to_string(),
+            Self::Pending(pending_wallet) => pending_wallet
+                .mnemonic
+                .word_iter()
+                .map(ToString::to_string)
+                .collect(),
         }
     }
 }

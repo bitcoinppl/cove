@@ -39,7 +39,9 @@ struct TwelveWordsView: View {
 
             VStack {
                 Text("Please write these words down").padding(.bottom, 30)
-                Text(model.rust.bip39Words())
+                ForEach(model.rust.bip39Words(), id: \.self) { word in
+                    Text(word)
+                }
             }
 
             Spacer()
@@ -60,7 +62,9 @@ struct TwentyFourWordsView: View {
 
             VStack {
                 Text("Please write these words down").padding(.bottom, 30)
-                Text(model.rust.bip39Words())
+                ForEach(model.rust.bip39Words(), id: \.self) { word in
+                    Text(word)
+                }
             }
 
             Spacer()
