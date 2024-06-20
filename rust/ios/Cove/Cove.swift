@@ -915,6 +915,8 @@ public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeM
 }
 
 public protocol RustWalletViewModelProtocol: AnyObject {
+    func createNewWallet() throws
+
     /**
      * Action from the frontend to change the state of the view model
      */
@@ -971,6 +973,11 @@ open class RustWalletViewModel:
         }
 
         try! rustCall { uniffi_cove_fn_free_rustwalletviewmodel(pointer, $0) }
+    }
+
+    open func createNewWallet() throws { try rustCallWithError(FfiConverterTypeWalletCreationError.lift) {
+        uniffi_cove_fn_method_rustwalletviewmodel_create_new_wallet(self.uniffiClonePointer(), $0)
+    }
     }
 
     /**
@@ -1031,6 +1038,87 @@ public func FfiConverterTypeRustWalletViewModel_lift(_ pointer: UnsafeMutableRaw
 
 public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewModel) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRustWalletViewModel.lower(value)
+}
+
+public protocol WalletProtocol: AnyObject {}
+
+open class Wallet:
+    WalletProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_wallet(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_wallet(pointer, $0) }
+    }
+}
+
+public struct FfiConverterTypeWallet: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Wallet
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Wallet {
+        return Wallet(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Wallet) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Wallet {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Wallet, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeWallet_lift(_ pointer: UnsafeMutableRawPointer) throws -> Wallet {
+    return try FfiConverterTypeWallet.lift(pointer)
+}
+
+public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeWallet.lower(value)
 }
 
 public struct AppState {
@@ -1368,15 +1456,15 @@ public func FfiConverterTypeHotWalletRoute_lower(_ value: HotWalletRoute) -> Rus
 
 extension HotWalletRoute: Equatable, Hashable {}
 
-public enum MyError {
+public enum KeychainError {
     case Generic(String
     )
 }
 
-public struct FfiConverterTypeMyError: FfiConverterRustBuffer {
-    typealias SwiftType = MyError
+public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
+    typealias SwiftType = KeychainError
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MyError {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeychainError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         case 1: return try .Generic(
@@ -1387,7 +1475,7 @@ public struct FfiConverterTypeMyError: FfiConverterRustBuffer {
         }
     }
 
-    public static func write(_ value: MyError, into buf: inout [UInt8]) {
+    public static func write(_ value: KeychainError, into buf: inout [UInt8]) {
         switch value {
         case let .Generic(v1):
             writeInt(&buf, Int32(1))
@@ -1396,9 +1484,9 @@ public struct FfiConverterTypeMyError: FfiConverterRustBuffer {
     }
 }
 
-extension MyError: Equatable, Hashable {}
+extension KeychainError: Equatable, Hashable {}
 
-extension MyError: Foundation.LocalizedError {
+extension KeychainError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -1590,6 +1678,42 @@ public func FfiConverterTypeUpdate_lift(_ buf: RustBuffer) throws -> Update {
 
 public func FfiConverterTypeUpdate_lower(_ value: Update) -> RustBuffer {
     return FfiConverterTypeUpdate.lower(value)
+}
+
+public enum WalletCreationError {
+    case BdkError(String
+    )
+}
+
+public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
+    typealias SwiftType = WalletCreationError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletCreationError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .BdkError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletCreationError, into buf: inout [UInt8]) {
+        switch value {
+        case let .BdkError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension WalletCreationError: Equatable, Hashable {}
+
+extension WalletCreationError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -1785,7 +1909,7 @@ private enum UniffiCallbackInterfaceKeychain {
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn,
-                lowerError: FfiConverterTypeMyError.lower
+                lowerError: FfiConverterTypeKeychainError.lower
             )
         },
         uniffiFree: { (uniffiHandle: UInt64) in
@@ -1983,6 +2107,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_create_new_wallet() != 33948 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2010,7 +2137,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiupdater_update() != 21755 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_keychain_encrypt() != 3575 {
+    if uniffi_cove_checksum_method_keychain_encrypt() != 65101 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_walletviewmodelreconciler_reconcile() != 28159 {

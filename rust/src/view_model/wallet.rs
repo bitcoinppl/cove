@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
-use crate::wallet::NumberOfBip39Words;
+use crate::wallet::{NumberOfBip39Words, Wallet};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
@@ -12,7 +12,7 @@ pub enum WalletViewModelReconcileMessage {
 
 #[derive(Debug)]
 pub enum WalletState {
-    Creating,
+    Empty,
     Created(bdk_wallet::Wallet),
 }
 
@@ -39,6 +39,12 @@ pub enum WalletViewModelAction {
     UpdateWords(NumberOfBip39Words),
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum WalletCreationError {
+    #[error("failed to create wallet: {0}")]
+    BdkError(String),
+}
+
 #[uniffi::export]
 impl RustWalletViewModel {
     #[uniffi::constructor]
@@ -50,6 +56,14 @@ impl RustWalletViewModel {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
+    }
+
+    pub fn create_new_wallet(&self) -> Result<(), WalletCreationError> {
+        let state = self.state.read().clone();
+
+        let wallet = Wallet::new(state.number_of_words);
+
+        Ok(())
     }
 
     #[uniffi::method]

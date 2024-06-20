@@ -8,6 +8,7 @@ pub(crate) mod router;
 pub(crate) mod update;
 
 pub mod keychain;
+pub mod keys;
 pub mod view_model;
 pub mod wallet;
 

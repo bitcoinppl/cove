@@ -6,13 +6,13 @@ use log::warn;
 use once_cell::sync::OnceCell;
 
 #[derive(uniffi::Error)]
-pub enum MyError {
+pub enum KeychainError {
     Generic(String),
 }
 
 #[uniffi::export(callback_interface)]
 pub trait Keychain: Send + Sync + std::fmt::Debug + 'static {
-    fn encrypt(&self, data: Vec<u8>) -> Result<Vec<u8>, MyError>;
+    fn encrypt(&self, data: Vec<u8>) -> Result<Vec<u8>, KeychainError>;
 }
 
 static REF: OnceCell<Authenticator> = OnceCell::new();
@@ -38,7 +38,7 @@ impl Authenticator {
         REF.get().expect("keychain is not initialized")
     }
 
-    pub fn encrypt(&self, data: Vec<u8>) -> Result<Vec<u8>, MyError> {
+    pub fn encrypt(&self, data: Vec<u8>) -> Result<Vec<u8>, KeychainError> {
         self.0.encrypt(data)
     }
 }
