@@ -1038,11 +1038,11 @@ open class RustWalletViewModel:
         return try! rustCall { uniffi_cove_fn_clone_rustwalletviewmodel(self.pointer, $0) }
     }
 
-    public convenience init(words: NumberOfBip39Words) {
+    public convenience init(numberOfWords: NumberOfBip39Words) {
         let pointer =
             try! rustCall {
                 uniffi_cove_fn_constructor_rustwalletviewmodel_new(
-                    FfiConverterTypeNumberOfBip39Words.lower(words), $0
+                    FfiConverterTypeNumberOfBip39Words.lower(numberOfWords), $0
                 )
             }
         self.init(unsafeFromRawPointer: pointer)
@@ -2267,7 +2267,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_routefactory_new() != 4959 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_rustwalletviewmodel_new() != 39419 {
+    if uniffi_cove_checksum_constructor_rustwalletviewmodel_new() != 22927 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiupdater_update() != 21755 {

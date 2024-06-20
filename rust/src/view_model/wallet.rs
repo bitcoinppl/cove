@@ -25,7 +25,7 @@ pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustWalletViewModel {
-    pub state: Arc<RwLock<WalletViewModelState>>,
+    pub state: Arc<Mutex<WalletViewModelState>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
 }
@@ -50,7 +50,7 @@ pub enum WalletCreationError {
 #[uniffi::export]
 impl RustWalletViewModel {
     #[uniffi::constructor]
-    pub fn new(words: NumberOfBip39Words) -> Self {
+    pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
@@ -88,10 +88,11 @@ impl RustWalletViewModel {
     pub fn dispatch(&self, action: WalletViewModelAction) {
         match action {
             WalletViewModelAction::UpdateWords(words) => {
-                let mut state = self.state.write();
-
-                state.number_of_words = words;
-                state.wallet = Wallet::new(words, Network::Bitcoin, None);
+                {
+                    let mut state = self.state.lock();
+                    state.wallet = Wallet::new(words, Network::Bitcoin, None);
+                    state.number_of_words = words;
+                }
 
                 self.reconciler
                     .send(WalletViewModelReconcileMessage::Words(words))
@@ -102,10 +103,10 @@ impl RustWalletViewModel {
 }
 
 impl WalletViewModelState {
-    pub fn new(words: NumberOfBip39Words) -> Self {
+    pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         Self {
-            number_of_words: words,
-            wallet: Wallet::new(words, Network::Bitcoin, None),
+            number_of_words,
+            wallet: Wallet::new(number_of_words, Network::Bitcoin, None),
         }
     }
 }

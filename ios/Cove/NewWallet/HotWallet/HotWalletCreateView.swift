@@ -10,14 +10,14 @@ import SwiftUI
 struct HotWalletCreateView: View {
     @State private var model: WalletViewModel
 
-    init(words: NumberOfBip39Words) {
-        self.model = WalletViewModel(words: words)
+    init(numberOfWords: NumberOfBip39Words) {
+        self.model = WalletViewModel(numberOfWords: numberOfWords)
     }
 
     var body: some View {
-        switch model.words {
+        switch model.numberOfWords {
         case .twelve:
-            TwelveWordsView(model: model)
+            TwelveWordsView(model: model, words: model.rust.bip39Words())
         case .twentyFour:
             TwentyFourWordsView(model: model)
         }
@@ -26,6 +26,7 @@ struct HotWalletCreateView: View {
 
 struct TwelveWordsView: View {
     var model: WalletViewModel
+    var words: [String]
 
     var body: some View {
         VStack {
@@ -37,9 +38,13 @@ struct TwelveWordsView: View {
             .padding(.top, 50)
             .padding(.bottom, 20)
 
+            Button("log") {
+                print(words)
+            }
+
             VStack {
                 Text("Please write these words down").padding(.bottom, 30)
-                ForEach(model.rust.bip39Words(), id: \.self) { word in
+                ForEach(words, id: \.self) { word in
                     Text(word)
                 }
             }
@@ -60,6 +65,10 @@ struct TwentyFourWordsView: View {
             .padding(.top, 50)
             .padding(.bottom, 20)
 
+            Button("log") {
+                print(model.rust.bip39Words())
+            }
+
             VStack {
                 Text("Please write these words down").padding(.bottom, 30)
                 ForEach(model.rust.bip39Words(), id: \.self) { word in
@@ -73,9 +82,9 @@ struct TwentyFourWordsView: View {
 }
 
 #Preview("12 Words") {
-    HotWalletCreateView(words: .twelve)
+    HotWalletCreateView(numberOfWords: .twelve)
 }
 
 #Preview("24 Words") {
-    HotWalletCreateView(words: .twentyFour)
+    HotWalletCreateView(numberOfWords: .twentyFour)
 }

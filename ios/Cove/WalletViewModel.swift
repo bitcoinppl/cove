@@ -9,12 +9,12 @@ import SwiftUI
 
 @Observable class WalletViewModel: WalletViewModelReconciler {
     var rust: RustWalletViewModel
-    var words: NumberOfBip39Words
+    var numberOfWords: NumberOfBip39Words
 
-    public init(words: NumberOfBip39Words) {
-        self.rust = RustWalletViewModel(words: words)
+    public init(numberOfWords: NumberOfBip39Words) {
+        self.rust = RustWalletViewModel(numberOfWords: numberOfWords)
 
-        self.words = words
+        self.numberOfWords = numberOfWords
         self.rust.listenForUpdates(reconciler: self)
     }
 
@@ -25,13 +25,14 @@ import SwiftUI
 
                 switch message {
                 case .words(let numberOfBip39Words):
-                    self.words = numberOfBip39Words
+                    self.numberOfWords = numberOfBip39Words
                 }
             }
         }
     }
 
     public func dispatch(action: WalletViewModelAction) {
+        print(Thread.current)
         self.rust.dispatch(action: action)
     }
 }

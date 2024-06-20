@@ -15,7 +15,7 @@ struct NewHotWalletView: View {
         case .select:
             HotWalletSelectView()
         case .create(words: let words):
-            HotWalletCreateView(words: words)
+            HotWalletCreateView(numberOfWords: words)
         case .import:
             HotWalletImportView()
         }
