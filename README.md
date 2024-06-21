@@ -1,2 +1,3 @@
-# SimpleBitcoinWallet
-A simple bitcoin wallet for all
+# Cove
+
+Cove, a simple bitcoin wallet for all
