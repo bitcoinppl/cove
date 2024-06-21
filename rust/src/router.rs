@@ -1,34 +1,35 @@
 use std::sync::Arc;
 
-use crate::{app::FfiApp, impl_default_for};
+use crate::{app::FfiApp, impl_default_for, wallet::NumberOfBip39Words};
+use derive_more::From;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
     Cove,
-    NewWallet { route: NewWalletRoute },
+    NewWallet(NewWalletRoute),
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum NewWalletRoute {
     #[default]
     Select,
-
-    HotWallet {
-        route: HotWalletRoute,
-    },
-    ColdWallet {
-        route: ColdWalletRoute,
-    },
+    HotWallet(HotWalletRoute),
+    ColdWallet(ColdWalletRoute),
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum HotWalletRoute {
     #[default]
-    Create,
+    Select,
+
+    Create {
+        words: NumberOfBip39Words,
+    },
+
     Import,
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum ColdWalletRoute {
     #[default]
     Create,
@@ -66,24 +67,18 @@ impl RouteFactory {
     }
 
     pub fn new_wallet_select(&self) -> Route {
-        Route::NewWallet {
-            route: Default::default(),
-        }
+        Route::NewWallet(Default::default())
     }
 
     pub fn new_hot_wallet(&self) -> Route {
-        Route::NewWallet {
-            route: NewWalletRoute::HotWallet {
-                route: Default::default(),
-            },
-        }
+        Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
     }
 
     pub fn new_cold_wallet(&self) -> Route {
-        Route::NewWallet {
-            route: NewWalletRoute::ColdWallet {
-                route: Default::default(),
-            },
-        }
+        Route::NewWallet(NewWalletRoute::ColdWallet(Default::default()))
+    }
+
+    pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
+        Route::NewWallet(NewWalletRoute::HotWallet(route))
     }
 }

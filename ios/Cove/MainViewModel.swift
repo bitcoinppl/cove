@@ -29,11 +29,10 @@ import SwiftUI
     }
 
     func update(update: Update) {
-        print("[swift] update: \(update)")
-        print("Update Outer: \(Thread.current)")
         Task {
             await MainActor.run {
-                print("Inner: \(Thread.current)")
+                print("[swift] Update: \(update)")
+
                 switch update {
                 case .routerUpdate(router: let router):
                     self.router = router

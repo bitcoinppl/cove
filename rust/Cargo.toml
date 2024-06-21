@@ -15,6 +15,14 @@ path = "src/bin/uniffi-bindgen.rs"
 default = ["uniffi/cli"]
 
 [dependencies]
+# bdk / bitcoin
+bdk_wallet = { version = "1.0.0-alpha.13", features = ["keys-bip39"] }
+bip39 = { version = "2.0.0", features = ["zeroize"] }
+
+# crypto
+rand = "0.8.5"
+zeroize = "1.8.1"
+
 # concurrency
 crossbeam = "0.8.4"
 parking_lot = {version = "0.12.1", features = ["deadlock_detection"]}

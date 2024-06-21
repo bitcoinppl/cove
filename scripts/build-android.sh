@@ -26,4 +26,4 @@ cargo ndk -o ../android/app/src/main/jniLibs \
 cargo run --bin uniffi-bindgen generate \
     --library ./target/debug/libcove.dylib \
     --language kotlin \
-    --out-dir ../android/app/src/main/java/com/example/cove
+    --out-dir ../android/app/src/main/java \

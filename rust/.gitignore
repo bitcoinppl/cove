@@ -1,7 +1,4 @@
 /target
 
-# android
-/app
-
 # ios
 /ios/Cove.xcframework

@@ -1,4 +1,5 @@
 //! Send updates from rust to the frontend
+//! MainViewModel update
 
 use crossbeam::channel::Sender;
 use once_cell::sync::OnceCell;
