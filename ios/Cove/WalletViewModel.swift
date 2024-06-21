@@ -36,7 +36,6 @@ import SwiftUI
     }
 
     public func dispatch(action: WalletViewModelAction) {
-        print(Thread.current)
         self.rust.dispatch(action: action)
     }
 }
