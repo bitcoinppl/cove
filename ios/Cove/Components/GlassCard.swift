@@ -22,12 +22,12 @@ struct GlassCard<Content: View>: View {
                 .offset(x: 50, y: 10)
 
             // Glass effect layer
-            RoundedRectangle(cornerRadius: 25)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(.ultraThinMaterial)
                 .shadow(color: .orange.opacity(0.3), radius: 20, x: 0, y: 10)
 
             // Border layer
-            RoundedRectangle(cornerRadius: 25)
+            RoundedRectangle(cornerRadius: 20)
                 .stroke(.white.opacity(0.3), lineWidth: 1)
 
             // content

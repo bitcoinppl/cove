@@ -381,6 +381,19 @@ private class UniffiHandleMap<T> {
 
 // Public interface members begin here.
 
+private struct FfiConverterUInt8: FfiConverterPrimitive {
+    typealias FfiType = UInt8
+    typealias SwiftType = UInt8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: UInt8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
 private struct FfiConverterBool: FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -998,6 +1011,10 @@ public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeM
 public protocol RustWalletViewModelProtocol: AnyObject {
     func bip39Words() -> [String]
 
+    func bip39WordsGrouped() -> [[GroupedWord]]
+
+    func cardIndexes() -> UInt8
+
     /**
      * Action from the frontend to change the state of the view model
      */
@@ -1059,6 +1076,18 @@ open class RustWalletViewModel:
     open func bip39Words() -> [String] {
         return try! FfiConverterSequenceString.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func bip39WordsGrouped() -> [[GroupedWord]] {
+        return try! FfiConverterSequenceSequenceTypeGroupedWord.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words_grouped(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func cardIndexes() -> UInt8 {
+        return try! FfiConverterUInt8.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_card_indexes(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -1232,6 +1261,58 @@ public func FfiConverterTypeAppState_lift(_ buf: RustBuffer) throws -> AppState 
 
 public func FfiConverterTypeAppState_lower(_ value: AppState) -> RustBuffer {
     return FfiConverterTypeAppState.lower(value)
+}
+
+public struct GroupedWord {
+    public var number: UInt8
+    public var word: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(number: UInt8, word: String) {
+        self.number = number
+        self.word = word
+    }
+}
+
+extension GroupedWord: Equatable, Hashable {
+    public static func == (lhs: GroupedWord, rhs: GroupedWord) -> Bool {
+        if lhs.number != rhs.number {
+            return false
+        }
+        if lhs.word != rhs.word {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(number)
+        hasher.combine(word)
+    }
+}
+
+public struct FfiConverterTypeGroupedWord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GroupedWord {
+        return
+            try GroupedWord(
+                number: FfiConverterUInt8.read(from: &buf),
+                word: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: GroupedWord, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.number, into: &buf)
+        FfiConverterString.write(value.word, into: &buf)
+    }
+}
+
+public func FfiConverterTypeGroupedWord_lift(_ buf: RustBuffer) throws -> GroupedWord {
+    return try FfiConverterTypeGroupedWord.lift(buf)
+}
+
+public func FfiConverterTypeGroupedWord_lower(_ value: GroupedWord) -> RustBuffer {
+    return FfiConverterTypeGroupedWord.lower(value)
 }
 
 public struct Router {
@@ -2163,6 +2244,28 @@ private struct FfiConverterSequenceString: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer {
+    typealias SwiftType = [GroupedWord]
+
+    public static func write(_ value: [GroupedWord], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeGroupedWord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [GroupedWord] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [GroupedWord]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeGroupedWord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     typealias SwiftType = [Route]
 
@@ -2180,6 +2283,28 @@ private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             try seq.append(FfiConverterTypeRoute.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+private struct FfiConverterSequenceSequenceTypeGroupedWord: FfiConverterRustBuffer {
+    typealias SwiftType = [[GroupedWord]]
+
+    public static func write(_ value: [[GroupedWord]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceTypeGroupedWord.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[GroupedWord]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[GroupedWord]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterSequenceTypeGroupedWord.read(from: &buf))
         }
         return seq
     }
@@ -2244,6 +2369,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words() != 30749 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words_grouped() != 18300 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_card_indexes() != 50108 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {

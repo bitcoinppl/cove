@@ -21,13 +21,25 @@ struct SunsetWave<Content: View>: View {
             ]), startPoint: .topLeading, endPoint: .bottomTrailing)
 
             // Overlapping waves
-            WaveView(color1: Color(red: 0.8, green: 0.3, blue: 0.2), color2: Color(red: 0.9, green: 0.5, blue: 0.3), frequency: 0.5, amplitude: 100, phase: 0)
+            WaveView(color1: Color(red: 0.8, green: 0.3, blue: 0.2),
+                     color2: Color(red: 0.9, green: 0.5, blue: 0.3),
+                     frequency: 0.5,
+                     amplitude: 100,
+                     phase: 0)
                 .opacity(0.4)
 
-            WaveView(color1: Color(red: 0.9, green: 0.4, blue: 0.2), color2: Color(red: 1.0, green: 0.6, blue: 0.4), frequency: 0.6, amplitude: 130, phase: 0.5)
+            WaveView(color1: Color(red: 0.9, green: 0.4, blue: 0.2),
+                     color2: Color(red: 1.0, green: 0.6, blue: 0.4),
+                     frequency: 0.6,
+                     amplitude: 130,
+                     phase: 0.5)
                 .opacity(0.3)
 
-            WaveView(color1: Color(red: 1.0, green: 0.5, blue: 0.3), color2: Color(red: 1.0, green: 0.7, blue: 0.5), frequency: 0.7, amplitude: 160, phase: 1)
+            WaveView(color1: Color(red: 1.0, green: 0.5, blue: 0.3),
+                     color2: Color(red: 1.0, green: 0.7, blue: 0.5),
+                     frequency: 0.7,
+                     amplitude: 160,
+                     phase: 1)
                 .opacity(0.2)
 
             // content

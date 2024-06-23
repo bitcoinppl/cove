@@ -15,18 +15,20 @@ struct HotWalletCreateView: View {
     }
 
     var body: some View {
-        switch model.numberOfWords {
-        case .twelve:
-            TwelveWordsView(model: model)
-        case .twentyFour:
-            TwentyFourWordsView(model: model)
-        }
+        WordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
     }
 }
 
-struct TwelveWordsView: View {
+struct WordsView: View {
     var model: WalletViewModel
+    var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
+    @State private var showConfirmationAlert = false
+    @Environment(\.presentationMode) var presentationMode
+
+    var lastIndex: Int {
+        return groupedWords.count - 1
+    }
 
     var body: some View {
         SunsetWave {
@@ -37,77 +39,76 @@ struct TwelveWordsView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(.white.opacity(0.75))
+                    .padding(.top, 50)
 
                 StyledWordCard(tabIndex: $tabIndex) {
-                    ForEach(0..<2) { pageIndex in
-                        WordCardView(
-                            words: Array(model.bip39Words[pageIndex * 6..<min((pageIndex + 1) * 6, model.bip39Words.count)]),
-                            startIndex: pageIndex * 6
-                        )
+                    ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
+                        WordCardView(words: wordGroup).tag(index)
                     }
-                }.padding()
+                }
+                .frame(height: 400)
+                .padding()
 
                 Spacer()
 
-                if tabIndex == 0 {
-                    Button("Next") {
-                        model.dispatch(action: .updateWords(.twentyFour))
-                    }
-                    .background(.white)
-                    .padding(.top, 50)
+                if tabIndex == lastIndex {
+                    Button("Save Wallet") {}
+                        .buttonStyle(GradientButtonStyle())
+                        .padding(.top, 50)
+
                 } else {
-                    StyledButton("Switch to 24 Word") {
-                        model.dispatch(action: .updateWords(.twentyFour))
+                    Button("Next") {
+                        withAnimation {
+                            tabIndex += 1
+                        }
                     }
+                    .buttonStyle(GlassyButtonStyle())
                     .padding(.top, 50)
                 }
 
                 Spacer()
             }
         }
-    }
-}
-
-struct TwentyFourWordsView: View {
-    var model: WalletViewModel
-
-    var body: some View {
-        SunsetWave {
-            VStack {
-                Button("24 Words") {
-                    model.dispatch(action: .updateWords(.twelve))
-                }
-                .padding(.top, 50)
-                .padding(.bottom, 20)
-
-                VStack {
-                    Text("Please write these words down").padding(.bottom, 20)
-                    ForEach(Array(model.bip39Words.enumerated()), id: \.offset) { index, word in
-                        HStack {
-                            Text("\(String(index + 1)). ")
-                            Text(word)
-                        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    showConfirmationAlert = true
+                }) {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
                     }
                 }
-
-                Spacer()
             }
+        }
+        .alert(isPresented: $showConfirmationAlert) {
+            Alert(
+                title: Text("⚠️ Wallet Not Saved ⚠️"),
+                message: Text("You will have to write down a new set of words."),
+                primaryButton: .destructive(Text("Yes, Go Back")) {
+                    presentationMode.wrappedValue.dismiss()
+                },
+                secondaryButton: .cancel(Text("Cancel"))
+            )
         }
     }
 }
 
 struct WordCardView: View {
-    let words: [String]
-    let startIndex: Int
+    let words: [GroupedWord]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+            ForEach(words, id: \.self) { group in
                 HStack {
-                    Text("\(startIndex + index + 1).")
+                    Text("\(group.number).")
                         .foregroundColor(.secondary)
+                        .frame(width: 30, alignment: .trailing)
+                        .padding(.trailing, 8)
+                        .multilineTextAlignment(.center)
 
-                    Text(word)
+                    Text(group.word)
                         .font(.headline)
                 }
             }
@@ -128,38 +129,7 @@ struct StyledWordCard<Content: View>: View {
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
         }
-        .frame(height: 300)
         .padding()
-    }
-}
-
-struct StyledButton: View {
-    let text: String
-    let action: () -> Void
-
-    init(_ text: String, action: @escaping () -> Void) {
-        self.text = text
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Text(text)
-                .padding()
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color(red: 0.2, green: 0.4, blue: 1.0),
-                            Color(red: 0.1, green: 0.5, blue: 1.0),
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
-        }
     }
 }
 
