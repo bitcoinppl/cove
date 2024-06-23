@@ -23,6 +23,8 @@ struct WordsView: View {
     var model: WalletViewModel
     var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
+    @State private var showConfirmationAlert = false
+    @Environment(\.presentationMode) var presentationMode
 
     var lastIndex: Int {
         return groupedWords.count - 1
@@ -66,6 +68,29 @@ struct WordsView: View {
 
                 Spacer()
             }
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    showConfirmationAlert = true
+                }) {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                }
+            }
+        }
+        .alert(isPresented: $showConfirmationAlert) {
+            Alert(
+                title: Text("⚠️ Wallet Not Saved ⚠️"),
+                message: Text("You will have to write down a new set of words."),
+                primaryButton: .destructive(Text("Yes, Go Back")) {
+                    presentationMode.wrappedValue.dismiss()
+                },
+                secondaryButton: .cancel(Text("Cancel"))
+            )
         }
     }
 }
