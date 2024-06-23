@@ -17,6 +17,12 @@ pub enum WalletState {
     Created(bdk_wallet::Wallet),
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct GroupedWord {
+    pub number: u8,
+    pub word: String,
+}
+
 #[uniffi::export(callback_interface)]
 pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the view model changes
@@ -68,6 +74,34 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn bip_39_words(&self) -> Vec<String> {
         self.state.read().wallet.words()
+    }
+
+    #[uniffi::method]
+    pub fn card_indexes(&self) -> u8 {
+        self.state.read().number_of_words.to_word_count() as u8 / 6
+    }
+
+    #[uniffi::method]
+    pub fn bip_39_words_grouped(&self) -> Vec<Vec<GroupedWord>> {
+        let chunk_size = 6;
+
+        self.state
+            .read()
+            .wallet
+            .words()
+            .chunks(chunk_size)
+            .enumerate()
+            .map(|(chunk_index, chunk)| {
+                chunk
+                    .iter()
+                    .enumerate()
+                    .map(|(index, word)| GroupedWord {
+                        number: ((chunk_index * chunk_size) + index + 1) as u8,
+                        word: word.to_string(),
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     // boilerplate methods
