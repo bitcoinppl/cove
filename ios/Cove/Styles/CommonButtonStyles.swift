@@ -54,8 +54,8 @@ struct GlassyButtonStyle: ButtonStyle {
             .foregroundStyle(
                 LinearGradient(
                     colors: [
-                        Color(red: 0.0, green: 0.5, blue: 0.7),
-                        Color(red: 0.0, green: 0.4, blue: 0.6),
+                        Color(red: 0.2, green: 0.4, blue: 1.0),
+                        Color(red: 0.1, green: 0.5, blue: 1.0),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
