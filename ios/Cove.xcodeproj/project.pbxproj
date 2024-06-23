@@ -19,7 +19,8 @@
 		ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301772C21D6EA006790DF /* HotWalletImportView.swift */; };
 		ACC3017A2C221450006790DF /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* WalletViewModel.swift */; };
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
-		ACF44D122C2642DD008C5034 /* OrangeGradientBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* OrangeGradientBackgroundView.swift */; };
+		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
+		ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* GlassCard.swift */; };
 		D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
@@ -41,7 +42,8 @@
 		ACC301772C21D6EA006790DF /* HotWalletImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletImportView.swift; sourceTree = "<group>"; };
 		ACC301792C221450006790DF /* WalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
-		ACF44D112C2642DD008C5034 /* OrangeGradientBackgroundView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OrangeGradientBackgroundView.swift; sourceTree = "<group>"; };
+		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
+		ACF44D132C2857E9008C5034 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Cove.xcframework; path = ../rust/ios/Cove.xcframework; sourceTree = "<group>"; };
 		D000B2F12C0F7BB100E32143 /* Cove.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Cove.swift; path = ../../rust/ios/Cove/Cove.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -95,12 +97,13 @@
 			path = HotWallet;
 			sourceTree = "<group>";
 		};
-		ACF44D102C2642BA008C5034 /* Views */ = {
+		ACF44D102C2642BA008C5034 /* Components */ = {
 			isa = PBXGroup;
 			children = (
-				ACF44D112C2642DD008C5034 /* OrangeGradientBackgroundView.swift */,
+				ACF44D112C2642DD008C5034 /* SunsetWave.swift */,
+				ACF44D132C2857E9008C5034 /* GlassCard.swift */,
 			);
-			path = Views;
+			path = Components;
 			sourceTree = "<group>";
 		};
 		D0245F432C0F7B4E0042B447 = {
@@ -123,7 +126,7 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
-				ACF44D102C2642BA008C5034 /* Views */,
+				ACF44D102C2642BA008C5034 /* Components */,
 				ACC3016B2C21095A006790DF /* NewWallet */,
 				ACC301662C20C11D006790DF /* Extention */,
 				D000B2F12C0F7BB100E32143 /* Cove.swift */,
@@ -232,9 +235,10 @@
 				ACC301712C2109C1006790DF /* NewWalletSelectView.swift in Sources */,
 				ACC3016F2C2109A1006790DF /* NewColdWalletView.swift in Sources */,
 				D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */,
+				ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */,
 				ACC3016D2C210978006790DF /* NewHotWalletView.swift in Sources */,
 				D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */,
-				ACF44D122C2642DD008C5034 /* OrangeGradientBackgroundView.swift in Sources */,
+				ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */,
 				ACC3016A2C20C9D4006790DF /* Routes+Ext.swift in Sources */,
 				ACC301652C207787006790DF /* NewWalletView.swift in Sources */,
 				ACC301762C21D698006790DF /* HotWalletCreateView.swift in Sources */,

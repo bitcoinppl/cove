@@ -26,34 +26,40 @@ struct HotWalletCreateView: View {
 
 struct TwelveWordsView: View {
     var model: WalletViewModel
+    @State private var tabIndex = 0
 
     var body: some View {
-        ZStack {
-            RadialGradient(
-                gradient: Gradient(colors: [
-                    Color.red.opacity(0.9),
-                    Color.orange.opacity(0.6),
-                ]),
-                center: .center, startRadius: 2, endRadius: 650
-            )
-            .edgesIgnoringSafeArea(.all)
-
-            VStack(spacing: 20) {
-                StyledButton("Switch to 24 Word") {
-                    model.dispatch(action: .updateWords(.twentyFour))
-                }.padding(.top, 20)
+        SunsetWave {
+            VStack {
+                Spacer()
 
                 Text("Please write these words down")
-                    .font(.title3)
-                    .foregroundColor(.white)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white.opacity(0.75))
 
-                StyledWordCard {
+                StyledWordCard(tabIndex: $tabIndex) {
                     ForEach(0..<2) { pageIndex in
                         WordCardView(
                             words: Array(model.bip39Words[pageIndex * 6..<min((pageIndex + 1) * 6, model.bip39Words.count)]),
                             startIndex: pageIndex * 6
                         )
                     }
+                }.padding()
+
+                Spacer()
+
+                if tabIndex == 0 {
+                    Button("Next") {
+                        model.dispatch(action: .updateWords(.twentyFour))
+                    }
+                    .background(.white)
+                    .padding(.top, 50)
+                } else {
+                    StyledButton("Switch to 24 Word") {
+                        model.dispatch(action: .updateWords(.twentyFour))
+                    }
+                    .padding(.top, 50)
                 }
 
                 Spacer()
@@ -66,7 +72,7 @@ struct TwentyFourWordsView: View {
     var model: WalletViewModel
 
     var body: some View {
-        OrangeGradientBackgroundView {
+        SunsetWave {
             VStack {
                 Button("24 Words") {
                     model.dispatch(action: .updateWords(.twelve))
@@ -100,8 +106,9 @@ struct WordCardView: View {
                 HStack {
                     Text("\(startIndex + index + 1).")
                         .foregroundColor(.secondary)
+
                     Text(word)
-                        .fontWeight(.medium)
+                        .font(.headline)
                 }
             }
         }
@@ -110,30 +117,18 @@ struct WordCardView: View {
     }
 }
 
-#Preview("12 Words") {
-    HotWalletCreateView(numberOfWords: .twelve)
-}
-
-#Preview("24 Words") {
-    HotWalletCreateView(numberOfWords: .twentyFour)
-}
-
 struct StyledWordCard<Content: View>: View {
+    @Binding var tabIndex: Int
     @ViewBuilder var content: Content
 
     var body: some View {
-        TabView {
-            content
+        GlassCard {
+            TabView(selection: $tabIndex) {
+                content
+            }
+            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
         }
-        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
         .frame(height: 300)
-        .background(.ultraThinMaterial)
-        .cornerRadius(20)
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 10)
         .padding()
     }
 }
@@ -166,4 +161,12 @@ struct StyledButton: View {
                 .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
         }
     }
+}
+
+#Preview("12 Words") {
+    HotWalletCreateView(numberOfWords: .twelve)
+}
+
+#Preview("24 Words") {
+    HotWalletCreateView(numberOfWords: .twentyFour)
 }
