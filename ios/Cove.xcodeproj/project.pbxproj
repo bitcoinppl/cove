@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC269AE12C289F17005481A8 /* VerifyWordsView.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
@@ -32,6 +33,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AC269AE12C289F17005481A8 /* VerifyWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsView.swift; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
 		ACA4CBEB2C2328BE0008F63E /* Security.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security.swift; sourceTree = "<group>"; };
 		ACC301642C207787006790DF /* NewWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWalletView.swift; sourceTree = "<group>"; };
@@ -136,19 +138,20 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				AC97D1ED2C287FCE00873092 /* Styles */,
 				ACF44D102C2642BA008C5034 /* Components */,
 				ACC3016B2C21095A006790DF /* NewWallet */,
 				ACC301662C20C11D006790DF /* Extention */,
-				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				ACC301642C207787006790DF /* NewWalletView.swift */,
 				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
 				ACC301792C221450006790DF /* WalletViewModel.swift */,
-				D0245F532C0F7B500042B447 /* Assets.xcassets */,
-				D0245F552C0F7B500042B447 /* Preview Content */,
+				AC269AE12C289F17005481A8 /* VerifyWordsView.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
+				D0245F532C0F7B500042B447 /* Assets.xcassets */,
+				D0245F552C0F7B500042B447 /* Preview Content */,
 			);
 			indentWidth = 4;
 			path = Cove;
@@ -245,6 +248,7 @@
 				ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */,
 				ACC301712C2109C1006790DF /* NewWalletSelectView.swift in Sources */,
 				ACC3016F2C2109A1006790DF /* NewColdWalletView.swift in Sources */,
+				AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */,
 				D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */,
 				ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */,
 				ACC3016D2C210978006790DF /* NewHotWalletView.swift in Sources */,
