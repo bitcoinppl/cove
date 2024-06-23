@@ -15,6 +15,17 @@ struct CoveApp: App {
         self.model = MainViewModel()
     }
 
+    var tintColor: Color {
+        switch model.router.routes.last {
+        case .newWallet(.hotWallet(.select)):
+            Color.blue
+        case .newWallet:
+            Color.white
+        default:
+            Color.blue
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $model.router.routes) {
@@ -34,6 +45,7 @@ struct CoveApp: App {
                         model.dispatch(event: Event.routeChanged(routes: new))
                     }
             }
+            .tint(tintColor)
         }.environment(model)
     }
 }
