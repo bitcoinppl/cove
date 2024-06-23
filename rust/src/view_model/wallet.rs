@@ -104,6 +104,7 @@ impl RustWalletViewModel {
             .collect()
     }
 
+
     // boilerplate methods
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {

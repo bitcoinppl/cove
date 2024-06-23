@@ -14,11 +14,88 @@ struct VerifyWordsView: View {
 
     var body: some View {
         TabView(selection: $tabIndex) {
-            ForEach(groupedWords, id: \.self) { wordGroup in
+            ForEach(self.groupedWords, id: \.self) { wordGroup in
                 CardTab(wordGroup: wordGroup)
             }
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+    }
+}
+
+struct CardTab: View {
+    let wordGroup: [GroupedWord]
+    @State private var fields = ["", "", "", "", "", ""]
+
+    var body: some View {
+        VStack(spacing: 20) {
+            ForEach(Array(self.wordGroup.enumerated()), id: \.offset) { index, word in
+                AutocompleteField(autocompleter: Bip39AutoComplete(), text: self.$fields[index], word: word)
+                    .zIndex(6 - Double(index))
+            }
+        }.onAppear {
+            print(self.wordGroup)
+        }
+    }
+}
+
+struct AutocompleteField<AutoCompleter: AutoComplete>: View {
+    let autocompleter: AutoCompleter
+    @Binding var text: String
+
+    let word: GroupedWord
+
+    @State private var showSuggestions = false
+    @State private var offset: CGPoint = .zero
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack {
+            Text("\(self.word.number). ")
+
+            TextField("Enter Word", text: self.$text)
+                .focused(self.$isFocused)
+                .onChange(of: self.text) {
+                    if self.text.lowercased() == self.word.word.lowercased() {
+                        self.showSuggestions = false
+                        return
+                    }
+
+                    self.showSuggestions = !self.text.isEmpty && self.isFocused && !self.filteredSuggestions.isEmpty
+                }
+                .overlay(
+                    Group {
+                        if self.showSuggestions {
+                            SuggestionList(suggestions: self.filteredSuggestions, selection: self.$text)
+                                .transition(.move(edge: .top))
+                                .frame(height: CGFloat(self.filteredSuggestions.count) * 50)
+                                .zIndex(10)
+                        }
+                    }
+                    .offset(y: 75)
+                )
+        }
+    }
+
+    var filteredSuggestions: [String] {
+        []
+    }
+}
+
+struct SuggestionList: View {
+    let suggestions: [String]
+    @Binding var selection: String
+
+    var body: some View {
+        List(suggestions, id: \.self) { suggestion in
+            Text(suggestion)
+                .onTapGesture {
+                    self.selection = suggestion
+                }
+                .padding(.vertical, 4)
+        }
+        .listStyle(.inset)
+        .cornerRadius(10)
+        .shadow(radius: 5)
     }
 }
 
@@ -29,14 +106,16 @@ struct VerifyWordsView: View {
         VerifyWordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
 }
 
-struct CardTab: View {
-    var wordGroup: [GroupedWord]
-
-    var body: some View {
-        VStack(spacing: 20) {
-            ForEach(Array(wordGroup.enumerated()), id: \.offset) { _, word in
-                Text("\(word.number). ")
-            }
-        }
+#Preview("Autocomplete") {
+    VStack {
+        AutocompleteField(
+            autocompleter: Bip39AutoComplete(),
+            text: Binding.constant("T"),
+            word: GroupedWord(number: 1, word: "Test")
+        )
+        .padding()
     }
+    .padding()
 }
+
+extension Bip39AutoComplete: AutoComplete {}

@@ -557,6 +557,247 @@ public func FfiConverterTypeAuthenticator_lower(_ value: Authenticator) -> Unsaf
     return FfiConverterTypeAuthenticator.lower(value)
 }
 
+public protocol AutoComplete: AnyObject {
+    func autocomplete(word: String) -> [String]
+}
+
+open class AutoCompleteImpl:
+    AutoComplete
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_autocomplete(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_autocomplete(pointer, $0) }
+    }
+
+    open func autocomplete(word: String) -> [String] {
+        return try! FfiConverterSequenceString.lift(try! rustCall {
+            uniffi_cove_fn_method_autocomplete_autocomplete(self.uniffiClonePointer(),
+                                                            FfiConverterString.lower(word), $0)
+        })
+    }
+}
+
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+private enum UniffiCallbackInterfaceAutoComplete {
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceAutoComplete = .init(
+        autocomplete: { (
+            uniffiHandle: UInt64,
+            word: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> [String] in
+                guard let uniffiObj = try? FfiConverterTypeAutoComplete.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.autocomplete(
+                    word: FfiConverterString.lift(word)
+                )
+            }
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) in
+            let result = try? FfiConverterTypeAutoComplete.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface AutoComplete: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitAutoComplete() {
+    uniffi_cove_fn_init_callback_vtable_autocomplete(&UniffiCallbackInterfaceAutoComplete.vtable)
+}
+
+public struct FfiConverterTypeAutoComplete: FfiConverter {
+    fileprivate static var handleMap = UniffiHandleMap<AutoComplete>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = AutoComplete
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> AutoComplete {
+        return AutoCompleteImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: AutoComplete) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AutoComplete {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: AutoComplete, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeAutoComplete_lift(_ pointer: UnsafeMutableRawPointer) throws -> AutoComplete {
+    return try FfiConverterTypeAutoComplete.lift(pointer)
+}
+
+public func FfiConverterTypeAutoComplete_lower(_ value: AutoComplete) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeAutoComplete.lower(value)
+}
+
+public protocol Bip39AutoCompleteProtocol: AnyObject {
+    func autocomplete(word: String) -> [String]
+}
+
+open class Bip39AutoComplete:
+    Bip39AutoCompleteProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_bip39autocomplete(self.pointer, $0) }
+    }
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_bip39autocomplete_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_bip39autocomplete(pointer, $0) }
+    }
+
+    open func autocomplete(word: String) -> [String] {
+        return try! FfiConverterSequenceString.lift(try! rustCall {
+            uniffi_cove_fn_method_bip39autocomplete_autocomplete(self.uniffiClonePointer(),
+                                                                 FfiConverterString.lower(word), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeBip39AutoComplete: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Bip39AutoComplete
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Bip39AutoComplete {
+        return Bip39AutoComplete(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Bip39AutoComplete) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bip39AutoComplete {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Bip39AutoComplete, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeBip39AutoComplete_lift(_ pointer: UnsafeMutableRawPointer) throws -> Bip39AutoComplete {
+    return try FfiConverterTypeBip39AutoComplete.lift(pointer)
+}
+
+public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBip39AutoComplete.lower(value)
+}
+
 public protocol DatabaseProtocol: AnyObject {
     func getBoolConfig(key: GlobalBoolConfigKey) throws -> Bool
 
@@ -1998,14 +2239,6 @@ public protocol FfiUpdater: AnyObject {
     func update(update: Update)
 }
 
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
-private let IDX_CALLBACK_FREE: Int32 = 0
-// Callback return codes
-private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
-private let UNIFFI_CALLBACK_ERROR: Int32 = 1
-private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
-
 // Put the implementation in a struct so we don't pollute the top-level namespace
 private enum UniffiCallbackInterfaceFfiUpdater {
     // Create the VTable using a series of closures.
@@ -2335,6 +2568,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_global() != 52066 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 21847 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_database_get_bool_config() != 51514 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2389,6 +2628,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_authenticator_new() != 4424 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_constructor_bip39autocomplete_new() != 41839 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_constructor_database_new() != 41458 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2411,6 +2653,7 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitAutoComplete()
     uniffiCallbackInitFfiUpdater()
     uniffiCallbackInitKeychain()
     uniffiCallbackInitWalletViewModelReconciler()
