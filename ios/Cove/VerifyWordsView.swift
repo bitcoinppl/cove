@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+extension Bip39AutoComplete: AutoComplete {}
+
 struct VerifyWordsView: View {
     var model: WalletViewModel
     var groupedWords: [[GroupedWord]]
@@ -62,7 +64,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
 
                     self.showSuggestions = !self.text.isEmpty && self.isFocused && !self.filteredSuggestions.isEmpty
                 }
-                .overlay(
+                .overlay(alignment: Alignment(horizontal: .center, vertical: .top)) {
                     Group {
                         if self.showSuggestions {
                             SuggestionList(suggestions: self.filteredSuggestions, selection: self.$text)
@@ -71,13 +73,13 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                                 .zIndex(10)
                         }
                     }
-                    .offset(y: 75)
-                )
+                    .offset(y: 40)
+                }
         }
     }
 
     var filteredSuggestions: [String] {
-        []
+        autocompleter.autocomplete(word: text)
     }
 }
 
@@ -96,6 +98,7 @@ struct SuggestionList: View {
         .listStyle(.inset)
         .cornerRadius(10)
         .shadow(radius: 5)
+        .padding(.trailing, 20)
     }
 }
 
@@ -105,17 +108,3 @@ struct SuggestionList: View {
     return
         VerifyWordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
 }
-
-#Preview("Autocomplete") {
-    VStack {
-        AutocompleteField(
-            autocompleter: Bip39AutoComplete(),
-            text: Binding.constant("T"),
-            word: GroupedWord(number: 1, word: "Test")
-        )
-        .padding()
-    }
-    .padding()
-}
-
-extension Bip39AutoComplete: AutoComplete {}
