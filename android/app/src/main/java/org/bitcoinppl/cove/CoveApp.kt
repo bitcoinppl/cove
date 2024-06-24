@@ -13,7 +13,6 @@ import com.example.cove.ViewModel
 import com.example.cove.ui.theme.CoveTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.bitcoinppl.cove.AutoComplete
-open class Bip39AutoComplete : org.bitcoinppl.cove.Bip39AutoComplete(), AutoComplete {}
 
 @Composable
 fun CoveApp(viewModel: ViewModel = viewModel()) {
