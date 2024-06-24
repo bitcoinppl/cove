@@ -102,6 +102,7 @@
 		ACC301722C21126C006790DF /* HotWallet */ = {
 			isa = PBXGroup;
 			children = (
+				AC269AE12C289F17005481A8 /* VerifyWordsView.swift */,
 				ACC301732C211281006790DF /* HotWalletSelectView.swift */,
 				ACC301752C21D698006790DF /* HotWalletCreateView.swift */,
 				ACC301772C21D6EA006790DF /* HotWalletImportView.swift */,
@@ -147,7 +148,6 @@
 				ACC301642C207787006790DF /* NewWalletView.swift */,
 				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
 				ACC301792C221450006790DF /* WalletViewModel.swift */,
-				AC269AE12C289F17005481A8 /* VerifyWordsView.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,

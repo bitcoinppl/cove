@@ -1264,6 +1264,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
     func getState() -> WalletViewModelState
 
     func listenForUpdates(reconciler: WalletViewModelReconciler)
+
+    func numberOfWordsCount() -> UInt8
 }
 
 open class RustWalletViewModel:
@@ -1351,6 +1353,12 @@ open class RustWalletViewModel:
         uniffi_cove_fn_method_rustwalletviewmodel_listen_for_updates(self.uniffiClonePointer(),
                                                                      FfiConverterCallbackInterfaceWalletViewModelReconciler.lower(reconciler), $0)
     }
+    }
+
+    open func numberOfWordsCount() -> UInt8 {
+        return try! FfiConverterUInt8.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_number_of_words_count(self.uniffiClonePointer(), $0)
+        })
     }
 }
 
@@ -2623,6 +2631,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_words_count() != 60024 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_authenticator_new() != 4424 {

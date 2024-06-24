@@ -52,9 +52,11 @@ struct WordsView: View {
                 Spacer()
 
                 if tabIndex == lastIndex {
-                    Button("Save Wallet") {}
-                        .buttonStyle(GradientButtonStyle())
-                        .padding(.top, 50)
+                    Button("Save Wallet") {
+                        // TODO: save the wallet
+                    }
+                    .buttonStyle(GradientButtonStyle())
+                    .padding(.top, 50)
 
                 } else {
                     Button("Next") {
@@ -102,7 +104,7 @@ struct WordCardView: View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(words, id: \.self) { group in
                 HStack {
-                    Text("\(group.number).")
+                    Text("\(String(format: "%02d", group.number)). ")
                         .foregroundColor(.secondary)
                         .frame(width: 30, alignment: .trailing)
                         .padding(.trailing, 8)

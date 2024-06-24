@@ -22,6 +22,10 @@ impl Bip39AutoComplete {
 impl AutoComplete for Bip39AutoComplete {
     #[uniffi::method]
     fn autocomplete(&self, word: String) -> Vec<String> {
+        if word.is_empty() {
+            return vec![];
+        }
+
         let word = word.to_lowercase();
 
         bip39::Language::English
