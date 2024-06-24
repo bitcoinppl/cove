@@ -7,8 +7,6 @@
 
 import SwiftUI
 
-extension Bip39AutoComplete: AutoComplete {}
-
 // MONDAY TODO:
 // 1. Add disabled next button
 // 2. Add confirm button on last page, if not correct, say which ones are not good!
