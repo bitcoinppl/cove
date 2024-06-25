@@ -25,19 +25,65 @@ struct VerifyWordsView: View {
         self.tabIndex = 0
     }
 
+    var buttonIsDisabled: Bool {
+        !model.rust.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
+    }
+
+    var lastIndex: Int {
+        return groupedWords.count - 1
+    }
+
     var body: some View {
-        GlassCard {
-            TabView(selection: $tabIndex) {
-                ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
-                    CardTab(wordGroup: wordGroup, fields: $enteredWords[index])
-                        .tag(index)
+        SunsetWave {
+            VStack {
+                Spacer()
+
+                Text("Please verify your words")
+                    .font(.title)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white.opacity(0.85))
+                    .padding(.top, 20)
+
+                Spacer()
+
+                GlassCard {
+                    TabView(selection: $tabIndex) {
+                        ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
+                            CardTab(wordGroup: wordGroup, fields: $enteredWords[index])
+                                .tag(index)
+                        }
+                        .padding(.horizontal, 30)
+                        .padding(.vertical, 30)
+                    }
                 }
+                .frame(height: 450)
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
                 .padding(.horizontal, 30)
-                .padding(.vertical, 30)
+
+                Spacer()
+
+                if tabIndex == lastIndex {
+                    Button("Confirm") {
+                        // TODO: confirm
+                    }
+                    .buttonStyle(GradientButtonStyle(disabled: buttonIsDisabled))
+                    .padding(.top, 20)
+
+                } else {
+                    Button("Next") {
+                        withAnimation {
+                            tabIndex += 1
+                        }
+                    }
+                    .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
+                    .disabled(buttonIsDisabled)
+                    .foregroundStyle(Color.red)
+                    .padding(.top, 20)
+                }
+
+                Spacer()
             }
         }
-        .frame(height: 500)
-        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
     }
 }
 
@@ -51,6 +97,7 @@ struct CardTab: View {
                 AutocompleteField(autocompleter: Bip39AutoComplete(), text: self.$fields[index], word: word)
                     .zIndex(6 - Double(index))
             }
+
         }.onAppear {
             print(self.wordGroup)
         }
@@ -183,13 +230,5 @@ struct SuggestionList: View {
     @State var model = WalletViewModel(numberOfWords: .twelve)
 
     return
-        SunsetWave {
-            VStack {
-                Spacer()
-                VerifyWordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
-                    .padding()
-                    .padding(.horizontal, 20)
-                Spacer()
-            }
-        }
+        VerifyWordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
 }

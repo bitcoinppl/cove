@@ -109,6 +109,20 @@ impl RustWalletViewModel {
             .collect()
     }
 
+    // check if the word group passed in is valid
+    #[uniffi::method]
+    pub fn is_valid_word_group(&self, group_number: u8, entered_words: Vec<String>) -> bool {
+        let actual_words = &self.bip_39_words_grouped()[group_number as usize];
+
+        for (actual_word, entered_word) in actual_words.iter().zip(entered_words.iter()) {
+            if actual_word.word != entered_word.to_lowercase().trim() {
+                return false;
+            }
+        }
+
+        true
+    }
+
     // boilerplate methods
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
