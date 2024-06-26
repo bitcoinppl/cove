@@ -12,46 +12,31 @@ import androidx.compose.ui.unit.sp
 import com.example.cove.ViewModel
 import com.example.cove.ui.theme.CoveTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
-import uniffi.cove.Event
-
+import org.bitcoinppl.cove.AutoComplete
 
 @Composable
 fun CoveApp(viewModel: ViewModel = viewModel()) {
-    val count by viewModel.cove.collectAsState()
     Box(
-        modifier = Modifier
-            .fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Button(
+            onClick = { }
         ) {
-            Button(
-                onClick = { viewModel.dispatch(Event.DECREMENT) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                modifier = Modifier
-                    .size(64.dp)
-            ) {
-                Text("-", color = Color.White, fontSize = 40.sp)
-            }
-
-            Text(
-                text = "$count",
-                fontSize = 32.sp,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-
-            Button(
-                onClick = { viewModel.dispatch(Event.INCREMENT) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Green),
-                modifier = Modifier
-                    .size(64.dp)
-            ) {
-                Text("+", color = Color.White, fontSize = 32.sp)
-            }
+            Text(text = Bip39AutoComplete().autocomplete(word = "da")[0], color = Color.White, fontSize = 32.sp)
         }
+
+        AutocompleteField(autocompleter = Bip39AutoComplete(), text = "ab", onTextChange = {})
     }
+}
+
+@Composable
+fun <AutoCompleter : AutoComplete> AutocompleteField(
+    autocompleter: AutoCompleter,
+    text: String,
+    onTextChange: (String) -> Unit,
+) {
+    Text(text = autocompleter.autocomplete(text)[0])
 }
 
 @Preview(showBackground = true)

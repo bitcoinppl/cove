@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */; };
+		AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC269AE12C289F17005481A8 /* VerifyWordsView.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
@@ -19,9 +21,11 @@
 		ACC301762C21D698006790DF /* HotWalletCreateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301752C21D698006790DF /* HotWalletCreateView.swift */; };
 		ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301772C21D6EA006790DF /* HotWalletImportView.swift */; };
 		ACC3017A2C221450006790DF /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* WalletViewModel.swift */; };
+		ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */; };
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
 		ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* GlassCard.swift */; };
+		ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = ACF5B3482C2BA4BC00DDDEB9 /* Inject */; };
 		D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
@@ -32,6 +36,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardObserver.swift; sourceTree = "<group>"; };
+		AC269AE12C289F17005481A8 /* VerifyWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsView.swift; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
 		ACA4CBEB2C2328BE0008F63E /* Security.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security.swift; sourceTree = "<group>"; };
 		ACC301642C207787006790DF /* NewWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewWalletView.swift; sourceTree = "<group>"; };
@@ -43,6 +49,7 @@
 		ACC301752C21D698006790DF /* HotWalletCreateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletCreateView.swift; sourceTree = "<group>"; };
 		ACC301772C21D6EA006790DF /* HotWalletImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletImportView.swift; sourceTree = "<group>"; };
 		ACC301792C221450006790DF /* WalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
+		ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Trait+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
 		ACF44D132C2857E9008C5034 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
@@ -63,6 +70,7 @@
 			files = (
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
 				D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */,
+				ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,6 +90,8 @@
 			children = (
 				ACC301692C20C9D4006790DF /* Routes+Ext.swift */,
 				ACF44D0C2C26131A008C5034 /* Color+Ext.swift */,
+				ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */,
+				4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */,
 			);
 			path = Extention;
 			sourceTree = "<group>";
@@ -100,6 +110,7 @@
 		ACC301722C21126C006790DF /* HotWallet */ = {
 			isa = PBXGroup;
 			children = (
+				AC269AE12C289F17005481A8 /* VerifyWordsView.swift */,
 				ACC301732C211281006790DF /* HotWalletSelectView.swift */,
 				ACC301752C21D698006790DF /* HotWalletCreateView.swift */,
 				ACC301772C21D6EA006790DF /* HotWalletImportView.swift */,
@@ -136,19 +147,19 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				AC97D1ED2C287FCE00873092 /* Styles */,
 				ACF44D102C2642BA008C5034 /* Components */,
 				ACC3016B2C21095A006790DF /* NewWallet */,
 				ACC301662C20C11D006790DF /* Extention */,
-				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				ACC301642C207787006790DF /* NewWalletView.swift */,
 				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
 				ACC301792C221450006790DF /* WalletViewModel.swift */,
-				D0245F532C0F7B500042B447 /* Assets.xcassets */,
-				D0245F552C0F7B500042B447 /* Preview Content */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
+				D0245F532C0F7B500042B447 /* Assets.xcassets */,
+				D0245F552C0F7B500042B447 /* Preview Content */,
 			);
 			indentWidth = 4;
 			path = Cove;
@@ -181,6 +192,7 @@
 			name = Cove;
 			packageProductDependencies = (
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
+				ACF5B3482C2BA4BC00DDDEB9 /* Inject */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -212,6 +224,7 @@
 			mainGroup = D0245F432C0F7B4E0042B447;
 			packageReferences = (
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
+				ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -245,6 +258,7 @@
 				ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */,
 				ACC301712C2109C1006790DF /* NewWalletSelectView.swift in Sources */,
 				ACC3016F2C2109A1006790DF /* NewColdWalletView.swift in Sources */,
+				AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */,
 				D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */,
 				ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */,
 				ACC3016D2C210978006790DF /* NewHotWalletView.swift in Sources */,
@@ -256,7 +270,9 @@
 				ACC301742C211281006790DF /* HotWalletSelectView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
 				ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */,
+				ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */,
 				AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */,
+				382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -390,7 +406,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1.1;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
-				DEVELOPMENT_TEAM = 4HFHA2C727;
+				DEVELOPMENT_TEAM = 4PZ3NJBYLZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -403,7 +419,12 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.cove.Cove;
+				NEW_SETTING = "";
+				OTHER_LDFLAGS = (
+					"-Xlinker",
+					"-interposable",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -419,7 +440,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1.1;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
-				DEVELOPMENT_TEAM = 4HFHA2C727;
+				DEVELOPMENT_TEAM = 4PZ3NJBYLZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -432,7 +453,12 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.cove.Cove;
+				NEW_SETTING = "";
+				OTHER_LDFLAGS = (
+					"-Xlinker",
+					"-interposable",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -472,6 +498,14 @@
 				minimumVersion = 24.0.0;
 			};
 		};
+		ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krzysztofzablocki/Inject.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -479,6 +513,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */;
 			productName = KeychainSwift;
+		};
+		ACF5B3482C2BA4BC00DDDEB9 /* Inject */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */;
+			productName = Inject;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

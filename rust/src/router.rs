@@ -27,6 +27,9 @@ pub enum HotWalletRoute {
     },
 
     Import,
+
+    // todo: add wallet id
+    VerifyWords,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]

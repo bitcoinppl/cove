@@ -11,23 +11,28 @@ import SwiftUI
     var rust: RustWalletViewModel
     var numberOfWords: NumberOfBip39Words
     var bip39Words: [String]
+    var focusField: Int?
 
     public init(numberOfWords: NumberOfBip39Words) {
         let rust = RustWalletViewModel(numberOfWords: numberOfWords)
         self.rust = rust
 
         self.numberOfWords = numberOfWords
-        self.bip39Words = rust.bip39Words()
+        bip39Words = rust.bip39Words()
         self.rust.listenForUpdates(reconciler: self)
+    }
+
+    func submitWordField(fieldNumber: UInt8) {
+        focusField = Int(fieldNumber) + 1
     }
 
     func reconcile(message: WalletViewModelReconcileMessage) {
         Task {
             await MainActor.run {
-                print("[swift] WalletViewModel Reconile: \(message)")
+                print("[swift] WalletViewModel Reconcile: \(message)")
 
                 switch message {
-                case .words(let numberOfBip39Words):
+                case let .words(numberOfBip39Words):
                     self.numberOfWords = numberOfBip39Words
                     self.bip39Words = self.rust.bip39Words()
                 }
@@ -36,6 +41,6 @@ import SwiftUI
     }
 
     public func dispatch(action: WalletViewModelAction) {
-        self.rust.dispatch(action: action)
+        rust.dispatch(action: action)
     }
 }

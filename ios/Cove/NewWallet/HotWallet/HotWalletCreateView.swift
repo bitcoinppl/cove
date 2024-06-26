@@ -11,12 +11,17 @@ struct HotWalletCreateView: View {
     @State private var model: WalletViewModel
 
     init(numberOfWords: NumberOfBip39Words) {
-        self.model = WalletViewModel(numberOfWords: numberOfWords)
+        model = WalletViewModel(numberOfWords: numberOfWords)
     }
 
     var body: some View {
         WordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
+            .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 }
 
 struct WordsView: View {
@@ -25,6 +30,7 @@ struct WordsView: View {
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
     @Environment(\.presentationMode) var presentationMode
+    @Environment(\.navigate) private var navigate
 
     var lastIndex: Int {
         return groupedWords.count - 1
@@ -52,9 +58,14 @@ struct WordsView: View {
                 Spacer()
 
                 if tabIndex == lastIndex {
-                    Button("Save Wallet") {}
-                        .buttonStyle(GradientButtonStyle())
-                        .padding(.top, 50)
+                    Button("Save Wallet") {
+                        // TODO: save the wallet
+                        navigate(
+                            HotWalletRoute.verifyWords.intoRoute()
+                        )
+                    }
+                    .buttonStyle(GradientButtonStyle())
+                    .padding(.top, 50)
 
                 } else {
                     Button("Next") {
@@ -92,7 +103,12 @@ struct WordsView: View {
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 }
 
 struct WordCardView: View {
@@ -102,7 +118,7 @@ struct WordCardView: View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(words, id: \.self) { group in
                 HStack {
-                    Text("\(group.number).")
+                    Text("\(String(format: "%02d", group.number)). ")
                         .foregroundColor(.secondary)
                         .frame(width: 30, alignment: .trailing)
                         .padding(.trailing, 8)
@@ -115,7 +131,12 @@ struct WordCardView: View {
         }
         .padding()
         .foregroundColor(.white)
+        .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 }
 
 struct StyledWordCard<Content: View>: View {
@@ -130,7 +151,12 @@ struct StyledWordCard<Content: View>: View {
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
         }
         .padding()
+        .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview("12 Words") {

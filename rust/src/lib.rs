@@ -11,5 +11,6 @@ pub mod keychain;
 pub mod keys;
 pub mod view_model;
 pub mod wallet;
+pub mod autocomplete;
 
 uniffi::setup_scaffolding!();

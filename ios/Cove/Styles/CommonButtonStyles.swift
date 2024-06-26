@@ -12,22 +12,33 @@ let paddingVertical: CGFloat = 15
 let paddingHorizontal: CGFloat = 25
 
 struct GradientButtonStyle: ButtonStyle {
+    var disabled = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(minWidth: minWidth)
             .padding(.horizontal, paddingHorizontal)
             .padding(.vertical, paddingVertical)
             .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 0.2, green: 0.4, blue: 1.0),
-                        Color(red: 0.1, green: 0.5, blue: 1.0),
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                disabled ?
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.gray.opacity(0.8),
+                            Color.gray.opacity(0.7),
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ) :
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color(red: 0.2, green: 0.4, blue: 1.0),
+                            Color(red: 0.1, green: 0.5, blue: 1.0),
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
             )
-            .foregroundColor(.white)
+            .foregroundColor(disabled ? Color.white.opacity(0.6) : Color.white)
             .cornerRadius(10)
             .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
             .font(.headline)
@@ -37,6 +48,8 @@ struct GradientButtonStyle: ButtonStyle {
 }
 
 struct GlassyButtonStyle: ButtonStyle {
+    var disabled = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(minWidth: minWidth)
@@ -52,14 +65,22 @@ struct GlassyButtonStyle: ButtonStyle {
             )
             .shadow(color: Color.white.opacity(0.3), radius: 5, x: 0, y: 0)
             .foregroundStyle(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.0, green: 0.5, blue: 0.7),
-                        Color(red: 0.0, green: 0.4, blue: 0.6),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                disabled ?
+                    LinearGradient(
+                        colors: [
+                            Color.gray,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ) :
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.2, green: 0.4, blue: 1.0),
+                            Color(red: 0.1, green: 0.5, blue: 1.0),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
             )
             .font(.headline)
             .scaleEffect(configuration.isPressed ? 0.95 : 1)

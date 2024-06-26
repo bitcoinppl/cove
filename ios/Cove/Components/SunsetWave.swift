@@ -46,7 +46,12 @@ struct SunsetWave<Content: View>: View {
             content
         }
         .ignoresSafeArea()
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 struct WaveView: View {
@@ -77,7 +82,12 @@ struct WaveView: View {
             }
             .fill(LinearGradient(gradient: Gradient(colors: [color1, color2]), startPoint: .top, endPoint: .bottom))
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview {

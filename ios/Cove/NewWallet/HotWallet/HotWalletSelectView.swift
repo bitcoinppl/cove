@@ -51,7 +51,12 @@ struct HotWalletSelectView: View {
             )
             .padding(.vertical, 15)
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview {

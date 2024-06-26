@@ -15,9 +15,9 @@ struct NewWalletView: View {
         switch route {
         case .select:
             NewWalletSelect()
-        case .hotWallet(let route):
+        case let .hotWallet(route):
             NewHotWalletView(route: route)
-        case .coldWallet(let route):
+        case let .coldWallet(route):
             NewColdWalletView(route: route)
         }
     }
