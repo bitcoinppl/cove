@@ -127,7 +127,7 @@ struct CardTab: View {
     func zIndex(index: Int) -> Double {
         // if focused, on the bottom half, don't set zIndex
         // becuase we want the suggestions to show on top
-        if let field = focusField, field > 3 {
+        if let field = focusField, (field % 6) == 0 || (field % 6) > 3 {
             return 1
         }
 
@@ -205,6 +205,16 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
         return .none
     }
 
+    var offsetCalc: CGFloat {
+        // bottom half word, show suggestions above the word
+        if word.number % 6 == 0 || word.number % 6 > 3 {
+            return -60 - frameHeight
+        }
+
+        // top half word, show suggestions below the word
+        return 0
+    }
+
     var body: some View {
         HStack {
             Text("\(String(format: "%02d", self.word.number)). ")
@@ -217,7 +227,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                             SuggestionList(suggestions: self.filteredSuggestions, selection: self.$text)
                                 .transition(.move(edge: .top))
                                 .frame(height: frameHeight)
-                                .offset(y: word.number <= 3 ? 0 : -60 - frameHeight)
+                                .offset(y: offsetCalc)
                         }
                     }
                     .offset(y: 40)
