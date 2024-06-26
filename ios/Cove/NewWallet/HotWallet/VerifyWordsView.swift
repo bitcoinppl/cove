@@ -301,6 +301,7 @@ struct SuggestionList: View {
                     self.selection = suggestion
                 }
                 .padding(.vertical, 4)
+                .foregroundColor(.black.opacity(0.75))
         }
         .listStyle(.inset)
         .cornerRadius(10)
