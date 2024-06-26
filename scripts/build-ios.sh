@@ -25,19 +25,29 @@ cargo build
  
 # Generate bindings
 cargo run --bin uniffi-bindgen generate --library ./target/debug/libcove.dylib --language swift --out-dir ./bindings
- 
-# Add the iOS targets and build
-for TARGET in \
+
+if [ $BUILD_TYPE == "release" ]; then
+    TARGETS=(
         aarch64-apple-ios-sim
-        # aarch64-apple-darwin \
-        # aarch64-apple-ios \
-        # x86_64-apple-darwin \
-        # x86_64-apple-ios
-do
+        aarch64-apple-ios
+        x86_64-apple-ios
+        # x86_64-apple-darwin
+        # aarch64-apple-darwin
+    )
+else
+    TARGETS=(aarch64-apple-ios-sim)
+fi 
+ 
+echo "Build for targets: ${TARGETS}"
+LIBRARY_FLAGS=""
+for TARGET in $TARGETS; do
+    echo "Building for target: ${TARGET}"
+    LIBRARY_FLAGS="$LIBRARY_FLAGS -library ./target/$TARGET/$BUILD_TYPE/libcove.a -headers ./bindings"
+
     rustup target add $TARGET
     cargo build --target=$TARGET $BUILD_FLAG
 done
- 
+
 # Rename *.modulemap to module.modulemap
 mv ./bindings/coveFFI.modulemap ./bindings/module.modulemap
  
@@ -47,10 +57,15 @@ mv ./bindings/cove.swift ./ios/Cove/Cove.swift
  
 # Recreate XCFramework
 rm -rf "ios/Cove.xcframework" || true
-        # -library ./target/aarch64-apple-ios/release/libcove.a -headers ./bindings \
 xcodebuild -create-xcframework \
-        -library ./target/aarch64-apple-ios-sim/$BUILD_TYPE/libcove.a -headers ./bindings \
+        $LIBRARY_FLAGS \
+        -headers ./bindings \
         -output "ios/Cove.xcframework"
  
 # Cleanup
 rm -rf bindings
+
+if [ ! -z $SIGN ] && [ ! -z $SIGNING_IDENTITY ]; then
+    echo "Signing for distribution: identity: $SIGNING_IDENTITY"
+    codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"
+fi

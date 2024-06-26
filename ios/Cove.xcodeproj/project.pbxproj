@@ -21,12 +21,13 @@
 		ACC301762C21D698006790DF /* HotWalletCreateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301752C21D698006790DF /* HotWalletCreateView.swift */; };
 		ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301772C21D6EA006790DF /* HotWalletImportView.swift */; };
 		ACC3017A2C221450006790DF /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* WalletViewModel.swift */; };
+		ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
+		ACC4D39B2C2CA6AD008E32A0 /* Cove.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */; };
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
 		ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* GlassCard.swift */; };
 		ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = ACF5B3482C2BA4BC00DDDEB9 /* Inject */; };
-		D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
 		D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F512C0F7B4E0042B447 /* CoveView.swift */; };
@@ -34,6 +35,20 @@
 		D0245F572C0F7B500042B447 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0245F562C0F7B500042B447 /* Preview Assets.xcassets */; };
 		D0BE2EBE2C1614150055FCBE /* MainViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		ACC4D39C2C2CA6AD008E32A0 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				ACC4D39B2C2CA6AD008E32A0 /* Cove.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardObserver.swift; sourceTree = "<group>"; };
@@ -69,8 +84,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
-				D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */,
 				ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */,
+				ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -184,6 +199,7 @@
 				D0245F482C0F7B4E0042B447 /* Sources */,
 				D0245F492C0F7B4E0042B447 /* Frameworks */,
 				D0245F4A2C0F7B4E0042B447 /* Resources */,
+				ACC4D39C2C2CA6AD008E32A0 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -476,7 +492,7 @@
 				D0245F592C0F7B500042B447 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		D0245F5A2C0F7B500042B447 /* Build configuration list for PBXNativeTarget "Cove" */ = {
 			isa = XCConfigurationList;
@@ -485,7 +501,7 @@
 				D0245F5C2C0F7B500042B447 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 

@@ -3,7 +3,7 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use eyre::Result;
+use eyre::{Context, Result};
 use log::{debug, error, info};
 use once_cell::sync::OnceCell;
 use redb::TableDefinition;
@@ -124,6 +124,7 @@ impl Database {
 
 fn get_or_create_database() -> redb::Database {
     let database_location = database_location();
+
     if database_location.exists() {
         let db = redb::Database::open(&database_location);
         match db {
@@ -158,12 +159,19 @@ fn create_all_tables(db: &redb::Database) {
 }
 
 fn database_location() -> PathBuf {
-    let parent = dirs::home_dir()
-        .expect("failed to get home directory")
+    let parent = dirs::document_dir()
+        .expect("failed to get home document directory")
         .join("data");
 
     if !parent.exists() {
-        std::fs::create_dir_all(&parent).expect("failed to create data directory");
+        std::fs::create_dir_all(&parent)
+            .wrap_err_with(|| {
+                format!(
+                    "failed to create data directory at {}",
+                    parent.to_string_lossy()
+                )
+            })
+            .unwrap();
     }
 
     parent.join("cove.db")
