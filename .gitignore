@@ -6,3 +6,4 @@ bindings/.uniffi/
 buildServer.json
 .compile
 log.txt
+.nvim

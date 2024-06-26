@@ -16,11 +16,11 @@ struct HotWalletCreateView: View {
 
     var body: some View {
         WordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
-        .enableInjection()
+            .enableInjection()
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
@@ -107,7 +107,7 @@ struct WordsView: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
@@ -135,7 +135,7 @@ struct WordCardView: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
@@ -155,7 +155,7 @@ struct StyledWordCard<Content: View>: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 

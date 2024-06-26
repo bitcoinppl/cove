@@ -19,6 +19,8 @@ struct VerifyWordsView: View {
     @State private var enteredWords: [[String]]
     @State private var tabIndex: Int
 
+    @StateObject private var keyboardObserver = KeyboardObserver()
+
     init() {
         // TODO: get wallet id, and wallet model from id
         model = WalletViewModel(numberOfWords: .twelve)
@@ -26,6 +28,14 @@ struct VerifyWordsView: View {
 
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         tabIndex = 0
+    }
+
+    var keyboardIsShowing: Bool {
+        keyboardObserver.keyboardIsShowing
+    }
+
+    var cardHeight: CGFloat {
+        keyboardIsShowing ? 350 : 450
     }
 
     var buttonIsDisabled: Bool {
@@ -45,13 +55,14 @@ struct VerifyWordsView: View {
             VStack {
                 Spacer()
 
-                Text("Please verify your words")
-                    .font(.title)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white.opacity(0.85))
-                    .padding(.top, 20)
-
-                Spacer()
+                if !keyboardIsShowing {
+                    Text("Please verify your words")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white.opacity(0.85))
+                        .padding(.top, 60)
+                        .padding(.bottom, 30)
+                }
 
                 GlassCard {
                     TabView(selection: $tabIndex) {
@@ -63,7 +74,7 @@ struct VerifyWordsView: View {
                         .padding(.vertical, 30)
                     }
                 }
-                .frame(height: 450)
+                .frame(height: cardHeight)
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
                 .padding(.horizontal, 30)
 
@@ -91,11 +102,12 @@ struct VerifyWordsView: View {
                 Spacer()
             }
         }
+        .environment(model)
         .enableInjection()
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
@@ -117,7 +129,7 @@ struct CardTab: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
@@ -127,6 +139,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
 
     let word: GroupedWord
 
+    @Environment(WalletViewModel.self) private var model
     @State private var showSuggestions = false
     @State private var offset: CGPoint = .zero
     @FocusState private var isFocused: Bool
@@ -136,35 +149,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
             Text("\(String(format: "%02d", self.word.number)). ")
                 .foregroundColor(.secondary)
 
-            TextField("", text: $text,
-                      prompt: Text("Placeholder text")
-                          .foregroundColor(.white.opacity(0.65)))
-                .foregroundColor(borderColor ?? .white)
-                .frame(alignment: .trailing)
-                .padding(.trailing, 8)
-                .textInputAutocapitalization(.never)
-                .focused(self.$isFocused)
-                .onChange(of: self.isFocused) {
-                    if !self.isFocused {
-                        return self.showSuggestions = false
-                    }
-                }
-                .onChange(of: self.text) {
-                    if !self.isFocused {
-                        return self.showSuggestions = false
-                    }
-
-                    if self.text.lowercased() == self.word.word {
-                        return self.showSuggestions = false
-                    }
-
-                    if self.filteredSuggestions.count == 1 && self.filteredSuggestions.first == word.word {
-                        self.showSuggestions = false
-                        return self.text = self.filteredSuggestions.first!
-                    }
-
-                    self.showSuggestions = !self.text.isEmpty && !self.filteredSuggestions.isEmpty
-                }
+            textField
                 .overlay(alignment: Alignment(horizontal: .center, vertical: .top)) {
                     Group {
                         if self.showSuggestions {
@@ -189,8 +174,50 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
         .enableInjection()
     }
 
+    var textField: some View {
+        TextField("", text: $text,
+                  prompt: Text("Placeholder text")
+                      .foregroundColor(.white.opacity(0.65)))
+            .foregroundColor(borderColor ?? .white)
+            .frame(alignment: .trailing)
+            .padding(.trailing, 8)
+            .textInputAutocapitalization(.never)
+            .focused($isFocused)
+            .onChange(of: isFocused) {
+                if !self.isFocused { return self.showSuggestions = false }
+            }
+            .onSubmit {
+                model.submitWordField(fieldNumber: word.number)
+            }
+            .onChange(of: model.focusField) { _, fieldNumber in
+                guard let fieldNumber = fieldNumber else { return }
+
+                print("field number is \(fieldNumber), i am \(word.number)")
+
+                if word.number == fieldNumber {
+                    isFocused = true
+                }
+            }
+            .onChange(of: text) {
+                if !self.isFocused {
+                    return self.showSuggestions = false
+                }
+
+                if self.text.lowercased() == self.word.word {
+                    return self.showSuggestions = false
+                }
+
+                if self.filteredSuggestions.count == 1 && self.filteredSuggestions.first == word.word {
+                    self.showSuggestions = false
+                    return self.text = self.filteredSuggestions.first!
+                }
+
+                self.showSuggestions = !self.text.isEmpty && !self.filteredSuggestions.isEmpty
+            }
+    }
+
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 
     var filteredSuggestions: [String] {
@@ -198,8 +225,6 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
     }
 
     var borderColor: Color? {
-        print("text is \(text), \(isFocused), \(filteredSuggestions.count), \(word.word)")
-
         // starting state
         if text == "" {
             return .none
@@ -249,7 +274,7 @@ struct SuggestionList: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
