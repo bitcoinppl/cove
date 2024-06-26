@@ -14,10 +14,12 @@ struct NewHotWalletView: View {
         switch route {
         case .select:
             HotWalletSelectView()
-        case .create(words: let words):
+        case let .create(words: words):
             HotWalletCreateView(numberOfWords: words)
         case .import:
             HotWalletImportView()
+        case .verifyWords:
+            VerifyWordsView()
         }
     }
 }

@@ -25,6 +25,7 @@ struct WordsView: View {
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
     @Environment(\.presentationMode) var presentationMode
+    @Environment(\.navigate) private var navigate
 
     var lastIndex: Int {
         return groupedWords.count - 1
@@ -54,6 +55,9 @@ struct WordsView: View {
                 if tabIndex == lastIndex {
                     Button("Save Wallet") {
                         // TODO: save the wallet
+                        navigate(
+                            HotWalletRoute.verifyWords.intoRoute()
+                        )
                     }
                     .buttonStyle(GradientButtonStyle())
                     .padding(.top, 50)

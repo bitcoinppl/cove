@@ -1834,6 +1834,7 @@ public enum HotWalletRoute {
     case create(words: NumberOfBip39Words
     )
     case `import`
+    case verifyWords
 }
 
 public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
@@ -1848,6 +1849,8 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
             )
 
         case 3: return .import
+
+        case 4: return .verifyWords
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -1864,6 +1867,9 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
 
         case .import:
             writeInt(&buf, Int32(3))
+
+        case .verifyWords:
+            writeInt(&buf, Int32(4))
         }
     }
 }

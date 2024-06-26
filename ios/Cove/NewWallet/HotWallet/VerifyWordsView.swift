@@ -19,9 +19,11 @@ struct VerifyWordsView: View {
     @State private var enteredWords: [[String]]
     @State private var tabIndex: Int
 
-    init(model: WalletViewModel, groupedWords: [[GroupedWord]]) {
-        self.model = model
-        self.groupedWords = groupedWords
+    init() {
+        // TODO: get wallet id, and wallet model from id
+        model = WalletViewModel(numberOfWords: .twelve)
+        groupedWords = model.rust.bip39WordsGrouped()
+
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         tabIndex = 0
     }
@@ -232,8 +234,5 @@ struct SuggestionList: View {
 }
 
 #Preview {
-    @State var model = WalletViewModel(numberOfWords: .twelve)
-
-    return
-        VerifyWordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
+    VerifyWordsView()
 }

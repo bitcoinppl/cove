@@ -7,12 +7,23 @@
 
 import SwiftUI
 
+struct NavigateKey: EnvironmentKey {
+    static let defaultValue: (Route) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var navigate: (Route) -> Void {
+        get { self[NavigateKey.self] }
+        set { self[NavigateKey.self] = newValue }
+    }
+}
+
 @main
 struct CoveApp: App {
     @State var model: MainViewModel
 
     public init() {
-        self.model = MainViewModel()
+        model = MainViewModel()
     }
 
     var tintColor: Color {
@@ -37,7 +48,7 @@ struct CoveApp: App {
                                 .onAppear {
                                     print("in main view, router is: \(model.router.routes)")
                                 }
-                        case .newWallet(route: let route):
+                        case let .newWallet(route: route):
                             NewWalletView(route: route)
                         }
                     })
@@ -46,6 +57,10 @@ struct CoveApp: App {
                     }
             }
             .tint(tintColor)
-        }.environment(model)
+        }
+        .environment(model)
+        .environment(\.navigate) { route in
+            model.pushRoute(route)
+        }
     }
 }
