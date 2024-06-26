@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 6/23/24.
 //
 
-import Inject
 import SwiftUI
 
 // WEDNESDAY TODO:
@@ -17,9 +16,8 @@ struct VerifyWordsView: View {
     var model: WalletViewModel
     var groupedWords: [[GroupedWord]]
 
-    @State private var enteredWords: [[Strqfing]]
+    @State private var enteredWords: [[String]]
     @State private var tabIndex: Int
-    @ObserveInjection var inject
 
     init(model: WalletViewModel, groupedWords: [[GroupedWord]]) {
         self.model = model
@@ -90,7 +88,7 @@ struct VerifyWordsView: View {
 
                 Spacer()
             }
-        }.enableInjection()
+        }
     }
 }
 

@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 6/18/24.
 //
 
-import Inject
 import SwiftUI
 
 struct HotWalletCreateView: View {
@@ -26,8 +25,6 @@ struct WordsView: View {
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
     @Environment(\.presentationMode) var presentationMode
-
-    @ObserveInjection var inject
 
     var lastIndex: Int {
         return groupedWords.count - 1
@@ -97,7 +94,6 @@ struct WordsView: View {
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
-        .enableInjection()
     }
 }
 
