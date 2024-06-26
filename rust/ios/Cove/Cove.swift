@@ -1263,6 +1263,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func getState() -> WalletViewModelState
 
+    func isAllWordsValid(enteredWords: [[String]]) -> Bool
+
     func isValidWordGroup(groupNumber: UInt8, enteredWords: [String]) -> Bool
 
     func listenForUpdates(reconciler: WalletViewModelReconciler)
@@ -1348,6 +1350,13 @@ open class RustWalletViewModel:
     open func getState() -> WalletViewModelState {
         return try! FfiConverterTypeWalletViewModelState.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_get_state(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isAllWordsValid(enteredWords: [[String]]) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_is_all_words_valid(self.uniffiClonePointer(),
+                                                                         FfiConverterSequenceSequenceString.lower(enteredWords), $0)
         })
     }
 
@@ -2539,6 +2548,28 @@ private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [[String]]
+
+    public static func write(_ value: [[String]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[String]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[String]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterSequenceString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceSequenceTypeGroupedWord: FfiConverterRustBuffer {
     typealias SwiftType = [[GroupedWord]]
 
@@ -2638,6 +2669,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_get_state() != 55828 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_is_all_words_valid() != 31255 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_is_valid_word_group() != 25656 {

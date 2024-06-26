@@ -86,6 +86,12 @@ impl Wallet {
                 .collect(),
         }
     }
+
+    pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
+        match self {
+            Self::Pending(pending_wallet) => pending_wallet.mnemonic.word_iter(),
+        }
+    }
 }
 
 impl PendingWallet {

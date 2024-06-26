@@ -5,32 +5,39 @@
 //  Created by Praveen Perera on 6/23/24.
 //
 
+import Inject
 import SwiftUI
 
-// MONDAY TODO:
-// 1. Add disabled next button
+// WEDNESDAY TODO:
+// 1. Add route to verify words, and send to that route when wallet is created is pressed
+// 1. Add ability to click on disabled confirm button
 // 2. Add confirm button on last page, if not correct, say which ones are not good!
 
 struct VerifyWordsView: View {
     var model: WalletViewModel
     var groupedWords: [[GroupedWord]]
 
-    @State private var enteredWords: [[String]]
+    @State private var enteredWords: [[Strqfing]]
     @State private var tabIndex: Int
+    @ObserveInjection var inject
 
     init(model: WalletViewModel, groupedWords: [[GroupedWord]]) {
         self.model = model
         self.groupedWords = groupedWords
-        self.enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
-        self.tabIndex = 0
+        enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
+        tabIndex = 0
     }
 
     var buttonIsDisabled: Bool {
         !model.rust.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
     }
 
+    var isAllWordsValid: Bool {
+        model.rust.isAllWordsValid(enteredWords: enteredWords)
+    }
+
     var lastIndex: Int {
-        return groupedWords.count - 1
+        groupedWords.count - 1
     }
 
     var body: some View {
@@ -66,7 +73,7 @@ struct VerifyWordsView: View {
                     Button("Confirm") {
                         // TODO: confirm
                     }
-                    .buttonStyle(GradientButtonStyle(disabled: buttonIsDisabled))
+                    .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
                     .padding(.top, 20)
 
                 } else {
@@ -83,7 +90,7 @@ struct VerifyWordsView: View {
 
                 Spacer()
             }
-        }
+        }.enableInjection()
     }
 }
 

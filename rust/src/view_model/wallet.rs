@@ -123,6 +123,20 @@ impl RustWalletViewModel {
         true
     }
 
+    #[uniffi::method]
+    pub fn is_all_words_valid(&self, entered_words: Vec<Vec<String>>) -> bool {
+        let state = self.state.read();
+        let entered_words = entered_words.iter().flat_map(|words| words.iter());
+
+        for (actual_word, entered_word) in state.wallet.words_iter().zip(entered_words) {
+            if actual_word != entered_word.to_lowercase().trim() {
+                return false;
+            }
+        }
+
+        true
+    }
+
     // boilerplate methods
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
