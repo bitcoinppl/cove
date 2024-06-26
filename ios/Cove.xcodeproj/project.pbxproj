@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */; };
 		AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC269AE12C289F17005481A8 /* VerifyWordsView.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
@@ -35,6 +36,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardObserver.swift; sourceTree = "<group>"; };
 		AC269AE12C289F17005481A8 /* VerifyWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsView.swift; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
 		ACA4CBEB2C2328BE0008F63E /* Security.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security.swift; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				ACC301692C20C9D4006790DF /* Routes+Ext.swift */,
 				ACF44D0C2C26131A008C5034 /* Color+Ext.swift */,
 				ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */,
+				4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */,
 			);
 			path = Extention;
 			sourceTree = "<group>";
@@ -269,6 +272,7 @@
 				ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */,
 				ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */,
 				AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */,
+				382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

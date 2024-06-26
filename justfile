@@ -1,6 +1,9 @@
 default:
     just --list
 
+bacon:
+    cd rust && bacon clippy
+
 clean:
     cargo clean
     rm -rf ios/Cove.xcframework
