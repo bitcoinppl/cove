@@ -18,7 +18,12 @@ struct CoveView: View {
             }
         }
         .padding()
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview {

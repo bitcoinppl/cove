@@ -91,7 +91,12 @@ struct VerifyWordsView: View {
                 Spacer()
             }
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 struct CardTab: View {
@@ -108,7 +113,12 @@ struct CardTab: View {
         }.onAppear {
             print(self.wordGroup)
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 struct AutocompleteField<AutoCompleter: AutoComplete>: View {
@@ -176,7 +186,12 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 
     var filteredSuggestions: [String] {
         autocompleter.autocomplete(word: text)
@@ -230,7 +245,12 @@ struct SuggestionList: View {
         .cornerRadius(10)
         .shadow(radius: 5)
         .padding(.trailing, 20)
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview {

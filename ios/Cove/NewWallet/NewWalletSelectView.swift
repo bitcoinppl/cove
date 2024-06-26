@@ -51,7 +51,12 @@ struct NewWalletSelect: View {
             .padding(.horizontal, 40)
             Spacer()
         }.background(.black)
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview {
