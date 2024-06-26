@@ -123,6 +123,7 @@ impl RustWalletViewModel {
         true
     }
 
+    // check if all the word groups are valid
     #[uniffi::method]
     pub fn is_all_words_valid(&self, entered_words: Vec<Vec<String>>) -> bool {
         let state = self.state.read();
@@ -135,6 +136,24 @@ impl RustWalletViewModel {
         }
 
         true
+    }
+
+    // get string of all invalid words
+    #[uniffi::method]
+    pub fn invalid_words_string(&self, entered_words: Vec<Vec<String>>) -> String {
+        let state = self.state.read();
+        let entered_words = entered_words.iter().flat_map(|words| words.iter());
+
+        let mut invalid_words = Vec::new();
+        for (index, (actual_word, entered_word)) in
+            state.wallet.words_iter().zip(entered_words).enumerate()
+        {
+            if actual_word != entered_word.to_lowercase().trim() {
+                invalid_words.push((index + 1).to_string());
+            }
+        }
+
+        invalid_words.join(", ")
     }
 
     // boilerplate methods

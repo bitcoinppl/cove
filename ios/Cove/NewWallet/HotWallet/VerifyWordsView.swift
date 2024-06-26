@@ -7,16 +7,15 @@
 
 import SwiftUI
 
-// WEDNESDAY TODO:
-// 1. Add ability to click on disabled confirm button
-// 2. Add confirm button on last page, if not correct, say which ones are not good!
-
 struct VerifyWordsView: View {
     var model: WalletViewModel
     var groupedWords: [[GroupedWord]]
 
     @State private var enteredWords: [[String]]
     @State private var tabIndex: Int
+
+    @State private var showErrorAlert = false
+    @State private var invalidWords: String = ""
 
     @StateObject private var keyboardObserver = KeyboardObserver()
 
@@ -81,7 +80,12 @@ struct VerifyWordsView: View {
 
                 if tabIndex == lastIndex {
                     Button("Confirm") {
-                        // TODO: confirm
+                        if isAllWordsValid {
+                            // confirm
+                        } else {
+                            showErrorAlert = true
+                            invalidWords = model.rust.invalidWordsString(enteredWords: enteredWords)
+                        }
                     }
                     .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
                     .padding(.top, 20)
@@ -100,6 +104,11 @@ struct VerifyWordsView: View {
 
                 Spacer()
             }
+        }
+        .alert("Words not valid", isPresented: $showErrorAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The following words are not valid: \(invalidWords)")
         }
         .environment(model)
         .enableInjection()

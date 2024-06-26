@@ -1263,6 +1263,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func getState() -> WalletViewModelState
 
+    func invalidWordsString(enteredWords: [[String]]) -> String
+
     func isAllWordsValid(enteredWords: [[String]]) -> Bool
 
     func isValidWordGroup(groupNumber: UInt8, enteredWords: [String]) -> Bool
@@ -1350,6 +1352,13 @@ open class RustWalletViewModel:
     open func getState() -> WalletViewModelState {
         return try! FfiConverterTypeWalletViewModelState.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_get_state(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func invalidWordsString(enteredWords: [[String]]) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_invalid_words_string(self.uniffiClonePointer(),
+                                                                           FfiConverterSequenceSequenceString.lower(enteredWords), $0)
         })
     }
 
@@ -2675,6 +2684,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_get_state() != 55828 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_invalid_words_string() != 62162 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_is_all_words_valid() != 31255 {
