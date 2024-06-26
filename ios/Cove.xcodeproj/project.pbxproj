@@ -24,6 +24,7 @@
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
 		ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* GlassCard.swift */; };
+		ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = ACF5B3482C2BA4BC00DDDEB9 /* Inject */; };
 		D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
@@ -67,6 +68,7 @@
 			files = (
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
 				D000B2F02C0F7BAA00E32143 /* Cove.xcframework in Frameworks */,
+				ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -187,6 +189,7 @@
 			name = Cove;
 			packageProductDependencies = (
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
+				ACF5B3482C2BA4BC00DDDEB9 /* Inject */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -218,6 +221,7 @@
 			mainGroup = D0245F432C0F7B4E0042B447;
 			packageReferences = (
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
+				ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -398,7 +402,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1.1;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
-				DEVELOPMENT_TEAM = 4HFHA2C727;
+				DEVELOPMENT_TEAM = 4PZ3NJBYLZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -411,7 +415,12 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.cove.Cove;
+				NEW_SETTING = "";
+				OTHER_LDFLAGS = (
+					"-Xlinker",
+					"-interposable",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -427,7 +436,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1.1;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
-				DEVELOPMENT_TEAM = 4HFHA2C727;
+				DEVELOPMENT_TEAM = 4PZ3NJBYLZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -440,7 +449,12 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.cove.Cove;
+				NEW_SETTING = "";
+				OTHER_LDFLAGS = (
+					"-Xlinker",
+					"-interposable",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -480,6 +494,14 @@
 				minimumVersion = 24.0.0;
 			};
 		};
+		ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krzysztofzablocki/Inject.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -487,6 +509,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */;
 			productName = KeychainSwift;
+		};
+		ACF5B3482C2BA4BC00DDDEB9 /* Inject */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */;
+			productName = Inject;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
