@@ -23,7 +23,6 @@ import SwiftUI
     }
 
     func submitWordField(fieldNumber: UInt8) {
-        print("submit word field \(fieldNumber)")
         focusField = Int(fieldNumber) + 1
     }
 
