@@ -59,10 +59,17 @@ struct WordsView: View {
 
                 if tabIndex == lastIndex {
                     Button("Save Wallet") {
-                        // TODO: save the wallet
-                        navigate(
-                            HotWalletRoute.verifyWords.intoRoute()
-                        )
+                        do {
+                            // save the wallet
+                            let walletId = try model.rust.saveWallet()
+
+                            navigate(
+                                HotWalletRoute.verifyWords(walletId).intoRoute()
+                            )
+                        } catch {
+                            // TODO: handle, maybe show an alert?
+                            print("[SWIFT] Error \(error)")
+                        }
                     }
                     .buttonStyle(GradientButtonStyle())
                     .padding(.top, 50)

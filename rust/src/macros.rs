@@ -47,6 +47,31 @@ macro_rules! new_type {
                 &self.0
             }
         }
+
+        impl ::redb::Value for $name {
+            type SelfType<'a> = $name;
+
+            type AsBytes<'a> = &'a [u8];
+
+            fn fixed_width() -> Option<usize> {
+                None
+            }
+
+            fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+            where
+                Self: 'a,
+            {
+                Self(String::from_utf8_lossy(data).into())
+            }
+
+            fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a> {
+                value.0.as_bytes()
+            }
+
+            fn type_name() -> ::redb::TypeName {
+                ::redb::TypeName::new(std::any::type_name::<$name>())
+            }
+        }
     };
 
     ($name:ident, Vec<$type:ty>) => {

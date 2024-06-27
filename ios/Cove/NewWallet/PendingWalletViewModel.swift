@@ -1,5 +1,5 @@
 //
-//  WalletViewModel.swift
+//  PendingWalletViewModel.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/18/24.
@@ -8,13 +8,13 @@
 import SwiftUI
 
 @Observable class PendingWalletViewModel: PendingWalletViewModelReconciler {
-    var rust: RustWalletViewModel
+    var rust: RustPendingWalletViewModel
     var numberOfWords: NumberOfBip39Words
     var bip39Words: [String]
     var focusField: Int?
 
     public init(numberOfWords: NumberOfBip39Words) {
-        let rust = RustWalletViewModel(numberOfWords: numberOfWords)
+        let rust = RustPendingWalletViewModel(numberOfWords: numberOfWords)
         self.rust = rust
 
         self.numberOfWords = numberOfWords
@@ -40,7 +40,7 @@ import SwiftUI
         }
     }
 
-    public func dispatch(action: WalletViewModelAction) {
+    public func dispatch(action: PendingWalletViewModelAction) {
         rust.dispatch(action: action)
     }
 }

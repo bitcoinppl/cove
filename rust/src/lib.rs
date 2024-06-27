@@ -7,10 +7,11 @@ pub(crate) mod macros;
 pub(crate) mod router;
 pub(crate) mod update;
 
+pub mod autocomplete;
 pub mod keychain;
 pub mod keys;
 pub mod view_model;
 pub mod wallet;
-pub mod autocomplete;
+pub mod word_validator;
 
 uniffi::setup_scaffolding!();

@@ -8,9 +8,12 @@
 import SwiftUI
 
 struct VerifyWordsView: View {
-    var model: PendingWalletViewModel
-    var groupedWords: [[GroupedWord]]
+    let walletId: WalletId
+    let model: WalletViewModel
+    let validator: WordValidator
+    let groupedWords: [[GroupedWord]]
 
+    @Environment(\.navigate) private var navigate
     @State private var enteredWords: [[String]]
     @State private var tabIndex: Int
 
@@ -19,11 +22,19 @@ struct VerifyWordsView: View {
 
     @StateObject private var keyboardObserver = KeyboardObserver()
 
-    init() {
-        // TODO: get wallet id, and wallet model from id
-        model = PendingWalletViewModel(numberOfWords: .twelve)
-        groupedWords = model.rust.bip39WordsGrouped()
+    init(id: WalletId) {
+        walletId = id
+        model = WalletViewModel(id: id)
 
+        do {
+            validator = try model.rust.wordValidator()
+        } catch {
+            print("errored!!")
+            print(error)
+            validator = try! model.rust.wordValidator()
+        }
+
+        groupedWords = validator.groupedWords()
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         tabIndex = 0
     }
@@ -37,11 +48,11 @@ struct VerifyWordsView: View {
     }
 
     var buttonIsDisabled: Bool {
-        !model.rust.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
+        !validator.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
     }
 
     var isAllWordsValid: Bool {
-        model.rust.isAllWordsValid(enteredWords: enteredWords)
+        validator.isAllWordsValid(enteredWords: enteredWords)
     }
 
     var lastIndex: Int {
@@ -84,7 +95,7 @@ struct VerifyWordsView: View {
                             // confirm
                         } else {
                             showErrorAlert = true
-                            invalidWords = model.rust.invalidWordsString(enteredWords: enteredWords)
+                            invalidWords = validator.invalidWordsString(enteredWords: enteredWords)
                         }
                     }
                     .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
@@ -326,5 +337,5 @@ struct SuggestionList: View {
 }
 
 #Preview {
-    VerifyWordsView()
+    VerifyWordsView(id: WalletId())
 }

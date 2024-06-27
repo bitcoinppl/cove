@@ -1,44 +1,88 @@
 //! Module for interacting with the secure element
 
-use std::sync::Arc;
+use std::{str::FromStr as _, sync::Arc};
 
+use bip39::Mnemonic;
 use log::warn;
 use once_cell::sync::OnceCell;
 
-#[derive(uniffi::Error)]
+use crate::view_model::wallet::WalletId;
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum KeychainError {
-    Generic(String),
+    #[error("unable to save")]
+    UnableToSave,
+
+    #[error("unable to delete")]
+    UnableToDelete,
+
+    #[error("unable to parse saved value")]
+    UnableToParseSavedValue(String),
 }
 
 #[uniffi::export(callback_interface)]
-pub trait Keychain: Send + Sync + std::fmt::Debug + 'static {
-    fn encrypt(&self, data: Vec<u8>) -> Result<Vec<u8>, KeychainError>;
+pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
+    fn save(&self, key: String, value: String) -> Result<(), KeychainError>;
+    fn get(&self, key: String) -> Option<String>;
+    fn delete(&self, key: String) -> bool;
 }
 
-static REF: OnceCell<Authenticator> = OnceCell::new();
+static REF: OnceCell<Keychain> = OnceCell::new();
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct Authenticator(Arc<Box<dyn Keychain>>);
+pub struct Keychain(Arc<Box<dyn KeychainAccess>>);
 
 #[uniffi::export]
-impl Authenticator {
+impl Keychain {
     #[uniffi::constructor]
-    pub fn new(keychain: Box<dyn Keychain>) -> Self {
+    pub fn new(keychain: Box<dyn KeychainAccess>) -> Self {
         if let Some(me) = REF.get() {
             warn!("keychain is already");
             return me.clone();
         }
 
-        Self(Arc::new(keychain))
+        let me = Self(Arc::new(keychain));
+        REF.set(me).expect("failed to set keychain");
+
+        Keychain::global().clone()
     }
 }
 
-impl Authenticator {
+impl Keychain {
     pub fn global() -> &'static Self {
         REF.get().expect("keychain is not initialized")
     }
 
-    pub fn encrypt(&self, data: Vec<u8>) -> Result<Vec<u8>, KeychainError> {
-        self.0.encrypt(data)
+    pub fn save_wallet_key(&self, id: WalletId, secret_key: Mnemonic) -> Result<(), KeychainError> {
+        let key = wallet_mnemonic_key_name(id);
+        let secret = secret_key.to_string();
+
+        self.0.save(key, secret)?;
+
+        Ok(())
     }
+
+    pub fn get_wallet_key(&self, id: WalletId) -> Result<Option<Mnemonic>, KeychainError> {
+        let key = wallet_mnemonic_key_name(id);
+
+        let Some(secret) = self.0.get(key) else {
+            return Ok(None);
+        };
+
+        let mnemonic = Mnemonic::from_str(&secret)
+            .map_err(|error| KeychainError::UnableToParseSavedValue(error.to_string()))?;
+
+        print!("mnemonic: {mnemonic:?}");
+
+        Ok(Some(mnemonic))
+    }
+
+    pub fn delete_wallet_key(&self, id: WalletId) -> bool {
+        let key = wallet_mnemonic_key_name(id);
+        self.0.delete(key)
+    }
+}
+
+fn wallet_mnemonic_key_name(id: WalletId) -> String {
+    format!("{id}::wallet_mnemonic")
 }

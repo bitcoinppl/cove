@@ -18,8 +18,8 @@ struct NewHotWalletView: View {
             HotWalletCreateView(numberOfWords: words)
         case .import:
             HotWalletImportView()
-        case .verifyWords:
-            VerifyWordsView()
+        case let .verifyWords(walletId):
+            VerifyWordsView(id: walletId)
         }
     }
 }

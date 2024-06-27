@@ -4,7 +4,24 @@ use bdk_wallet::bitcoin::Network;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
-use crate::wallet::{NumberOfBip39Words, PendingWallet};
+use crate::{
+    database::{Database, DatabaseError},
+    keychain::{Keychain, KeychainError},
+    wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WordAccess},
+};
+
+use super::wallet::WalletId;
+
+type Error = PendingWalletViewModelError;
+
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+pub enum PendingWalletViewModelError {
+    #[error("failed to create wallet: {0}")]
+    BdkError(String),
+
+    #[error("failed to save wallet to keychain: {0}")]
+    WalletCreationError(#[from] WalletCreationError),
+}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum PendingWalletViewModelReconcileMessage {
@@ -15,12 +32,6 @@ pub enum PendingWalletViewModelReconcileMessage {
 pub enum WalletState {
     Empty,
     Created(bdk_wallet::Wallet),
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct GroupedWord {
-    pub number: u8,
-    pub word: String,
 }
 
 #[uniffi::export(callback_interface)]
@@ -51,6 +62,12 @@ pub enum PendingWalletViewModelAction {
 pub enum WalletCreationError {
     #[error("failed to create wallet: {0}")]
     BdkError(String),
+
+    #[error("failed to save wallet to keychain: {0}")]
+    KeychainError(#[from] KeychainError),
+
+    #[error("failed to save wallet: {0}")]
+    DatabaseError(#[from] DatabaseError),
 }
 
 #[uniffi::export]
@@ -89,73 +106,33 @@ impl RustPendingWalletViewModel {
     }
 
     #[uniffi::method]
+    pub fn save_wallet(&self) -> Result<WalletId, Error> {
+        let state = self.state.read();
+        let wallet_id = WalletId::new();
+
+        let keychain = Keychain::global();
+
+        keychain
+            .save_wallet_key(wallet_id.clone(), state.wallet.mnemonic.clone())
+            .map_err(WalletCreationError::from)?;
+
+        let database = Database::global();
+        let mut wallets = database
+            .get_wallets(state.wallet.network)
+            .map_err(WalletCreationError::from)?;
+
+        wallets.push(wallet_id.clone());
+
+        database
+            .save_wallets(state.wallet.network, wallets)
+            .map_err(WalletCreationError::from)?;
+
+        Ok(wallet_id)
+    }
+
+    #[uniffi::method]
     pub fn bip_39_words_grouped(&self) -> Vec<Vec<GroupedWord>> {
-        let chunk_size = 6;
-
-        self.state
-            .read()
-            .wallet
-            .words()
-            .chunks(chunk_size)
-            .enumerate()
-            .map(|(chunk_index, chunk)| {
-                chunk
-                    .iter()
-                    .enumerate()
-                    .map(|(index, word)| GroupedWord {
-                        number: ((chunk_index * chunk_size) + index + 1) as u8,
-                        word: word.to_string(),
-                    })
-                    .collect()
-            })
-            .collect()
-    }
-
-    // check if the word group passed in is valid
-    #[uniffi::method]
-    pub fn is_valid_word_group(&self, group_number: u8, entered_words: Vec<String>) -> bool {
-        let actual_words = &self.bip_39_words_grouped()[group_number as usize];
-
-        for (actual_word, entered_word) in actual_words.iter().zip(entered_words.iter()) {
-            if actual_word.word != entered_word.to_lowercase().trim() {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    // check if all the word groups are valid
-    #[uniffi::method]
-    pub fn is_all_words_valid(&self, entered_words: Vec<Vec<String>>) -> bool {
-        let state = self.state.read();
-        let entered_words = entered_words.iter().flat_map(|words| words.iter());
-
-        for (actual_word, entered_word) in state.wallet.words_iter().zip(entered_words) {
-            if actual_word != entered_word.to_lowercase().trim() {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    // get string of all invalid words
-    #[uniffi::method]
-    pub fn invalid_words_string(&self, entered_words: Vec<Vec<String>>) -> String {
-        let state = self.state.read();
-        let entered_words = entered_words.iter().flat_map(|words| words.iter());
-
-        let mut invalid_words = Vec::new();
-        for (index, (actual_word, entered_word)) in
-            state.wallet.words_iter().zip(entered_words).enumerate()
-        {
-            if actual_word != entered_word.to_lowercase().trim() {
-                invalid_words.push((index + 1).to_string());
-            }
-        }
-
-        invalid_words.join(", ")
+        self.state.read().wallet.mnemonic.bip_39_words_groups_of(6)
     }
 
     // boilerplate methods

@@ -1,11 +1,21 @@
-use bdk_wallet::{bitcoin::Network, KeychainKind};
-use bip39::Mnemonic;
-use rand::Rng as _;
-
 use crate::{
     keys::{Descriptor, DescriptorSecretKey},
     view_model::wallet::WalletId,
 };
+use bdk_wallet::{bitcoin::Network, KeychainKind};
+use bip39::Mnemonic;
+use itertools::Itertools as _;
+use rand::Rng as _;
+
+pub trait WordAccess {
+    fn bip_39_words_groups_of(&self, groups: usize) -> Vec<Vec<GroupedWord>>;
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct GroupedWord {
+    pub number: u8,
+    pub word: String,
+}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum NumberOfBip39Words {
@@ -51,7 +61,10 @@ impl NumberOfBip39Words {
 #[derive(Debug, uniffi::Object)]
 pub struct PendingWallet {
     pub bdk: bdk_wallet::Wallet,
-    mnemonic: Mnemonic,
+
+    pub mnemonic: Mnemonic,
+    pub network: Network,
+    pub passphrase: Option<String>,
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -67,7 +80,8 @@ impl PendingWallet {
         passphrase: Option<String>,
     ) -> Self {
         let mnemonic = number_of_words.to_mnemonic();
-        let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
+        let descriptor_secret_key =
+            DescriptorSecretKey::new(network, mnemonic.clone(), passphrase.clone());
 
         let descriptor =
             Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::External, network);
@@ -82,6 +96,8 @@ impl PendingWallet {
         Self {
             bdk: wallet,
             mnemonic,
+            network,
+            passphrase,
         }
     }
 
@@ -91,6 +107,26 @@ impl PendingWallet {
 
     pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.mnemonic.word_iter()
+    }
+}
+
+impl WordAccess for Mnemonic {
+    fn bip_39_words_groups_of(&self, groups: usize) -> Vec<Vec<GroupedWord>> {
+        self.word_iter()
+            .chunks(groups)
+            .into_iter()
+            .enumerate()
+            .map(|(chunk_index, chunk)| {
+                chunk
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, word)| GroupedWord {
+                        number: ((chunk_index * groups) + index + 1) as u8,
+                        word: word.to_string(),
+                    })
+                    .collect()
+            })
+            .collect()
     }
 }
 

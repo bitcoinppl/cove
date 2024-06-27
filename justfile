@@ -10,6 +10,9 @@ clean:
     rm -rf ios/Cove
     rf -rf rust/target
 
+fmt:
+    cd rust && cargo fmt
+
 build-android:
     bash scripts/build-android.sh
 
