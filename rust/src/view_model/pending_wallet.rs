@@ -30,20 +30,20 @@ pub trait PendingWalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'sta
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct RustWalletViewModel {
-    pub state: Arc<RwLock<WalletViewModelState>>,
+pub struct RustPendingWalletViewModel {
+    pub state: Arc<RwLock<PendingWalletViewModelState>>,
     pub reconciler: Sender<PendingWalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<PendingWalletViewModelReconcileMessage>>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct WalletViewModelState {
+pub struct PendingWalletViewModelState {
     pub number_of_words: NumberOfBip39Words,
     pub wallet: Arc<PendingWallet>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelAction {
+pub enum PendingWalletViewModelAction {
     UpdateWords(NumberOfBip39Words),
 }
 
@@ -54,20 +54,22 @@ pub enum WalletCreationError {
 }
 
 #[uniffi::export]
-impl RustWalletViewModel {
+impl RustPendingWalletViewModel {
     #[uniffi::constructor]
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
-            state: Arc::new(RwLock::new(WalletViewModelState::new(number_of_words))),
+            state: Arc::new(RwLock::new(PendingWalletViewModelState::new(
+                number_of_words,
+            ))),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
     }
 
     #[uniffi::method]
-    pub fn get_state(&self) -> WalletViewModelState {
+    pub fn get_state(&self) -> PendingWalletViewModelState {
         self.state.read().clone()
     }
 
@@ -171,9 +173,9 @@ impl RustWalletViewModel {
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: WalletViewModelAction) {
+    pub fn dispatch(&self, action: PendingWalletViewModelAction) {
         match action {
-            WalletViewModelAction::UpdateWords(words) => {
+            PendingWalletViewModelAction::UpdateWords(words) => {
                 {
                     let mut state = self.state.write();
                     state.wallet = PendingWallet::new(words, Network::Bitcoin, None).into();
@@ -188,7 +190,7 @@ impl RustWalletViewModel {
     }
 }
 
-impl WalletViewModelState {
+impl PendingWalletViewModelState {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         Self {
             number_of_words,

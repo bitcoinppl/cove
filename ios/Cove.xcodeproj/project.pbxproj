@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */; };
+		48582AEE3539AD866FAC18BF /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */; };
 		AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC269AE12C289F17005481A8 /* VerifyWordsView.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
@@ -68,6 +69,7 @@
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
 		ACF44D132C2857E9008C5034 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
 		D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Cove.xcframework; path = ../rust/ios/Cove.xcframework; sourceTree = "<group>"; };
 		D000B2F12C0F7BB100E32143 /* Cove.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Cove.swift; path = ../../rust/ios/Cove/Cove.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -114,6 +116,8 @@
 		ACC3016B2C21095A006790DF /* NewWallet */ = {
 			isa = PBXGroup;
 			children = (
+				ACC301642C207787006790DF /* NewWalletView.swift */,
+				ACC301792C221450006790DF /* PendingWalletViewModel.swift */,
 				ACC301722C21126C006790DF /* HotWallet */,
 				ACC3016C2C210978006790DF /* NewHotWalletView.swift */,
 				ACC3016E2C2109A1006790DF /* NewColdWalletView.swift */,
@@ -168,9 +172,8 @@
 				ACC3016B2C21095A006790DF /* NewWallet */,
 				ACC301662C20C11D006790DF /* Extention */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
-				ACC301642C207787006790DF /* NewWalletView.swift */,
 				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
-				ACC301792C221450006790DF /* PendingWalletViewModel.swift */,
+				C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
@@ -289,6 +292,7 @@
 				ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */,
 				AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */,
 				382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */,
+				48582AEE3539AD866FAC18BF /* WalletViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

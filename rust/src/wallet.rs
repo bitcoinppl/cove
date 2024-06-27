@@ -1,9 +1,11 @@
 use bdk_wallet::{bitcoin::Network, KeychainKind};
 use bip39::Mnemonic;
 use rand::Rng as _;
-use uuid::Uuid;
 
-use crate::keys::{Descriptor, DescriptorSecretKey};
+use crate::{
+    keys::{Descriptor, DescriptorSecretKey},
+    view_model::wallet::WalletId,
+};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum NumberOfBip39Words {
@@ -54,7 +56,7 @@ pub struct PendingWallet {
 
 #[derive(Debug, uniffi::Object)]
 pub struct Wallet {
-    pub id: Uuid,
+    pub id: WalletId,
     pub bdk: bdk_wallet::Wallet,
 }
 
