@@ -141,7 +141,7 @@ struct CardTab: View {
 
     func zIndex(index: Int) -> Double {
         // if focused, on the bottom half, don't set zIndex
-        // becuase we want the suggestions to show on top
+        // because we want the suggestions to show on top
         if let field = focusField, (field % 6) == 0 || (field % 6) > 3 {
             return 1
         }
@@ -178,7 +178,6 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
 
     @Binding var focusField: Int?
 
-    @Environment(PendingWalletViewModel.self) private var model
     @State private var showSuggestions = false
     @State private var offset: CGPoint = .zero
     @FocusState private var isFocused: Bool
@@ -278,14 +277,14 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 }
             }
             .onSubmit {
-                model.submitWordField(fieldNumber: word.number)
+//                model.submitWordField(fieldNumber: word.number)
             }
-            .onChange(of: model.focusField) { _, fieldNumber in
-                guard let fieldNumber = fieldNumber else { return }
-                if word.number == fieldNumber {
-                    isFocused = true
-                }
-            }
+//            .onChange(of: model.focusField) { _, fieldNumber in
+//                guard let fieldNumber = fieldNumber else { return }
+//                if word.number == fieldNumber {
+//                    isFocused = true
+//                }
+//            }
             .onChange(of: text) {
                 if !self.isFocused {
                     return self.showSuggestions = false
@@ -302,7 +301,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 if self.filteredSuggestions.count == 1 && self.filteredSuggestions.first == word.word {
                     self.showSuggestions = false
                     self.text = self.filteredSuggestions.first!
-                    model.submitWordField(fieldNumber: word.number)
+//                    model.submitWordField(fieldNumber: word.number)
                     return
                 }
 
