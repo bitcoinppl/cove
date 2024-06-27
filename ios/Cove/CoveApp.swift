@@ -23,6 +23,8 @@ struct CoveApp: App {
     @State var model: MainViewModel
 
     public init() {
+        let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+        print(paths.first!)
         model = MainViewModel()
     }
 

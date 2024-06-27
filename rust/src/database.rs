@@ -159,9 +159,11 @@ fn create_all_tables(db: &redb::Database) {
 }
 
 fn database_location() -> PathBuf {
-    let parent = dirs::document_dir()
+    let parent = dirs::home_dir()
         .expect("failed to get home document directory")
-        .join("data");
+        .join("Library/Application Support/.data");
+
+    println!("parent: {:?}", parent);
 
     if !parent.exists() {
         std::fs::create_dir_all(&parent)

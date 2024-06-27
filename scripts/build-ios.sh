@@ -6,7 +6,6 @@ cd rust
 
 BUILD_TYPE=$1
 
-echo "Building for $BUILD_TYPE"
 if [ "$BUILD_TYPE" == "release" ] || [ "$BUILD_TYPE" == "--release" ]; then
     BUILD_FLAG="--release"
     BUILD_TYPE="release"
@@ -22,15 +21,14 @@ mkdir -p ios/Cove.xcframework bindings ios/Cove
 
 # Build the dylib
 cargo build
- 
+
 # Generate bindings
 cargo run --bin uniffi-bindgen generate --library ./target/debug/libcove.dylib --language swift --out-dir ./bindings
 
 if [ $BUILD_TYPE == "release" ]; then
     TARGETS=(
-        aarch64-apple-ios-sim
-        aarch64-apple-ios
-        x86_64-apple-ios
+        aarch64-apple-ios-sim \
+        aarch64-apple-ios \
         # x86_64-apple-darwin
         # aarch64-apple-darwin
     )
@@ -38,9 +36,9 @@ else
     TARGETS=(aarch64-apple-ios-sim)
 fi 
  
-echo "Build for targets: ${TARGETS}"
 LIBRARY_FLAGS=""
-for TARGET in $TARGETS; do
+echo "Build for targets: ${TARGETS[@]}"
+for TARGET in ${TARGETS[@]}; do
     echo "Building for target: ${TARGET}"
     LIBRARY_FLAGS="$LIBRARY_FLAGS -library ./target/$TARGET/$BUILD_TYPE/libcove.a -headers ./bindings"
 
@@ -59,7 +57,6 @@ mv ./bindings/cove.swift ./ios/Cove/Cove.swift
 rm -rf "ios/Cove.xcframework" || true
 xcodebuild -create-xcframework \
         $LIBRARY_FLAGS \
-        -headers ./bindings \
         -output "ios/Cove.xcframework"
  
 # Cleanup

@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-@Observable class WalletViewModel: WalletViewModelReconciler {
+@Observable class PendingWalletViewModel: PendingWalletViewModelReconciler {
     var rust: RustWalletViewModel
     var numberOfWords: NumberOfBip39Words
     var bip39Words: [String]
@@ -26,7 +26,7 @@ import SwiftUI
         focusField = Int(fieldNumber) + 1
     }
 
-    func reconcile(message: WalletViewModelReconcileMessage) {
+    func reconcile(message: PendingWalletViewModelReconcileMessage) {
         Task {
             await MainActor.run {
                 print("[swift] WalletViewModel Reconcile: \(message)")

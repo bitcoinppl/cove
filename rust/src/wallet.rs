@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
 use bdk_wallet::{bitcoin::Network, KeychainKind};
 use bip39::Mnemonic;
 use rand::Rng as _;
+use uuid::Uuid;
 
 use crate::keys::{Descriptor, DescriptorSecretKey};
 
@@ -47,12 +46,6 @@ impl NumberOfBip39Words {
     }
 }
 
-/// Creates a new wallet with mnemonic words
-#[derive(Debug, Clone, uniffi::Enum)]
-pub enum Wallet {
-    Pending(Arc<PendingWallet>),
-}
-
 #[derive(Debug, uniffi::Object)]
 pub struct PendingWallet {
     pub bdk: bdk_wallet::Wallet,
@@ -60,42 +53,13 @@ pub struct PendingWallet {
 }
 
 #[derive(Debug, uniffi::Object)]
-pub struct SavedWallet {
+pub struct Wallet {
+    pub id: Uuid,
     pub bdk: bdk_wallet::Wallet,
 }
 
-impl Wallet {
-    pub fn new(
-        number_of_words: NumberOfBip39Words,
-        network: Network,
-        passphrase: Option<String>,
-    ) -> Self {
-        Self::Pending(Arc::new(PendingWallet::new(
-            number_of_words,
-            network,
-            passphrase,
-        )))
-    }
-
-    pub fn words(&self) -> Vec<String> {
-        match self {
-            Self::Pending(pending_wallet) => pending_wallet
-                .mnemonic
-                .word_iter()
-                .map(ToString::to_string)
-                .collect(),
-        }
-    }
-
-    pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
-        match self {
-            Self::Pending(pending_wallet) => pending_wallet.mnemonic.word_iter(),
-        }
-    }
-}
-
 impl PendingWallet {
-    fn new(
+    pub fn new(
         number_of_words: NumberOfBip39Words,
         network: Network,
         passphrase: Option<String>,
@@ -117,6 +81,14 @@ impl PendingWallet {
             bdk: wallet,
             mnemonic,
         }
+    }
+
+    pub fn words(&self) -> Vec<String> {
+        self.words_iter().map(ToString::to_string).collect()
+    }
+
+    pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.mnemonic.word_iter()
     }
 }
 

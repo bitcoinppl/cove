@@ -1,1 +1,1 @@
-pub mod wallet;
+pub mod pending_wallet;

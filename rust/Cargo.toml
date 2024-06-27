@@ -49,6 +49,9 @@ redb = "2.1"
 derive_more = "0.99.18"
 strum = {version = "0.26", features = ["derive"]}
 
+# uuid
+uuid = { version = "1.9", features = ["v4"] }
+
 # bindings
 uniffi = { version = "=0.28" }
 

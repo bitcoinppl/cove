@@ -4,10 +4,10 @@ use bdk_wallet::bitcoin::Network;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
-use crate::wallet::{NumberOfBip39Words, Wallet};
+use crate::wallet::{NumberOfBip39Words, PendingWallet};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelReconcileMessage {
+pub enum PendingWalletViewModelReconcileMessage {
     Words(NumberOfBip39Words),
 }
 
@@ -24,22 +24,22 @@ pub struct GroupedWord {
 }
 
 #[uniffi::export(callback_interface)]
-pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
+pub trait PendingWalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the view model changes
-    fn reconcile(&self, message: WalletViewModelReconcileMessage);
+    fn reconcile(&self, message: PendingWalletViewModelReconcileMessage);
 }
 
-#[derive(Clone, Debug, uniffi::Object)]
+#[derive(Debug, Clone, uniffi::Object)]
 pub struct RustWalletViewModel {
     pub state: Arc<RwLock<WalletViewModelState>>,
-    pub reconciler: Sender<WalletViewModelReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+    pub reconciler: Sender<PendingWalletViewModelReconcileMessage>,
+    pub reconcile_receiver: Arc<Receiver<PendingWalletViewModelReconcileMessage>>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct WalletViewModelState {
     pub number_of_words: NumberOfBip39Words,
-    pub wallet: Wallet,
+    pub wallet: Arc<PendingWallet>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -158,7 +158,7 @@ impl RustWalletViewModel {
 
     // boilerplate methods
     #[uniffi::method]
-    pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
+    pub fn listen_for_updates(&self, reconciler: Box<dyn PendingWalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
         std::thread::spawn(move || {
@@ -176,12 +176,12 @@ impl RustWalletViewModel {
             WalletViewModelAction::UpdateWords(words) => {
                 {
                     let mut state = self.state.write();
-                    state.wallet = Wallet::new(words, Network::Bitcoin, None);
+                    state.wallet = PendingWallet::new(words, Network::Bitcoin, None).into();
                     state.number_of_words = words;
                 }
 
                 self.reconciler
-                    .send(WalletViewModelReconcileMessage::Words(words))
+                    .send(PendingWalletViewModelReconcileMessage::Words(words))
                     .expect("failed to send update");
             }
         }
@@ -192,7 +192,7 @@ impl WalletViewModelState {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         Self {
             number_of_words,
-            wallet: Wallet::new(number_of_words, Network::Bitcoin, None),
+            wallet: PendingWallet::new(number_of_words, Network::Bitcoin, None).into(),
         }
     }
 }

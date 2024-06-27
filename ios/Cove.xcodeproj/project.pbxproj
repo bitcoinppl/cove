@@ -20,7 +20,7 @@
 		ACC301742C211281006790DF /* HotWalletSelectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301732C211281006790DF /* HotWalletSelectView.swift */; };
 		ACC301762C21D698006790DF /* HotWalletCreateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301752C21D698006790DF /* HotWalletCreateView.swift */; };
 		ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301772C21D6EA006790DF /* HotWalletImportView.swift */; };
-		ACC3017A2C221450006790DF /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* WalletViewModel.swift */; };
+		ACC3017A2C221450006790DF /* PendingWalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* PendingWalletViewModel.swift */; };
 		ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		ACC4D39B2C2CA6AD008E32A0 /* Cove.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */; };
@@ -63,7 +63,7 @@
 		ACC301732C211281006790DF /* HotWalletSelectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletSelectView.swift; sourceTree = "<group>"; };
 		ACC301752C21D698006790DF /* HotWalletCreateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletCreateView.swift; sourceTree = "<group>"; };
 		ACC301772C21D6EA006790DF /* HotWalletImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletImportView.swift; sourceTree = "<group>"; };
-		ACC301792C221450006790DF /* WalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
+		ACC301792C221450006790DF /* PendingWalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingWalletViewModel.swift; sourceTree = "<group>"; };
 		ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Trait+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
@@ -170,7 +170,7 @@
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				ACC301642C207787006790DF /* NewWalletView.swift */,
 				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
-				ACC301792C221450006790DF /* WalletViewModel.swift */,
+				ACC301792C221450006790DF /* PendingWalletViewModel.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
@@ -270,7 +270,7 @@
 			files = (
 				D0BE2EBE2C1614150055FCBE /* MainViewModel.swift in Sources */,
 				D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */,
-				ACC3017A2C221450006790DF /* WalletViewModel.swift in Sources */,
+				ACC3017A2C221450006790DF /* PendingWalletViewModel.swift in Sources */,
 				ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */,
 				ACC301712C2109C1006790DF /* NewWalletSelectView.swift in Sources */,
 				ACC3016F2C2109A1006790DF /* NewColdWalletView.swift in Sources */,

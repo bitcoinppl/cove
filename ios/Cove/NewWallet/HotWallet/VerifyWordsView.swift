@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct VerifyWordsView: View {
-    var model: WalletViewModel
+    var model: PendingWalletViewModel
     var groupedWords: [[GroupedWord]]
 
     @State private var enteredWords: [[String]]
@@ -21,7 +21,7 @@ struct VerifyWordsView: View {
 
     init() {
         // TODO: get wallet id, and wallet model from id
-        model = WalletViewModel(numberOfWords: .twelve)
+        model = PendingWalletViewModel(numberOfWords: .twelve)
         groupedWords = model.rust.bip39WordsGrouped()
 
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
@@ -163,7 +163,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
 
     @Binding var focusField: Int?
 
-    @Environment(WalletViewModel.self) private var model
+    @Environment(PendingWalletViewModel.self) private var model
     @State private var showSuggestions = false
     @State private var offset: CGPoint = .zero
     @FocusState private var isFocused: Bool
