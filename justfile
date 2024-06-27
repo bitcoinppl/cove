@@ -5,10 +5,10 @@ bacon:
     cd rust && bacon clippy
 
 clean:
-    rm -rf ios/Cove.xcframework
-    rm -rf ios/Cove
+    cd rust && cargo clean && \
+    rm -rf ios/Cove.xcframework && \
+    rm -rf ios/Cove && \
     rm -rf rust/target
-    cd rust && cargo clean
 
 fmt:
     cd rust && cargo fmt

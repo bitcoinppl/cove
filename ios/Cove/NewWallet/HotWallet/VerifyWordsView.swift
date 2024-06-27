@@ -10,7 +10,7 @@ import SwiftUI
 struct VerifyWordsView: View {
     let walletId: WalletId
     let model: WalletViewModel
-    let validator: WordValidator
+    let validator: WordValidator?
     let groupedWords: [[GroupedWord]]
 
     @Environment(\.navigate) private var navigate
@@ -26,15 +26,15 @@ struct VerifyWordsView: View {
         walletId = id
         model = WalletViewModel(id: id)
 
+        var v: WordValidator?
         do {
-            validator = try model.rust.wordValidator()
+            v = try model.rust.wordValidator()
         } catch {
-            print("errored!!")
-            print(error)
-            validator = try! model.rust.wordValidator()
+            print("errored!! with error: \(error)")
         }
 
-        groupedWords = validator.groupedWords()
+        validator = v
+        groupedWords = v?.groupedWords() ?? []
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         tabIndex = 0
     }
@@ -48,11 +48,11 @@ struct VerifyWordsView: View {
     }
 
     var buttonIsDisabled: Bool {
-        !validator.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
+        !validator!.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
     }
 
     var isAllWordsValid: Bool {
-        validator.isAllWordsValid(enteredWords: enteredWords)
+        validator!.isAllWordsValid(enteredWords: enteredWords)
     }
 
     var lastIndex: Int {
@@ -60,69 +60,73 @@ struct VerifyWordsView: View {
     }
 
     var body: some View {
-        SunsetWave {
-            VStack {
-                Spacer()
+        if let validator = validator {
+            SunsetWave {
+                VStack {
+                    Spacer()
 
-                if !keyboardIsShowing {
-                    Text("Please verify your words")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white.opacity(0.85))
-                        .padding(.top, 60)
-                        .padding(.bottom, 30)
-                }
-
-                GlassCard {
-                    TabView(selection: $tabIndex) {
-                        ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
-                            CardTab(wordGroup: wordGroup, fields: $enteredWords[index])
-                                .tag(index)
-                        }
-                        .padding(.horizontal, 30)
-                        .padding(.vertical, 30)
+                    if !keyboardIsShowing {
+                        Text("Please verify your words")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white.opacity(0.85))
+                            .padding(.top, 60)
+                            .padding(.bottom, 30)
                     }
-                }
-                .frame(height: cardHeight)
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-                .padding(.horizontal, 30)
 
-                Spacer()
-
-                if tabIndex == lastIndex {
-                    Button("Confirm") {
-                        if isAllWordsValid {
-                            // confirm
-                        } else {
-                            showErrorAlert = true
-                            invalidWords = validator.invalidWordsString(enteredWords: enteredWords)
+                    GlassCard {
+                        TabView(selection: $tabIndex) {
+                            ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
+                                CardTab(wordGroup: wordGroup, fields: $enteredWords[index])
+                                    .tag(index)
+                            }
+                            .padding(.horizontal, 30)
+                            .padding(.vertical, 30)
                         }
                     }
-                    .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
-                    .padding(.top, 20)
+                    .frame(height: cardHeight)
+                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+                    .padding(.horizontal, 30)
 
-                } else {
-                    Button("Next") {
-                        withAnimation {
-                            tabIndex += 1
+                    Spacer()
+
+                    if tabIndex == lastIndex {
+                        Button("Confirm") {
+                            if isAllWordsValid {
+                                // confirm
+                            } else {
+                                showErrorAlert = true
+                                invalidWords = validator.invalidWordsString(enteredWords: enteredWords)
+                            }
                         }
-                    }
-                    .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
-                    .disabled(buttonIsDisabled)
-                    .foregroundStyle(Color.red)
-                    .padding(.top, 20)
-                }
+                        .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
+                        .padding(.top, 20)
 
-                Spacer()
+                    } else {
+                        Button("Next") {
+                            withAnimation {
+                                tabIndex += 1
+                            }
+                        }
+                        .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
+                        .disabled(buttonIsDisabled)
+                        .foregroundStyle(Color.red)
+                        .padding(.top, 20)
+                    }
+
+                    Spacer()
+                }
             }
+            .alert("Words not valid", isPresented: $showErrorAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The following words are not valid: \(invalidWords)")
+            }
+            .environment(model)
+            .enableInjection()
+        } else {
+            Text("No words found")
         }
-        .alert("Words not valid", isPresented: $showErrorAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The following words are not valid: \(invalidWords)")
-        }
-        .environment(model)
-        .enableInjection()
     }
 
     #if DEBUG
