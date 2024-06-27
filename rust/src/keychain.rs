@@ -72,8 +72,6 @@ impl Keychain {
         let mnemonic = Mnemonic::from_str(&secret)
             .map_err(|error| KeychainError::UnableToParseSavedValue(error.to_string()))?;
 
-        print!("mnemonic: {mnemonic:?}");
-
         Ok(Some(mnemonic))
     }
 
