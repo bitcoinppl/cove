@@ -8,24 +8,36 @@
 import SwiftUI
 
 struct VerifyWordsView: View {
-    var model: WalletViewModel
-    var groupedWords: [[GroupedWord]]
+    let walletId: WalletId
+    let model: WalletViewModel
+    let validator: WordValidator?
+    let groupedWords: [[GroupedWord]]
 
+    @Environment(\.navigate) private var navigate
     @State private var enteredWords: [[String]]
     @State private var tabIndex: Int
 
     @State private var showErrorAlert = false
     @State private var invalidWords: String = ""
-
+    @State private var focusField: Int?
     @StateObject private var keyboardObserver = KeyboardObserver()
 
-    init() {
-        // TODO: get wallet id, and wallet model from id
-        model = WalletViewModel(numberOfWords: .twelve)
-        groupedWords = model.rust.bip39WordsGrouped()
+    init(id: WalletId) {
+        walletId = id
+        model = WalletViewModel(id: id)
 
+        var validator: WordValidator? = nil
+        do {
+            validator = try model.rust.wordValidator()
+        } catch {
+            print("errored!! with error: \(error)")
+        }
+
+        groupedWords = validator?.groupedWords() ?? []
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         tabIndex = 0
+        focusField = nil
+        self.validator = validator
     }
 
     var keyboardIsShowing: Bool {
@@ -37,11 +49,11 @@ struct VerifyWordsView: View {
     }
 
     var buttonIsDisabled: Bool {
-        !model.rust.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
+        !validator!.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
     }
 
     var isAllWordsValid: Bool {
-        model.rust.isAllWordsValid(enteredWords: enteredWords)
+        validator!.isAllWordsValid(enteredWords: enteredWords)
     }
 
     var lastIndex: Int {
@@ -49,69 +61,73 @@ struct VerifyWordsView: View {
     }
 
     var body: some View {
-        SunsetWave {
-            VStack {
-                Spacer()
+        if let validator = validator {
+            SunsetWave {
+                VStack {
+                    Spacer()
 
-                if !keyboardIsShowing {
-                    Text("Please verify your words")
-                        .font(.title2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white.opacity(0.85))
-                        .padding(.top, 60)
-                        .padding(.bottom, 30)
-                }
-
-                GlassCard {
-                    TabView(selection: $tabIndex) {
-                        ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
-                            CardTab(wordGroup: wordGroup, fields: $enteredWords[index])
-                                .tag(index)
-                        }
-                        .padding(.horizontal, 30)
-                        .padding(.vertical, 30)
+                    if !keyboardIsShowing {
+                        Text("Please verify your words")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white.opacity(0.85))
+                            .padding(.top, 60)
+                            .padding(.bottom, 30)
                     }
-                }
-                .frame(height: cardHeight)
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-                .padding(.horizontal, 30)
 
-                Spacer()
-
-                if tabIndex == lastIndex {
-                    Button("Confirm") {
-                        if isAllWordsValid {
-                            // confirm
-                        } else {
-                            showErrorAlert = true
-                            invalidWords = model.rust.invalidWordsString(enteredWords: enteredWords)
+                    GlassCard {
+                        TabView(selection: $tabIndex) {
+                            ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
+                                CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)
+                                    .tag(index)
+                            }
+                            .padding(.horizontal, 30)
+                            .padding(.vertical, 30)
                         }
                     }
-                    .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
-                    .padding(.top, 20)
+                    .frame(height: cardHeight)
+                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+                    .padding(.horizontal, 30)
 
-                } else {
-                    Button("Next") {
-                        withAnimation {
-                            tabIndex += 1
+                    Spacer()
+
+                    if tabIndex == lastIndex {
+                        Button("Confirm") {
+                            if isAllWordsValid {
+                                // confirm
+                            } else {
+                                showErrorAlert = true
+                                invalidWords = validator.invalidWordsString(enteredWords: enteredWords)
+                            }
                         }
-                    }
-                    .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
-                    .disabled(buttonIsDisabled)
-                    .foregroundStyle(Color.red)
-                    .padding(.top, 20)
-                }
+                        .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
+                        .padding(.top, 20)
 
-                Spacer()
+                    } else {
+                        Button("Next") {
+                            withAnimation {
+                                tabIndex += 1
+                            }
+                        }
+                        .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
+                        .disabled(buttonIsDisabled)
+                        .foregroundStyle(Color.red)
+                        .padding(.top, 20)
+                    }
+
+                    Spacer()
+                }
             }
+            .alert("Words not valid", isPresented: $showErrorAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The following words are not valid: \(invalidWords)")
+            }
+            .enableInjection()
+        } else {
+            // TODO: handle better
+            Text("No words found")
         }
-        .alert("Words not valid", isPresented: $showErrorAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The following words are not valid: \(invalidWords)")
-        }
-        .environment(model)
-        .enableInjection()
     }
 
     #if DEBUG
@@ -122,12 +138,12 @@ struct VerifyWordsView: View {
 struct CardTab: View {
     let wordGroup: [GroupedWord]
     @Binding var fields: [String]
-    @State var focusField: Int?
+    @Binding var focusField: Int?
 
     func zIndex(index: Int) -> Double {
         // if focused, on the bottom half, don't set zIndex
-        // becuase we want the suggestions to show on top
-        if let field = focusField, field > 3 {
+        // because we want the suggestions to show on top
+        if let field = focusField, (field % 6) == 0 || (field % 6) > 3 {
             return 1
         }
 
@@ -138,8 +154,8 @@ struct CardTab: View {
         VStack(spacing: 20) {
             ForEach(Array(self.wordGroup.enumerated()), id: \.offset) { index, word in
                 AutocompleteField(autocompleter: Bip39AutoComplete(),
-                                  text: self.$fields[index],
                                   word: word,
+                                  text: self.$fields[index],
                                   focusField: self.$focusField)
                     .zIndex(zIndex(index: index))
             }
@@ -157,13 +173,11 @@ struct CardTab: View {
 
 struct AutocompleteField<AutoCompleter: AutoComplete>: View {
     let autocompleter: AutoCompleter
-    @Binding var text: String
-
     let word: GroupedWord
 
+    @Binding var text: String
     @Binding var focusField: Int?
 
-    @Environment(WalletViewModel.self) private var model
     @State private var showSuggestions = false
     @State private var offset: CGPoint = .zero
     @FocusState private var isFocused: Bool
@@ -205,6 +219,16 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
         return .none
     }
 
+    var offsetCalc: CGFloat {
+        // bottom half word, show suggestions above the word
+        if word.number % 6 == 0 || word.number % 6 > 3 {
+            return -60 - frameHeight
+        }
+
+        // top half word, show suggestions below the word
+        return 0
+    }
+
     var body: some View {
         HStack {
             Text("\(String(format: "%02d", self.word.number)). ")
@@ -217,7 +241,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                             SuggestionList(suggestions: self.filteredSuggestions, selection: self.$text)
                                 .transition(.move(edge: .top))
                                 .frame(height: frameHeight)
-                                .offset(y: word.number <= 3 ? 0 : -60 - frameHeight)
+                                .offset(y: offsetCalc)
                         }
                     }
                     .offset(y: 40)
@@ -234,6 +258,14 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 }
             })
         .enableInjection()
+    }
+
+    func submitFocusField() {
+        guard let focusField = focusField else {
+            return
+        }
+
+        self.focusField = focusField + 1
     }
 
     var textField: some View {
@@ -253,9 +285,9 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 }
             }
             .onSubmit {
-                model.submitWordField(fieldNumber: word.number)
+                submitFocusField()
             }
-            .onChange(of: model.focusField) { _, fieldNumber in
+            .onChange(of: focusField) { _, fieldNumber in
                 guard let fieldNumber = fieldNumber else { return }
                 if word.number == fieldNumber {
                     isFocused = true
@@ -277,7 +309,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 if self.filteredSuggestions.count == 1 && self.filteredSuggestions.first == word.word {
                     self.showSuggestions = false
                     self.text = self.filteredSuggestions.first!
-                    model.submitWordField(fieldNumber: word.number)
+                    submitFocusField()
                     return
                 }
 
@@ -301,6 +333,7 @@ struct SuggestionList: View {
                     self.selection = suggestion
                 }
                 .padding(.vertical, 4)
+                .foregroundColor(.black.opacity(0.75))
         }
         .listStyle(.inset)
         .cornerRadius(10)
@@ -315,5 +348,5 @@ struct SuggestionList: View {
 }
 
 #Preview {
-    VerifyWordsView()
+    VerifyWordsView(id: WalletId())
 }

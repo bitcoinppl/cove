@@ -14,7 +14,13 @@ use bdk_wallet::KeychainKind;
 
 pub type Seed = [u8; 64];
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("failed to parse descriptor secret key: {0}")]
+    ParseDescriptorSecretKey(String),
+}
+
+#[derive(Debug, Clone, derive_more::Display, derive_more::From, derive_more::FromStr)]
 pub struct DescriptorSecretKey(pub(crate) BdkDescriptorSecretKey);
 
 #[derive(Debug)]

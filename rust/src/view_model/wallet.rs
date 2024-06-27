@@ -1,27 +1,18 @@
 use std::sync::Arc;
 
-use bdk_wallet::bitcoin::Network;
 use crossbeam::channel::{Receiver, Sender};
+use nid::Nanoid;
 use parking_lot::RwLock;
 
-use crate::wallet::{NumberOfBip39Words, Wallet};
+use crate::{
+    impl_default_for,
+    keychain::{Keychain, KeychainError},
+    new_type,
+    word_validator::WordValidator,
+};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelReconcileMessage {
-    Words(NumberOfBip39Words),
-}
-
-#[derive(Debug)]
-pub enum WalletState {
-    Empty,
-    Created(bdk_wallet::Wallet),
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct GroupedWord {
-    pub number: u8,
-    pub word: String,
-}
+pub enum WalletViewModelReconcileMessage {}
 
 #[uniffi::export(callback_interface)]
 pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
@@ -36,31 +27,41 @@ pub struct RustWalletViewModel {
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Clone, Debug, uniffi::Record)]
 pub struct WalletViewModelState {
-    pub number_of_words: NumberOfBip39Words,
-    pub wallet: Wallet,
+    id: WalletId,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelAction {
-    UpdateWords(NumberOfBip39Words),
+pub enum WalletViewModelAction {}
+
+type Error = WalletViewModelError;
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum WalletViewModelError {
+    #[error("Unable to retrieve the secret words for the wallet {0}")]
+    SecretRetrievalError(#[from] KeychainError),
+
+    #[error("Wallet does not exist")]
+    WalletDoesNotExist,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum WalletCreationError {
-    #[error("failed to create wallet: {0}")]
-    BdkError(String),
+new_type!(WalletId, String);
+impl_default_for!(WalletId);
+impl WalletId {
+    pub fn new() -> Self {
+        let nanoid: Nanoid = Nanoid::new();
+        Self(nanoid.to_string())
+    }
 }
 
 #[uniffi::export]
 impl RustWalletViewModel {
     #[uniffi::constructor]
-    pub fn new(number_of_words: NumberOfBip39Words) -> Self {
+    pub fn new(id: WalletId) -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
-            state: Arc::new(RwLock::new(WalletViewModelState::new(number_of_words))),
+            state: Arc::new(RwLock::new(WalletViewModelState::new(id))),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
@@ -72,91 +73,16 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn number_of_words_count(&self) -> u8 {
-        self.state.read().number_of_words.to_word_count() as u8
+    pub fn word_validator(&self) -> Result<WordValidator, Error> {
+        let mnemonic = Keychain::global()
+            .get_wallet_key(self.state.read().id.clone())?
+            .ok_or(Error::WalletDoesNotExist)?;
+
+        let validator = WordValidator::new(mnemonic);
+
+        Ok(validator)
     }
 
-    #[uniffi::method]
-    pub fn bip_39_words(&self) -> Vec<String> {
-        self.state.read().wallet.words()
-    }
-
-    #[uniffi::method]
-    pub fn card_indexes(&self) -> u8 {
-        self.state.read().number_of_words.to_word_count() as u8 / 6
-    }
-
-    #[uniffi::method]
-    pub fn bip_39_words_grouped(&self) -> Vec<Vec<GroupedWord>> {
-        let chunk_size = 6;
-
-        self.state
-            .read()
-            .wallet
-            .words()
-            .chunks(chunk_size)
-            .enumerate()
-            .map(|(chunk_index, chunk)| {
-                chunk
-                    .iter()
-                    .enumerate()
-                    .map(|(index, word)| GroupedWord {
-                        number: ((chunk_index * chunk_size) + index + 1) as u8,
-                        word: word.to_string(),
-                    })
-                    .collect()
-            })
-            .collect()
-    }
-
-    // check if the word group passed in is valid
-    #[uniffi::method]
-    pub fn is_valid_word_group(&self, group_number: u8, entered_words: Vec<String>) -> bool {
-        let actual_words = &self.bip_39_words_grouped()[group_number as usize];
-
-        for (actual_word, entered_word) in actual_words.iter().zip(entered_words.iter()) {
-            if actual_word.word != entered_word.to_lowercase().trim() {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    // check if all the word groups are valid
-    #[uniffi::method]
-    pub fn is_all_words_valid(&self, entered_words: Vec<Vec<String>>) -> bool {
-        let state = self.state.read();
-        let entered_words = entered_words.iter().flat_map(|words| words.iter());
-
-        for (actual_word, entered_word) in state.wallet.words_iter().zip(entered_words) {
-            if actual_word != entered_word.to_lowercase().trim() {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    // get string of all invalid words
-    #[uniffi::method]
-    pub fn invalid_words_string(&self, entered_words: Vec<Vec<String>>) -> String {
-        let state = self.state.read();
-        let entered_words = entered_words.iter().flat_map(|words| words.iter());
-
-        let mut invalid_words = Vec::new();
-        for (index, (actual_word, entered_word)) in
-            state.wallet.words_iter().zip(entered_words).enumerate()
-        {
-            if actual_word != entered_word.to_lowercase().trim() {
-                invalid_words.push((index + 1).to_string());
-            }
-        }
-
-        invalid_words.join(", ")
-    }
-
-    // boilerplate methods
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
@@ -172,27 +98,14 @@ impl RustWalletViewModel {
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
-        match action {
-            WalletViewModelAction::UpdateWords(words) => {
-                {
-                    let mut state = self.state.write();
-                    state.wallet = Wallet::new(words, Network::Bitcoin, None);
-                    state.number_of_words = words;
-                }
+        let state = self.state.clone();
 
-                self.reconciler
-                    .send(WalletViewModelReconcileMessage::Words(words))
-                    .expect("failed to send update");
-            }
-        }
+        match action {}
     }
 }
 
 impl WalletViewModelState {
-    pub fn new(number_of_words: NumberOfBip39Words) -> Self {
-        Self {
-            number_of_words,
-            wallet: Wallet::new(number_of_words, Network::Bitcoin, None),
-        }
+    pub fn new(id: WalletId) -> Self {
+        Self { id }
     }
 }

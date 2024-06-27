@@ -45,9 +45,15 @@ dirs = "5.0.1"
 # database
 redb = "2.1"
 
+# ids
+nid = "3.0"
+
 # derive stuff
 derive_more = "0.99.18"
 strum = {version = "0.26", features = ["derive"]}
+
+# exts
+itertools = "0.13"
 
 # bindings
 uniffi = { version = "=0.28" }

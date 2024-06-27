@@ -8,10 +8,10 @@
 import SwiftUI
 
 struct HotWalletCreateView: View {
-    @State private var model: WalletViewModel
+    @State private var model: PendingWalletViewModel
 
     init(numberOfWords: NumberOfBip39Words) {
-        model = WalletViewModel(numberOfWords: numberOfWords)
+        model = PendingWalletViewModel(numberOfWords: numberOfWords)
     }
 
     var body: some View {
@@ -25,7 +25,7 @@ struct HotWalletCreateView: View {
 }
 
 struct WordsView: View {
-    var model: WalletViewModel
+    var model: PendingWalletViewModel
     var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
@@ -59,10 +59,17 @@ struct WordsView: View {
 
                 if tabIndex == lastIndex {
                     Button("Save Wallet") {
-                        // TODO: save the wallet
-                        navigate(
-                            HotWalletRoute.verifyWords.intoRoute()
-                        )
+                        do {
+                            // save the wallet
+                            let walletId = try model.rust.saveWallet()
+
+                            navigate(
+                                HotWalletRoute.verifyWords(walletId).intoRoute()
+                            )
+                        } catch {
+                            // TODO: handle, maybe show an alert?
+                            print("[SWIFT] Error \(error)")
+                        }
                     }
                     .buttonStyle(GradientButtonStyle())
                     .padding(.top, 50)

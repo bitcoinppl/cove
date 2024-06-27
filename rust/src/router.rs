@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
-use crate::{app::FfiApp, impl_default_for, wallet::NumberOfBip39Words};
+use crate::{
+    app::FfiApp, impl_default_for, view_model::wallet::WalletId, wallet::NumberOfBip39Words,
+};
 use derive_more::From;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
     Cove,
     NewWallet(NewWalletRoute),
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum NewWalletRoute {
     #[default]
     Select,
@@ -17,7 +19,7 @@ pub enum NewWalletRoute {
     ColdWallet(ColdWalletRoute),
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
 pub enum HotWalletRoute {
     #[default]
     Select,
@@ -28,8 +30,7 @@ pub enum HotWalletRoute {
 
     Import,
 
-    // todo: add wallet id
-    VerifyWords,
+    VerifyWords(WalletId),
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
