@@ -19,24 +19,25 @@ struct VerifyWordsView: View {
 
     @State private var showErrorAlert = false
     @State private var invalidWords: String = ""
-
+    @State private var focusField: Int?
     @StateObject private var keyboardObserver = KeyboardObserver()
 
     init(id: WalletId) {
         walletId = id
         model = WalletViewModel(id: id)
 
-        var v: WordValidator?
+        var validator: WordValidator? = nil
         do {
-            v = try model.rust.wordValidator()
+            validator = try model.rust.wordValidator()
         } catch {
             print("errored!! with error: \(error)")
         }
 
-        validator = v
-        groupedWords = v?.groupedWords() ?? []
+        groupedWords = validator?.groupedWords() ?? []
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         tabIndex = 0
+        focusField = nil
+        self.validator = validator
     }
 
     var keyboardIsShowing: Bool {
@@ -77,7 +78,7 @@ struct VerifyWordsView: View {
                     GlassCard {
                         TabView(selection: $tabIndex) {
                             ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
-                                CardTab(wordGroup: wordGroup, fields: $enteredWords[index])
+                                CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)
                                     .tag(index)
                             }
                             .padding(.horizontal, 30)
@@ -122,9 +123,9 @@ struct VerifyWordsView: View {
             } message: {
                 Text("The following words are not valid: \(invalidWords)")
             }
-            .environment(model)
             .enableInjection()
         } else {
+            // TODO: handle better
             Text("No words found")
         }
     }
@@ -137,7 +138,7 @@ struct VerifyWordsView: View {
 struct CardTab: View {
     let wordGroup: [GroupedWord]
     @Binding var fields: [String]
-    @State var focusField: Int?
+    @Binding var focusField: Int?
 
     func zIndex(index: Int) -> Double {
         // if focused, on the bottom half, don't set zIndex
@@ -153,8 +154,8 @@ struct CardTab: View {
         VStack(spacing: 20) {
             ForEach(Array(self.wordGroup.enumerated()), id: \.offset) { index, word in
                 AutocompleteField(autocompleter: Bip39AutoComplete(),
-                                  text: self.$fields[index],
                                   word: word,
+                                  text: self.$fields[index],
                                   focusField: self.$focusField)
                     .zIndex(zIndex(index: index))
             }
@@ -172,10 +173,9 @@ struct CardTab: View {
 
 struct AutocompleteField<AutoCompleter: AutoComplete>: View {
     let autocompleter: AutoCompleter
-    @Binding var text: String
-
     let word: GroupedWord
 
+    @Binding var text: String
     @Binding var focusField: Int?
 
     @State private var showSuggestions = false
@@ -260,6 +260,14 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
         .enableInjection()
     }
 
+    func submitFocusField() {
+        guard let focusField = focusField else {
+            return
+        }
+
+        self.focusField = focusField + 1
+    }
+
     var textField: some View {
         TextField("", text: $text,
                   prompt: Text("Placeholder text")
@@ -277,14 +285,14 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 }
             }
             .onSubmit {
-//                model.submitWordField(fieldNumber: word.number)
+                submitFocusField()
             }
-//            .onChange(of: model.focusField) { _, fieldNumber in
-//                guard let fieldNumber = fieldNumber else { return }
-//                if word.number == fieldNumber {
-//                    isFocused = true
-//                }
-//            }
+            .onChange(of: focusField) { _, fieldNumber in
+                guard let fieldNumber = fieldNumber else { return }
+                if word.number == fieldNumber {
+                    isFocused = true
+                }
+            }
             .onChange(of: text) {
                 if !self.isFocused {
                     return self.showSuggestions = false
@@ -301,7 +309,7 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 if self.filteredSuggestions.count == 1 && self.filteredSuggestions.first == word.word {
                     self.showSuggestions = false
                     self.text = self.filteredSuggestions.first!
-//                    model.submitWordField(fieldNumber: word.number)
+                    submitFocusField()
                     return
                 }
 

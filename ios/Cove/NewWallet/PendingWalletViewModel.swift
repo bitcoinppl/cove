@@ -11,7 +11,6 @@ import SwiftUI
     var rust: RustPendingWalletViewModel
     var numberOfWords: NumberOfBip39Words
     var bip39Words: [String]
-    var focusField: Int?
 
     public init(numberOfWords: NumberOfBip39Words) {
         let rust = RustPendingWalletViewModel(numberOfWords: numberOfWords)
@@ -20,10 +19,6 @@ import SwiftUI
         self.numberOfWords = numberOfWords
         bip39Words = rust.bip39Words()
         self.rust.listenForUpdates(reconciler: self)
-    }
-
-    func submitWordField(fieldNumber: UInt8) {
-        focusField = Int(fieldNumber) + 1
     }
 
     func reconcile(message: PendingWalletViewModelReconcileMessage) {
