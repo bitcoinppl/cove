@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use bdk_wallet::bitcoin::Network;
 use redb::{ReadOnlyTable, ReadableTableMetadata as _, TableDefinition};
@@ -11,6 +11,10 @@ use crate::{
 use super::Error;
 
 const TABLE: TableDefinition<&'static str, Vec<WalletId>> = TableDefinition::new("wallets");
+pub const VERSION: Version = Version(1);
+
+#[derive(Debug, Clone, derive_more::Display, derive_more::From, derive_more::FromStr)]
+pub struct Version(u32);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum WalletTableError {
@@ -21,10 +25,28 @@ pub enum WalletTableError {
     ReadError(String),
 }
 
-#[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, uniffi::Enum)]
 pub enum WalletKey {
     Bitcoin,
     Testnet,
+}
+
+impl Display for WalletKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.for_version(VERSION))
+    }
+}
+
+impl WalletKey {
+    pub fn for_version(&self, version: Version) -> String {
+        // do it here, so only way to get to string is to call `to_string`
+        let network = match self {
+            WalletKey::Bitcoin => "bitcoin",
+            WalletKey::Testnet => "testnet",
+        };
+
+        format!("{network}:{version}")
+    }
 }
 
 impl From<Network> for WalletKey {
@@ -69,12 +91,10 @@ impl WalletTable {
 
     pub fn get(&self, network: Network) -> Result<Vec<WalletId>, Error> {
         let table = self.read_table()?;
-
-        let key: WalletKey = network.into();
-        let key: &'static str = key.into();
+        let key = WalletKey::from(network).to_string();
 
         let value = table
-            .get(key)
+            .get(&*key)
             .map_err(|error| WalletTableError::ReadError(error.to_string()))?
             .map(|value| value.value())
             .unwrap_or_default();
@@ -87,12 +107,9 @@ impl WalletTable {
 
         {
             let mut table = write_txn.open_table(TABLE)?;
-
-            let key: WalletKey = network.into();
-            let key: &'static str = key.into();
-
+            let key = WalletKey::from(network).to_string();
             table
-                .insert(key, wallets)
+                .insert(&*key, wallets)
                 .map_err(|error| WalletTableError::SaveError(error.to_string()))?;
         }
 
