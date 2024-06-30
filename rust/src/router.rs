@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    app::FfiApp, impl_default_for, view_model::wallet::WalletId, wallet::NumberOfBip39Words,
+    app::FfiApp, database::Database, impl_default_for, view_model::wallet::WalletId,
+    wallet::NumberOfBip39Words,
 };
 use derive_more::From;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
-    Cove,
     ListWallets,
     NewWallet(NewWalletRoute),
 }
@@ -68,7 +68,15 @@ impl RouteFactory {
     }
 
     pub fn default(&self) -> Route {
-        Route::Cove
+        let database = Database::global();
+
+        // when there are no wallets, show the new wallet screen
+        if database.wallets.is_empty().unwrap_or(true) {
+            return self.new_wallet_select();
+        }
+
+        // otherwise, for now show the list of wallets
+        Route::ListWallets
     }
 
     pub fn new_wallet_select(&self) -> Route {

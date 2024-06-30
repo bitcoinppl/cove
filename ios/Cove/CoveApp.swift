@@ -24,8 +24,7 @@ struct CoveApp: App {
 
     public init() {
         // initialize keychain
-        let keychain = KeychainAccessor()
-        Keychain(keychain: keychain)
+        _ = Keychain(keychain: KeychainAccessor())
 
         model = MainViewModel()
     }
@@ -44,17 +43,9 @@ struct CoveApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $model.router.routes) {
-                NewWalletView(route: NewWalletRoute.select)
+                DefaultRouteView()
                     .navigationDestination(for: Route.self, destination: { route in
-                        switch route {
-                        case .cove:
-                            CoveView(model: model)
-                                .onAppear {
-                                    print("in main view, router is: \(model.router.routes)")
-                                }
-                        case let .newWallet(route: route):
-                            NewWalletView(route: route)
-                        }
+                        routeToView(route: route)
                     })
                     .onChange(of: model.router.routes) { _, new in
                         model.dispatch(event: Event.routeChanged(routes: new))
@@ -66,6 +57,22 @@ struct CoveApp: App {
         .environment(\.navigate) { route in
             model.pushRoute(route)
         }
+    }
+}
+
+struct DefaultRouteView: View {
+    var body: some View {
+        routeToView(route: RouteFactory().default())
+    }
+}
+
+@ViewBuilder
+func routeToView(route: Route) -> some View {
+    switch route {
+    case .listWallets:
+        ListWalletsView()
+    case let .newWallet(route: route):
+        NewWalletView(route: route)
     }
 }
 

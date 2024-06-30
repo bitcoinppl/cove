@@ -22,7 +22,10 @@ import SwiftUI
             await MainActor.run {
                 print("[swift] WalletViewModel Reconcile: \(message)")
 
-                switch message {}
+                switch message {
+                case .noOp:
+                    break
+                }
             }
         }
     }

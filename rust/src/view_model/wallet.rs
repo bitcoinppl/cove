@@ -12,7 +12,9 @@ use crate::{
 };
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelReconcileMessage {}
+pub enum WalletViewModelReconcileMessage {
+    NoOp,
+}
 
 #[uniffi::export(callback_interface)]
 pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
@@ -33,7 +35,9 @@ pub struct WalletViewModelState {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelAction {}
+pub enum WalletViewModelAction {
+    NoOp,
+}
 
 type Error = WalletViewModelError;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
@@ -98,9 +102,11 @@ impl RustWalletViewModel {
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
-        let state = self.state.clone();
+        // let state = self.state.clone();
 
-        match action {}
+        match action {
+            WalletViewModelAction::NoOp => {}
+        }
     }
 }
 
