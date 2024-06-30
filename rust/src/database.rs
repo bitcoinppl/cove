@@ -1,6 +1,8 @@
 //! Module for interacting with redb database, to store high level state, and non sensitive data.
 //! That will be available across the app, and will be persisted across app launches.
 
+pub mod wallet;
+
 use std::{path::PathBuf, sync::Arc};
 
 use bdk_wallet::bitcoin::Network;
@@ -8,6 +10,7 @@ use eyre::{Context, Result};
 use log::{debug, error, info};
 use once_cell::sync::OnceCell;
 use redb::TableDefinition;
+use wallet::WalletTable;
 
 use crate::{
     update::{Update, Updater},
@@ -16,15 +19,15 @@ use crate::{
 
 pub static DATABASE: OnceCell<Database> = OnceCell::new();
 
-const GLOBAL_BOOL_CONFIG: TableDefinition<&'static str, bool> =
+pub const GLOBAL_BOOL_CONFIG: TableDefinition<&'static str, bool> =
     TableDefinition::new("global_bool_config");
+
+pub const WALLETS: TableDefinition<&'static str, Vec<WalletId>> = TableDefinition::new("wallets");
 
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
 pub enum GlobalBoolConfigKey {
     CompletedOnboarding,
 }
-
-const WALLETS: TableDefinition<&'static str, Vec<WalletId>> = TableDefinition::new("wallets");
 
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
 pub enum WalletKey {
@@ -45,6 +48,7 @@ impl From<Network> for WalletKey {
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
     pub db: Arc<redb::Database>,
+    pub wallets: WalletTable,
 }
 
 #[uniffi::export]
@@ -150,58 +154,11 @@ impl Database {
             let db = get_or_create_database();
             create_all_tables(&db);
 
-            Database { db: Arc::new(db) }
+            let db = Arc::new(db);
+            let wallets = WalletTable::new(db.clone());
+
+            Database { db, wallets }
         })
-    }
-
-    pub fn get_wallets(&self, network: Network) -> Result<Vec<WalletId>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
-
-        let table = read_txn
-            .open_table(WALLETS)
-            .map_err(|error| Error::TableAccessError(error.to_string()))?;
-
-        let key: WalletKey = network.into();
-        let key: &'static str = key.into();
-
-        let value = table
-            .get(key)
-            .map_err(|error| Error::WalletsReadError(error.to_string()))?
-            .map(|value| value.value())
-            .unwrap_or_default();
-
-        Ok(value)
-    }
-
-    pub fn save_wallets(&self, network: Network, wallets: Vec<WalletId>) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
-
-        {
-            let mut table = write_txn
-                .open_table(WALLETS)
-                .map_err(|error| Error::TableAccessError(error.to_string()))?;
-
-            let key: WalletKey = network.into();
-            let key: &'static str = key.into();
-
-            table
-                .insert(key, wallets)
-                .map_err(|error| Error::WalletsSaveError(error.to_string()))?;
-        }
-
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
-
-        Updater::send_update(Update::DatabaseUpdate);
-
-        Ok(())
     }
 }
 

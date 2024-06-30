@@ -118,13 +118,15 @@ impl RustPendingWalletViewModel {
 
         let database = Database::global();
         let mut wallets = database
-            .get_wallets(state.wallet.network)
+            .wallets
+            .get(state.wallet.network)
             .map_err(WalletCreationError::from)?;
 
         wallets.push(wallet_id.clone());
 
         database
-            .save_wallets(state.wallet.network, wallets)
+            .wallets
+            .save(state.wallet.network, wallets)
             .map_err(WalletCreationError::from)?;
 
         Ok(wallet_id)

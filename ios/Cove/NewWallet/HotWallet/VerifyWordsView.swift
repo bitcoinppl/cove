@@ -26,11 +26,13 @@ struct VerifyWordsView: View {
         walletId = id
         model = WalletViewModel(id: id)
 
-        var validator: WordValidator? = nil
+        var validator: WordValidator?
+
         do {
             validator = try model.rust.wordValidator()
         } catch {
-            print("errored!! with error: \(error)")
+            // TODO: handle error better?, show error alert?
+            print("[SWIFT] Unable to create word validator: \(error)")
         }
 
         groupedWords = validator?.groupedWords() ?? []

@@ -8,6 +8,7 @@ use derive_more::From;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
     Cove,
+    ListWallets,
     NewWallet(NewWalletRoute),
 }
 
