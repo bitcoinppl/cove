@@ -67,7 +67,6 @@ impl WalletColor {
         ];
 
         let random_index = rand::thread_rng().gen_range(0..options.len());
-
         options[random_index]
     }
 }

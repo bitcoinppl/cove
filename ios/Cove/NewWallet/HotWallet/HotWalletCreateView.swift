@@ -61,7 +61,7 @@ struct WordsView: View {
                     Button("Save Wallet") {
                         do {
                             // save the wallet
-                            let walletId = try model.rust.saveWallet()
+                            let walletId = try model.rust.saveWallet().id
 
                             navigate(
                                 HotWalletRoute.verifyWords(walletId).intoRoute()

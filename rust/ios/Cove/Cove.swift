@@ -707,7 +707,9 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
     return FfiConverterTypeBip39AutoComplete.lower(value)
 }
 
-public protocol DatabaseProtocol: AnyObject {}
+public protocol DatabaseProtocol: AnyObject {
+    func wallets() -> WalletTable
+}
 
 open class Database:
     DatabaseProtocol
@@ -754,6 +756,12 @@ open class Database:
         }
 
         try! rustCall { uniffi_cove_fn_free_database(pointer, $0) }
+    }
+
+    open func wallets() -> WalletTable {
+        return try! FfiConverterTypeWalletTable.lift(try! rustCall {
+            uniffi_cove_fn_method_database_wallets(self.uniffiClonePointer(), $0)
+        })
     }
 }
 
@@ -1777,6 +1785,8 @@ public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UnsafeMutable
 }
 
 public protocol WalletTableProtocol: AnyObject {
+    func getAll() throws -> [WalletMetadata]
+
     func isEmpty(network: Network) throws -> Bool
 
     func len(network: Network) throws -> UInt16
@@ -1820,6 +1830,12 @@ open class WalletTable:
         }
 
         try! rustCall { uniffi_cove_fn_free_wallettable(pointer, $0) }
+    }
+
+    open func getAll() throws -> [WalletMetadata] {
+        return try FfiConverterSequenceTypeWalletMetadata.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+            uniffi_cove_fn_method_wallettable_get_all(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func isEmpty(network: Network) throws -> Bool {
@@ -3652,6 +3668,28 @@ private struct FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = [WalletMetadata]
+
+    public static func write(_ value: [WalletMetadata], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWalletMetadata.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WalletMetadata] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WalletMetadata]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeWalletMetadata.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     typealias SwiftType = [Route]
 
@@ -3749,12 +3787,6 @@ public func FfiConverterTypeWalletId_lower(_ value: WalletId) -> RustBuffer {
     return FfiConverterTypeWalletId.lower(value)
 }
 
-public func global() { try! rustCall {
-    uniffi_cove_fn_func_global($0
-    )
-}
-}
-
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -3771,13 +3803,13 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if uniffi_cove_checksum_func_global() != 52066 {
-        return InitializationResult.apiChecksumMismatch
-    }
     if uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 21847 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_database_wallets() != 17223 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_dispatch() != 2014 {
@@ -3847,6 +3879,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_wallettable_get_all() != 16410 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wallettable_is_empty() != 56834 {

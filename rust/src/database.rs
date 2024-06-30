@@ -25,11 +25,6 @@ pub struct Database {
     pub wallets: WalletTable,
 }
 
-#[uniffi::export]
-pub fn global() {
-    Database::global();
-}
-
 impl Default for Database {
     fn default() -> Self {
         Self::new()
@@ -41,6 +36,10 @@ impl Database {
     #[uniffi::constructor(name = "new")]
     pub fn new() -> Self {
         Self::global().clone()
+    }
+
+    pub fn wallets(&self) -> WalletTable {
+        self.wallets.clone()
     }
 }
 

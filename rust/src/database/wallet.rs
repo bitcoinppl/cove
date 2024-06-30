@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use redb::{ReadOnlyTable, ReadableTableMetadata as _, TableDefinition};
+use redb::{ReadOnlyTable, ReadableTable, ReadableTableMetadata, TableDefinition};
 
 use crate::{
     redb::Json,
@@ -62,6 +62,14 @@ impl WalletTable {
         let count = self.get(network).map(|wallets| wallets.len() as u16)?;
         Ok(count)
     }
+
+    pub fn get_all(&self) -> Result<Vec<WalletMetadata>, Error> {
+        // TODO: get network from context (database) global
+        let table = self.read_table()?;
+        let wallets = self.get(Network::Bitcoin)?;
+
+        Ok(wallets)
+    }
 }
 
 impl WalletTable {
@@ -77,15 +85,17 @@ impl WalletTable {
         let key = WalletKey::from(network).to_string();
 
         let value = table
-            .get(&*key)
+            .get(key.as_str())
             .map_err(|error| WalletTableError::ReadError(error.to_string()))?
             .map(|value| value.value())
-            .unwrap_or_default();
+            .expect("wallets not found");
 
         Ok(value)
     }
 
     pub fn save(&self, network: Network, wallets: Vec<WalletMetadata>) -> Result<(), Error> {
+        assert!(!wallets.is_empty());
+
         let write_txn = self.db.begin_write()?;
 
         {

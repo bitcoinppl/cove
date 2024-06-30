@@ -63,10 +63,15 @@ struct CoveApp: App {
 struct DefaultRouteView: View {
     var body: some View {
         routeToView(route: RouteFactory().default())
+            .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 }
 
-@ViewBuilder
+@MainActor @ViewBuilder
 func routeToView(route: Route) -> some View {
     switch route {
     case .listWallets:
