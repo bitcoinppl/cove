@@ -75,7 +75,7 @@ struct VerifyWordsView: View {
                             .padding(.bottom, 30)
                     }
 
-                    GlassCard {
+                    FixedGlassCard {
                         TabView(selection: $tabIndex) {
                             ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
                                 CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)

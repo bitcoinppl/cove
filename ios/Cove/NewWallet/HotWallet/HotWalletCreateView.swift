@@ -151,7 +151,7 @@ struct StyledWordCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        GlassCard {
+        FixedGlassCard {
             TabView(selection: $tabIndex) {
                 content
             }
