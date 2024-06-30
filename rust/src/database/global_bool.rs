@@ -20,6 +20,15 @@ impl GlobalBoolTable {
     }
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum GlobalBoolTableError {
+    #[error("failed to save wallets: {0}")]
+    SaveError(String),
+
+    #[error("failed to get wallets: {0}")]
+    ReadError(String),
+}
+
 #[uniffi::export]
 impl GlobalBoolTable {
     pub fn get_bool_config(&self, key: GlobalBoolConfigKey) -> Result<bool, Error> {
@@ -35,7 +44,7 @@ impl GlobalBoolTable {
         let key: &'static str = key.into();
         let value = table
             .get(key)
-            .map_err(|error| Error::ConfigReadError(error.to_string()))?
+            .map_err(|error| GlobalBoolTableError::ReadError(error.to_string()))?
             .map(|value| value.value())
             .unwrap_or(false);
 
@@ -56,7 +65,7 @@ impl GlobalBoolTable {
             let key: &'static str = key.into();
             table
                 .insert(key, value)
-                .map_err(|error| Error::ConfigSaveError(error.to_string()))?;
+                .map_err(|error| GlobalBoolTableError::SaveError(error.to_string()))?;
         }
 
         write_txn

@@ -1,6 +1,7 @@
 //! Module for interacting with redb database, to store high level state, and non sensitive data.
 //! That will be available across the app, and will be persisted across app launches.
 
+pub mod error;
 pub mod global_bool;
 pub mod wallet;
 
@@ -23,6 +24,8 @@ pub const GLOBAL_BOOL_CONFIG: TableDefinition<&'static str, bool> =
 
 pub const WALLETS: TableDefinition<&'static str, Vec<WalletId>> = TableDefinition::new("wallets");
 
+pub type Error = error::DatabaseError;
+
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
     pub db: Arc<redb::Database>,
@@ -39,29 +42,6 @@ impl Default for Database {
     fn default() -> Self {
         Self::new()
     }
-}
-
-type Error = DatabaseError;
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum DatabaseError {
-    #[error("failed to open database: {0}")]
-    DatabaseAccessError(String),
-
-    #[error("failed to open table: {0}")]
-    TableAccessError(String),
-
-    #[error("failed to get bool config value: {0}")]
-    ConfigReadError(String),
-
-    #[error("failed to get wallets: {0}")]
-    WalletsReadError(String),
-
-    #[error("failed to save bool config value: {0}")]
-    ConfigSaveError(String),
-
-    #[error("failed to save wallets: {0}")]
-    WalletsSaveError(String),
 }
 
 #[uniffi::export]

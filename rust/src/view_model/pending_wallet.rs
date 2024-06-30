@@ -5,7 +5,7 @@ use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
-    database::{Database, DatabaseError},
+    database::{self, Database},
     keychain::{Keychain, KeychainError},
     wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WordAccess},
 };
@@ -67,7 +67,7 @@ pub enum WalletCreationError {
     KeychainError(#[from] KeychainError),
 
     #[error("failed to save wallet: {0}")]
-    DatabaseError(#[from] DatabaseError),
+    DatabaseError(#[from] database::Error),
 }
 
 #[uniffi::export]
