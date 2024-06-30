@@ -8,7 +8,23 @@ use crate::{
     view_model::wallet::WalletId,
 };
 
-use super::{Error, WalletKey, WALLETS};
+use super::{Error, WALLETS};
+
+#[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
+pub enum WalletKey {
+    Bitcoin,
+    Testnet,
+}
+
+impl From<Network> for WalletKey {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => WalletKey::Bitcoin,
+            Network::Testnet => WalletKey::Testnet,
+            other => panic!("unsupported network: {other:?}"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct WalletTable {
