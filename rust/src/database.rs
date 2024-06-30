@@ -11,18 +11,10 @@ use global_bool::GlobalBoolTable;
 use wallet::WalletTable;
 
 use eyre::Context;
-use log::{debug, error, info};
+use log::{error, info};
 use once_cell::sync::OnceCell;
-use redb::TableDefinition;
-
-use crate::view_model::wallet::WalletId;
 
 pub static DATABASE: OnceCell<Database> = OnceCell::new();
-
-pub const GLOBAL_BOOL_CONFIG: TableDefinition<&'static str, bool> =
-    TableDefinition::new("global_bool_config");
-
-pub const WALLETS: TableDefinition<&'static str, Vec<WalletId>> = TableDefinition::new("wallets");
 
 pub type Error = error::DatabaseError;
 
@@ -56,11 +48,17 @@ impl Database {
     pub fn global() -> &'static Database {
         DATABASE.get_or_init(|| {
             let db = get_or_create_database();
-            create_all_tables(&db);
+
+            let write_txn = db.begin_write().expect("failed to begin write transaction");
 
             let db = Arc::new(db);
-            let wallets = WalletTable::new(db.clone());
-            let global_bool = GlobalBoolTable::new(db.clone());
+
+            let wallets = WalletTable::new(db.clone(), &write_txn);
+            let global_bool = GlobalBoolTable::new(db.clone(), &write_txn);
+
+            write_txn
+                .commit()
+                .expect("failed to commit write transaction");
 
             Database {
                 db,
@@ -90,25 +88,6 @@ fn get_or_create_database() -> redb::Database {
     );
 
     redb::Database::create(&database_location).expect("failed to create database")
-}
-
-fn create_all_tables(db: &redb::Database) {
-    debug!("creating all tables");
-
-    let write_txn = db.begin_write().expect("failed to begin write transaction");
-
-    // create table if it doesn't exist
-    write_txn
-        .open_table(GLOBAL_BOOL_CONFIG)
-        .expect("failed to create table");
-
-    write_txn
-        .open_table(WALLETS)
-        .expect("failed to create table");
-
-    write_txn
-        .commit()
-        .expect("failed to commit write transaction");
 }
 
 fn database_location() -> PathBuf {

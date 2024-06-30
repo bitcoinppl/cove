@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
 use bdk_wallet::bitcoin::Network;
-use redb::{ReadOnlyTable, ReadableTableMetadata as _};
+use redb::{ReadOnlyTable, ReadableTableMetadata as _, TableDefinition};
 
 use crate::{
     update::{Update, Updater},
     view_model::wallet::WalletId,
 };
 
-use super::{Error, WALLETS};
+use super::Error;
+
+const TABLE: TableDefinition<&'static str, Vec<WalletId>> = TableDefinition::new("wallets");
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum WalletTableError {
@@ -58,7 +60,10 @@ impl WalletTable {
 }
 
 impl WalletTable {
-    pub fn new(db: Arc<redb::Database>) -> Self {
+    pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
+        // create table if it doesn't exist
+        write_txn.open_table(TABLE).expect("failed to create table");
+
         Self { db }
     }
 
@@ -81,7 +86,7 @@ impl WalletTable {
         let write_txn = self.db.begin_write()?;
 
         {
-            let mut table = write_txn.open_table(WALLETS)?;
+            let mut table = write_txn.open_table(TABLE)?;
 
             let key: WalletKey = network.into();
             let key: &'static str = key.into();
@@ -107,7 +112,7 @@ impl WalletTable {
             .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
 
         let table = read_txn
-            .open_table(WALLETS)
+            .open_table(TABLE)
             .map_err(|error| Error::TableAccessError(error.to_string()))?;
 
         Ok(table)

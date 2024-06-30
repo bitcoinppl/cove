@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
+use redb::TableDefinition;
+
 use crate::update::{Update, Updater};
 
-use super::{Error, GLOBAL_BOOL_CONFIG};
+use super::Error;
+
+pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("global_bool_config");
 
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
 pub enum GlobalBoolConfigKey {
@@ -15,7 +19,10 @@ pub struct GlobalBoolTable {
 }
 
 impl GlobalBoolTable {
-    pub fn new(db: Arc<redb::Database>) -> Self {
+    pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
+        // create table if it doesn't exist
+        write_txn.open_table(TABLE).expect("failed to create table");
+
         Self { db }
     }
 }
@@ -38,7 +45,7 @@ impl GlobalBoolTable {
             .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
 
         let table = read_txn
-            .open_table(GLOBAL_BOOL_CONFIG)
+            .open_table(TABLE)
             .map_err(|error| Error::TableAccessError(error.to_string()))?;
 
         let key: &'static str = key.into();
@@ -59,7 +66,7 @@ impl GlobalBoolTable {
 
         {
             let mut table = write_txn
-                .open_table(GLOBAL_BOOL_CONFIG)
+                .open_table(TABLE)
                 .map_err(|error| Error::TableAccessError(error.to_string()))?;
 
             let key: &'static str = key.into();
