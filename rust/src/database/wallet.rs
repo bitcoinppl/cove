@@ -1,19 +1,21 @@
 use std::{fmt::Display, sync::Arc};
 
-use bdk_wallet::bitcoin::Network;
 use redb::{ReadOnlyTable, ReadableTableMetadata as _, TableDefinition};
 
 use crate::{
+    redb::Json,
     update::{Update, Updater},
-    view_model::wallet::WalletId,
+    wallet::{Network, WalletMetadata},
 };
 
 use super::Error;
 
-const TABLE: TableDefinition<&'static str, Vec<WalletId>> = TableDefinition::new("wallets");
+const TABLE: TableDefinition<&'static str, Json<Vec<WalletMetadata>>> =
+    TableDefinition::new("wallets.json");
+
 pub const VERSION: Version = Version(1);
 
-#[derive(Debug, Clone, derive_more::Display, derive_more::From, derive_more::FromStr)]
+#[derive(Debug, Clone, Copy, derive_more::Display, derive_more::From, derive_more::FromStr)]
 pub struct Version(u32);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
@@ -25,37 +27,18 @@ pub enum WalletTableError {
     ReadError(String),
 }
 
-#[derive(Debug, Clone, Copy, uniffi::Enum)]
-pub enum WalletKey {
-    Bitcoin,
-    Testnet,
-}
+#[derive(Debug, Clone, Copy, uniffi::Object)]
+pub struct WalletKey(Network, Version);
 
 impl Display for WalletKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.for_version(VERSION))
-    }
-}
-
-impl WalletKey {
-    pub fn for_version(&self, version: Version) -> String {
-        // do it here, so only way to get to string is to call `to_string`
-        let network = match self {
-            WalletKey::Bitcoin => "bitcoin",
-            WalletKey::Testnet => "testnet",
-        };
-
-        format!("{network}:{version}")
+        write!(f, "{}::{}", self.0, self.1)
     }
 }
 
 impl From<Network> for WalletKey {
     fn from(network: Network) -> Self {
-        match network {
-            Network::Bitcoin => WalletKey::Bitcoin,
-            Network::Testnet => WalletKey::Testnet,
-            other => panic!("unsupported network: {other:?}"),
-        }
+        WalletKey(network, VERSION)
     }
 }
 
@@ -66,18 +49,18 @@ pub struct WalletTable {
 
 #[uniffi::export]
 impl WalletTable {
-    pub fn is_empty(&self) -> Result<bool, Error> {
+    pub fn is_empty(&self, network: Network) -> Result<bool, Error> {
         let table = self.read_table()?;
-        let is_empty = table.is_empty()?;
+        if table.is_empty()? {
+            return Ok(true);
+        }
 
-        Ok(is_empty)
+        Ok(self.len(network)? == 0)
     }
 
-    pub fn len(&self) -> Result<u16, Error> {
-        let table = self.read_table()?;
-        let count = table.len()?;
-
-        Ok(count as u16)
+    pub fn len(&self, network: Network) -> Result<u16, Error> {
+        let count = self.get(network).map(|wallets| wallets.len() as u16)?;
+        Ok(count)
     }
 }
 
@@ -89,7 +72,7 @@ impl WalletTable {
         Self { db }
     }
 
-    pub fn get(&self, network: Network) -> Result<Vec<WalletId>, Error> {
+    pub fn get(&self, network: Network) -> Result<Vec<WalletMetadata>, Error> {
         let table = self.read_table()?;
         let key = WalletKey::from(network).to_string();
 
@@ -102,12 +85,13 @@ impl WalletTable {
         Ok(value)
     }
 
-    pub fn save(&self, network: Network, wallets: Vec<WalletId>) -> Result<(), Error> {
+    pub fn save(&self, network: Network, wallets: Vec<WalletMetadata>) -> Result<(), Error> {
         let write_txn = self.db.begin_write()?;
 
         {
             let mut table = write_txn.open_table(TABLE)?;
             let key = WalletKey::from(network).to_string();
+
             table
                 .insert(&*key, wallets)
                 .map_err(|error| WalletTableError::SaveError(error.to_string()))?;
@@ -122,7 +106,7 @@ impl WalletTable {
         Ok(())
     }
 
-    fn read_table<'a>(&self) -> Result<ReadOnlyTable<&'a str, Vec<WalletId>>, Error> {
+    fn read_table<'a>(&self) -> Result<ReadOnlyTable<&'a str, Json<Vec<WalletMetadata>>>, Error> {
         let read_txn = self
             .db
             .begin_read()

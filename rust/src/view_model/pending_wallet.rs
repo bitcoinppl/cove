@@ -1,16 +1,13 @@
 use std::sync::Arc;
 
-use bdk_wallet::bitcoin::Network;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WordAccess},
+    wallet::{GroupedWord, Network, NumberOfBip39Words, PendingWallet, WalletMetadata, WordAccess},
 };
-
-use super::wallet::WalletId;
 
 type Error = PendingWalletViewModelError;
 
@@ -106,14 +103,22 @@ impl RustPendingWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn save_wallet(&self) -> Result<WalletId, Error> {
+    pub fn save_wallet(&self) -> Result<WalletMetadata, Error> {
         let state = self.state.read();
-        let wallet_id = WalletId::new();
+
+        // get current number of wallets and add one;
+        let number_of_wallets = Database::global()
+            .wallets
+            .len(state.wallet.network)
+            .unwrap_or(0);
+
+        let name = format!("Wallet {}", number_of_wallets + 1);
+        let wallet_metadata = WalletMetadata::new(name);
 
         let keychain = Keychain::global();
 
         keychain
-            .save_wallet_key(wallet_id.clone(), state.wallet.mnemonic.clone())
+            .save_wallet_key(&wallet_metadata.id, state.wallet.mnemonic.clone())
             .map_err(WalletCreationError::from)?;
 
         let database = Database::global();
@@ -122,14 +127,14 @@ impl RustPendingWalletViewModel {
             .get(state.wallet.network)
             .map_err(WalletCreationError::from)?;
 
-        wallets.push(wallet_id.clone());
+        wallets.push(wallet_metadata.clone());
 
         database
             .wallets
             .save(state.wallet.network, wallets)
             .map_err(WalletCreationError::from)?;
 
-        Ok(wallet_id)
+        Ok(wallet_metadata)
     }
 
     #[uniffi::method]

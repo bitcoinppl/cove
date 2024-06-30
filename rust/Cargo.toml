@@ -52,6 +52,10 @@ nid = "3.0"
 derive_more = "0.99.18"
 strum = {version = "0.26", features = ["derive"]}
 
+# ser/de
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = "1.0"
+
 # exts
 itertools = "0.13"
 

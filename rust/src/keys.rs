@@ -1,7 +1,6 @@
 use std::str::FromStr as _;
 
 use bdk_wallet::bitcoin::bip32::{DerivationPath, Fingerprint};
-use bdk_wallet::bitcoin::Network;
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use bdk_wallet::keys::bip39::Mnemonic;
 use bdk_wallet::keys::{
@@ -11,6 +10,8 @@ use bdk_wallet::keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap};
 use bdk_wallet::miniscript::descriptor::{DescriptorXKey, Wildcard};
 use bdk_wallet::template::{Bip84, Bip84Public, DescriptorTemplate as _};
 use bdk_wallet::KeychainKind;
+
+use crate::wallet::Network;
 
 pub type Seed = [u8; 64];
 
@@ -41,8 +42,9 @@ impl Descriptor {
         match derivable_key {
             BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
                 let derivable_key = descriptor_x_key.xkey;
-                let (extended_descriptor, key_map, _) =
-                    Bip84(derivable_key, keychain_kind).build(network).unwrap();
+                let (extended_descriptor, key_map, _) = Bip84(derivable_key, keychain_kind)
+                    .build(network.into())
+                    .unwrap();
 
                 Self {
                     extended_descriptor,
@@ -76,7 +78,7 @@ impl Descriptor {
                 let derivable_key = descriptor_x_key.xkey;
                 let (extended_descriptor, key_map, _) =
                     Bip84Public(derivable_key, fingerprint, keychain_kind)
-                        .build(network)
+                        .build(network.into())
                         .unwrap();
 
                 Self {
@@ -106,7 +108,7 @@ impl DescriptorSecretKey {
 
         let descriptor_secret_key = BdkDescriptorSecretKey::XPrv(DescriptorXKey {
             origin: None,
-            xkey: xkey.into_xprv(network).unwrap(),
+            xkey: xkey.into_xprv(network.into()).unwrap(),
             derivation_path: DerivationPath::master(),
             wildcard: Wildcard::Unhardened,
         });

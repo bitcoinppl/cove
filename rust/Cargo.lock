@@ -422,6 +422,8 @@ dependencies = [
  "parking_lot",
  "rand",
  "redb",
+ "serde",
+ "serde_json",
  "strum",
  "thiserror",
  "tokio",

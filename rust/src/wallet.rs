@@ -1,11 +1,76 @@
 use crate::{
+    impl_default_for,
     keys::{Descriptor, DescriptorSecretKey},
-    view_model::wallet::WalletId,
+    new_type,
 };
-use bdk_wallet::{bitcoin::Network, KeychainKind};
+use bdk_wallet::{bitcoin, KeychainKind};
 use bip39::Mnemonic;
 use itertools::Itertools as _;
+use nid::Nanoid;
 use rand::Rng as _;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, derive_more::Display)]
+pub enum Network {
+    Bitcoin,
+    Testnet,
+}
+
+new_type!(WalletId, String);
+impl_default_for!(WalletId);
+impl WalletId {
+    pub fn new() -> Self {
+        let nanoid: Nanoid = Nanoid::new();
+        Self(nanoid.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+pub struct WalletMetadata {
+    pub id: WalletId,
+    pub name: String,
+    pub color: WalletColor,
+}
+
+impl WalletMetadata {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            id: WalletId::new(),
+            name: name.into(),
+            color: WalletColor::random(),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, uniffi::Enum)]
+pub enum WalletColor {
+    Red,
+    Blue,
+    Green,
+    Yellow,
+    Orange,
+    Purple,
+    Pink,
+    Custom { r: u8, g: u8, b: u8 },
+}
+
+impl WalletColor {
+    pub fn random() -> Self {
+        let options = [
+            WalletColor::Red,
+            WalletColor::Blue,
+            WalletColor::Green,
+            WalletColor::Yellow,
+            WalletColor::Orange,
+            WalletColor::Purple,
+            WalletColor::Pink,
+        ];
+
+        let random_index = rand::thread_rng().gen_range(0..options.len());
+
+        options[random_index]
+    }
+}
 
 pub trait WordAccess {
     fn bip_39_words_groups_of(&self, groups: usize) -> Vec<Vec<GroupedWord>>;
@@ -89,9 +154,12 @@ impl PendingWallet {
         let change_descriptor =
             Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::Internal, network);
 
-        let wallet =
-            bdk_wallet::Wallet::new(descriptor.to_tuple(), change_descriptor.to_tuple(), network)
-                .expect("failed to create wallet");
+        let wallet = bdk_wallet::Wallet::new(
+            descriptor.to_tuple(),
+            change_descriptor.to_tuple(),
+            network.into(),
+        )
+        .expect("failed to create wallet");
 
         Self {
             bdk: wallet,
@@ -127,6 +195,25 @@ impl WordAccess for Mnemonic {
                     .collect()
             })
             .collect()
+    }
+}
+
+impl From<Network> for bitcoin::Network {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => bitcoin::Network::Bitcoin,
+            Network::Testnet => bitcoin::Network::Testnet,
+        }
+    }
+}
+
+impl From<bitcoin::Network> for Network {
+    fn from(network: bitcoin::Network) -> Self {
+        match network {
+            bitcoin::Network::Bitcoin => Network::Bitcoin,
+            bitcoin::Network::Testnet => Network::Testnet,
+            network => panic!("unsupported network: {network:?}"),
+        }
     }
 }
 

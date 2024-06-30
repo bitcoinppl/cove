@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
 use crossbeam::channel::{Receiver, Sender};
-use nid::Nanoid;
 use parking_lot::RwLock;
 
 use crate::{
-    impl_default_for,
     keychain::{Keychain, KeychainError},
-    new_type,
+    wallet::WalletId,
     word_validator::WordValidator,
 };
 
@@ -49,15 +47,6 @@ pub enum WalletViewModelError {
     WalletDoesNotExist,
 }
 
-new_type!(WalletId, String);
-impl_default_for!(WalletId);
-impl WalletId {
-    pub fn new() -> Self {
-        let nanoid: Nanoid = Nanoid::new();
-        Self(nanoid.to_string())
-    }
-}
-
 #[uniffi::export]
 impl RustWalletViewModel {
     #[uniffi::constructor]
@@ -79,7 +68,7 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn word_validator(&self) -> Result<WordValidator, Error> {
         let mnemonic = Keychain::global()
-            .get_wallet_key(self.state.read().id.clone())?
+            .get_wallet_key(&self.state.read().id)?
             .ok_or(Error::WalletDoesNotExist)?;
 
         let validator = WordValidator::new(mnemonic);

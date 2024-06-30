@@ -6,7 +6,7 @@ use bip39::Mnemonic;
 use log::warn;
 use once_cell::sync::OnceCell;
 
-use crate::view_model::wallet::WalletId;
+use crate::wallet::WalletId;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum KeychainError {
@@ -53,7 +53,11 @@ impl Keychain {
         REF.get().expect("keychain is not initialized")
     }
 
-    pub fn save_wallet_key(&self, id: WalletId, secret_key: Mnemonic) -> Result<(), KeychainError> {
+    pub fn save_wallet_key(
+        &self,
+        id: &WalletId,
+        secret_key: Mnemonic,
+    ) -> Result<(), KeychainError> {
         let key = wallet_mnemonic_key_name(id);
         let secret = secret_key.to_string();
 
@@ -62,7 +66,7 @@ impl Keychain {
         Ok(())
     }
 
-    pub fn get_wallet_key(&self, id: WalletId) -> Result<Option<Mnemonic>, KeychainError> {
+    pub fn get_wallet_key(&self, id: &WalletId) -> Result<Option<Mnemonic>, KeychainError> {
         let key = wallet_mnemonic_key_name(id);
 
         let Some(secret) = self.0.get(key) else {
@@ -75,12 +79,12 @@ impl Keychain {
         Ok(Some(mnemonic))
     }
 
-    pub fn delete_wallet_key(&self, id: WalletId) -> bool {
+    pub fn delete_wallet_key(&self, id: &WalletId) -> bool {
         let key = wallet_mnemonic_key_name(id);
         self.0.delete(key)
     }
 }
 
-fn wallet_mnemonic_key_name(id: WalletId) -> String {
+fn wallet_mnemonic_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_mnemonic")
 }
