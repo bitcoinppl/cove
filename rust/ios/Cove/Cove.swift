@@ -812,12 +812,12 @@ public protocol FfiAppProtocol: AnyObject {
      */
     func dispatch(event: Event)
 
+    func getState() -> AppState
+
     /**
      * Get the selected wallet
      */
-    func getSelectedWallet() -> WalletId?
-
-    func getState() -> AppState
+    func goToSelectedWallet() -> WalletId?
 
     func listenForUpdates(updater: FfiUpdater)
 
@@ -889,18 +889,18 @@ open class FfiApp:
     }
     }
 
-    /**
-     * Get the selected wallet
-     */
-    open func getSelectedWallet() -> WalletId? {
-        return try! FfiConverterOptionTypeWalletId.lift(try! rustCall {
-            uniffi_cove_fn_method_ffiapp_get_selected_wallet(self.uniffiClonePointer(), $0)
-        })
-    }
-
     open func getState() -> AppState {
         return try! FfiConverterTypeAppState.lift(try! rustCall {
             uniffi_cove_fn_method_ffiapp_get_state(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    /**
+     * Get the selected wallet
+     */
+    open func goToSelectedWallet() -> WalletId? {
+        return try! FfiConverterOptionTypeWalletId.lift(try! rustCall {
+            uniffi_cove_fn_method_ffiapp_go_to_selected_wallet(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -2153,11 +2153,13 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> Unsaf
 
 public struct AppState {
     public var router: Router
+    public var defaultRoute: Route
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(router: Router) {
+    public init(router: Router, defaultRoute: Route) {
         self.router = router
+        self.defaultRoute = defaultRoute
     }
 }
 
@@ -2165,12 +2167,14 @@ public struct FfiConverterTypeAppState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppState {
         return
             try AppState(
-                router: FfiConverterTypeRouter.read(from: &buf)
+                router: FfiConverterTypeRouter.read(from: &buf),
+                defaultRoute: FfiConverterTypeRoute.read(from: &buf)
             )
     }
 
     public static func write(_ value: AppState, into buf: inout [UInt8]) {
         FfiConverterTypeRouter.write(value.router, into: &buf)
+        FfiConverterTypeRoute.write(value.defaultRoute, into: &buf)
     }
 }
 
@@ -3106,6 +3110,8 @@ extension PendingWalletViewModelReconcileMessage: Equatable, Hashable {}
 
 public enum Route {
     case listWallets
+    case selectedWallet(WalletId
+    )
     case newWallet(NewWalletRoute
     )
 }
@@ -3118,7 +3124,10 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         switch variant {
         case 1: return .listWallets
 
-        case 2: return try .newWallet(FfiConverterTypeNewWalletRoute.read(from: &buf)
+        case 2: return try .selectedWallet(FfiConverterTypeWalletId.read(from: &buf)
+            )
+
+        case 3: return try .newWallet(FfiConverterTypeNewWalletRoute.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3130,8 +3139,12 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case .listWallets:
             writeInt(&buf, Int32(1))
 
-        case let .newWallet(v1):
+        case let .selectedWallet(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+
+        case let .newWallet(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterTypeNewWalletRoute.write(v1, into: &buf)
         }
     }
@@ -3151,7 +3164,9 @@ extension Route: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Update {
-    case routerUpdate(router: Router
+    case defaultRouteChanged(Route
+    )
+    case routeUpdate([Route]
     )
     case databaseUpdate
 }
@@ -3162,10 +3177,13 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Update {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .routerUpdate(router: FfiConverterTypeRouter.read(from: &buf)
+        case 1: return try .defaultRouteChanged(FfiConverterTypeRoute.read(from: &buf)
             )
 
-        case 2: return .databaseUpdate
+        case 2: return try .routeUpdate(FfiConverterSequenceTypeRoute.read(from: &buf)
+            )
+
+        case 3: return .databaseUpdate
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3173,12 +3191,16 @@ public struct FfiConverterTypeUpdate: FfiConverterRustBuffer {
 
     public static func write(_ value: Update, into buf: inout [UInt8]) {
         switch value {
-        case let .routerUpdate(router):
+        case let .defaultRouteChanged(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeRouter.write(router, into: &buf)
+            FfiConverterTypeRoute.write(v1, into: &buf)
+
+        case let .routeUpdate(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterSequenceTypeRoute.write(v1, into: &buf)
 
         case .databaseUpdate:
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
         }
     }
 }
@@ -3190,6 +3212,8 @@ public func FfiConverterTypeUpdate_lift(_ buf: RustBuffer) throws -> Update {
 public func FfiConverterTypeUpdate_lower(_ value: Update) -> RustBuffer {
     return FfiConverterTypeUpdate.lower(value)
 }
+
+extension Update: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -4071,10 +4095,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_dispatch() != 2014 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_ffiapp_get_selected_wallet() != 27781 {
+    if uniffi_cove_checksum_method_ffiapp_get_state() != 15088 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_ffiapp_get_state() != 15088 {
+    if uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet() != 36820 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 45338 {

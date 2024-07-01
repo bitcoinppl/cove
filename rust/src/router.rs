@@ -4,6 +4,7 @@ use crate::{
     app::FfiApp,
     database::Database,
     impl_default_for,
+    update::{Update, Updater},
     wallet::{Network, NumberOfBip39Words, WalletId},
 };
 use derive_more::From;
@@ -11,6 +12,7 @@ use derive_more::From;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
     ListWallets,
+    SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
 }
 
@@ -56,6 +58,11 @@ impl Router {
             app: FfiApp::new(),
             routes: vec![],
         }
+    }
+
+    pub fn replace(&mut self, routes: Vec<Route>) {
+        self.routes.clone_from(&routes);
+        Updater::send_update(Update::RouteUpdate(routes));
     }
 }
 

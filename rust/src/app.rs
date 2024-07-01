@@ -6,7 +6,7 @@ use crate::{
     database::{error::DatabaseError, Database},
     event::Event,
     impl_default_for,
-    router::Router,
+    router::{Route, Router},
     update::{FfiUpdater, Update, Updater},
     wallet::WalletId,
 };
@@ -19,13 +19,24 @@ pub static APP: OnceCell<App> = OnceCell::new();
 #[derive(Clone, uniffi::Record)]
 pub struct AppState {
     router: Router,
+    default_route: Route,
 }
 
 impl_default_for!(AppState);
 impl AppState {
     pub fn new() -> Self {
+        let database = Database::global();
+
+        let mut default_route = Route::ListWallets;
+
+        // if there is a selected wallet, set it as the default route
+        if let Some(selected_wallet) = database.global_config.get_selected_wallet() {
+            default_route = Route::SelectedWallet(selected_wallet);
+        }
+
         Self {
             router: Router::new(),
+            default_route,
         }
     }
 }
@@ -130,12 +141,27 @@ impl FfiApp {
 
     /// Select a wallet
     pub fn select_wallet(&self, id: WalletId) -> Result<(), DatabaseError> {
-        Database::global().global_config.select_wallet(id)
+        // set the selected wallet
+        Database::global().global_config.select_wallet(id.clone())?;
+
+        // update the router
+        self.go_to_selected_wallet();
+
+        Ok(())
     }
 
     /// Get the selected wallet
-    pub fn get_selected_wallet(&self) -> Option<WalletId> {
-        Database::global().global_config.get_selected_wallet()
+    pub fn go_to_selected_wallet(&self) -> Option<WalletId> {
+        let selected_wallet = Database::global().global_config.get_selected_wallet()?;
+
+        self.inner()
+            .state
+            .write()
+            .unwrap()
+            .router
+            .replace(vec![Route::SelectedWallet(selected_wallet.clone())]);
+
+        Some(selected_wallet)
     }
 
     /// Frontend calls this method to send events to the rust application logic

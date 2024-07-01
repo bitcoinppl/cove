@@ -8,10 +8,13 @@
 import SwiftUI
 
 struct ListWalletsView: View {
+    let model: MainViewModel
     @State var wallets: [WalletMetadata]
     @Environment(\.navigate) private var navigate
 
-    init() {
+    init(model: MainViewModel) {
+        self.model = model
+
         do {
             wallets = try Database().wallets().getAll()
         } catch {
@@ -28,6 +31,9 @@ struct ListWalletsView: View {
                         Text(wallet.name).foregroundColor(.white)
                     }
                     .frame(width: 300, height: 200)
+                    .onTapGesture {
+                        try? model.rust.selectWallet(id: wallet.id)
+                    }
                 }
                 .padding(.top, 10)
             }
@@ -49,5 +55,5 @@ struct ListWalletsView: View {
 }
 
 #Preview {
-    ListWalletsView()
+    ListWalletsView(model: MainViewModel())
 }

@@ -5,6 +5,7 @@ import SwiftUI
     var router: Router
     var database: Database
     var isSidebarVisible = false
+    var defaultRoute: Route
 
     public init() {
         let rust = FfiApp()
@@ -13,6 +14,8 @@ import SwiftUI
         router = state.router
         self.rust = rust
         database = Database()
+
+        defaultRoute = state.defaultRoute
 
         self.rust.listenForUpdates(updater: self)
     }
@@ -39,10 +42,12 @@ import SwiftUI
                 print("[SWIFT] Update: \(update)")
 
                 switch update {
-                case let .routerUpdate(router: router):
-                    self.router = router
+                case let .routeUpdate(routes: routes):
+                    self.router.routes = routes
                 case .databaseUpdate:
                     self.database = Database()
+                case let .defaultRouteChanged(route):
+                    self.defaultRoute = route
                 }
             }
         }
