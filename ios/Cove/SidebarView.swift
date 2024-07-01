@@ -18,7 +18,7 @@ struct SidebarView: View {
             if isShowing {
                 Rectangle().opacity(0.6).ignoresSafeArea().onTapGesture {
                     withAnimation {
-                        isShowing.toggle()
+                        isShowing = false
                     }
                 }
 
@@ -53,7 +53,7 @@ struct SidebarView: View {
 #Preview {
     ZStack {
         SidebarView(isShowing: Binding.constant(true), menuItems: [
-            MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "wallet.pass.fill")
+            MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "wallet.pass.fill"),
         ])
     }.background(Color.white)
 }
