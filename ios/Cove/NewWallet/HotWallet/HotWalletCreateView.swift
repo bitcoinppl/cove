@@ -61,7 +61,7 @@ struct WordsView: View {
                     Button("Save Wallet") {
                         do {
                             // save the wallet
-                            let walletId = try model.rust.saveWallet()
+                            let walletId = try model.rust.saveWallet().id
 
                             navigate(
                                 HotWalletRoute.verifyWords(walletId).intoRoute()
@@ -151,7 +151,7 @@ struct StyledWordCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        GlassCard {
+        FixedGlassCard {
             TabView(selection: $tabIndex) {
                 content
             }

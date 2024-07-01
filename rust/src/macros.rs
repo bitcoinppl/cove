@@ -18,6 +18,8 @@ macro_rules! new_type {
             Clone,
             Debug,
             PartialEq,
+            ::serde::Serialize,
+            ::serde::Deserialize,
             ::derive_more::Deref,
             ::derive_more::Display,
             ::derive_more::From,

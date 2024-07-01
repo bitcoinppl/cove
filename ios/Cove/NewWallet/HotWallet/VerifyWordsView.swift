@@ -26,11 +26,13 @@ struct VerifyWordsView: View {
         walletId = id
         model = WalletViewModel(id: id)
 
-        var validator: WordValidator? = nil
+        var validator: WordValidator?
+
         do {
             validator = try model.rust.wordValidator()
         } catch {
-            print("errored!! with error: \(error)")
+            // TODO: handle error better?, show error alert?
+            print("[SWIFT] Unable to create word validator: \(error)")
         }
 
         groupedWords = validator?.groupedWords() ?? []
@@ -75,7 +77,7 @@ struct VerifyWordsView: View {
                             .padding(.bottom, 30)
                     }
 
-                    GlassCard {
+                    FixedGlassCard {
                         TabView(selection: $tabIndex) {
                             ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
                                 CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)

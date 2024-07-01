@@ -8,23 +8,21 @@
 import SwiftUI
 
 struct GlassCard<Content: View>: View {
+    var colors: [Color] = [.orange, Color.red.opacity(0.6)]
+    var shadowRadius: CGFloat = 0
+    var shadowColor: Color = .gray
+
     @ViewBuilder var content: Content
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(Color.orange)
-                .blur(radius: 30)
-                .offset(x: -50, y: -5)
-            Circle()
-                .fill(Color.red.opacity(0.5))
-                .blur(radius: 30)
-                .offset(x: 50, y: 10)
+            RoundedRectangle(cornerRadius: 20)
+                .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
 
             // Glass effect layer
             RoundedRectangle(cornerRadius: 20)
                 .fill(.ultraThinMaterial)
-                .shadow(color: .orange.opacity(0.3), radius: 20, x: 0, y: 10)
+                .shadow(color: shadowColor, radius: shadowRadius)
 
             // Border layer
             RoundedRectangle(cornerRadius: 20)
@@ -33,23 +31,42 @@ struct GlassCard<Content: View>: View {
             // content
             content
         }
-        .enableInjection()
     }
-
-    #if DEBUG
-    @ObserveInjection var forceRedraw
-    #endif
 }
 
 #Preview {
-    GlassCard {
-        VStack {
-            Text("Glass Card")
-                .font(.title)
-                .foregroundColor(.white)
-            Text("With warm orange glow")
-                .foregroundColor(.white.opacity(0.7))
+    VStack(spacing: 20) {
+        GlassCard {
+            VStack {
+                Text("Glass Card")
+                    .font(.title)
+                    .foregroundColor(.white)
+                Text("Customonizable")
+                    .foregroundColor(.white.opacity(0.7))
+            }
         }
+        .frame(width: 300, height: 200)
+
+        GlassCard(colors: [.blue, Color.blue.opacity(0.8)], shadowRadius: 10) {
+            VStack {
+                Text("Glass Card")
+                    .font(.title)
+                    .foregroundColor(.white)
+                Text("Customonizable")
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        }
+        .frame(width: 300, height: 200)
+
+        GlassCard(colors: [Color.purple.opacity(0.9), Color.purple.opacity(0.7), Color.purple.opacity(0.6)], shadowRadius: 10) {
+            VStack {
+                Text("Glass Card")
+                    .font(.title)
+                    .foregroundColor(.white)
+                Text("Customonizable")
+                    .foregroundColor(.white.opacity(0.7))
+            }
+        }
+        .frame(width: 300, height: 200)
     }
-    .frame(width: 300, height: 200)
 }

@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */; };
 		48582AEE3539AD866FAC18BF /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */; };
+		AC07617D2C31A527007B4540 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617C2C31A527007B4540 /* GlassCard.swift */; };
+		AC07617F2C31BAA9007B4540 /* ListWalletsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */; };
 		AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC269AE12C289F17005481A8 /* VerifyWordsView.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
@@ -27,11 +29,10 @@
 		ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */; };
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
-		ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* GlassCard.swift */; };
+		ACF44D142C2857E9008C5034 /* FixedGlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* FixedGlassCard.swift */; };
 		ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = ACF5B3482C2BA4BC00DDDEB9 /* Inject */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
-		D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F512C0F7B4E0042B447 /* CoveView.swift */; };
 		D0245F542C0F7B500042B447 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0245F532C0F7B500042B447 /* Assets.xcassets */; };
 		D0245F572C0F7B500042B447 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0245F562C0F7B500042B447 /* Preview Assets.xcassets */; };
 		D0BE2EBE2C1614150055FCBE /* MainViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */; };
@@ -53,6 +54,8 @@
 
 /* Begin PBXFileReference section */
 		4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardObserver.swift; sourceTree = "<group>"; };
+		AC07617C2C31A527007B4540 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListWalletsView.swift; sourceTree = "<group>"; };
 		AC269AE12C289F17005481A8 /* VerifyWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsView.swift; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
 		ACA4CBEB2C2328BE0008F63E /* Security.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security.swift; sourceTree = "<group>"; };
@@ -68,13 +71,12 @@
 		ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Trait+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
-		ACF44D132C2857E9008C5034 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		ACF44D132C2857E9008C5034 /* FixedGlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixedGlassCard.swift; sourceTree = "<group>"; };
 		C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
 		D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Cove.xcframework; path = ../rust/ios/Cove.xcframework; sourceTree = "<group>"; };
 		D000B2F12C0F7BB100E32143 /* Cove.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Cove.swift; path = ../../rust/ios/Cove/Cove.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoveApp.swift; sourceTree = "<group>"; };
-		D0245F512C0F7B4E0042B447 /* CoveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoveView.swift; sourceTree = "<group>"; };
 		D0245F532C0F7B500042B447 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D0245F562C0F7B500042B447 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewModel.swift; sourceTree = "<group>"; };
@@ -141,7 +143,8 @@
 			isa = PBXGroup;
 			children = (
 				ACF44D112C2642DD008C5034 /* SunsetWave.swift */,
-				ACF44D132C2857E9008C5034 /* GlassCard.swift */,
+				ACF44D132C2857E9008C5034 /* FixedGlassCard.swift */,
+				AC07617C2C31A527007B4540 /* GlassCard.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -172,9 +175,9 @@
 				ACC3016B2C21095A006790DF /* NewWallet */,
 				ACC301662C20C11D006790DF /* Extention */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
-				D0245F512C0F7B4E0042B447 /* CoveView.swift */,
 				C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
+				AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
 				D0245F552C0F7B500042B447 /* Preview Content */,
@@ -272,16 +275,17 @@
 			buildActionMask = 2147483647;
 			files = (
 				D0BE2EBE2C1614150055FCBE /* MainViewModel.swift in Sources */,
-				D0245F522C0F7B4E0042B447 /* CoveView.swift in Sources */,
 				ACC3017A2C221450006790DF /* PendingWalletViewModel.swift in Sources */,
 				ACC301782C21D6EA006790DF /* HotWalletImportView.swift in Sources */,
 				ACC301712C2109C1006790DF /* NewWalletSelectView.swift in Sources */,
 				ACC3016F2C2109A1006790DF /* NewColdWalletView.swift in Sources */,
 				AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */,
 				D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */,
-				ACF44D142C2857E9008C5034 /* GlassCard.swift in Sources */,
+				ACF44D142C2857E9008C5034 /* FixedGlassCard.swift in Sources */,
+				AC07617F2C31BAA9007B4540 /* ListWalletsView.swift in Sources */,
 				ACC3016D2C210978006790DF /* NewHotWalletView.swift in Sources */,
 				D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */,
+				AC07617D2C31A527007B4540 /* GlassCard.swift in Sources */,
 				ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */,
 				ACC3016A2C20C9D4006790DF /* Routes+Ext.swift in Sources */,
 				ACC301652C207787006790DF /* NewWalletView.swift in Sources */,

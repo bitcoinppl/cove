@@ -394,6 +394,19 @@ private struct FfiConverterUInt8: FfiConverterPrimitive {
     }
 }
 
+private struct FfiConverterUInt16: FfiConverterPrimitive {
+    typealias FfiType = UInt16
+    typealias SwiftType = UInt16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
 private struct FfiConverterBool: FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -695,11 +708,7 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
 }
 
 public protocol DatabaseProtocol: AnyObject {
-    func getBoolConfig(key: GlobalBoolConfigKey) throws -> Bool
-
-    func setBoolConfig(key: GlobalBoolConfigKey, value: Bool) throws
-
-    func toggleBoolConfig(key: GlobalBoolConfigKey) throws
+    func wallets() -> WalletTable
 }
 
 open class Database:
@@ -749,24 +758,10 @@ open class Database:
         try! rustCall { uniffi_cove_fn_free_database(pointer, $0) }
     }
 
-    open func getBoolConfig(key: GlobalBoolConfigKey) throws -> Bool {
-        return try FfiConverterBool.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
-            uniffi_cove_fn_method_database_get_bool_config(self.uniffiClonePointer(),
-                                                           FfiConverterTypeGlobalBoolConfigKey.lower(key), $0)
+    open func wallets() -> WalletTable {
+        return try! FfiConverterTypeWalletTable.lift(try! rustCall {
+            uniffi_cove_fn_method_database_wallets(self.uniffiClonePointer(), $0)
         })
-    }
-
-    open func setBoolConfig(key: GlobalBoolConfigKey, value: Bool) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
-        uniffi_cove_fn_method_database_set_bool_config(self.uniffiClonePointer(),
-                                                       FfiConverterTypeGlobalBoolConfigKey.lower(key),
-                                                       FfiConverterBool.lower(value), $0)
-    }
-    }
-
-    open func toggleBoolConfig(key: GlobalBoolConfigKey) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
-        uniffi_cove_fn_method_database_toggle_bool_config(self.uniffiClonePointer(),
-                                                          FfiConverterTypeGlobalBoolConfigKey.lower(key), $0)
-    }
     }
 }
 
@@ -933,6 +928,113 @@ public func FfiConverterTypeFfiApp_lift(_ pointer: UnsafeMutableRawPointer) thro
 
 public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFfiApp.lower(value)
+}
+
+public protocol GlobalBoolTableProtocol: AnyObject {
+    func getBoolConfig(key: GlobalBoolConfigKey) throws -> Bool
+
+    func setBoolConfig(key: GlobalBoolConfigKey, value: Bool) throws
+
+    func toggleBoolConfig(key: GlobalBoolConfigKey) throws
+}
+
+open class GlobalBoolTable:
+    GlobalBoolTableProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_globalbooltable(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_globalbooltable(pointer, $0) }
+    }
+
+    open func getBoolConfig(key: GlobalBoolConfigKey) throws -> Bool {
+        return try FfiConverterBool.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+            uniffi_cove_fn_method_globalbooltable_get_bool_config(self.uniffiClonePointer(),
+                                                                  FfiConverterTypeGlobalBoolConfigKey.lower(key), $0)
+        })
+    }
+
+    open func setBoolConfig(key: GlobalBoolConfigKey, value: Bool) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+        uniffi_cove_fn_method_globalbooltable_set_bool_config(self.uniffiClonePointer(),
+                                                              FfiConverterTypeGlobalBoolConfigKey.lower(key),
+                                                              FfiConverterBool.lower(value), $0)
+    }
+    }
+
+    open func toggleBoolConfig(key: GlobalBoolConfigKey) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+        uniffi_cove_fn_method_globalbooltable_toggle_bool_config(self.uniffiClonePointer(),
+                                                                 FfiConverterTypeGlobalBoolConfigKey.lower(key), $0)
+    }
+    }
+}
+
+public struct FfiConverterTypeGlobalBoolTable: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = GlobalBoolTable
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> GlobalBoolTable {
+        return GlobalBoolTable(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: GlobalBoolTable) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GlobalBoolTable {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: GlobalBoolTable, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeGlobalBoolTable_lift(_ pointer: UnsafeMutableRawPointer) throws -> GlobalBoolTable {
+    return try FfiConverterTypeGlobalBoolTable.lift(pointer)
+}
+
+public func FfiConverterTypeGlobalBoolTable_lower(_ value: GlobalBoolTable) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeGlobalBoolTable.lower(value)
 }
 
 public protocol KeychainProtocol: AnyObject {}
@@ -1252,7 +1354,7 @@ public protocol RustPendingWalletViewModelProtocol: AnyObject {
 
     func numberOfWordsCount() -> UInt8
 
-    func saveWallet() throws -> WalletId
+    func saveWallet() throws -> WalletMetadata
 }
 
 open class RustPendingWalletViewModel:
@@ -1348,8 +1450,8 @@ open class RustPendingWalletViewModel:
         })
     }
 
-    open func saveWallet() throws -> WalletId {
-        return try FfiConverterTypeWalletId.lift(rustCallWithError(FfiConverterTypePendingWalletViewModelError.lift) {
+    open func saveWallet() throws -> WalletMetadata {
+        return try FfiConverterTypeWalletMetadata.lift(rustCallWithError(FfiConverterTypePendingWalletViewModelError.lift) {
             uniffi_cove_fn_method_rustpendingwalletviewmodel_save_wallet(self.uniffiClonePointer(), $0)
         })
     }
@@ -1599,6 +1701,194 @@ public func FfiConverterTypeWallet_lift(_ pointer: UnsafeMutableRawPointer) thro
 
 public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPointer {
     return FfiConverterTypeWallet.lower(value)
+}
+
+public protocol WalletKeyProtocol: AnyObject {}
+
+open class WalletKey:
+    WalletKeyProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_walletkey(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_walletkey(pointer, $0) }
+    }
+}
+
+public struct FfiConverterTypeWalletKey: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = WalletKey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> WalletKey {
+        return WalletKey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: WalletKey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletKey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: WalletKey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeWalletKey_lift(_ pointer: UnsafeMutableRawPointer) throws -> WalletKey {
+    return try FfiConverterTypeWalletKey.lift(pointer)
+}
+
+public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeWalletKey.lower(value)
+}
+
+public protocol WalletTableProtocol: AnyObject {
+    func getAll() throws -> [WalletMetadata]
+
+    func isEmpty(network: Network) throws -> Bool
+
+    func len(network: Network) throws -> UInt16
+}
+
+open class WalletTable:
+    WalletTableProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_wallettable(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_wallettable(pointer, $0) }
+    }
+
+    open func getAll() throws -> [WalletMetadata] {
+        return try FfiConverterSequenceTypeWalletMetadata.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+            uniffi_cove_fn_method_wallettable_get_all(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isEmpty(network: Network) throws -> Bool {
+        return try FfiConverterBool.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+            uniffi_cove_fn_method_wallettable_is_empty(self.uniffiClonePointer(),
+                                                       FfiConverterTypeNetwork.lower(network), $0)
+        })
+    }
+
+    open func len(network: Network) throws -> UInt16 {
+        return try FfiConverterUInt16.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+            uniffi_cove_fn_method_wallettable_len(self.uniffiClonePointer(),
+                                                  FfiConverterTypeNetwork.lower(network), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeWalletTable: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = WalletTable
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> WalletTable {
+        return WalletTable(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: WalletTable) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletTable {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: WalletTable, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeWalletTable_lift(_ pointer: UnsafeMutableRawPointer) throws -> WalletTable {
+    return try FfiConverterTypeWalletTable.lift(pointer)
+}
+
+public func FfiConverterTypeWalletTable_lower(_ value: WalletTable) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeWalletTable.lower(value)
 }
 
 public protocol WordValidatorProtocol: AnyObject {
@@ -1871,6 +2161,66 @@ public func FfiConverterTypeRouter_lower(_ value: Router) -> RustBuffer {
     return FfiConverterTypeRouter.lower(value)
 }
 
+public struct WalletMetadata {
+    public var id: WalletId
+    public var name: String
+    public var color: WalletColor
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: WalletId, name: String, color: WalletColor) {
+        self.id = id
+        self.name = name
+        self.color = color
+    }
+}
+
+extension WalletMetadata: Equatable, Hashable {
+    public static func == (lhs: WalletMetadata, rhs: WalletMetadata) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.color != rhs.color {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
+        hasher.combine(color)
+    }
+}
+
+public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletMetadata {
+        return
+            try WalletMetadata(
+                id: FfiConverterTypeWalletId.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                color: FfiConverterTypeWalletColor.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: WalletMetadata, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletId.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterTypeWalletColor.write(value.color, into: &buf)
+    }
+}
+
+public func FfiConverterTypeWalletMetadata_lift(_ buf: RustBuffer) throws -> WalletMetadata {
+    return try FfiConverterTypeWalletMetadata.lift(buf)
+}
+
+public func FfiConverterTypeWalletMetadata_lower(_ value: WalletMetadata) -> RustBuffer {
+    return FfiConverterTypeWalletMetadata.lower(value)
+}
+
 public struct WalletViewModelState {
     public var id: WalletId
 
@@ -1963,13 +2313,9 @@ public enum DatabaseError {
     )
     case TableAccessError(String
     )
-    case ConfigReadError(String
+    case WalletsError(WalletTableError
     )
-    case WalletsReadError(String
-    )
-    case ConfigSaveError(String
-    )
-    case WalletsSaveError(String
+    case BoolConfigError(GlobalBoolTableError
     )
 }
 
@@ -1985,17 +2331,11 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
         case 2: return try .TableAccessError(
                 FfiConverterString.read(from: &buf)
             )
-        case 3: return try .ConfigReadError(
-                FfiConverterString.read(from: &buf)
+        case 3: return try .WalletsError(
+                FfiConverterTypeWalletTableError.read(from: &buf)
             )
-        case 4: return try .WalletsReadError(
-                FfiConverterString.read(from: &buf)
-            )
-        case 5: return try .ConfigSaveError(
-                FfiConverterString.read(from: &buf)
-            )
-        case 6: return try .WalletsSaveError(
-                FfiConverterString.read(from: &buf)
+        case 4: return try .BoolConfigError(
+                FfiConverterTypeGlobalBoolTableError.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2011,21 +2351,13 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .ConfigReadError(v1):
+        case let .WalletsError(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypeWalletTableError.write(v1, into: &buf)
 
-        case let .WalletsReadError(v1):
+        case let .BoolConfigError(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
-
-        case let .ConfigSaveError(v1):
-            writeInt(&buf, Int32(5))
-            FfiConverterString.write(v1, into: &buf)
-
-        case let .WalletsSaveError(v1):
-            writeInt(&buf, Int32(6))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypeGlobalBoolTableError.write(v1, into: &buf)
         }
     }
 }
@@ -2114,6 +2446,52 @@ public func FfiConverterTypeGlobalBoolConfigKey_lower(_ value: GlobalBoolConfigK
 }
 
 extension GlobalBoolConfigKey: Equatable, Hashable {}
+
+public enum GlobalBoolTableError {
+    case SaveError(String
+    )
+    case ReadError(String
+    )
+}
+
+public struct FfiConverterTypeGlobalBoolTableError: FfiConverterRustBuffer {
+    typealias SwiftType = GlobalBoolTableError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GlobalBoolTableError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .SaveError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .ReadError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: GlobalBoolTableError, into buf: inout [UInt8]) {
+        switch value {
+        case let .SaveError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .ReadError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension GlobalBoolTableError: Equatable, Hashable {}
+
+extension GlobalBoolTableError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -2220,6 +2598,49 @@ extension KeychainError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum Network {
+    case bitcoin
+    case testnet
+}
+
+public struct FfiConverterTypeNetwork: FfiConverterRustBuffer {
+    typealias SwiftType = Network
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Network {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .bitcoin
+
+        case 2: return .testnet
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Network, into buf: inout [UInt8]) {
+        switch value {
+        case .bitcoin:
+            writeInt(&buf, Int32(1))
+
+        case .testnet:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeNetwork_lift(_ buf: RustBuffer) throws -> Network {
+    return try FfiConverterTypeNetwork.lift(buf)
+}
+
+public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
+    return FfiConverterTypeNetwork.lower(value)
+}
+
+extension Network: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -2449,7 +2870,7 @@ extension PendingWalletViewModelReconcileMessage: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Route {
-    case cove
+    case listWallets
     case newWallet(NewWalletRoute
     )
 }
@@ -2460,7 +2881,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Route {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .cove
+        case 1: return .listWallets
 
         case 2: return try .newWallet(FfiConverterTypeNewWalletRoute.read(from: &buf)
             )
@@ -2471,7 +2892,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
 
     public static func write(_ value: Route, into buf: inout [UInt8]) {
         switch value {
-        case .cove:
+        case .listWallets:
             writeInt(&buf, Int32(1))
 
         case let .newWallet(v1):
@@ -2535,6 +2956,88 @@ public func FfiConverterTypeUpdate_lower(_ value: Update) -> RustBuffer {
     return FfiConverterTypeUpdate.lower(value)
 }
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum WalletColor {
+    case red
+    case blue
+    case green
+    case yellow
+    case orange
+    case purple
+    case pink
+    case custom(r: UInt8, g: UInt8, b: UInt8)
+}
+
+public struct FfiConverterTypeWalletColor: FfiConverterRustBuffer {
+    typealias SwiftType = WalletColor
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletColor {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .red
+
+        case 2: return .blue
+
+        case 3: return .green
+
+        case 4: return .yellow
+
+        case 5: return .orange
+
+        case 6: return .purple
+
+        case 7: return .pink
+
+        case 8: return try .custom(r: FfiConverterUInt8.read(from: &buf), g: FfiConverterUInt8.read(from: &buf), b: FfiConverterUInt8.read(from: &buf))
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletColor, into buf: inout [UInt8]) {
+        switch value {
+        case .red:
+            writeInt(&buf, Int32(1))
+
+        case .blue:
+            writeInt(&buf, Int32(2))
+
+        case .green:
+            writeInt(&buf, Int32(3))
+
+        case .yellow:
+            writeInt(&buf, Int32(4))
+
+        case .orange:
+            writeInt(&buf, Int32(5))
+
+        case .purple:
+            writeInt(&buf, Int32(6))
+
+        case .pink:
+            writeInt(&buf, Int32(7))
+
+        case let .custom(r, g, b):
+            writeInt(&buf, Int32(8))
+            FfiConverterUInt8.write(r, into: &buf)
+            FfiConverterUInt8.write(g, into: &buf)
+            FfiConverterUInt8.write(b, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeWalletColor_lift(_ buf: RustBuffer) throws -> WalletColor {
+    return try FfiConverterTypeWalletColor.lift(buf)
+}
+
+public func FfiConverterTypeWalletColor_lower(_ value: WalletColor) -> RustBuffer {
+    return FfiConverterTypeWalletColor.lower(value)
+}
+
+extension WalletColor: Equatable, Hashable {}
+
 public enum WalletCreationError {
     case BdkError(String
     )
@@ -2588,53 +3091,58 @@ extension WalletCreationError: Foundation.LocalizedError {
     }
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum WalletKey {
-    case bitcoin
-    case testnet
+public enum WalletTableError {
+    case SaveError(String
+    )
+    case ReadError(String
+    )
 }
 
-public struct FfiConverterTypeWalletKey: FfiConverterRustBuffer {
-    typealias SwiftType = WalletKey
+public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
+    typealias SwiftType = WalletTableError
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletKey {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletTableError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .bitcoin
+        case 1: return try .SaveError(
+                FfiConverterString.read(from: &buf)
+            )
 
-        case 2: return .testnet
+        case 2: return try .ReadError(
+                FfiConverterString.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: WalletKey, into buf: inout [UInt8]) {
+    public static func write(_ value: WalletTableError, into buf: inout [UInt8]) {
         switch value {
-        case .bitcoin:
+        case let .SaveError(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
 
-        case .testnet:
+        case let .ReadError(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
         }
     }
 }
 
-public func FfiConverterTypeWalletKey_lift(_ buf: RustBuffer) throws -> WalletKey {
-    return try FfiConverterTypeWalletKey.lift(buf)
-}
+extension WalletTableError: Equatable, Hashable {}
 
-public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> RustBuffer {
-    return FfiConverterTypeWalletKey.lower(value)
+extension WalletTableError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
 }
-
-extension WalletKey: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletViewModelAction {}
+public enum WalletViewModelAction {
+    case noOp
+}
 
 public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
     typealias SwiftType = WalletViewModelAction
@@ -2642,12 +3150,17 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletViewModelAction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
+        case 1: return .noOp
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: WalletViewModelAction, into _: inout [UInt8]) {
-        switch value {}
+    public static func write(_ value: WalletViewModelAction, into buf: inout [UInt8]) {
+        switch value {
+        case .noOp:
+            writeInt(&buf, Int32(1))
+        }
     }
 }
 
@@ -2706,7 +3219,9 @@ extension WalletViewModelError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum WalletViewModelReconcileMessage {}
+public enum WalletViewModelReconcileMessage {
+    case noOp
+}
 
 public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustBuffer {
     typealias SwiftType = WalletViewModelReconcileMessage
@@ -2714,12 +3229,17 @@ public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletViewModelReconcileMessage {
         let variant: Int32 = try readInt(&buf)
         switch variant {
+        case 1: return .noOp
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: WalletViewModelReconcileMessage, into _: inout [UInt8]) {
-        switch value {}
+    public static func write(_ value: WalletViewModelReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+        case .noOp:
+            writeInt(&buf, Int32(1))
+        }
     }
 }
 
@@ -3148,6 +3668,28 @@ private struct FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = [WalletMetadata]
+
+    public static func write(_ value: [WalletMetadata], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWalletMetadata.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WalletMetadata] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WalletMetadata]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeWalletMetadata.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     typealias SwiftType = [Route]
 
@@ -3245,12 +3787,6 @@ public func FfiConverterTypeWalletId_lower(_ value: WalletId) -> RustBuffer {
     return FfiConverterTypeWalletId.lower(value)
 }
 
-public func global() { try! rustCall {
-    uniffi_cove_fn_func_global($0
-    )
-}
-}
-
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -3267,22 +3803,13 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if uniffi_cove_checksum_func_global() != 52066 {
-        return InitializationResult.apiChecksumMismatch
-    }
     if uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 21847 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_database_get_bool_config() != 49287 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_database_set_bool_config() != 32892 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_database_toggle_bool_config() != 58843 {
+    if uniffi_cove_checksum_method_database_wallets() != 17223 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_dispatch() != 2014 {
@@ -3292,6 +3819,15 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 45338 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_globalbooltable_get_bool_config() != 40031 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_globalbooltable_set_bool_config() != 23253 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_globalbooltable_toggle_bool_config() != 31990 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_default() != 64785 {
@@ -3330,7 +3866,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustpendingwalletviewmodel_number_of_words_count() != 47399 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustpendingwalletviewmodel_save_wallet() != 15716 {
+    if uniffi_cove_checksum_method_rustpendingwalletviewmodel_save_wallet() != 45300 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {
@@ -3343,6 +3879,15 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_wallettable_get_all() != 16410 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_wallettable_is_empty() != 56834 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_wallettable_len() != 21855 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wordvalidator_grouped_words() != 32035 {
