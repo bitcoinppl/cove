@@ -39,6 +39,11 @@ import SwiftUI
         router.routes = routes
     }
 
+    func resetRoute(to route: Route) {
+        router.routes = []
+        rust.resetDefaultRouteTo(route: route)
+    }
+
     func update(update: Update) {
         Task {
             await MainActor.run {
@@ -51,8 +56,8 @@ import SwiftUI
                     self.database = Database()
                 case let .defaultRouteChanged(route):
                     // default changes, means root changes, set routes to []
-                    self.router.default = route
                     self.router.routes = []
+                    self.router.default = route
                 }
             }
         }

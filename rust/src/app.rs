@@ -144,13 +144,13 @@ impl FfiApp {
         let selected_wallet = Database::global().global_config.get_selected_wallet()?;
 
         // change default route to selected wallet
-        self.change_default_route(Route::SelectedWallet(selected_wallet.clone()));
+        self.reset_default_route_to(Route::SelectedWallet(selected_wallet.clone()));
 
         Some(selected_wallet)
     }
 
-    /// Change the default route
-    pub fn change_default_route(&self, route: Route) {
+    /// Change the default route, and reset the routes
+    pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);
 
         self.inner()
@@ -158,7 +158,7 @@ impl FfiApp {
             .write()
             .unwrap()
             .router
-            .change_default(route.clone());
+            .reset_routes_to(route.clone());
 
         Updater::send_update(Update::DefaultRouteChanged(route));
     }
