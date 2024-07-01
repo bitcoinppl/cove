@@ -8,18 +8,29 @@
 import SwiftUI
 
 struct SelectedWalletView: View {
+    @Environment(\.navigate) private var navigate
+
     var id: WalletId
-    var walletMetadata: WalletMetadata?
+    @State private var model: SelectedWalletViewModel? = nil
 
     var body: some View {
         Group {
-            if let walletMetadata = walletMetadata {
-                Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+            if let model = model {
+                VStack {
+                    Text("NAME: \(model.walletMetadata.name)")
+                        .foregroundColor(model.walletMetadata.color.toCardColors()[0])
+                }
             } else {
                 Text("Loading...")
             }
         }.onAppear {
-            print("appeared")
+            do {
+                print("getting wallet for \(id)")
+                model = try SelectedWalletViewModel(id: id)
+            } catch {
+                print("[SWIFT][ERROR] something went very wrong: \(error)")
+                navigate(Route.listWallets)
+            }
         }
     }
 }

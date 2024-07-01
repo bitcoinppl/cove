@@ -5,7 +5,7 @@ use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 use crate::{
     redb::Json,
     update::{Update, Updater},
-    wallet::{Network, WalletMetadata},
+    wallet::{Network, WalletId, WalletMetadata},
 };
 
 use super::Error;
@@ -77,6 +77,25 @@ impl WalletTable {
         write_txn.open_table(TABLE).expect("failed to create table");
 
         Self { db }
+    }
+
+    pub fn get_selected_wallet(
+        &self,
+        id: WalletId,
+        network: Network,
+    ) -> Result<Option<WalletMetadata>, Error> {
+        let table = self.read_table()?;
+        let key = WalletKey::from(network).to_string();
+
+        let value = table
+            .get(key.as_str())
+            .map_err(|error| WalletTableError::ReadError(error.to_string()))?
+            .map(|value| value.value())
+            .expect("wallets not found");
+
+        let wallet_metadata = value.iter().find(|wallet| wallet.id == id).cloned();
+
+        Ok(wallet_metadata)
     }
 
     pub fn get(&self, network: Network) -> Result<Vec<WalletMetadata>, Error> {
