@@ -33,7 +33,12 @@ struct FixedGlassCard<Content: View>: View {
             // content
             content
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview {

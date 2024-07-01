@@ -14,20 +14,22 @@ struct ListWalletsView: View {
     init() {
         do {
             wallets = try Database().wallets().getAll()
-        }
-        catch {
+        } catch {
             print("[SWIFT] Failed to get wallets \(error)")
             wallets = []
         }
     }
 
     var body: some View {
-        VStack {
-            ForEach(wallets, id: \.id) { wallet in
-                GlassCard {
-                    Text(wallet.name).foregroundColor(.white)
+        ScrollView {
+            LazyVStack(spacing: 20) {
+                ForEach(wallets, id: \.id) { wallet in
+                    GlassCard {
+                        Text(wallet.name).foregroundColor(.white)
+                    }
+                    .frame(width: 300, height: 200)
                 }
-                .frame(width: 300, height: 200)
+                .padding(.top, 10)
             }
         }
         .onAppear {
@@ -37,13 +39,12 @@ struct ListWalletsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea(.all)
         .background(.primary)
         .enableInjection()
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
