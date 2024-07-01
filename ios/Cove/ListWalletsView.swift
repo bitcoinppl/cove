@@ -24,7 +24,7 @@ struct ListWalletsView: View {
         ScrollView {
             LazyVStack(spacing: 20) {
                 ForEach(wallets, id: \.id) { wallet in
-                    GlassCard {
+                    GlassCard(colors: wallet.color.toCardColors()) {
                         Text(wallet.name).foregroundColor(.white)
                     }
                     .frame(width: 300, height: 200)
