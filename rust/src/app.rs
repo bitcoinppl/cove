@@ -3,13 +3,15 @@
 use std::sync::{Arc, RwLock};
 
 use crate::{
+    database::{error::DatabaseError, Database},
     event::Event,
     impl_default_for,
-    router::Router,
+    router::{Route, Router},
     update::{FfiUpdater, Update, Updater},
+    wallet::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
-use log::error;
+use log::{debug, error};
 use once_cell::sync::OnceCell;
 
 pub static APP: OnceCell<App> = OnceCell::new();
@@ -124,6 +126,41 @@ impl FfiApp {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
         Arc::new(Self)
+    }
+
+    /// Select a wallet
+    pub fn select_wallet(&self, id: WalletId) -> Result<(), DatabaseError> {
+        // set the selected wallet
+        Database::global().global_config.select_wallet(id.clone())?;
+
+        // update the router
+        self.go_to_selected_wallet();
+
+        Ok(())
+    }
+
+    /// Get the selected wallet
+    pub fn go_to_selected_wallet(&self) -> Option<WalletId> {
+        let selected_wallet = Database::global().global_config.get_selected_wallet()?;
+
+        // change default route to selected wallet
+        self.change_default_route(Route::SelectedWallet(selected_wallet.clone()));
+
+        Some(selected_wallet)
+    }
+
+    /// Change the default route
+    pub fn change_default_route(&self, route: Route) {
+        debug!("changing default route to: {:?}", route);
+
+        self.inner()
+            .state
+            .write()
+            .unwrap()
+            .router
+            .change_default(route.clone());
+
+        Updater::send_update(Update::DefaultRouteChanged(route));
     }
 
     /// Frontend calls this method to send events to the rust application logic

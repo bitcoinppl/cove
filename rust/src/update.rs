@@ -4,12 +4,13 @@
 use crossbeam::channel::Sender;
 use once_cell::sync::OnceCell;
 
-use crate::router::Router;
+use crate::router::Route;
 
 #[derive(uniffi::Enum)]
 #[allow(clippy::enum_variant_names)]
 pub enum Update {
-    RouterUpdate { router: Router },
+    DefaultRouteChanged(Route),
+    RouteUpdate(Vec<Route>),
     DatabaseUpdate,
 }
 

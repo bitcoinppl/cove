@@ -6,19 +6,19 @@ use crate::update::{Update, Updater};
 
 use super::Error;
 
-pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("global_bool_config");
+pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("global_flag");
 
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
-pub enum GlobalBoolConfigKey {
+pub enum GlobalFlagKey {
     CompletedOnboarding,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct GlobalBoolTable {
+pub struct GlobalFlagTable {
     db: Arc<redb::Database>,
 }
 
-impl GlobalBoolTable {
+impl GlobalFlagTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create table if it doesn't exist
         write_txn.open_table(TABLE).expect("failed to create table");
@@ -28,17 +28,17 @@ impl GlobalBoolTable {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum GlobalBoolTableError {
-    #[error("failed to save wallets: {0}")]
+pub enum GlobalFlagTableError {
+    #[error("failed to save global flag: {0}")]
     SaveError(String),
 
-    #[error("failed to get wallets: {0}")]
+    #[error("failed to get global flag: {0}")]
     ReadError(String),
 }
 
 #[uniffi::export]
-impl GlobalBoolTable {
-    pub fn get_bool_config(&self, key: GlobalBoolConfigKey) -> Result<bool, Error> {
+impl GlobalFlagTable {
+    pub fn get(&self, key: GlobalFlagKey) -> Result<bool, Error> {
         let read_txn = self
             .db
             .begin_read()
@@ -51,14 +51,14 @@ impl GlobalBoolTable {
         let key: &'static str = key.into();
         let value = table
             .get(key)
-            .map_err(|error| GlobalBoolTableError::ReadError(error.to_string()))?
+            .map_err(|error| GlobalFlagTableError::ReadError(error.to_string()))?
             .map(|value| value.value())
             .unwrap_or(false);
 
         Ok(value)
     }
 
-    pub fn set_bool_config(&self, key: GlobalBoolConfigKey, value: bool) -> Result<(), Error> {
+    pub fn set(&self, key: GlobalFlagKey, value: bool) -> Result<(), Error> {
         let write_txn = self
             .db
             .begin_write()
@@ -72,7 +72,7 @@ impl GlobalBoolTable {
             let key: &'static str = key.into();
             table
                 .insert(key, value)
-                .map_err(|error| GlobalBoolTableError::SaveError(error.to_string()))?;
+                .map_err(|error| GlobalFlagTableError::SaveError(error.to_string()))?;
         }
 
         write_txn
@@ -84,11 +84,11 @@ impl GlobalBoolTable {
         Ok(())
     }
 
-    pub fn toggle_bool_config(&self, key: GlobalBoolConfigKey) -> Result<(), Error> {
-        let value = self.get_bool_config(key)?;
+    pub fn toggle_bool_config(&self, key: GlobalFlagKey) -> Result<(), Error> {
+        let value = self.get(key)?;
 
         let new_value = !value;
-        self.set_bool_config(key, new_value)?;
+        self.set(key, new_value)?;
 
         Ok(())
     }

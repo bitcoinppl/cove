@@ -11,6 +11,7 @@ use derive_more::From;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum Route {
     ListWallets,
+    SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
 }
 
@@ -46,16 +47,32 @@ pub enum ColdWalletRoute {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct Router {
     pub app: Arc<FfiApp>,
+    pub default: Route,
     pub routes: Vec<Route>,
 }
 
 impl_default_for!(Router);
 impl Router {
     pub fn new() -> Self {
+        let database = Database::global();
+
+        let mut default_route = Route::ListWallets;
+
+        // if there is a selected wallet, set it as the default route
+        if let Some(selected_wallet) = database.global_config.get_selected_wallet() {
+            default_route = Route::SelectedWallet(selected_wallet);
+        }
+
         Self {
             app: FfiApp::new(),
+            default: default_route,
             routes: vec![],
         }
+    }
+
+    pub fn change_default(&mut self, route: Route) {
+        self.default = route;
+        self.routes.clear();
     }
 }
 
@@ -79,6 +96,19 @@ impl RouteFactory {
 
         // otherwise, for now show the list of wallets
         Route::ListWallets
+    }
+
+    pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {
+        if route == route_to_check {
+            return true;
+        }
+
+        matches!(
+            (route, route_to_check),
+            (Route::ListWallets, Route::ListWallets)
+                | (Route::SelectedWallet(_), Route::SelectedWallet(_))
+                | (Route::NewWallet(_), Route::NewWallet(_))
+        )
     }
 
     pub fn new_wallet_select(&self) -> Route {

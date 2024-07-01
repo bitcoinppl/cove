@@ -43,9 +43,9 @@ struct CoveApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $model.router.routes) {
-                RouteView(model: $model)
+                RouteView(model: model)
                     .navigationDestination(for: Route.self, destination: { route in
-                        RouteView(route: route, model: $model)
+                        RouteView(model: model, route: route)
                     })
                     .onChange(of: model.router.routes) { _, new in
                         model.dispatch(event: Event.routeChanged(routes: new))
@@ -74,16 +74,20 @@ struct MenuItem {
 }
 
 struct RouteView: View {
-    var route: Route = RouteFactory().default()
-    @Binding var model: MainViewModel
+    @Bindable var model: MainViewModel
+    @State var route: Route
+
+    init(model: MainViewModel, route: Route? = nil) {
+        self.model = model
+        self.route = route ?? model.router.default
+    }
 
     var body: some View {
         ZStack {
-            routeToView(route: route)
-
-            SidebarView(isShowing: $model.isSidebarVisible, menuItems: [
-                MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "lock.square.fill")
-            ])
+            routeToView(model: model, route: route)
+            SidebarView(isShowing: $model.isSidebarVisible, currentRoute: route, menuItems: model.menuItems)
+        }.onChange(of: model.router.default) { _, newRoute in
+            self.route = newRoute
         }
     }
 
@@ -93,12 +97,14 @@ struct RouteView: View {
 }
 
 @MainActor @ViewBuilder
-func routeToView(route: Route) -> some View {
+func routeToView(model: MainViewModel, route: Route) -> some View {
     switch route {
     case .listWallets:
-        ListWalletsView()
+        ListWalletsView(model: model)
     case let .newWallet(route: route):
         NewWalletView(route: route)
+    case let .selectedWallet(walletId):
+        SelectedWalletView(id: walletId)
     }
 }
 

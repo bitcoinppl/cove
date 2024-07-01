@@ -2,12 +2,14 @@
 //! That will be available across the app, and will be persisted across app launches.
 
 pub mod error;
-pub mod global_bool;
+pub mod global_config;
+pub mod global_flag;
 pub mod wallet;
 
 use std::{path::PathBuf, sync::Arc};
 
-use global_bool::GlobalBoolTable;
+use global_config::GlobalConfigTable;
+use global_flag::GlobalFlagTable;
 use wallet::WalletTable;
 
 use eyre::Context;
@@ -21,7 +23,8 @@ pub type Error = error::DatabaseError;
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
     pub db: Arc<redb::Database>,
-    pub global_bool: GlobalBoolTable,
+    pub global_flag: GlobalFlagTable,
+    pub global_config: GlobalConfigTable,
     pub wallets: WalletTable,
 }
 
@@ -53,7 +56,8 @@ impl Database {
             let db = Arc::new(db);
 
             let wallets = WalletTable::new(db.clone(), &write_txn);
-            let global_bool = GlobalBoolTable::new(db.clone(), &write_txn);
+            let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
+            let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
 
             write_txn
                 .commit()
@@ -62,7 +66,8 @@ impl Database {
             Database {
                 db,
                 wallets,
-                global_bool,
+                global_flag,
+                global_config,
             }
         })
     }

@@ -7,3 +7,4 @@ buildServer.json
 .compile
 log.txt
 .nvim
+ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
