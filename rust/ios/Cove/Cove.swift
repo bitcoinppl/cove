@@ -808,6 +808,11 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRa
  */
 public protocol FfiAppProtocol: AnyObject {
     /**
+     * Change the default route
+     */
+    func changeDefaultRoute(route: Route)
+
+    /**
      * Frontend calls this method to send events to the rust application logic
      */
     func dispatch(event: Event)
@@ -878,6 +883,15 @@ open class FfiApp:
         }
 
         try! rustCall { uniffi_cove_fn_free_ffiapp(pointer, $0) }
+    }
+
+    /**
+     * Change the default route
+     */
+    open func changeDefaultRoute(route: Route) { try! rustCall {
+        uniffi_cove_fn_method_ffiapp_change_default_route(self.uniffiClonePointer(),
+                                                          FfiConverterTypeRoute.lower(route), $0)
+    }
     }
 
     /**
@@ -1355,6 +1369,8 @@ public protocol RouteFactoryProtocol: AnyObject {
 
     func hotWallet(route: HotWalletRoute) -> Route
 
+    func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool
+
     func newColdWallet() -> Route
 
     func newHotWallet() -> Route
@@ -1419,6 +1435,14 @@ open class RouteFactory:
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_hot_wallet(self.uniffiClonePointer(),
                                                           FfiConverterTypeHotWalletRoute.lower(route), $0)
+        })
+    }
+
+    open func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_is_same_parent_route(self.uniffiClonePointer(),
+                                                                    FfiConverterTypeRoute.lower(route),
+                                                                    FfiConverterTypeRoute.lower(routeToCheck), $0)
         })
     }
 
@@ -2153,13 +2177,11 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> Unsaf
 
 public struct AppState {
     public var router: Router
-    public var defaultRoute: Route
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(router: Router, defaultRoute: Route) {
+    public init(router: Router) {
         self.router = router
-        self.defaultRoute = defaultRoute
     }
 }
 
@@ -2167,14 +2189,12 @@ public struct FfiConverterTypeAppState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppState {
         return
             try AppState(
-                router: FfiConverterTypeRouter.read(from: &buf),
-                defaultRoute: FfiConverterTypeRoute.read(from: &buf)
+                router: FfiConverterTypeRouter.read(from: &buf)
             )
     }
 
     public static func write(_ value: AppState, into buf: inout [UInt8]) {
         FfiConverterTypeRouter.write(value.router, into: &buf)
-        FfiConverterTypeRoute.write(value.defaultRoute, into: &buf)
     }
 }
 
@@ -2275,12 +2295,14 @@ public func FfiConverterTypePendingWalletViewModelState_lower(_ value: PendingWa
 
 public struct Router {
     public var app: FfiApp
+    public var `default`: Route
     public var routes: [Route]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(app: FfiApp, routes: [Route]) {
+    public init(app: FfiApp, default: Route, routes: [Route]) {
         self.app = app
+        self.default = `default`
         self.routes = routes
     }
 }
@@ -2290,12 +2312,14 @@ public struct FfiConverterTypeRouter: FfiConverterRustBuffer {
         return
             try Router(
                 app: FfiConverterTypeFfiApp.read(from: &buf),
+                default: FfiConverterTypeRoute.read(from: &buf),
                 routes: FfiConverterSequenceTypeRoute.read(from: &buf)
             )
     }
 
     public static func write(_ value: Router, into buf: inout [UInt8]) {
         FfiConverterTypeFfiApp.write(value.app, into: &buf)
+        FfiConverterTypeRoute.write(value.default, into: &buf)
         FfiConverterSequenceTypeRoute.write(value.routes, into: &buf)
     }
 }
@@ -4092,6 +4116,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_database_wallets() != 17223 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_ffiapp_change_default_route() != 56180 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_ffiapp_dispatch() != 2014 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4132,6 +4159,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 43168 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_new_cold_wallet() != 14639 {

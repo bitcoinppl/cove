@@ -11,7 +11,7 @@ use crate::{
     wallet::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
-use log::error;
+use log::{debug, error};
 use once_cell::sync::OnceCell;
 
 pub static APP: OnceCell<App> = OnceCell::new();
@@ -19,24 +19,13 @@ pub static APP: OnceCell<App> = OnceCell::new();
 #[derive(Clone, uniffi::Record)]
 pub struct AppState {
     router: Router,
-    default_route: Route,
 }
 
 impl_default_for!(AppState);
 impl AppState {
     pub fn new() -> Self {
-        let database = Database::global();
-
-        let mut default_route = Route::ListWallets;
-
-        // if there is a selected wallet, set it as the default route
-        if let Some(selected_wallet) = database.global_config.get_selected_wallet() {
-            default_route = Route::SelectedWallet(selected_wallet);
-        }
-
         Self {
             router: Router::new(),
-            default_route,
         }
     }
 }
@@ -154,14 +143,24 @@ impl FfiApp {
     pub fn go_to_selected_wallet(&self) -> Option<WalletId> {
         let selected_wallet = Database::global().global_config.get_selected_wallet()?;
 
+        // change default route to selected wallet
+        self.change_default_route(Route::SelectedWallet(selected_wallet.clone()));
+
+        Some(selected_wallet)
+    }
+
+    /// Change the default route
+    pub fn change_default_route(&self, route: Route) {
+        debug!("changing default route to: {:?}", route);
+
         self.inner()
             .state
             .write()
             .unwrap()
             .router
-            .replace(vec![Route::SelectedWallet(selected_wallet.clone())]);
+            .change_default(route.clone());
 
-        Some(selected_wallet)
+        Updater::send_update(Update::DefaultRouteChanged(route));
     }
 
     /// Frontend calls this method to send events to the rust application logic

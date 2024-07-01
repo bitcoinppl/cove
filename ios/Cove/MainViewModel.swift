@@ -5,7 +5,12 @@ import SwiftUI
     var router: Router
     var database: Database
     var isSidebarVisible = false
-    var defaultRoute: Route
+
+    public let menuItems: [MenuItem] =
+        [
+            MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "wallet.pass.fill"),
+            MenuItem(destination: Route.listWallets, title: "Change Wallet", icon: "arrow.uturn.right.square.fill"),
+        ]
 
     public init() {
         let rust = FfiApp()
@@ -14,8 +19,6 @@ import SwiftUI
         router = state.router
         self.rust = rust
         database = Database()
-
-        defaultRoute = state.defaultRoute
 
         self.rust.listenForUpdates(updater: self)
     }
@@ -47,7 +50,9 @@ import SwiftUI
                 case .databaseUpdate:
                     self.database = Database()
                 case let .defaultRouteChanged(route):
-                    self.defaultRoute = route
+                    // default changes, means root changes, set routes to []
+                    self.router.default = route
+                    self.router.routes = []
                 }
             }
         }

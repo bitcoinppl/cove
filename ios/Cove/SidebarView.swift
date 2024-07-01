@@ -10,8 +10,35 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(\.navigate) private var navigate
     @Binding var isShowing: Bool
-    let menuItems: [MenuItem]
+    let currentRoute: Route
+
+    var menuItems: [MenuItem]
     let screenWidth = UIScreen.main.bounds.width
+
+    func setForeground(_ route: Route) -> LinearGradient {
+        if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
+            return
+                LinearGradient(
+                    colors: [
+                        Color.blue,
+                        Color.blue.opacity(0.9),
+                        Color.blue.opacity(0.8),
+                        Color.blue.opacity(0.7)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+        } else {
+            return
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.8), Color.white.opacity(0.7)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -23,13 +50,13 @@ struct SidebarView: View {
                 }
 
                 HStack(alignment: .top) {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 30) {
                         ForEach(menuItems, id: \.destination) { item in
                             Button(action: { goTo(item) }) {
                                 Label(item.title, systemImage: item.icon)
                                     .foregroundStyle(
-                                        LinearGradient(colors: [Color.blue, Color.blue.opacity(0.9), Color.blue.opacity(0.8), Color.blue.opacity(0.7)],
-                                                       startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        setForeground(item.destination)
+                                    )
                                     .padding(.leading, 30)
                             }
                         }
@@ -52,8 +79,7 @@ struct SidebarView: View {
 
 #Preview {
     ZStack {
-        SidebarView(isShowing: Binding.constant(true), menuItems: [
-            MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "wallet.pass.fill"),
-        ])
-    }.background(Color.white)
+        SidebarView(isShowing: Binding.constant(true), currentRoute: Route.listWallets, menuItems: MainViewModel().menuItems)
+    }
+    .background(Color.white)
 }
