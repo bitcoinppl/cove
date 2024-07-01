@@ -3,10 +3,12 @@
 use std::sync::{Arc, RwLock};
 
 use crate::{
+    database::{error::DatabaseError, Database},
     event::Event,
     impl_default_for,
     router::Router,
     update::{FfiUpdater, Update, Updater},
+    wallet::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
 use log::error;
@@ -124,6 +126,16 @@ impl FfiApp {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
         Arc::new(Self)
+    }
+
+    /// Select a wallet
+    pub fn select_wallet(&self, id: WalletId) -> Result<(), DatabaseError> {
+        Database::global().global_config.select_wallet(id)
+    }
+
+    /// Get the selected wallet
+    pub fn get_selected_wallet(&self) -> Option<WalletId> {
+        Database::global().global_config.get_selected_wallet()
     }
 
     /// Frontend calls this method to send events to the rust application logic

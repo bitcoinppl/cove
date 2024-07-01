@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use redb::{ReadOnlyTable, ReadableTable, ReadableTableMetadata, TableDefinition};
+use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 
 use crate::{
     redb::Json,
@@ -65,7 +65,6 @@ impl WalletTable {
 
     pub fn get_all(&self) -> Result<Vec<WalletMetadata>, Error> {
         // TODO: get network from context (database) global
-        let table = self.read_table()?;
         let wallets = self.get(Network::Bitcoin)?;
 
         Ok(wallets)

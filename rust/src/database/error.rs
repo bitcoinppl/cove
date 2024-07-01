@@ -1,4 +1,7 @@
-use super::{global_bool::GlobalBoolTableError, wallet::WalletTableError};
+use super::{
+    global_config::GlobalConfigTableError, global_flag::GlobalFlagTableError,
+    wallet::WalletTableError,
+};
 
 type Error = DatabaseError;
 
@@ -14,7 +17,10 @@ pub enum DatabaseError {
     WalletsError(#[from] WalletTableError),
 
     #[error(transparent)]
-    BoolConfigError(#[from] GlobalBoolTableError),
+    GlobalFlagError(#[from] GlobalFlagTableError),
+
+    #[error(transparent)]
+    GlobalConfigError(#[from] GlobalConfigTableError),
 }
 
 impl From<redb::TransactionError> for Error {
