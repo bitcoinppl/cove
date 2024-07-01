@@ -11,6 +11,7 @@
 		48582AEE3539AD866FAC18BF /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */; };
 		AC07617D2C31A527007B4540 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617C2C31A527007B4540 /* GlassCard.swift */; };
 		AC07617F2C31BAA9007B4540 /* ListWalletsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */; };
+		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
 		AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC269AE12C289F17005481A8 /* VerifyWordsView.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
@@ -56,6 +57,7 @@
 		4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardObserver.swift; sourceTree = "<group>"; };
 		AC07617C2C31A527007B4540 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListWalletsView.swift; sourceTree = "<group>"; };
+		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		AC269AE12C289F17005481A8 /* VerifyWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsView.swift; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
 		ACA4CBEB2C2328BE0008F63E /* Security.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security.swift; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				C9C554D1DB26BDBD563452A6 /* WalletViewModel.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
+				AC0761802C32E3BA007B4540 /* SidebarView.swift */,
 				AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
@@ -291,6 +294,7 @@
 				ACC301652C207787006790DF /* NewWalletView.swift in Sources */,
 				ACC301762C21D698006790DF /* HotWalletCreateView.swift in Sources */,
 				ACC301742C211281006790DF /* HotWalletSelectView.swift in Sources */,
+				AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
 				ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */,
 				ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */,

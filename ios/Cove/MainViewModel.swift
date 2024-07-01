@@ -4,6 +4,7 @@ import SwiftUI
     var rust: FfiApp
     var router: Router
     var database: Database
+    var isSidebarVisible = false
 
     public init() {
         let rust = FfiApp()
@@ -14,6 +15,10 @@ import SwiftUI
         database = Database()
 
         self.rust.listenForUpdates(updater: self)
+    }
+
+    func toggleSidebar() {
+        isSidebarVisible.toggle()
     }
 
     func pushRoute(_ route: Route) {

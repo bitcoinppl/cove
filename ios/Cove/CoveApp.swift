@@ -43,27 +43,48 @@ struct CoveApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $model.router.routes) {
-                DefaultRouteView()
+                RouteView(model: $model)
                     .navigationDestination(for: Route.self, destination: { route in
-                        routeToView(route: route)
+                        RouteView(route: route, model: $model)
                     })
                     .onChange(of: model.router.routes) { _, new in
                         model.dispatch(event: Event.routeChanged(routes: new))
                     }
+                    .navigationBarItems(leading: Button(action: {
+                        withAnimation {
+                            model.toggleSidebar()
+                        }
+                    }) {
+                        Image(systemName: "line.horizontal.3")
+                    })
             }
             .tint(tintColor)
-        }
-        .environment(model)
-        .environment(\.navigate) { route in
-            model.pushRoute(route)
+            .environment(\.navigate) { route in
+                model.pushRoute(route)
+            }
+            .environment(model)
         }
     }
 }
 
-struct DefaultRouteView: View {
+struct MenuItem {
+    let destination: Route
+    let title: String
+    let icon: String
+}
+
+struct RouteView: View {
+    var route: Route = RouteFactory().default()
+    @Binding var model: MainViewModel
+
     var body: some View {
-        routeToView(route: RouteFactory().default())
-            .enableInjection()
+        ZStack {
+            routeToView(route: route)
+
+            SidebarView(isShowing: $model.isSidebarVisible, menuItems: [
+                MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "lock.square.fill")
+            ])
+        }
     }
 
     #if DEBUG
