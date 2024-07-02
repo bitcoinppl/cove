@@ -10,7 +10,7 @@ import SwiftUI
 struct SelectedWalletView: View {
     @Environment(\.navigate) private var navigate
 
-    var id: WalletId
+    let id: WalletId
     @State private var model: SelectedWalletViewModel? = nil
 
     var body: some View {

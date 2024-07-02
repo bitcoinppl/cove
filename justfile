@@ -19,8 +19,8 @@ build-android:
 run-android: build-android
     bash scripts/run-android.sh
 
-build-ios profile="debug":
-    bash scripts/build-ios.sh {{profile}}
+build-ios profile="debug" device="false":
+    bash scripts/build-ios.sh {{profile}} {{device}}
 
 run-ios: build-ios
     bash scripts/run-ios.sh
