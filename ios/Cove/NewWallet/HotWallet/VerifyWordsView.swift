@@ -20,6 +20,8 @@ struct VerifyWordsView: View {
     @State private var showErrorAlert = false
     @State private var invalidWords: String = ""
     @State private var focusField: Int?
+    @State private var showSkipAlert = false
+
     @StateObject private var keyboardObserver = KeyboardObserver()
 
     init(id: WalletId) {
@@ -39,6 +41,8 @@ struct VerifyWordsView: View {
         enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         tabIndex = 0
         focusField = nil
+        showSkipAlert = false
+
         self.validator = validator
     }
 
@@ -117,6 +121,16 @@ struct VerifyWordsView: View {
                         .padding(.top, 20)
                     }
 
+                    Button(action: {
+                        showSkipAlert = true
+                    }) {
+                        Text("SKIP")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.opacity(0.6))
+                    }
+                    .padding(.top, 10)
+
                     Spacer()
                 }
             }
@@ -124,6 +138,16 @@ struct VerifyWordsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("The following words are not valid: \(invalidWords)")
+            }
+            .alert(isPresented: $showSkipAlert) {
+                Alert(
+                    title: Text("Skip verifying words?"),
+                    message: Text("Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"),
+                    primaryButton: .destructive(Text("Yes, Verify Later")) {
+                        navigate(Route.listWallets)
+                    },
+                    secondaryButton: .cancel(Text("Cancel"))
+                )
             }
             .enableInjection()
         } else {
