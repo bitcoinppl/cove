@@ -1,6 +1,7 @@
 import SwiftUI
 
 @Observable class WalletViewModel: WalletViewModelReconciler {
+    private let logger = Log(id: "WalletViewModel")
     var rust: RustWalletViewModel
     var walletMetadata: WalletMetadata
 
@@ -16,7 +17,7 @@ import SwiftUI
     func reconcile(message: WalletViewModelReconcileMessage) {
         Task {
             await MainActor.run {
-                print("[swift] WalletViewModel Reconcile: \(message)")
+                logger.debug("Reconcile: \(message)")
 
                 switch message {
                 case .noOp:

@@ -23,12 +23,12 @@ struct SelectedWalletView: View {
             } else {
                 Text("Loading...")
             }
-        }.onAppear {
+        }
+        .onAppear {
             do {
-                print("getting wallet for \(id)")
                 model = try WalletViewModel(id: id)
             } catch {
-                print("[SWIFT][ERROR] something went very wrong: \(error)")
+                Log.error("Something went very wrong: \(error)")
                 navigate(Route.listWallets)
             }
         }

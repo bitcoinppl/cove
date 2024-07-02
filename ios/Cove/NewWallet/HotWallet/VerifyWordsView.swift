@@ -36,7 +36,7 @@ struct VerifyWordsView: View {
             self.groupedWords = groupedWords
             enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         } catch {
-            print("[SWIFT] [ERROR] VerifyWords failed to initialize")
+            Log.error("VerifyWords failed to initialize")
         }
     }
 
