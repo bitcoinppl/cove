@@ -41,7 +41,7 @@ struct ListWalletsView: View {
         .onAppear {
             if wallets.isEmpty {
                 print("[SWIFT] Something went wrong, no wallets found")
-                navigate(RouteFactory().newWalletSelect())
+                model.resetRoute(to: RouteFactory().newWalletSelect())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

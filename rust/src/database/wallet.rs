@@ -106,7 +106,7 @@ impl WalletTable {
             .get(key.as_str())
             .map_err(|error| WalletTableError::ReadError(error.to_string()))?
             .map(|value| value.value())
-            .expect("wallets not found");
+            .unwrap_or(vec![]);
 
         Ok(value)
     }

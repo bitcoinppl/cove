@@ -56,12 +56,12 @@ impl Router {
     pub fn new() -> Self {
         let database = Database::global();
 
-        let mut default_route = Route::ListWallets;
-
-        // if there is a selected wallet, set it as the default route
-        if let Some(selected_wallet) = database.global_config.get_selected_wallet() {
-            default_route = Route::SelectedWallet(selected_wallet);
-        }
+        // when there are no wallets, show the new wallet screen
+        let default_route = if database.wallets.is_empty(Network::Bitcoin).unwrap_or(true) {
+            Route::NewWallet(Default::default())
+        } else {
+            Route::ListWallets
+        };
 
         Self {
             app: FfiApp::new(),
@@ -70,7 +70,7 @@ impl Router {
         }
     }
 
-    pub fn change_default(&mut self, route: Route) {
+    pub fn reset_routes_to(&mut self, route: Route) {
         self.default = route;
         self.routes.clear();
     }
@@ -84,18 +84,6 @@ impl RouteFactory {
     #[uniffi::constructor]
     pub fn new() -> Self {
         Self
-    }
-
-    pub fn default(&self) -> Route {
-        let database = Database::global();
-
-        // when there are no wallets, show the new wallet screen
-        if database.wallets.is_empty(Network::Bitcoin).unwrap_or(true) {
-            return self.new_wallet_select();
-        }
-
-        // otherwise, for now show the list of wallets
-        Route::ListWallets
     }
 
     pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {

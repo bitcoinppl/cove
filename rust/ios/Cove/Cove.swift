@@ -808,11 +808,6 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRa
  */
 public protocol FfiAppProtocol: AnyObject {
     /**
-     * Change the default route
-     */
-    func changeDefaultRoute(route: Route)
-
-    /**
      * Frontend calls this method to send events to the rust application logic
      */
     func dispatch(event: Event)
@@ -825,6 +820,11 @@ public protocol FfiAppProtocol: AnyObject {
     func goToSelectedWallet() -> WalletId?
 
     func listenForUpdates(updater: FfiUpdater)
+
+    /**
+     * Change the default route, and reset the routes
+     */
+    func resetDefaultRouteTo(route: Route)
 
     /**
      * Select a wallet
@@ -886,15 +886,6 @@ open class FfiApp:
     }
 
     /**
-     * Change the default route
-     */
-    open func changeDefaultRoute(route: Route) { try! rustCall {
-        uniffi_cove_fn_method_ffiapp_change_default_route(self.uniffiClonePointer(),
-                                                          FfiConverterTypeRoute.lower(route), $0)
-    }
-    }
-
-    /**
      * Frontend calls this method to send events to the rust application logic
      */
     open func dispatch(event: Event) { try! rustCall {
@@ -921,6 +912,15 @@ open class FfiApp:
     open func listenForUpdates(updater: FfiUpdater) { try! rustCall {
         uniffi_cove_fn_method_ffiapp_listen_for_updates(self.uniffiClonePointer(),
                                                         FfiConverterCallbackInterfaceFfiUpdater.lower(updater), $0)
+    }
+    }
+
+    /**
+     * Change the default route, and reset the routes
+     */
+    open func resetDefaultRouteTo(route: Route) { try! rustCall {
+        uniffi_cove_fn_method_ffiapp_reset_default_route_to(self.uniffiClonePointer(),
+                                                            FfiConverterTypeRoute.lower(route), $0)
     }
     }
 
@@ -1365,8 +1365,6 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
 }
 
 public protocol RouteFactoryProtocol: AnyObject {
-    func `default`() -> Route
-
     func hotWallet(route: HotWalletRoute) -> Route
 
     func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool
@@ -1423,12 +1421,6 @@ open class RouteFactory:
         }
 
         try! rustCall { uniffi_cove_fn_free_routefactory(pointer, $0) }
-    }
-
-    open func `default`() -> Route {
-        return try! FfiConverterTypeRoute.lift(try! rustCall {
-            uniffi_cove_fn_method_routefactory_default(self.uniffiClonePointer(), $0)
-        })
     }
 
     open func hotWallet(route: HotWalletRoute) -> Route {
@@ -4470,9 +4462,6 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_database_wallets() != 17223 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_ffiapp_change_default_route() != 56180 {
-        return InitializationResult.apiChecksumMismatch
-    }
     if uniffi_cove_checksum_method_ffiapp_dispatch() != 2014 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4483,6 +4472,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 45338 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 40613 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_select_wallet() != 4478 {
@@ -4507,9 +4499,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_routefactory_default() != 64785 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {
