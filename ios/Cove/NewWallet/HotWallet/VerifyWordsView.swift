@@ -8,14 +8,10 @@
 import SwiftUI
 
 struct VerifyWordsView: View {
-    let walletId: WalletId
-    let model: WalletViewModel
-    let validator: WordValidator?
-    let groupedWords: [[GroupedWord]]
+    let id: WalletId
 
     @Environment(\.navigate) private var navigate
-    @State private var enteredWords: [[String]]
-    @State private var tabIndex: Int
+    @State private var tabIndex: Int = 0
 
     @State private var showErrorAlert = false
     @State private var invalidWords: String = ""
@@ -24,26 +20,24 @@ struct VerifyWordsView: View {
 
     @StateObject private var keyboardObserver = KeyboardObserver()
 
-    init(id: WalletId) {
-        walletId = id
-        model = WalletViewModel(id: id)
+    @State private var model: WalletViewModel? = nil
+    @State private var validator: WordValidator? = nil
+    @State private var groupedWords: [[GroupedWord]] = [[]]
+    @State private var enteredWords: [[String]] = [[]]
 
-        var validator: WordValidator?
-
+    func initOnAppear() {
         do {
-            validator = try model.rust.wordValidator()
+            let model = try WalletViewModel(id: id)
+            let validator = try model.rust.wordValidator()
+            let groupedWords = validator.groupedWords()
+
+            self.model = model
+            self.validator = validator
+            self.groupedWords = groupedWords
+            enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         } catch {
-            // TODO: handle error better?, show error alert?
-            print("[SWIFT] Unable to create word validator: \(error)")
+            print("[SWIFT] [ERROR] VerifyWords failed to initialize")
         }
-
-        groupedWords = validator?.groupedWords() ?? []
-        enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
-        tabIndex = 0
-        focusField = nil
-        showSkipAlert = false
-
-        self.validator = validator
     }
 
     var keyboardIsShowing: Bool {
@@ -67,7 +61,7 @@ struct VerifyWordsView: View {
     }
 
     var body: some View {
-        if let validator = validator {
+        if let model = model, let validator = validator {
             SunsetWave {
                 VStack {
                     Spacer()
@@ -83,7 +77,7 @@ struct VerifyWordsView: View {
 
                     FixedGlassCard {
                         TabView(selection: $tabIndex) {
-                            ForEach(Array(self.groupedWords.enumerated()), id: \.offset) { index, wordGroup in
+                            ForEach(Array(validator.groupedWords().enumerated()), id: \.offset) { index, wordGroup in
                                 CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)
                                     .tag(index)
                             }
@@ -151,8 +145,8 @@ struct VerifyWordsView: View {
             }
             .enableInjection()
         } else {
-            // TODO: handle better
-            Text("No words found")
+            Text("Loading....")
+                .onAppear(perform: initOnAppear)
         }
     }
 

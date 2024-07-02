@@ -25,5 +25,5 @@ build-ios profile="debug" device="false":
 run-ios: build-ios
     bash scripts/run-ios.sh
 
-watch: 
-    watchexec --exts rs just build-ios
+watch profile="debug" device="false":
+    watchexec --exts rs just build-ios {{profile}} {{device}}

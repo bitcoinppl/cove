@@ -1,18 +1,14 @@
-//
-//  WalletViewModel.swift
-//  Cove
-//
-//  Created by Praveen Perera on 6/27/24.
-//
-
 import SwiftUI
 
 @Observable class WalletViewModel: WalletViewModelReconciler {
     var rust: RustWalletViewModel
+    var walletMetadata: WalletMetadata
 
-    public init(id: WalletId) {
-        let rust = RustWalletViewModel(id: id)
+    public init(id: WalletId) throws {
+        let rust = try RustWalletViewModel(id: id)
+
         self.rust = rust
+        walletMetadata = rust.getState().walletMetadata
 
         rust.listenForUpdates(reconciler: self)
     }

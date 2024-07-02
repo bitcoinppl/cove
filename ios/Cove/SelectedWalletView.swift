@@ -11,7 +11,7 @@ struct SelectedWalletView: View {
     @Environment(\.navigate) private var navigate
 
     let id: WalletId
-    @State private var model: SelectedWalletViewModel? = nil
+    @State private var model: WalletViewModel? = nil
 
     var body: some View {
         Group {
@@ -26,7 +26,7 @@ struct SelectedWalletView: View {
         }.onAppear {
             do {
                 print("getting wallet for \(id)")
-                model = try SelectedWalletViewModel(id: id)
+                model = try WalletViewModel(id: id)
             } catch {
                 print("[SWIFT][ERROR] something went very wrong: \(error)")
                 navigate(Route.listWallets)
