@@ -50,13 +50,20 @@ struct CoveApp: App {
                     .onChange(of: model.router.routes) { _, new in
                         model.dispatch(event: Event.routeChanged(routes: new))
                     }
-                    .navigationBarItems(leading: Button(action: {
-                        withAnimation {
-                            model.toggleSidebar()
+                    .toolbar {
+                        // if walletsIsEmpty that means only thing they can do is create a wallet
+                        if let walletsIsEmpty = try? Database().wallets().isEmpty(network: .bitcoin), !walletsIsEmpty {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button(action: {
+                                    withAnimation {
+                                        model.toggleSidebar()
+                                    }
+                                }) {
+                                    Image(systemName: "line.horizontal.3")
+                                }
+                            }
                         }
-                    }) {
-                        Image(systemName: "line.horizontal.3")
-                    })
+                    }
             }
             .tint(tintColor)
             .environment(\.navigate) { route in

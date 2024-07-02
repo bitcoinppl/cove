@@ -15,19 +15,6 @@ struct SidebarView: View {
     var menuItems: [MenuItem]
     let screenWidth = UIScreen.main.bounds.width
 
-    init(isShowing: Binding<Bool>, currentRoute: Route, menuItems: [MenuItem]) {
-        self._isShowing = isShowing
-        self.currentRoute = currentRoute
-
-        // on emptyWallet remove the ChangeWallet menu item
-        // note: this is called everytime the sidebar is opened, maybe this should be handled a different way?
-        if let walletsIsEmpty = try? Database().wallets().isEmpty(network: .bitcoin) {
-            self.menuItems = menuItems.filter { item in item.destination != Route.listWallets }
-        } else {
-            self.menuItems = menuItems
-        }
-    }
-
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
             return
