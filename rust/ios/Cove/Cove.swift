@@ -2491,13 +2491,15 @@ public struct WalletMetadata {
     public var id: WalletId
     public var name: String
     public var color: WalletColor
+    public var verified: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool) {
         self.id = id
         self.name = name
         self.color = color
+        self.verified = verified
     }
 }
 
@@ -2512,6 +2514,9 @@ extension WalletMetadata: Equatable, Hashable {
         if lhs.color != rhs.color {
             return false
         }
+        if lhs.verified != rhs.verified {
+            return false
+        }
         return true
     }
 
@@ -2519,6 +2524,7 @@ extension WalletMetadata: Equatable, Hashable {
         hasher.combine(id)
         hasher.combine(name)
         hasher.combine(color)
+        hasher.combine(verified)
     }
 }
 
@@ -2528,7 +2534,8 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
             try WalletMetadata(
                 id: FfiConverterTypeWalletId.read(from: &buf),
                 name: FfiConverterString.read(from: &buf),
-                color: FfiConverterTypeWalletColor.read(from: &buf)
+                color: FfiConverterTypeWalletColor.read(from: &buf),
+                verified: FfiConverterBool.read(from: &buf)
             )
     }
 
@@ -2536,6 +2543,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletId.write(value.id, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterTypeWalletColor.write(value.color, into: &buf)
+        FfiConverterBool.write(value.verified, into: &buf)
     }
 }
 
