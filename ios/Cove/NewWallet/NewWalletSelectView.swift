@@ -28,8 +28,11 @@ struct NewWalletSelect: View {
             .frame(maxHeight: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 15)
-                    .fill(Color.blue)
-                    .brightness(-0.1)
+                    .fill(LinearGradient(colors: [
+                            Color.blue, Color.blue.opacity(0.8), Color.blue.opacity(0.6),
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
             )
             .padding(.vertical, 30)
             .padding(.horizontal, 40)
@@ -43,15 +46,18 @@ struct NewWalletSelect: View {
             .frame(maxHeight: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 15)
-                    .fill(Color.green)
-                    .brightness(-0.15)
+                    .fill(LinearGradient(colors: [
+                            Color.green, Color.green.opacity(0.8), Color.green.opacity(0.6),
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
             )
             .foregroundColor(.white)
             .padding(.vertical, 30)
             .padding(.horizontal, 40)
             Spacer()
         }.background(.black)
-        .enableInjection()
+            .enableInjection()
     }
 
     #if DEBUG
