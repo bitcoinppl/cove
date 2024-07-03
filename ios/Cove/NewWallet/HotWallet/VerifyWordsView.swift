@@ -11,6 +11,8 @@ struct VerifyWordsView: View {
     let id: WalletId
 
     @Environment(\.navigate) private var navigate
+    @Environment(MainViewModel.self) private var appModel
+
     @State private var tabIndex: Int = 0
 
     @State private var showErrorAlert = false
@@ -60,8 +62,23 @@ struct VerifyWordsView: View {
         groupedWords.count - 1
     }
 
+    func confirm(_ model: WalletViewModel, _ validator: WordValidator) {
+        guard isAllWordsValid else {
+            showErrorAlert = true
+            invalidWords = validator.invalidWordsString(enteredWords: enteredWords)
+            return
+        }
+
+        do {
+            try model.rust.markWalletAsVerified()
+            appModel.resetRoute(to: Route.selectedWallet(id))
+        } catch {
+            Log.error("Error marking wallet as verified: \(error)")
+        }
+    }
+
     var body: some View {
-        if let _model = model, let validator = validator {
+        if let model = model, let validator = validator {
             SunsetWave {
                 VStack {
                     Spacer()
@@ -93,12 +110,7 @@ struct VerifyWordsView: View {
 
                     if tabIndex == lastIndex {
                         Button("Confirm") {
-                            if isAllWordsValid {
-                                // confirm
-                            } else {
-                                showErrorAlert = true
-                                invalidWords = validator.invalidWordsString(enteredWords: enteredWords)
-                            }
+                            confirm(model, validator)
                         }
                         .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
                         .padding(.top, 20)
