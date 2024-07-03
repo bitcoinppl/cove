@@ -4,7 +4,7 @@ use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
-    database::Database,
+    database::{error::DatabaseError, Database},
     keychain::{Keychain, KeychainError},
     wallet::{Network, WalletId, WalletMetadata},
     word_validator::WordValidator,
@@ -50,6 +50,9 @@ pub enum WalletViewModelError {
 
     #[error("unable to retrieve the secret words for the wallet {0}")]
     SecretRetrievalError(#[from] KeychainError),
+
+    #[error("unable to mark wallet as verified")]
+    MarkWalletAsVerifiedError(#[from] DatabaseError),
 }
 
 #[uniffi::export]
@@ -79,6 +82,30 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub fn word_validator(&self) -> Result<WordValidator, Error> {
+        let mnemonic = Keychain::global()
+            .get_wallet_key(&self.state.read().wallet_metadata.id)?
+            .ok_or(Error::WalletDoesNotExist)?;
+
+        let validator = WordValidator::new(mnemonic);
+
+        Ok(validator)
+    }
+
+    #[uniffi::method]
+    pub fn mark_wallet_as_verified(&self) -> Result<(), Error> {
+        let wallet_metadata = self.state.read().wallet_metadata.clone();
+
+        let database = Database::global();
+        database
+            .wallets
+            .mark_wallet_as_verified(wallet_metadata.id)
+            .map_err(Error::MarkWalletAsVerifiedError)?;
+
+        Ok(())
+    }
+
+    #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
@@ -88,17 +115,6 @@ impl RustWalletViewModel {
                 reconciler.reconcile(field);
             }
         });
-    }
-
-    #[uniffi::method]
-    pub fn word_validator(&self) -> Result<WordValidator, Error> {
-        let mnemonic = Keychain::global()
-            .get_wallet_key(&self.state.read().wallet_metadata.id)?
-            .ok_or(Error::WalletDoesNotExist)?;
-
-        let validator = WordValidator::new(mnemonic);
-
-        Ok(validator)
     }
 
     /// Action from the frontend to change the state of the view model

@@ -98,6 +98,21 @@ impl WalletTable {
         Ok(wallet_metadata)
     }
 
+    pub fn mark_wallet_as_verified(&self, id: WalletId) -> Result<(), Error> {
+        let mut wallets = self.get(Network::Bitcoin)?;
+
+        // update the wallet
+        wallets.iter_mut().for_each(|wallet| {
+            if wallet.id == id {
+                wallet.verified = true;
+            }
+        });
+
+        self.save(Network::Bitcoin, wallets)?;
+
+        Ok(())
+    }
+
     pub fn get(&self, network: Network) -> Result<Vec<WalletMetadata>, Error> {
         let table = self.read_table()?;
         let key = WalletKey::from(network).to_string();

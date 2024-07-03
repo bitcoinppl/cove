@@ -1664,6 +1664,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func listenForUpdates(reconciler: WalletViewModelReconciler)
 
+    func markWalletAsVerified() throws
+
     func wordValidator() throws -> WordValidator
 }
 
@@ -1733,6 +1735,11 @@ open class RustWalletViewModel:
     open func listenForUpdates(reconciler: WalletViewModelReconciler) { try! rustCall {
         uniffi_cove_fn_method_rustwalletviewmodel_listen_for_updates(self.uniffiClonePointer(),
                                                                      FfiConverterCallbackInterfaceWalletViewModelReconciler.lower(reconciler), $0)
+    }
+    }
+
+    open func markWalletAsVerified() throws { try rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
+        uniffi_cove_fn_method_rustwalletviewmodel_mark_wallet_as_verified(self.uniffiClonePointer(), $0)
     }
     }
 
@@ -3463,6 +3470,8 @@ public enum WalletViewModelError {
     case WalletDoesNotExist
     case SecretRetrievalError(KeychainError
     )
+    case MarkWalletAsVerifiedError(DatabaseError
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -3477,6 +3486,9 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
         case 2: return .WalletDoesNotExist
         case 3: return try .SecretRetrievalError(
                 FfiConverterTypeKeychainError.read(from: &buf)
+            )
+        case 4: return try .MarkWalletAsVerifiedError(
+                FfiConverterTypeDatabaseError.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3494,6 +3506,10 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
         case let .SecretRetrievalError(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeKeychainError.write(v1, into: &buf)
+
+        case let .MarkWalletAsVerifiedError(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeDatabaseError.write(v1, into: &buf)
         }
     }
 }
@@ -4208,6 +4224,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_mark_wallet_as_verified() != 64306 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
