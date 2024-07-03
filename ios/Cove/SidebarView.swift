@@ -69,7 +69,12 @@ struct SidebarView: View {
                 .transition(.move(edge: .leading))
             }
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 
     func goTo(_ item: MenuItem) {
         isShowing.toggle()

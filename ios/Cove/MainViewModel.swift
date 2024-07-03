@@ -1,6 +1,8 @@
 import SwiftUI
 
 @Observable class MainViewModel: FfiUpdater {
+    private let logger = Log(id: "MainViewModel")
+
     var rust: FfiApp
     var router: Router
     var database: Database
@@ -13,6 +15,8 @@ import SwiftUI
         ]
 
     public init() {
+        logger.debug("Initializing MainViewModel")
+
         let rust = FfiApp()
         let state = rust.getState()
 
@@ -47,7 +51,8 @@ import SwiftUI
     func update(update: Update) {
         Task {
             await MainActor.run {
-                print("[SWIFT] Update: \(update)")
+                logger.debug("Update: \(update)")
+                print("update \(update)")
 
                 switch update {
                 case let .routeUpdate(routes: routes):
@@ -64,6 +69,7 @@ import SwiftUI
     }
 
     public func dispatch(event: Event) {
+        logger.debug("dispatch \(event)")
         rust.dispatch(event: event)
     }
 }

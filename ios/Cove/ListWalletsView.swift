@@ -18,7 +18,7 @@ struct ListWalletsView: View {
         do {
             wallets = try Database().wallets().getAll()
         } catch {
-            print("[SWIFT][ERROR] Failed to get wallets \(error)")
+            Log.error("Failed to get wallets \(error)")
             wallets = []
         }
     }
@@ -40,7 +40,7 @@ struct ListWalletsView: View {
         }
         .onAppear {
             if wallets.isEmpty {
-                print("[SWIFT] Something went wrong, no wallets found")
+                Log.error("Something went wrong, no wallets found")
                 model.resetRoute(to: RouteFactory().newWalletSelect())
             }
         }

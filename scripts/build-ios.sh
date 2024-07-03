@@ -5,6 +5,7 @@ set -o pipefail
 cd rust
 
 BUILD_TYPE=$1
+DEVICE=$2
 
 if [ "$BUILD_TYPE" == "release" ] || [ "$BUILD_TYPE" == "--release" ]; then
     BUILD_FLAG="--release"
@@ -27,13 +28,18 @@ cargo run --bin uniffi-bindgen generate --library ./target/debug/libcove.dylib -
 
 if [ $BUILD_TYPE == "release" ]; then
     TARGETS=(
-        aarch64-apple-ios-sim \
+        # aarch64-apple-ios-sim \
         aarch64-apple-ios \
         # x86_64-apple-darwin
         # aarch64-apple-darwin
     )
 else
-    TARGETS=(aarch64-apple-ios-sim)
+    # debug on device or simulator
+    if [ "$DEVICE" == "true" ] || [ "$DEVICE" == "--device" ]; then
+        TARGETS=(aarch64-apple-ios)
+    else
+        TARGETS=(aarch64-apple-ios-sim)
+    fi
 fi 
  
 LIBRARY_FLAGS=""

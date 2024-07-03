@@ -42,12 +42,12 @@ struct HotWalletSelectView: View {
                 Text("Restore Wallet")
                     .font(.title3)
                     .bold()
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.primary)
                     .frame(minWidth: 250, minHeight: 90)
             }
             .overlay(
                 RoundedRectangle(cornerRadius: 15)
-                    .stroke(Color.black, lineWidth: 2)
+                    .stroke(Color.primary, lineWidth: 2)
             )
             .padding(.vertical, 15)
         }

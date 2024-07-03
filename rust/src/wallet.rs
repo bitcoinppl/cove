@@ -30,6 +30,7 @@ pub struct WalletMetadata {
     pub id: WalletId,
     pub name: String,
     pub color: WalletColor,
+    pub verified: bool,
 }
 
 impl WalletMetadata {
@@ -38,6 +39,7 @@ impl WalletMetadata {
             id: WalletId::new(),
             name: name.into(),
             color: WalletColor::random(),
+            verified: false,
         }
     }
 }

@@ -68,7 +68,7 @@ struct WordsView: View {
                             )
                         } catch {
                             // TODO: handle, maybe show an alert?
-                            print("[SWIFT] Error \(error)")
+                            Log.error("Error \(error)")
                         }
                     }
                     .buttonStyle(GradientButtonStyle())

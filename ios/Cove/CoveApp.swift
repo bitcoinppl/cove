@@ -33,6 +33,8 @@ struct CoveApp: App {
         switch model.router.routes.last {
         case .newWallet(.hotWallet(.select)):
             Color.blue
+        case .newWallet(.hotWallet(.import)):
+            Color.blue
         case .newWallet:
             Color.white
         default:
@@ -96,6 +98,7 @@ struct RouteView: View {
         }.onChange(of: model.router.default) { _, newRoute in
             self.route = newRoute
         }
+        .enableInjection()
     }
 
     #if DEBUG

@@ -14,11 +14,13 @@ struct NewWalletSelect: View {
                 Text("How do you want to secure your Bitcoin?")
                     .font(.largeTitle)
                     .multilineTextAlignment(.center)
-                    .foregroundColor(.white)
-            }.padding(.top, 30)
-                .padding(.bottom, 20)
-                .padding(.horizontal, 30)
+            }
+            .padding(.top, 20)
+            .padding(.bottom, 20)
+            .padding(.horizontal, 30)
+
             Spacer()
+
             NavigationLink(value: RouteFactory().newHotWallet()) {
                 Spacer()
                 Text("On This Device").font(.title)
@@ -37,7 +39,9 @@ struct NewWalletSelect: View {
             .padding(.vertical, 30)
             .padding(.horizontal, 40)
             .foregroundColor(.white)
+
             Spacer()
+
             NavigationLink(value: RouteFactory().newColdWallet()) {
                 Spacer()
                 Text("On Hardware Wallet").font(.title)
@@ -56,8 +60,8 @@ struct NewWalletSelect: View {
             .padding(.vertical, 30)
             .padding(.horizontal, 40)
             Spacer()
-        }.background(.black)
-            .enableInjection()
+        }
+        .enableInjection()
     }
 
     #if DEBUG

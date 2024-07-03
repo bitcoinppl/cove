@@ -8,6 +8,7 @@
 import SwiftUI
 
 @Observable class PendingWalletViewModel: PendingWalletViewModelReconciler {
+    private let logger = Log(id: "PendingWalletViewModel")
     var rust: RustPendingWalletViewModel
     var numberOfWords: NumberOfBip39Words
     var bip39Words: [String]
@@ -24,7 +25,7 @@ import SwiftUI
     func reconcile(message: PendingWalletViewModelReconcileMessage) {
         Task {
             await MainActor.run {
-                print("[swift] WalletViewModel Reconcile: \(message)")
+                logger.debug("Reconcile: \(message)")
 
                 switch message {
                 case let .words(numberOfBip39Words):
