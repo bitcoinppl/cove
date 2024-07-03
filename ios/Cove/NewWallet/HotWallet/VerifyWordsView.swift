@@ -36,7 +36,7 @@ struct VerifyWordsView: View {
             self.groupedWords = groupedWords
             enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
         } catch {
-            Log.error("VerifyWords failed to initialize")
+            Log.error("VerifyWords failed to initialize: \(error)")
         }
     }
 
@@ -61,7 +61,7 @@ struct VerifyWordsView: View {
     }
 
     var body: some View {
-        if let model = model, let validator = validator {
+        if let _model = model, let validator = validator {
             SunsetWave {
                 VStack {
                     Spacer()

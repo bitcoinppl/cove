@@ -14,6 +14,10 @@ import SwiftUI
         rust.listenForUpdates(reconciler: self)
     }
 
+    var isVerified: Bool {
+        walletMetadata.verified
+    }
+
     func reconcile(message: WalletViewModelReconcileMessage) {
         Task {
             await MainActor.run {
