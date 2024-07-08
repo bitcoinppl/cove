@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use redb::TableDefinition;
 
-use crate::update::{Update, Updater};
+use crate::app::reconcile::{AppStateReconcileMessage, Updater};
 
 use super::Error;
 
@@ -79,7 +79,7 @@ impl GlobalFlagTable {
             .commit()
             .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
 
-        Updater::send_update(Update::DatabaseUpdate);
+        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
         Ok(())
     }

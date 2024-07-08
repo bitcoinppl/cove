@@ -9,8 +9,7 @@ import SwiftUI
     var isSidebarVisible = false
 
     public var selectedNetwork: Network {
-        logger.debug("selectedNetwork gotten")
-        return rust.getNetwork()
+        rust.network()
     }
 
     public let menuItems: [MenuItem] =
@@ -23,7 +22,7 @@ import SwiftUI
         logger.debug("Initializing MainViewModel")
 
         let rust = FfiApp()
-        let state = rust.getState()
+        let state = rust.state()
 
         router = state.router
         self.rust = rust
@@ -53,7 +52,7 @@ import SwiftUI
         rust.resetDefaultRouteTo(route: route)
     }
 
-    func update(update: Update) {
+    func reconcile(message _: AppStateReconcileMessage) {
         Task {
             await MainActor.run {
                 logger.debug("Update: \(update)")
@@ -62,8 +61,10 @@ import SwiftUI
                 switch update {
                 case let .routeUpdate(routes: routes):
                     self.router.routes = routes
+
                 case .databaseUpdate:
                     self.database = Database()
+
                 case let .defaultRouteChanged(route):
                     // default changes, means root changes, set routes to []
                     self.router.routes = []

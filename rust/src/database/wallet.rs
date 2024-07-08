@@ -3,8 +3,8 @@ use std::{fmt::Display, sync::Arc};
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 
 use crate::{
+    app::reconcile::{AppStateReconcileMessage, Updater},
     redb::Json,
-    update::{Update, Updater},
     wallet::{Network, WalletId, WalletMetadata},
 };
 
@@ -144,7 +144,7 @@ impl WalletTable {
             .commit()
             .map_err(|error| WalletTableError::SaveError(error.to_string()))?;
 
-        Updater::send_update(Update::DatabaseUpdate);
+        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
         Ok(())
     }

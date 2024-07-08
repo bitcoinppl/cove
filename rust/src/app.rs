@@ -1,18 +1,20 @@
 //! MainViewModel
 
+pub mod reconcile;
+
 use std::sync::Arc;
 
 use crate::{
     database::{error::DatabaseError, Database},
     impl_default_for,
     router::{Route, Router},
-    update::{FfiUpdater, Update, Updater},
     wallet::{Network, WalletId},
 };
 use crossbeam::channel::{Receiver, Sender};
 use log::{debug, error};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
+use reconcile::{AppStateReconcileMessage, FfiUpdater, Updater};
 
 pub static APP: OnceCell<App> = OnceCell::new();
 
@@ -40,7 +42,7 @@ impl AppState {
 #[derive(Clone)]
 pub struct App {
     state: Arc<RwLock<AppState>>,
-    update_receiver: Arc<Receiver<Update>>,
+    update_receiver: Arc<Receiver<AppStateReconcileMessage>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -61,8 +63,10 @@ impl App {
         crate::logging::init();
 
         // Set up the updater channel
-        let (sender, receiver): (Sender<Update>, Receiver<Update>) =
-            crossbeam::channel::bounded(1000);
+        let (sender, receiver): (
+            Sender<AppStateReconcileMessage>,
+            Receiver<AppStateReconcileMessage>,
+        ) = crossbeam::channel::bounded(1000);
 
         Updater::init(sender);
         let state = Arc::new(RwLock::new(AppState::new()));
@@ -188,7 +192,7 @@ impl FfiApp {
             .router
             .reset_routes_to(route.clone());
 
-        Updater::send_update(Update::DefaultRouteChanged(route));
+        Updater::send_update(AppStateReconcileMessage::DefaultRouteChanged(route));
     }
 
     /// Frontend calls this method to send events to the rust application logic
@@ -200,11 +204,11 @@ impl FfiApp {
         self.inner().listen_for_updates(updater);
     }
 
-    pub fn get_state(&self) -> AppState {
+    pub fn state(&self) -> AppState {
         self.inner().get_state()
     }
 
-    pub fn get_network(&self) -> Network {
+    pub fn network(&self) -> Network {
         self.inner().state.read().selected_network
     }
 }

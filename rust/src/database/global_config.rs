@@ -3,7 +3,7 @@ use std::sync::Arc;
 use redb::TableDefinition;
 
 use crate::{
-    update::{Update, Updater},
+    app::reconcile::{Update, Updater},
     wallet::{Network, WalletId},
 };
 
@@ -111,7 +111,7 @@ impl GlobalConfigTable {
             .commit()
             .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
 
-        Updater::send_update(Update::DatabaseUpdate);
+        Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }
