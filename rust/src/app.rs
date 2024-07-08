@@ -14,7 +14,7 @@ use crossbeam::channel::{Receiver, Sender};
 use log::{debug, error};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
-use reconcile::{AppStateReconcileMessage, FfiUpdater, Updater};
+use reconcile::{AppStateReconcileMessage, FfiReconcile, Updater};
 
 pub static APP: OnceCell<App> = OnceCell::new();
 
@@ -134,12 +134,12 @@ impl App {
         }
     }
 
-    pub fn listen_for_updates(&self, updater: Box<dyn FfiUpdater>) {
+    pub fn listen_for_updates(&self, updater: Box<dyn FfiReconcile>) {
         let update_receiver = self.update_receiver.clone();
 
         std::thread::spawn(move || {
             while let Ok(field) = update_receiver.recv() {
-                updater.update(field);
+                updater.reconcile(field);
             }
         });
     }
@@ -200,7 +200,7 @@ impl FfiApp {
         self.inner().handle_action(action);
     }
 
-    pub fn listen_for_updates(&self, updater: Box<dyn FfiUpdater>) {
+    pub fn listen_for_updates(&self, updater: Box<dyn FfiReconcile>) {
         self.inner().listen_for_updates(updater);
     }
 

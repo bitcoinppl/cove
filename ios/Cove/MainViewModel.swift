@@ -1,6 +1,6 @@
 import SwiftUI
 
-@Observable class MainViewModel: FfiUpdater {
+@Observable class MainViewModel: FfiReconcile {
     private let logger = Log(id: "MainViewModel")
 
     var rust: FfiApp
@@ -52,17 +52,17 @@ import SwiftUI
         rust.resetDefaultRouteTo(route: route)
     }
 
-    func reconcile(message _: AppStateReconcileMessage) {
+    func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {
-                logger.debug("Update: \(update)")
-                print("update \(update)")
+                logger.debug("Update: \(reconcile)")
+                print("update \(reconcile)")
 
-                switch update {
-                case let .routeUpdate(routes: routes):
+                switch message {
+                case let .routeUpdated(routes: routes):
                     self.router.routes = routes
 
-                case .databaseUpdate:
+                case .databaseUpdated:
                     self.database = Database()
 
                 case let .defaultRouteChanged(route):

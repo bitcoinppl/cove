@@ -29,6 +29,7 @@ impl Updater {
         UPDATER.get().expect("updater is not initialized")
     }
 
+    /// Send the updated value to the frontend
     pub fn send_update(update: AppStateReconcileMessage) {
         Self::global()
             .0
@@ -38,7 +39,7 @@ impl Updater {
 }
 
 #[uniffi::export(callback_interface)]
-pub trait FfiUpdater: Send + Sync + 'static {
+pub trait FfiReconcile: Send + Sync + 'static {
     /// Essentially a callback to the frontend
-    fn update(&self, update: AppStateReconcileMessage);
+    fn reconcile(&self, message: AppStateReconcileMessage);
 }

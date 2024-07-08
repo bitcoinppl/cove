@@ -817,7 +817,7 @@ public protocol FfiAppProtocol: AnyObject {
      */
     func goToSelectedWallet() -> WalletId?
 
-    func listenForUpdates(updater: FfiUpdater)
+    func listenForUpdates(updater: FfiReconcile)
 
     func network() -> Network
 
@@ -905,9 +905,9 @@ open class FfiApp:
         })
     }
 
-    open func listenForUpdates(updater: FfiUpdater) { try! rustCall {
+    open func listenForUpdates(updater: FfiReconcile) { try! rustCall {
         uniffi_cove_fn_method_ffiapp_listen_for_updates(self.uniffiClonePointer(),
-                                                        FfiConverterCallbackInterfaceFfiUpdater.lower(updater), $0)
+                                                        FfiConverterCallbackInterfaceFfiReconcile.lower(updater), $0)
     }
     }
 
@@ -3608,31 +3608,31 @@ public func FfiConverterTypeWalletViewModelReconcileMessage_lower(_ value: Walle
 
 extension WalletViewModelReconcileMessage: Equatable, Hashable {}
 
-public protocol FfiUpdater: AnyObject {
+public protocol FfiReconcile: AnyObject {
     /**
      * Essentially a callback to the frontend
      */
-    func update(update: AppStateReconcileMessage)
+    func reconcile(message: AppStateReconcileMessage)
 }
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
-private enum UniffiCallbackInterfaceFfiUpdater {
+private enum UniffiCallbackInterfaceFfiReconcile {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
-    static var vtable: UniffiVTableCallbackInterfaceFfiUpdater = .init(
-        update: { (
+    static var vtable: UniffiVTableCallbackInterfaceFfiReconcile = .init(
+        reconcile: { (
             uniffiHandle: UInt64,
-            update: RustBuffer,
+            message: RustBuffer,
             _: UnsafeMutableRawPointer,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
             let makeCall = {
                 () throws in
-                guard let uniffiObj = try? FfiConverterCallbackInterfaceFfiUpdater.handleMap.get(handle: uniffiHandle) else {
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceFfiReconcile.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.update(
-                    update: FfiConverterTypeAppStateReconcileMessage.lift(update)
+                return try uniffiObj.reconcile(
+                    message: FfiConverterTypeAppStateReconcileMessage.lift(message)
                 )
             }
 
@@ -3644,25 +3644,25 @@ private enum UniffiCallbackInterfaceFfiUpdater {
             )
         },
         uniffiFree: { (uniffiHandle: UInt64) in
-            let result = try? FfiConverterCallbackInterfaceFfiUpdater.handleMap.remove(handle: uniffiHandle)
+            let result = try? FfiConverterCallbackInterfaceFfiReconcile.handleMap.remove(handle: uniffiHandle)
             if result == nil {
-                print("Uniffi callback interface FfiUpdater: handle missing in uniffiFree")
+                print("Uniffi callback interface FfiReconcile: handle missing in uniffiFree")
             }
         }
     )
 }
 
-private func uniffiCallbackInitFfiUpdater() {
-    uniffi_cove_fn_init_callback_vtable_ffiupdater(&UniffiCallbackInterfaceFfiUpdater.vtable)
+private func uniffiCallbackInitFfiReconcile() {
+    uniffi_cove_fn_init_callback_vtable_ffireconcile(&UniffiCallbackInterfaceFfiReconcile.vtable)
 }
 
 // FfiConverter protocol for callback interfaces
-private enum FfiConverterCallbackInterfaceFfiUpdater {
-    fileprivate static var handleMap = UniffiHandleMap<FfiUpdater>()
+private enum FfiConverterCallbackInterfaceFfiReconcile {
+    fileprivate static var handleMap = UniffiHandleMap<FfiReconcile>()
 }
 
-extension FfiConverterCallbackInterfaceFfiUpdater: FfiConverter {
-    typealias SwiftType = FfiUpdater
+extension FfiConverterCallbackInterfaceFfiReconcile: FfiConverter {
+    typealias SwiftType = FfiReconcile
     typealias FfiType = UInt64
 
     public static func lift(_ handle: UInt64) throws -> SwiftType {
@@ -4258,7 +4258,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet() != 36820 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 45338 {
+    if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 48795 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_network() != 26747 {
@@ -4396,7 +4396,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_rustwalletviewmodel_new() != 37675 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_ffiupdater_update() != 32755 {
+    if uniffi_cove_checksum_method_ffireconcile_reconcile() != 54238 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_keychainaccess_save() != 63039 {
@@ -4416,7 +4416,7 @@ private var initializationResult: InitializationResult = {
     }
 
     uniffiCallbackInitAutoComplete()
-    uniffiCallbackInitFfiUpdater()
+    uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitKeychainAccess()
     uniffiCallbackInitPendingWalletViewModelReconciler()
     uniffiCallbackInitWalletViewModelReconciler()
