@@ -6,7 +6,7 @@ use parking_lot::RwLock;
 use crate::{
     database::{error::DatabaseError, Database},
     keychain::{Keychain, KeychainError},
-    wallet::{Network, WalletId, WalletMetadata},
+    wallet::{WalletId, WalletMetadata},
     word_validator::WordValidator,
 };
 
@@ -61,9 +61,11 @@ impl RustWalletViewModel {
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
+        let network = Database::global().global_config.selected_network();
+
         let wallet_metadata = Database::global()
             .wallets
-            .get_selected_wallet(id, Network::Bitcoin)
+            .get_selected_wallet(id, network)
             .map_err(|error| Error::GetSelectedWalletError(error.to_string()))?
             .ok_or(Error::WalletDoesNotExist)?;
 
@@ -74,11 +76,6 @@ impl RustWalletViewModel {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         })
-    }
-
-    #[uniffi::method]
-    pub fn get_state(&self) -> WalletViewModelState {
-        self.state.read().clone()
     }
 
     #[uniffi::method]

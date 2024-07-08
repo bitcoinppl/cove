@@ -58,11 +58,15 @@ impl GlobalConfigTable {
         Some(wallet_id)
     }
 
-    pub fn selected_network(&self) -> Option<Network> {
-        let network = self.get(GlobalConfigKey::SelectedNetwork).unwrap_or(None)?;
+    pub fn selected_network(&self) -> Network {
+        let network = self
+            .get(GlobalConfigKey::SelectedNetwork)
+            .unwrap_or(None)
+            .unwrap_or("bitcoin".to_string());
+
         let network = Network::try_from(network.as_str()).unwrap_or(Network::Bitcoin);
 
-        Some(network)
+        network
     }
 
     pub fn set_selected_network(&self, network: Network) -> Result<(), Error> {

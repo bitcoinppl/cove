@@ -985,7 +985,7 @@ public protocol GlobalConfigTableProtocol: AnyObject {
 
     func selectWallet(id: WalletId) throws
 
-    func selectedNetwork() -> Network?
+    func selectedNetwork() -> Network
 
     func selectedWallet() -> WalletId?
 
@@ -1047,8 +1047,8 @@ open class GlobalConfigTable:
     }
     }
 
-    open func selectedNetwork() -> Network? {
-        return try! FfiConverterOptionTypeNetwork.lift(try! rustCall {
+    open func selectedNetwork() -> Network {
+        return try! FfiConverterTypeNetwork.lift(try! rustCall {
             uniffi_cove_fn_method_globalconfigtable_selected_network(self.uniffiClonePointer(), $0)
         })
     }
@@ -1684,8 +1684,6 @@ public protocol RustWalletViewModelProtocol: AnyObject {
      */
     func dispatch(action: WalletViewModelAction)
 
-    func getState() -> WalletViewModelState
-
     func listenForUpdates(reconciler: WalletViewModelReconciler)
 
     func markWalletAsVerified() throws
@@ -1748,12 +1746,6 @@ open class RustWalletViewModel:
         uniffi_cove_fn_method_rustwalletviewmodel_dispatch(self.uniffiClonePointer(),
                                                            FfiConverterTypeWalletViewModelAction.lower(action), $0)
     }
-    }
-
-    open func getState() -> WalletViewModelState {
-        return try! FfiConverterTypeWalletViewModelState.lift(try! rustCall {
-            uniffi_cove_fn_method_rustwalletviewmodel_get_state(self.uniffiClonePointer(), $0)
-        })
     }
 
     open func listenForUpdates(reconciler: WalletViewModelReconciler) { try! rustCall {
@@ -1975,7 +1967,7 @@ public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UnsafeMutable
 }
 
 public protocol WalletTableProtocol: AnyObject {
-    func getAll() throws -> [WalletMetadata]
+    func all() throws -> [WalletMetadata]
 
     func isEmpty(network: Network) throws -> Bool
 
@@ -2022,9 +2014,9 @@ open class WalletTable:
         try! rustCall { uniffi_cove_fn_free_wallettable(pointer, $0) }
     }
 
-    open func getAll() throws -> [WalletMetadata] {
+    open func all() throws -> [WalletMetadata] {
         return try FfiConverterSequenceTypeWalletMetadata.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
-            uniffi_cove_fn_method_wallettable_get_all(self.uniffiClonePointer(), $0)
+            uniffi_cove_fn_method_wallettable_all(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -2200,13 +2192,11 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> Unsaf
 
 public struct AppState {
     public var router: Router
-    public var selectedNetwork: Network
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(router: Router, selectedNetwork: Network) {
+    public init(router: Router) {
         self.router = router
-        self.selectedNetwork = selectedNetwork
     }
 }
 
@@ -2214,14 +2204,12 @@ public struct FfiConverterTypeAppState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppState {
         return
             try AppState(
-                router: FfiConverterTypeRouter.read(from: &buf),
-                selectedNetwork: FfiConverterTypeNetwork.read(from: &buf)
+                router: FfiConverterTypeRouter.read(from: &buf)
             )
     }
 
     public static func write(_ value: AppState, into buf: inout [UInt8]) {
         FfiConverterTypeRouter.write(value.router, into: &buf)
-        FfiConverterTypeNetwork.write(value.selectedNetwork, into: &buf)
     }
 }
 
@@ -3979,27 +3967,6 @@ private struct FfiConverterOptionString: FfiConverterRustBuffer {
     }
 }
 
-private struct FfiConverterOptionTypeNetwork: FfiConverterRustBuffer {
-    typealias SwiftType = Network?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeNetwork.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeNetwork.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
 private struct FfiConverterOptionTypeWalletId: FfiConverterRustBuffer {
     typealias SwiftType = WalletId?
 
@@ -4279,7 +4246,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 52001 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_globalconfigtable_selected_network() != 660 {
+    if uniffi_cove_checksum_method_globalconfigtable_selected_network() != 7657 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalconfigtable_selected_wallet() != 51568 {
@@ -4342,9 +4309,6 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_get_state() != 55828 {
-        return InitializationResult.apiChecksumMismatch
-    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4354,7 +4318,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_wallettable_get_all() != 16410 {
+    if uniffi_cove_checksum_method_wallettable_all() != 50582 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wallettable_is_empty() != 56834 {

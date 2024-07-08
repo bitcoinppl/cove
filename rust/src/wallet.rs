@@ -1,4 +1,5 @@
 use crate::{
+    database::Database,
     impl_default_for,
     keys::{Descriptor, DescriptorSecretKey},
     new_type,
@@ -165,11 +166,9 @@ pub struct Wallet {
 }
 
 impl PendingWallet {
-    pub fn new(
-        number_of_words: NumberOfBip39Words,
-        network: Network,
-        passphrase: Option<String>,
-    ) -> Self {
+    pub fn new(number_of_words: NumberOfBip39Words, passphrase: Option<String>) -> Self {
+        let network = Database::global().global_config.selected_network();
+
         let mnemonic = number_of_words.to_mnemonic();
         let descriptor_secret_key =
             DescriptorSecretKey::new(network, mnemonic.clone(), passphrase.clone());

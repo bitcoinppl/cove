@@ -4,7 +4,7 @@ use crate::{
     app::FfiApp,
     database::Database,
     impl_default_for,
-    wallet::{Network, NumberOfBip39Words, WalletId},
+    wallet::{NumberOfBip39Words, WalletId},
 };
 use derive_more::From;
 
@@ -57,8 +57,10 @@ impl Router {
     pub fn new() -> Self {
         let database = Database::global();
 
+        let network = database.global_config.selected_network();
+
         // when there are no wallets, show the new wallet screen
-        let default_route = if database.wallets.is_empty(Network::Bitcoin).unwrap_or(true) {
+        let default_route = if database.wallets.is_empty(network).unwrap_or(true) {
             Route::NewWallet(Default::default())
         } else {
             Route::ListWallets

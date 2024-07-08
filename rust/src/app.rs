@@ -21,20 +21,13 @@ pub static APP: OnceCell<App> = OnceCell::new();
 #[derive(Clone, uniffi::Record)]
 pub struct AppState {
     router: Router,
-    selected_network: Network,
 }
 
 impl_default_for!(AppState);
 impl AppState {
     pub fn new() -> Self {
-        let selected_network = Database::global()
-            .global_config
-            .selected_network()
-            .unwrap_or(Network::Bitcoin);
-
         Self {
             router: Router::new(),
-            selected_network,
         }
     }
 }
@@ -118,18 +111,12 @@ impl App {
             }
 
             AppAction::ChangeNetwork { network } => {
-                debug!(
-                    "Network change OLD: {:?}, NEW: {:?}",
-                    state.read().selected_network,
-                    network
-                );
+                debug!("Network change, NEW: {:?}", network);
 
-                // ignore database save error?
-                let _ = Database::global()
+                Database::global()
                     .global_config
-                    .set_selected_network(network);
-
-                state.write().selected_network = network;
+                    .set_selected_network(network)
+                    .expect("failed to set network, please report this bug");
             }
         }
     }
@@ -209,7 +196,7 @@ impl FfiApp {
     }
 
     pub fn network(&self) -> Network {
-        self.inner().state.read().selected_network
+        Database::global().global_config.selected_network()
     }
 }
 

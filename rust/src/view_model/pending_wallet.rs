@@ -6,7 +6,7 @@ use parking_lot::RwLock;
 use crate::{
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    wallet::{GroupedWord, Network, NumberOfBip39Words, PendingWallet, WalletMetadata, WordAccess},
+    wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WalletMetadata, WordAccess},
 };
 
 type Error = PendingWalletViewModelError;
@@ -45,6 +45,7 @@ pub struct RustPendingWalletViewModel {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+
 pub struct PendingWalletViewModelState {
     pub number_of_words: NumberOfBip39Words,
     pub wallet: Arc<PendingWallet>,
@@ -162,7 +163,7 @@ impl RustPendingWalletViewModel {
             PendingWalletViewModelAction::UpdateWords(words) => {
                 {
                     let mut state = self.state.write();
-                    state.wallet = PendingWallet::new(words, Network::Bitcoin, None).into();
+                    state.wallet = PendingWallet::new(words, None).into();
                     state.number_of_words = words;
                 }
 
@@ -178,7 +179,7 @@ impl PendingWalletViewModelState {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         Self {
             number_of_words,
-            wallet: PendingWallet::new(number_of_words, Network::Bitcoin, None).into(),
+            wallet: PendingWallet::new(number_of_words, None).into(),
         }
     }
 }
