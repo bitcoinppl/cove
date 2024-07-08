@@ -23,7 +23,7 @@ struct SidebarView: View {
                         Color.blue,
                         Color.blue.opacity(0.9),
                         Color.blue.opacity(0.8),
-                        Color.blue.opacity(0.7)
+                        Color.blue.opacity(0.7),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -32,7 +32,7 @@ struct SidebarView: View {
             return
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.8), Color.white.opacity(0.7)
+                        Color.white.opacity(0.8), Color.white.opacity(0.7),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -51,6 +51,7 @@ struct SidebarView: View {
 
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 30) {
+                        Spacer()
                         ForEach(menuItems, id: \.destination) { item in
                             Button(action: { goTo(item) }) {
                                 Label(item.title, systemImage: item.icon)
@@ -59,6 +60,19 @@ struct SidebarView: View {
                                     )
                                     .padding(.leading, 30)
                             }
+                        }
+
+                        Spacer()
+                        HStack(alignment: .center) {
+                            Button(action: { goTo(.settings) }, label: {
+                                HStack {
+                                    Image(systemName: "gear")
+                                        .foregroundStyle(Color.black.gradient.opacity(0.5))
+                                    Text("Settings")
+                                        .foregroundStyle(Color.black.gradient)
+                                }
+                            })
+                            .frame(maxWidth: screenWidth * 0.75)
                         }
                     }
                     .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
@@ -73,11 +87,16 @@ struct SidebarView: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 
+    func goTo(_ route: Route) {
+        isShowing = false
+        navigate(route)
+    }
+
     func goTo(_ item: MenuItem) {
-        isShowing.toggle()
+        isShowing = false
         navigate(item.destination)
     }
 }

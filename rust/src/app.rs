@@ -1,31 +1,38 @@
 //! MainViewModel
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::{
     database::{error::DatabaseError, Database},
-    event::Event,
     impl_default_for,
     router::{Route, Router},
     update::{FfiUpdater, Update, Updater},
-    wallet::WalletId,
+    wallet::{Network, WalletId},
 };
 use crossbeam::channel::{Receiver, Sender};
 use log::{debug, error};
 use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
 
 pub static APP: OnceCell<App> = OnceCell::new();
 
 #[derive(Clone, uniffi::Record)]
 pub struct AppState {
     router: Router,
+    selected_network: Network,
 }
 
 impl_default_for!(AppState);
 impl AppState {
     pub fn new() -> Self {
+        let selected_network = Database::global()
+            .global_config
+            .selected_network()
+            .unwrap_or(Network::Bitcoin);
+
         Self {
             router: Router::new(),
+            selected_network,
         }
     }
 }
@@ -34,6 +41,13 @@ impl AppState {
 pub struct App {
     state: Arc<RwLock<AppState>>,
     update_receiver: Arc<Receiver<Update>>,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[allow(clippy::enum_variant_names)]
+pub enum AppAction {
+    UpdateRoute { routes: Vec<Route> },
+    ChangeNetwork { network: Network },
 }
 
 impl_default_for!(App);
@@ -85,18 +99,33 @@ impl App {
     }
 
     /// Handle event received from frontend
-    pub fn handle_event(&self, event: Event) {
+    pub fn handle_action(&self, event: AppAction) {
         // Handle event
         let state = self.state.clone();
         match event {
-            Event::RouteChanged { routes } => {
-                log::debug!(
+            AppAction::UpdateRoute { routes } => {
+                debug!(
                     "Route change OLD: {:?}, NEW: {:?}",
-                    state.read().unwrap().router.routes,
+                    state.read().router.routes,
                     routes
                 );
 
-                state.write().unwrap().router.routes = routes;
+                state.write().router.routes = routes;
+            }
+
+            AppAction::ChangeNetwork { network } => {
+                debug!(
+                    "Network change OLD: {:?}, NEW: {:?}",
+                    state.read().selected_network,
+                    network
+                );
+
+                // ignore database save error?
+                let _ = Database::global()
+                    .global_config
+                    .set_selected_network(network);
+
+                state.write().selected_network = network;
             }
         }
     }
@@ -112,7 +141,7 @@ impl App {
     }
 
     pub fn get_state(&self) -> AppState {
-        self.state.read().unwrap().clone()
+        self.state.read().clone()
     }
 }
 
@@ -141,7 +170,7 @@ impl FfiApp {
 
     /// Get the selected wallet
     pub fn go_to_selected_wallet(&self) -> Option<WalletId> {
-        let selected_wallet = Database::global().global_config.get_selected_wallet()?;
+        let selected_wallet = Database::global().global_config.selected_wallet()?;
 
         // change default route to selected wallet
         self.reset_default_route_to(Route::SelectedWallet(selected_wallet.clone()));
@@ -156,7 +185,6 @@ impl FfiApp {
         self.inner()
             .state
             .write()
-            .unwrap()
             .router
             .reset_routes_to(route.clone());
 
@@ -164,8 +192,8 @@ impl FfiApp {
     }
 
     /// Frontend calls this method to send events to the rust application logic
-    pub fn dispatch(&self, event: Event) {
-        self.inner().handle_event(event);
+    pub fn dispatch(&self, action: AppAction) {
+        self.inner().handle_action(action);
     }
 
     pub fn listen_for_updates(&self, updater: Box<dyn FfiUpdater>) {
@@ -174,6 +202,10 @@ impl FfiApp {
 
     pub fn get_state(&self) -> AppState {
         self.inner().get_state()
+    }
+
+    pub fn get_network(&self) -> Network {
+        self.inner().state.read().selected_network
     }
 }
 

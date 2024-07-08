@@ -13,6 +13,7 @@ pub enum Route {
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
+    Settings,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]

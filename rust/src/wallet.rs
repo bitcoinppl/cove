@@ -9,11 +9,36 @@ use itertools::Itertools as _;
 use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, derive_more::Display)]
+#[derive(
+    Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, derive_more::Display, strum::EnumIter,
+)]
 pub enum Network {
     Bitcoin,
     Testnet,
+}
+
+#[uniffi::export]
+pub fn network_to_string(network: Network) -> String {
+    network.to_string()
+}
+
+#[uniffi::export]
+pub fn all_networks() -> Vec<Network> {
+    Network::iter().collect()
+}
+
+impl TryFrom<&str> for Network {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "bitcoin" | "Bitcoin" => Ok(Network::Bitcoin),
+            "testnet" | "Testnet" => Ok(Network::Testnet),
+            _ => Err(format!("Unknown network: {}", value)),
+        }
+    }
 }
 
 new_type!(WalletId, String);

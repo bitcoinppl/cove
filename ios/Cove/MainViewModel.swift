@@ -8,6 +8,11 @@ import SwiftUI
     var database: Database
     var isSidebarVisible = false
 
+    public var selectedNetwork: Network {
+        logger.debug("selectedNetwork gotten")
+        return rust.getNetwork()
+    }
+
     public let menuItems: [MenuItem] =
         [
             MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "wallet.pass.fill"),
@@ -68,8 +73,8 @@ import SwiftUI
         }
     }
 
-    public func dispatch(event: Event) {
-        logger.debug("dispatch \(event)")
-        rust.dispatch(event: event)
+    public func dispatch(action: AppAction) {
+        logger.debug("dispatch \(action)")
+        rust.dispatch(action: action)
     }
 }
