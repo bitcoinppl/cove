@@ -119,6 +119,16 @@ impl WalletTable {
         Ok(())
     }
 
+    pub fn delete(&self, id: &WalletId) -> Result<(), Error> {
+        let network = Database::global().global_config.selected_network();
+        let mut wallets = self.get(network)?;
+
+        wallets.retain(|wallet| &wallet.id != id);
+        self.save(network, wallets)?;
+
+        Ok(())
+    }
+
     pub fn get(&self, network: Network) -> Result<Vec<WalletMetadata>, Error> {
         let table = self.read_table()?;
         let key = WalletKey::from(network).to_string();
@@ -133,8 +143,6 @@ impl WalletTable {
     }
 
     pub fn save(&self, network: Network, wallets: Vec<WalletMetadata>) -> Result<(), Error> {
-        assert!(!wallets.is_empty());
-
         let write_txn = self.db.begin_write()?;
 
         {

@@ -10,6 +10,14 @@ import SwiftUI
 struct NewWalletSelect: View {
     @Environment(\.colorScheme) var colorScheme
 
+    var opacityStart: Double {
+        colorScheme == .dark ? 0.8 : 0.9
+    }
+
+    var opacityEnd: Double {
+        colorScheme == .dark ? 0.6 : 0.8
+    }
+
     var body: some View {
         VStack {
             HStack {
@@ -33,7 +41,7 @@ struct NewWalletSelect: View {
             .background(
                 RoundedRectangle(cornerRadius: 15)
                     .fill(LinearGradient(colors: [
-                            Color.blue, Color.blue.opacity(0.8), Color.blue.opacity(0.6),
+                            Color.blue, Color.blue.opacity(opacityStart), Color.blue.opacity(opacityEnd),
                         ],
                         startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
@@ -53,7 +61,7 @@ struct NewWalletSelect: View {
             .background(
                 RoundedRectangle(cornerRadius: 15)
                     .fill(LinearGradient(colors: [
-                            Color.green, Color.green.opacity(0.8), Color.green.opacity(0.6),
+                            Color.green, Color.green.opacity(opacityStart), Color.green.opacity(opacityEnd),
                         ],
                         startPoint: .topLeading, endPoint: .bottomTrailing)
                     )
@@ -62,9 +70,6 @@ struct NewWalletSelect: View {
             .padding(.vertical, 30)
             .padding(.horizontal, 40)
             Spacer()
-        }
-        .onAppear {
-            print("Color Scheme: \(colorScheme)")
         }
         .enableInjection()
     }

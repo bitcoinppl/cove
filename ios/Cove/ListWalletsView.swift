@@ -22,11 +22,6 @@ struct ListWalletsView: View {
             Log.error("Failed to get wallets \(error)")
             wallets = []
         }
-
-        if wallets.isEmpty {
-            Log.debug("No wallets found, going to new wallet screen")
-            model.resetRoute(to: RouteFactory().newWalletSelect())
-        }
     }
 
     var body: some View {
@@ -42,6 +37,12 @@ struct ListWalletsView: View {
                     }
                 }
                 .padding(.top, 10)
+            }
+        }
+        .onAppear {
+            if wallets.isEmpty {
+                Log.debug("No wallets found, going to new wallet screen")
+                model.resetRoute(to: RouteFactory().newWalletSelect())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -4,8 +4,10 @@ use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
+    app::FfiApp,
     database::{error::DatabaseError, Database},
     keychain::{Keychain, KeychainError},
+    router::Route,
     wallet::{WalletId, WalletMetadata},
     word_validator::WordValidator,
 };
@@ -76,6 +78,24 @@ impl RustWalletViewModel {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         })
+    }
+
+    #[uniffi::method]
+    pub fn delete_wallet(&self) -> Result<(), Error> {
+        let wallet_id = self.state.read().wallet_metadata.id.clone();
+        log::debug!("deleting wallet {wallet_id}");
+
+        // delete the wallet from the database
+        let database = Database::global();
+        database.wallets.delete(&wallet_id)?;
+
+        // delete the secret key from the keychain
+        Keychain::global().delete_wallet_key(&wallet_id);
+
+        // reset the default route to list wallets
+        FfiApp::global().reset_default_route_to(Route::ListWallets);
+
+        Ok(())
     }
 
     #[uniffi::method]

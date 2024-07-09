@@ -65,7 +65,7 @@ impl Router {
         };
 
         Self {
-            app: FfiApp::new(),
+            app: FfiApp::global(),
             default: default_route,
             routes: vec![],
         }
