@@ -1,4 +1,5 @@
 use crate::{
+    database::Database,
     impl_default_for,
     keys::{Descriptor, DescriptorSecretKey},
     new_type,
@@ -9,11 +10,36 @@ use itertools::Itertools as _;
 use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, derive_more::Display)]
+#[derive(
+    Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, derive_more::Display, strum::EnumIter,
+)]
 pub enum Network {
     Bitcoin,
     Testnet,
+}
+
+#[uniffi::export]
+pub fn network_to_string(network: Network) -> String {
+    network.to_string()
+}
+
+#[uniffi::export]
+pub fn all_networks() -> Vec<Network> {
+    Network::iter().collect()
+}
+
+impl TryFrom<&str> for Network {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "bitcoin" | "Bitcoin" => Ok(Network::Bitcoin),
+            "testnet" | "Testnet" => Ok(Network::Testnet),
+            _ => Err(format!("Unknown network: {}", value)),
+        }
+    }
 }
 
 new_type!(WalletId, String);
@@ -140,11 +166,9 @@ pub struct Wallet {
 }
 
 impl PendingWallet {
-    pub fn new(
-        number_of_words: NumberOfBip39Words,
-        network: Network,
-        passphrase: Option<String>,
-    ) -> Self {
+    pub fn new(number_of_words: NumberOfBip39Words, passphrase: Option<String>) -> Self {
+        let network = Database::global().global_config.selected_network();
+
         let mnemonic = number_of_words.to_mnemonic();
         let descriptor_secret_key =
             DescriptorSecretKey::new(network, mnemonic.clone(), passphrase.clone());

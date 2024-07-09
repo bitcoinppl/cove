@@ -16,10 +16,16 @@ struct ListWalletsView: View {
         self.model = model
 
         do {
-            wallets = try Database().wallets().getAll()
+            wallets = try Database().wallets().all()
+            Log.debug("Wallets: \(wallets)")
         } catch {
             Log.error("Failed to get wallets \(error)")
             wallets = []
+        }
+
+        if wallets.isEmpty {
+            Log.debug("No wallets found, going to new wallet screen")
+            model.resetRoute(to: RouteFactory().newWalletSelect())
         }
     }
 
@@ -38,14 +44,8 @@ struct ListWalletsView: View {
                 .padding(.top, 10)
             }
         }
-        .onAppear {
-            if wallets.isEmpty {
-                Log.error("Something went wrong, no wallets found")
-                model.resetRoute(to: RouteFactory().newWalletSelect())
-            }
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.primary)
+        .background(.background)
         .enableInjection()
     }
 

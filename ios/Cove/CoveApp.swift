@@ -33,9 +33,7 @@ struct CoveApp: App {
         switch model.router.routes.last {
         case .newWallet(.hotWallet(.select)):
             Color.blue
-        case .newWallet(.hotWallet(.import)):
-            Color.blue
-        case .newWallet:
+        case .newWallet(.hotWallet(_)):
             Color.white
         default:
             Color.blue
@@ -50,19 +48,16 @@ struct CoveApp: App {
                         RouteView(model: model, route: route)
                     })
                     .onChange(of: model.router.routes) { _, new in
-                        model.dispatch(event: Event.routeChanged(routes: new))
+                        model.dispatch(action: AppAction.updateRoute(routes: new))
                     }
                     .toolbar {
-                        // if walletsIsEmpty that means only thing they can do is create a wallet
-                        if let walletsIsEmpty = try? Database().wallets().isEmpty(network: .bitcoin), !walletsIsEmpty {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button(action: {
-                                    withAnimation {
-                                        model.toggleSidebar()
-                                    }
-                                }) {
-                                    Image(systemName: "line.horizontal.3")
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                withAnimation {
+                                    model.toggleSidebar()
                                 }
+                            }) {
+                                Image(systemName: "line.horizontal.3")
                             }
                         }
                     }
@@ -73,48 +68,6 @@ struct CoveApp: App {
             }
             .environment(model)
         }
-    }
-}
-
-struct MenuItem {
-    let destination: Route
-    let title: String
-    let icon: String
-}
-
-struct RouteView: View {
-    @Bindable var model: MainViewModel
-    @State var route: Route
-
-    init(model: MainViewModel, route: Route? = nil) {
-        self.model = model
-        self.route = route ?? model.router.default
-    }
-
-    var body: some View {
-        ZStack {
-            routeToView(model: model, route: route)
-            SidebarView(isShowing: $model.isSidebarVisible, currentRoute: route, menuItems: model.menuItems)
-        }.onChange(of: model.router.default) { _, newRoute in
-            self.route = newRoute
-        }
-        .enableInjection()
-    }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
-}
-
-@MainActor @ViewBuilder
-func routeToView(model: MainViewModel, route: Route) -> some View {
-    switch route {
-    case .listWallets:
-        ListWalletsView(model: model)
-    case let .newWallet(route: route):
-        NewWalletView(route: route)
-    case let .selectedWallet(walletId):
-        SelectedWalletView(id: walletId)
     }
 }
 

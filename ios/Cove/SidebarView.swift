@@ -8,12 +8,20 @@
 import SwiftUI
 
 struct SidebarView: View {
+    @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
     @Binding var isShowing: Bool
     let currentRoute: Route
 
-    var menuItems: [MenuItem]
     let screenWidth = UIScreen.main.bounds.width
+
+    var walletsIsEmpty: Bool {
+        if let walletsIsEmpty = try? Database().wallets().isEmpty() {
+            return walletsIsEmpty
+        }
+
+        return true
+    }
 
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
@@ -23,7 +31,7 @@ struct SidebarView: View {
                         Color.blue,
                         Color.blue.opacity(0.9),
                         Color.blue.opacity(0.8),
-                        Color.blue.opacity(0.7)
+                        Color.blue.opacity(0.7),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -32,7 +40,7 @@ struct SidebarView: View {
             return
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.8), Color.white.opacity(0.7)
+                        Color.white.opacity(0.8), Color.white.opacity(0.7),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -51,14 +59,37 @@ struct SidebarView: View {
 
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 30) {
-                        ForEach(menuItems, id: \.destination) { item in
-                            Button(action: { goTo(item) }) {
-                                Label(item.title, systemImage: item.icon)
+                        Spacer()
+
+                        Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
+                            Label("New Wallet", systemImage: "wallet.pass.fill")
+                                .foregroundStyle(
+                                    setForeground(RouteFactory().newWalletSelect())
+                                )
+                                .padding(.leading, 30)
+                        }
+
+                        if !walletsIsEmpty {
+                            Button(action: { goTo(Route.listWallets) }) {
+                                Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
                                     .foregroundStyle(
-                                        setForeground(item.destination)
+                                        setForeground(Route.listWallets)
                                     )
                                     .padding(.leading, 30)
                             }
+                        }
+
+                        Spacer()
+                        HStack(alignment: .center) {
+                            Button(action: { goTo(.settings) }, label: {
+                                HStack {
+                                    Image(systemName: "gear")
+                                        .foregroundStyle(Color.black.gradient.opacity(0.5))
+                                    Text("Settings")
+                                        .foregroundStyle(Color.black.gradient)
+                                }
+                            })
+                            .frame(maxWidth: screenWidth * 0.75)
                         }
                     }
                     .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
@@ -73,18 +104,23 @@ struct SidebarView: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 
-    func goTo(_ item: MenuItem) {
-        isShowing.toggle()
-        navigate(item.destination)
+    func goTo(_ route: Route) {
+        isShowing = false
+
+        if walletsIsEmpty && route == Route.newWallet(.select) {
+            return app.resetRoute(to: RouteFactory().newWalletSelect())
+        } else {
+            navigate(route)
+        }
     }
 }
 
 #Preview {
     ZStack {
-        SidebarView(isShowing: Binding.constant(true), currentRoute: Route.listWallets, menuItems: MainViewModel().menuItems)
+        SidebarView(isShowing: Binding.constant(true), currentRoute: Route.listWallets)
     }
     .background(Color.white)
 }

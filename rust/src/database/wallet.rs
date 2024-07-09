@@ -1,14 +1,15 @@
 use std::{fmt::Display, sync::Arc};
 
+use log::debug;
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 
 use crate::{
+    app::reconcile::{AppStateReconcileMessage, Updater},
     redb::Json,
-    update::{Update, Updater},
     wallet::{Network, WalletId, WalletMetadata},
 };
 
-use super::Error;
+use super::{Database, Error};
 
 const TABLE: TableDefinition<&'static str, Json<Vec<WalletMetadata>>> =
     TableDefinition::new("wallets.json");
@@ -49,7 +50,9 @@ pub struct WalletTable {
 
 #[uniffi::export]
 impl WalletTable {
-    pub fn is_empty(&self, network: Network) -> Result<bool, Error> {
+    pub fn is_empty(&self) -> Result<bool, Error> {
+        let network = Database::global().global_config.selected_network();
+
         let table = self.read_table()?;
         if table.is_empty()? {
             return Ok(true);
@@ -63,9 +66,11 @@ impl WalletTable {
         Ok(count)
     }
 
-    pub fn get_all(&self) -> Result<Vec<WalletMetadata>, Error> {
-        // TODO: get network from context (database) global
-        let wallets = self.get(Network::Bitcoin)?;
+    pub fn all(&self) -> Result<Vec<WalletMetadata>, Error> {
+        let network = Database::global().global_config.selected_network();
+
+        debug!("getting all wallets for {network}");
+        let wallets = self.get(network)?;
 
         Ok(wallets)
     }
@@ -99,7 +104,8 @@ impl WalletTable {
     }
 
     pub fn mark_wallet_as_verified(&self, id: WalletId) -> Result<(), Error> {
-        let mut wallets = self.get(Network::Bitcoin)?;
+        let network = Database::global().global_config.selected_network();
+        let mut wallets = self.get(network)?;
 
         // update the wallet
         wallets.iter_mut().for_each(|wallet| {
@@ -144,7 +150,7 @@ impl WalletTable {
             .commit()
             .map_err(|error| WalletTableError::SaveError(error.to_string()))?;
 
-        Updater::send_update(Update::DatabaseUpdate);
+        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
         Ok(())
     }

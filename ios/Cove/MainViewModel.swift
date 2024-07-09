@@ -1,6 +1,6 @@
 import SwiftUI
 
-@Observable class MainViewModel: FfiUpdater {
+@Observable class MainViewModel: FfiReconcile {
     private let logger = Log(id: "MainViewModel")
 
     var rust: FfiApp
@@ -8,17 +8,15 @@ import SwiftUI
     var database: Database
     var isSidebarVisible = false
 
-    public let menuItems: [MenuItem] =
-        [
-            MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "wallet.pass.fill"),
-            MenuItem(destination: Route.listWallets, title: "Change Wallet", icon: "arrow.uturn.right.square.fill"),
-        ]
+    public var selectedNetwork: Network {
+        rust.network()
+    }
 
     public init() {
         logger.debug("Initializing MainViewModel")
 
         let rust = FfiApp()
-        let state = rust.getState()
+        let state = rust.state()
 
         router = state.router
         self.rust = rust
@@ -48,17 +46,19 @@ import SwiftUI
         rust.resetDefaultRouteTo(route: route)
     }
 
-    func update(update: Update) {
+    func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {
-                logger.debug("Update: \(update)")
-                print("update \(update)")
+                logger.debug("Update: \(message)")
+                print("update \(message)")
 
-                switch update {
-                case let .routeUpdate(routes: routes):
+                switch message {
+                case let .routeUpdated(routes: routes):
                     self.router.routes = routes
-                case .databaseUpdate:
+
+                case .databaseUpdated:
                     self.database = Database()
+
                 case let .defaultRouteChanged(route):
                     // default changes, means root changes, set routes to []
                     self.router.routes = []
@@ -68,8 +68,8 @@ import SwiftUI
         }
     }
 
-    public func dispatch(event: Event) {
-        logger.debug("dispatch \(event)")
-        rust.dispatch(event: event)
+    public func dispatch(action: AppAction) {
+        logger.debug("dispatch \(action)")
+        rust.dispatch(action: action)
     }
 }

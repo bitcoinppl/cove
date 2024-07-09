@@ -3,8 +3,8 @@ use std::sync::Arc;
 use redb::TableDefinition;
 
 use crate::{
-    update::{Update, Updater},
-    wallet::WalletId,
+    app::reconcile::{Update, Updater},
+    wallet::{Network, WalletId},
 };
 
 use super::Error;
@@ -14,6 +14,7 @@ pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("g
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
 pub enum GlobalConfigKey {
     SelectedWalletId,
+    SelectedNetwork,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -47,7 +48,7 @@ impl GlobalConfigTable {
         Ok(())
     }
 
-    pub fn get_selected_wallet(&self) -> Option<WalletId> {
+    pub fn selected_wallet(&self) -> Option<WalletId> {
         let id = self
             .get(GlobalConfigKey::SelectedWalletId)
             .unwrap_or(None)?;
@@ -55,6 +56,23 @@ impl GlobalConfigTable {
         let wallet_id = WalletId::from(id);
 
         Some(wallet_id)
+    }
+
+    pub fn selected_network(&self) -> Network {
+        let network = self
+            .get(GlobalConfigKey::SelectedNetwork)
+            .unwrap_or(None)
+            .unwrap_or("bitcoin".to_string());
+
+        let network = Network::try_from(network.as_str()).unwrap_or(Network::Bitcoin);
+
+        network
+    }
+
+    pub fn set_selected_network(&self, network: Network) -> Result<(), Error> {
+        self.set(GlobalConfigKey::SelectedNetwork, network.to_string())?;
+
+        Ok(())
     }
 
     pub fn get(&self, key: GlobalConfigKey) -> Result<Option<String>, Error> {
@@ -97,7 +115,7 @@ impl GlobalConfigTable {
             .commit()
             .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
 
-        Updater::send_update(Update::DatabaseUpdate);
+        Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }
