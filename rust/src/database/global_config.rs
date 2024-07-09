@@ -4,6 +4,7 @@ use redb::TableDefinition;
 
 use crate::{
     app::reconcile::{Update, Updater},
+    color_scheme::ColorSchemeSelection,
     wallet::{Network, WalletId},
 };
 
@@ -15,6 +16,7 @@ pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("g
 pub enum GlobalConfigKey {
     SelectedWalletId,
     SelectedNetwork,
+    ColorScheme,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -67,6 +69,22 @@ impl GlobalConfigTable {
         let network = Network::try_from(network.as_str()).unwrap_or(Network::Bitcoin);
 
         network
+    }
+
+    pub fn color_scheme(&self) -> ColorSchemeSelection {
+        let color_scheme = self
+            .get(GlobalConfigKey::ColorScheme)
+            .unwrap_or(None)
+            .unwrap_or("system".to_string());
+
+        ColorSchemeSelection::from(color_scheme)
+    }
+
+    pub fn set_color_scheme(&self, color_scheme: ColorSchemeSelection) -> Result<(), Error> {
+        self.set(GlobalConfigKey::ColorScheme, color_scheme.to_string())?;
+        Updater::send_update(Update::ColorSchemeChanged(color_scheme));
+
+        Ok(())
     }
 
     pub fn set_selected_network(&self, network: Network) -> Result<(), Error> {

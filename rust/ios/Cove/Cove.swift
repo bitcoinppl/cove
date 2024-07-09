@@ -708,6 +708,8 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
 }
 
 public protocol DatabaseProtocol: AnyObject {
+    func globalConfig() -> GlobalConfigTable
+
     func wallets() -> WalletTable
 }
 
@@ -756,6 +758,12 @@ open class Database:
         }
 
         try! rustCall { uniffi_cove_fn_free_database(pointer, $0) }
+    }
+
+    open func globalConfig() -> GlobalConfigTable {
+        return try! FfiConverterTypeGlobalConfigTable.lift(try! rustCall {
+            uniffi_cove_fn_method_database_global_config(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func wallets() -> WalletTable {
@@ -981,6 +989,8 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
 }
 
 public protocol GlobalConfigTableProtocol: AnyObject {
+    func colorScheme() -> ColorSchemeSelection
+
     func get(key: GlobalConfigKey) throws -> String?
 
     func selectWallet(id: WalletId) throws
@@ -990,6 +1000,8 @@ public protocol GlobalConfigTableProtocol: AnyObject {
     func selectedWallet() -> WalletId?
 
     func set(key: GlobalConfigKey, value: String) throws
+
+    func setColorScheme(colorScheme: ColorSchemeSelection) throws
 
     func setSelectedNetwork(network: Network) throws
 }
@@ -1034,6 +1046,12 @@ open class GlobalConfigTable:
         try! rustCall { uniffi_cove_fn_free_globalconfigtable(pointer, $0) }
     }
 
+    open func colorScheme() -> ColorSchemeSelection {
+        return try! FfiConverterTypeColorSchemeSelection.lift(try! rustCall {
+            uniffi_cove_fn_method_globalconfigtable_color_scheme(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func get(key: GlobalConfigKey) throws -> String? {
         return try FfiConverterOptionString.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
             uniffi_cove_fn_method_globalconfigtable_get(self.uniffiClonePointer(),
@@ -1063,6 +1081,12 @@ open class GlobalConfigTable:
         uniffi_cove_fn_method_globalconfigtable_set(self.uniffiClonePointer(),
                                                     FfiConverterTypeGlobalConfigKey.lower(key),
                                                     FfiConverterString.lower(value), $0)
+    }
+    }
+
+    open func setColorScheme(colorScheme: ColorSchemeSelection) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+        uniffi_cove_fn_method_globalconfigtable_set_color_scheme(self.uniffiClonePointer(),
+                                                                 FfiConverterTypeColorSchemeSelection.lower(colorScheme), $0)
     }
     }
 
@@ -2474,6 +2498,8 @@ public enum AppAction {
     )
     case changeNetwork(network: Network
     )
+    case changeColorScheme(ColorSchemeSelection
+    )
 }
 
 public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
@@ -2486,6 +2512,9 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             )
 
         case 2: return try .changeNetwork(network: FfiConverterTypeNetwork.read(from: &buf)
+            )
+
+        case 3: return try .changeColorScheme(FfiConverterTypeColorSchemeSelection.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -2501,6 +2530,10 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case let .changeNetwork(network):
             writeInt(&buf, Int32(2))
             FfiConverterTypeNetwork.write(network, into: &buf)
+
+        case let .changeColorScheme(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
         }
     }
 }
@@ -2524,6 +2557,8 @@ public enum AppStateReconcileMessage {
     case routeUpdated([Route]
     )
     case databaseUpdated
+    case colorSchemeChanged(ColorSchemeSelection
+    )
 }
 
 public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
@@ -2539,6 +2574,9 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             )
 
         case 3: return .databaseUpdated
+
+        case 4: return try .colorSchemeChanged(FfiConverterTypeColorSchemeSelection.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2556,6 +2594,10 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
 
         case .databaseUpdated:
             writeInt(&buf, Int32(3))
+
+        case let .colorSchemeChanged(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
         }
     }
 }
@@ -2612,6 +2654,55 @@ public func FfiConverterTypeColdWalletRoute_lower(_ value: ColdWalletRoute) -> R
 }
 
 extension ColdWalletRoute: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ColorSchemeSelection {
+    case light
+    case dark
+    case system
+}
+
+public struct FfiConverterTypeColorSchemeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = ColorSchemeSelection
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColorSchemeSelection {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .light
+
+        case 2: return .dark
+
+        case 3: return .system
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ColorSchemeSelection, into buf: inout [UInt8]) {
+        switch value {
+        case .light:
+            writeInt(&buf, Int32(1))
+
+        case .dark:
+            writeInt(&buf, Int32(2))
+
+        case .system:
+            writeInt(&buf, Int32(3))
+        }
+    }
+}
+
+public func FfiConverterTypeColorSchemeSelection_lift(_ buf: RustBuffer) throws -> ColorSchemeSelection {
+    return try FfiConverterTypeColorSchemeSelection.lift(buf)
+}
+
+public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelection) -> RustBuffer {
+    return FfiConverterTypeColorSchemeSelection.lower(value)
+}
+
+extension ColorSchemeSelection: Equatable, Hashable {}
 
 public enum DatabaseError {
     case DatabaseAccessError(String
@@ -2690,6 +2781,7 @@ extension DatabaseError: Foundation.LocalizedError {
 public enum GlobalConfigKey {
     case selectedWalletId
     case selectedNetwork
+    case colorScheme
 }
 
 public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
@@ -2702,6 +2794,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case 2: return .selectedNetwork
 
+        case 3: return .colorScheme
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -2713,6 +2807,9 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case .selectedNetwork:
             writeInt(&buf, Int32(2))
+
+        case .colorScheme:
+            writeInt(&buf, Int32(3))
         }
     }
 }
@@ -4061,6 +4158,28 @@ private struct FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceTypeColorSchemeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = [ColorSchemeSelection]
+
+    public static func write(_ value: [ColorSchemeSelection], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeColorSchemeSelection.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ColorSchemeSelection] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ColorSchemeSelection]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeColorSchemeSelection.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
     typealias SwiftType = [Network]
 
@@ -4180,9 +4299,24 @@ public func FfiConverterTypeWalletId_lower(_ value: WalletId) -> RustBuffer {
     return FfiConverterTypeWalletId.lower(value)
 }
 
+public func allColorSchemes() -> [ColorSchemeSelection] {
+    return try! FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall {
+        uniffi_cove_fn_func_all_color_schemes($0
+        )
+    })
+}
+
 public func allNetworks() -> [Network] {
     return try! FfiConverterSequenceTypeNetwork.lift(try! rustCall {
         uniffi_cove_fn_func_all_networks($0
+        )
+    })
+}
+
+public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelection) -> String {
+    return try! FfiConverterString.lift(try! rustCall {
+        uniffi_cove_fn_func_color_scheme_selection_capitalized_string(
+            FfiConverterTypeColorSchemeSelection.lower(colorScheme), $0
         )
     })
 }
@@ -4211,7 +4345,13 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if uniffi_cove_checksum_func_all_color_schemes() != 24835 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_func_all_networks() != 30650 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_color_scheme_selection_capitalized_string() != 42247 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_network_to_string() != 60660 {
@@ -4221,6 +4361,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 21847 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_database_global_config() != 4476 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_database_wallets() != 17223 {
@@ -4247,6 +4390,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_state() != 19551 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_globalconfigtable_color_scheme() != 18859 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_globalconfigtable_get() != 52128 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4260,6 +4406,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalconfigtable_set() != 31033 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_globalconfigtable_set_color_scheme() != 24086 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 34312 {

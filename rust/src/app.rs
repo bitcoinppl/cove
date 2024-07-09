@@ -5,6 +5,7 @@ pub mod reconcile;
 use std::sync::Arc;
 
 use crate::{
+    color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
     impl_default_for,
     router::{Route, Router},
@@ -43,6 +44,7 @@ pub struct App {
 pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     ChangeNetwork { network: Network },
+    ChangeColorScheme(ColorSchemeSelection),
 }
 
 impl_default_for!(App);
@@ -117,6 +119,15 @@ impl App {
                     .global_config
                     .set_selected_network(network)
                     .expect("failed to set network, please report this bug");
+            }
+
+            AppAction::ChangeColorScheme(color_scheme) => {
+                debug!("Color scheme change, NEW: {:?}", color_scheme);
+
+                Database::global()
+                    .global_config
+                    .set_color_scheme(color_scheme)
+                    .expect("failed to set color scheme, please report this bug");
             }
         }
     }

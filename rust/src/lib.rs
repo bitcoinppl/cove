@@ -6,6 +6,7 @@ pub(crate) mod macros;
 pub(crate) mod router;
 
 pub mod autocomplete;
+pub mod color_scheme;
 pub mod keychain;
 pub mod keys;
 pub mod redb;

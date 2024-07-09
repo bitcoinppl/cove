@@ -67,6 +67,7 @@ struct CoveApp: App {
                 model.pushRoute(route)
             }
             .environment(model)
+            .preferredColorScheme(model.colorScheme)
         }
     }
 }

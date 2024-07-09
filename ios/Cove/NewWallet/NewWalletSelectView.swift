@@ -1,5 +1,5 @@
 //
-//  NewWalletSelect.swift
+//  NewWalletSelectView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/17/24.
@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct NewWalletSelect: View {
+    @Environment(\.colorScheme) var colorScheme
+
     var body: some View {
         VStack {
             HStack {
@@ -61,11 +63,14 @@ struct NewWalletSelect: View {
             .padding(.horizontal, 40)
             Spacer()
         }
+        .onAppear {
+            print("Color Scheme: \(colorScheme)")
+        }
         .enableInjection()
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 

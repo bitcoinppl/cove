@@ -2,14 +2,13 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(MainViewModel.self) private var app
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.presentationMode) private var presentationMode
 
-    @State private var selectedTheme = "Light"
     @State private var notificationFrequency = 1
     @State private var networkChanged = false
     @State private var showConfirmationAlert = false
 
-    let themes = ["Light", "Dark", "System"]
+    let themes = allColorSchemes()
     let notificationOptions = [1, 2, 3, 4, 5]
 
     var body: some View {
@@ -31,9 +30,15 @@ struct SettingsView: View {
             }
 
             Section(header: Text("Appearance")) {
-                Picker("Theme", selection: $selectedTheme) {
+                Picker("Theme",
+                       selection: Binding(
+                           get: { app.colorSchemeSelection },
+                           set: {
+                               app.dispatch(action: .changeColorScheme($0))
+                           }
+                       )) {
                     ForEach(themes, id: \.self) {
-                        Text($0)
+                        Text($0.capitalizedString)
                     }
                 }
                 .pickerStyle(SegmentedPickerStyle())
@@ -77,5 +82,6 @@ struct SettingsView: View {
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
+        .preferredColorScheme(app.colorScheme)
     }
 }
