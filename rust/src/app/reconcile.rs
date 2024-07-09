@@ -3,7 +3,7 @@
 use crossbeam::channel::Sender;
 use once_cell::sync::OnceCell;
 
-use crate::router::Route;
+use crate::{color_scheme::ColorSchemeSelection, router::Route};
 
 #[derive(uniffi::Enum)]
 #[allow(clippy::enum_variant_names)]
@@ -11,6 +11,7 @@ pub enum AppStateReconcileMessage {
     DefaultRouteChanged(Route),
     RouteUpdated(Vec<Route>),
     DatabaseUpdated,
+    ColorSchemeChanged(ColorSchemeSelection),
 }
 
 // alais for easier imports on the rust side

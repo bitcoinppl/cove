@@ -44,6 +44,10 @@ impl Database {
     pub fn wallets(&self) -> WalletTable {
         self.wallets.clone()
     }
+
+    pub fn global_config(&self) -> GlobalConfigTable {
+        self.global_config.clone()
+    }
 }
 
 impl Database {
