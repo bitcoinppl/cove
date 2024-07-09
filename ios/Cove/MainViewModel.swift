@@ -71,8 +71,8 @@ import SwiftUI
                 case .databaseUpdated:
                     self.database = Database()
 
-                case .colorSchemeChanged:
-                    self.colorSchemeSelection = Database().globalConfig().colorScheme()
+                case let .colorSchemeChanged(colorSchemeSelection):
+                    self.colorSchemeSelection = colorSchemeSelection
 
                 case let .defaultRouteChanged(route):
                     // default changes, means root changes, set routes to []
