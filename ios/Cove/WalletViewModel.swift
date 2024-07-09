@@ -9,7 +9,7 @@ import SwiftUI
         let rust = try RustWalletViewModel(id: id)
 
         self.rust = rust
-        walletMetadata = rust.getState().walletMetadata
+        walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: self)
     }

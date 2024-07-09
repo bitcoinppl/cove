@@ -103,6 +103,11 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub fn wallet_metadata(&self) -> WalletMetadata {
+        self.state.read().wallet_metadata.clone()
+    }
+
+    #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 

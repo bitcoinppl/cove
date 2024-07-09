@@ -12,12 +12,6 @@ import SwiftUI
         rust.network()
     }
 
-    public let menuItems: [MenuItem] =
-        [
-            MenuItem(destination: RouteFactory().newWalletSelect(), title: "New Wallet", icon: "wallet.pass.fill"),
-            MenuItem(destination: Route.listWallets, title: "Change Wallet", icon: "arrow.uturn.right.square.fill"),
-        ]
-
     public init() {
         logger.debug("Initializing MainViewModel")
 
@@ -55,8 +49,8 @@ import SwiftUI
     func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {
-                logger.debug("Update: \(reconcile)")
-                print("update \(reconcile)")
+                logger.debug("Update: \(message)")
+                print("update \(message)")
 
                 switch message {
                 case let .routeUpdated(routes: routes):

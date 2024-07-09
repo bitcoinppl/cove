@@ -8,12 +8,20 @@
 import SwiftUI
 
 struct SidebarView: View {
+    @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
     @Binding var isShowing: Bool
     let currentRoute: Route
 
-    var menuItems: [MenuItem]
     let screenWidth = UIScreen.main.bounds.width
+
+    var walletsIsEmpty: Bool {
+        if let walletsIsEmpty = try? Database().wallets().isEmpty() {
+            return walletsIsEmpty
+        }
+
+        return true
+    }
 
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
@@ -52,11 +60,20 @@ struct SidebarView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 30) {
                         Spacer()
-                        ForEach(menuItems, id: \.destination) { item in
-                            Button(action: { goTo(item) }) {
-                                Label(item.title, systemImage: item.icon)
+
+                        Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
+                            Label("New Wallet", systemImage: "wallet.pass.fill")
+                                .foregroundStyle(
+                                    setForeground(RouteFactory().newWalletSelect())
+                                )
+                                .padding(.leading, 30)
+                        }
+
+                        if !walletsIsEmpty {
+                            Button(action: { goTo(Route.listWallets) }) {
+                                Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
                                     .foregroundStyle(
-                                        setForeground(item.destination)
+                                        setForeground(Route.listWallets)
                                     )
                                     .padding(.leading, 30)
                             }
@@ -92,18 +109,18 @@ struct SidebarView: View {
 
     func goTo(_ route: Route) {
         isShowing = false
-        navigate(route)
-    }
 
-    func goTo(_ item: MenuItem) {
-        isShowing = false
-        navigate(item.destination)
+        if walletsIsEmpty && route == Route.newWallet(.select) {
+            return app.resetRoute(to: RouteFactory().newWalletSelect())
+        } else {
+            navigate(route)
+        }
     }
 }
 
 #Preview {
     ZStack {
-        SidebarView(isShowing: Binding.constant(true), currentRoute: Route.listWallets, menuItems: MainViewModel().menuItems)
+        SidebarView(isShowing: Binding.constant(true), currentRoute: Route.listWallets)
     }
     .background(Color.white)
 }

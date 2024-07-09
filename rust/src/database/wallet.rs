@@ -1,5 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
+use log::debug;
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 
 use crate::{
@@ -49,7 +50,9 @@ pub struct WalletTable {
 
 #[uniffi::export]
 impl WalletTable {
-    pub fn is_empty(&self, network: Network) -> Result<bool, Error> {
+    pub fn is_empty(&self) -> Result<bool, Error> {
+        let network = Database::global().global_config.selected_network();
+
         let table = self.read_table()?;
         if table.is_empty()? {
             return Ok(true);
@@ -65,6 +68,8 @@ impl WalletTable {
 
     pub fn all(&self) -> Result<Vec<WalletMetadata>, Error> {
         let network = Database::global().global_config.selected_network();
+
+        debug!("getting all wallets for {network}");
         let wallets = self.get(network)?;
 
         Ok(wallets)

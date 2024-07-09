@@ -1688,6 +1688,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func markWalletAsVerified() throws
 
+    func walletMetadata() -> WalletMetadata
+
     func wordValidator() throws -> WordValidator
 }
 
@@ -1757,6 +1759,12 @@ open class RustWalletViewModel:
     open func markWalletAsVerified() throws { try rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
         uniffi_cove_fn_method_rustwalletviewmodel_mark_wallet_as_verified(self.uniffiClonePointer(), $0)
     }
+    }
+
+    open func walletMetadata() -> WalletMetadata {
+        return try! FfiConverterTypeWalletMetadata.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_wallet_metadata(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func wordValidator() throws -> WordValidator {
@@ -1969,7 +1977,7 @@ public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UnsafeMutable
 public protocol WalletTableProtocol: AnyObject {
     func all() throws -> [WalletMetadata]
 
-    func isEmpty(network: Network) throws -> Bool
+    func isEmpty() throws -> Bool
 
     func len(network: Network) throws -> UInt16
 }
@@ -2020,10 +2028,9 @@ open class WalletTable:
         })
     }
 
-    open func isEmpty(network: Network) throws -> Bool {
+    open func isEmpty() throws -> Bool {
         return try FfiConverterBool.lift(rustCallWithError(FfiConverterTypeDatabaseError.lift) {
-            uniffi_cove_fn_method_wallettable_is_empty(self.uniffiClonePointer(),
-                                                       FfiConverterTypeNetwork.lower(network), $0)
+            uniffi_cove_fn_method_wallettable_is_empty(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -4315,13 +4322,16 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_mark_wallet_as_verified() != 64306 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_wallet_metadata() != 44518 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wallettable_all() != 50582 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_wallettable_is_empty() != 56834 {
+    if uniffi_cove_checksum_method_wallettable_is_empty() != 59412 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wallettable_len() != 21855 {

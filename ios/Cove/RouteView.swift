@@ -12,7 +12,7 @@ struct RouteView: View {
     var body: some View {
         ZStack {
             routeToView(model: model, route: route)
-            SidebarView(isShowing: $model.isSidebarVisible, currentRoute: route, menuItems: model.menuItems)
+            SidebarView(isShowing: $model.isSidebarVisible, currentRoute: route)
         }.onChange(of: model.router.default) { _, newRoute in
             self.route = newRoute
         }
