@@ -1703,6 +1703,8 @@ public func FfiConverterTypeRustPendingWalletViewModel_lower(_ value: RustPendin
 }
 
 public protocol RustWalletViewModelProtocol: AnyObject {
+    func deleteWallet() throws
+
     /**
      * Action from the frontend to change the state of the view model
      */
@@ -1763,6 +1765,11 @@ open class RustWalletViewModel:
         }
 
         try! rustCall { uniffi_cove_fn_free_rustwalletviewmodel(pointer, $0) }
+    }
+
+    open func deleteWallet() throws { try rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
+        uniffi_cove_fn_method_rustwalletviewmodel_delete_wallet(self.uniffiClonePointer(), $0)
+    }
     }
 
     /**
@@ -4460,6 +4467,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustpendingwalletviewmodel_save_wallet() != 45300 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_delete_wallet() != 30016 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {

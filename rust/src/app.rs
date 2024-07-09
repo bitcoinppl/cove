@@ -154,8 +154,8 @@ pub struct FfiApp;
 #[uniffi::export]
 impl FfiApp {
     /// FFI constructor which wraps in an Arc
-    #[uniffi::constructor]
-    pub fn new() -> Arc<Self> {
+    #[uniffi::constructor(name = "new")]
+    pub fn global() -> Arc<Self> {
         Arc::new(Self)
     }
 

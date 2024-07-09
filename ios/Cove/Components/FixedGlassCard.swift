@@ -28,7 +28,7 @@ struct FixedGlassCard<Content: View>: View {
 
             // Border layer
             RoundedRectangle(cornerRadius: 20)
-                .stroke(.white.opacity(0.3), lineWidth: 1)
+                .stroke(.background.opacity(0.2), lineWidth: 1)
 
             // content
             content
@@ -37,7 +37,7 @@ struct FixedGlassCard<Content: View>: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
