@@ -27,7 +27,7 @@ impl WordValidator {
         let actual_words = &self.mnemonic.bip_39_words_groups_of(6)[group_number as usize];
 
         for (actual_word, entered_word) in actual_words.iter().zip(entered_words.iter()) {
-            if actual_word.word != entered_word.to_lowercase().trim() {
+            if !entered_word.trim().eq_ignore_ascii_case(&actual_word.word) {
                 return false;
             }
         }
@@ -41,7 +41,7 @@ impl WordValidator {
         let entered_words = entered_words.iter().flat_map(|words| words.iter());
 
         for (actual_word, entered_word) in self.mnemonic.word_iter().zip(entered_words) {
-            if actual_word != entered_word.to_lowercase().trim() {
+            if !entered_word.trim().eq_ignore_ascii_case(actual_word) {
                 return false;
             }
         }
@@ -58,7 +58,7 @@ impl WordValidator {
         for (index, (actual_word, entered_word)) in
             self.mnemonic.word_iter().zip(entered_words).enumerate()
         {
-            if actual_word != entered_word.to_lowercase().trim() {
+            if !entered_word.trim().eq_ignore_ascii_case(actual_word) {
                 invalid_words.push((index + 1).to_string());
             }
         }
