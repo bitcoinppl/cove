@@ -4,7 +4,12 @@ use crate::{
     keys::{Descriptor, DescriptorSecretKey},
     new_type,
 };
-use bdk_wallet::{bitcoin, KeychainKind};
+use bdk_wallet::{
+    bitcoin::{self, bip32::Fingerprint},
+    descriptor::ExtendedDescriptor,
+    keys::DescriptorPublicKey,
+    KeychainKind,
+};
 use bip39::Mnemonic;
 use itertools::Itertools as _;
 use nid::Nanoid;
@@ -152,8 +157,7 @@ impl NumberOfBip39Words {
 
 #[derive(Debug, uniffi::Object)]
 pub struct PendingWallet {
-    pub bdk: bdk_wallet::Wallet,
-
+    pub wallet: Wallet,
     pub mnemonic: Mnemonic,
     pub network: Network,
     pub passphrase: Option<String>,
@@ -165,13 +169,31 @@ pub struct Wallet {
     pub bdk: bdk_wallet::Wallet,
 }
 
-impl PendingWallet {
-    pub fn new(number_of_words: NumberOfBip39Words, passphrase: Option<String>) -> Self {
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+pub enum Error {
+    #[error("failed to create wallet: {0}")]
+    BdkError(String),
+
+    #[error("unsupported wallet: {0}")]
+    UnsupportedWallet(String),
+}
+
+impl Wallet {
+    pub fn try_new(
+        number_of_words: NumberOfBip39Words,
+        passphrase: Option<String>,
+    ) -> Result<Self, Error> {
+        let mnemonic = number_of_words.to_mnemonic();
+        Self::try_new_from_mnemonic(mnemonic, passphrase)
+    }
+
+    pub fn try_new_from_mnemonic(
+        mnemonic: Mnemonic,
+        passphrase: Option<String>,
+    ) -> Result<Self, Error> {
         let network = Database::global().global_config.selected_network();
 
-        let mnemonic = number_of_words.to_mnemonic();
-        let descriptor_secret_key =
-            DescriptorSecretKey::new(network, mnemonic.clone(), passphrase.clone());
+        let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
 
         let descriptor =
             Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::External, network);
@@ -186,8 +208,63 @@ impl PendingWallet {
         )
         .expect("failed to create wallet");
 
-        Self {
+        Ok(Self {
+            id: WalletId::new(),
             bdk: wallet,
+        })
+    }
+
+    pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, Error> {
+        use bdk_wallet::miniscript::descriptor::ShInner;
+        use bdk_wallet::miniscript::Descriptor;
+
+        let extended_descriptor: ExtendedDescriptor =
+            self.bdk.public_descriptor(KeychainKind::External).clone();
+
+        println!("extended descriptor: {extended_descriptor:#?}");
+
+        let key = match extended_descriptor {
+            Descriptor::Pkh(pk) => pk.into_inner(),
+            Descriptor::Wpkh(pk) => pk.into_inner(),
+            Descriptor::Tr(pk) => pk.internal_key().clone(),
+            Descriptor::Sh(pk) => match pk.into_inner() {
+                ShInner::Wpkh(pk) => pk.into_inner(),
+                _ => {
+                    return Err(Error::UnsupportedWallet(
+                        "unsupported wallet bare descriptor not wpkh".to_string(),
+                    ))
+                }
+            },
+            // not sure
+            Descriptor::Bare(pk) => pk.as_inner().iter_pk().next().unwrap(),
+            // multi-sig
+            Descriptor::Wsh(_pk) => {
+                return Err(Error::UnsupportedWallet(
+                    "unsupported wallet, multisig".to_string(),
+                ))
+            }
+        };
+
+        Ok(key)
+    }
+
+    pub fn master_fingerprint(&self) -> Result<Fingerprint, Error> {
+        let key = self.get_pub_key()?;
+        Ok(key.master_fingerprint())
+    }
+}
+
+impl PendingWallet {
+    pub fn new(number_of_words: NumberOfBip39Words, passphrase: Option<String>) -> Self {
+        let network = Database::global().global_config.selected_network();
+
+        let mnemonic = number_of_words.to_mnemonic().clone();
+
+        let wallet = Wallet::try_new_from_mnemonic(mnemonic.clone(), passphrase.clone())
+            .expect("failed to create wallet");
+
+        Self {
+            wallet,
             mnemonic,
             network,
             passphrase,
@@ -267,5 +344,16 @@ mod tests {
             NumberOfBip39Words::TwentyFour.to_word_count(),
             NumberOfBip39Words::TwentyFour.to_mnemonic().word_count()
         );
+    }
+
+    #[test]
+    fn test_fingerprint() {
+        let mnemonic = Mnemonic::parse_normalized(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
+
+        let wallet = Wallet::try_new_from_mnemonic(mnemonic, None).unwrap();
+        let fingerprint = wallet.master_fingerprint();
+
+        assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }
 }

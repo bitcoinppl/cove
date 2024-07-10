@@ -2782,6 +2782,52 @@ extension DatabaseError: Foundation.LocalizedError {
     }
 }
 
+public enum Error {
+    case BdkError(String
+    )
+    case UnsupportedWallet(String
+    )
+}
+
+public struct FfiConverterTypeError: FfiConverterRustBuffer {
+    typealias SwiftType = Error
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Error {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .BdkError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .UnsupportedWallet(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Error, into buf: inout [UInt8]) {
+        switch value {
+        case let .BdkError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .UnsupportedWallet(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension Error: Equatable, Hashable {}
+
+extension Error: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
