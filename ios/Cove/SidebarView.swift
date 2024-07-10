@@ -51,11 +51,14 @@ struct SidebarView: View {
     var body: some View {
         ZStack {
             if isShowing {
-                Rectangle().opacity(0.6).ignoresSafeArea().onTapGesture {
-                    withAnimation {
-                        isShowing = false
+                Rectangle()
+                    .foregroundStyle(.background.opacity(0.9))
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation {
+                            isShowing = false
+                        }
                     }
-                }
 
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 30) {
@@ -84,16 +87,16 @@ struct SidebarView: View {
                             Button(action: { goTo(.settings) }, label: {
                                 HStack {
                                     Image(systemName: "gear")
-                                        .foregroundStyle(Color.black.gradient.opacity(0.5))
+                                        .foregroundStyle(Color.primary.gradient.opacity(0.5))
                                     Text("Settings")
-                                        .foregroundStyle(Color.black.gradient)
+                                        .foregroundStyle(Color.primary.gradient)
                                 }
                             })
                             .frame(maxWidth: screenWidth * 0.75)
                         }
                     }
                     .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
-                    .background(.thinMaterial)
+                    .background(.thickMaterial)
 
                     Spacer()
                 }

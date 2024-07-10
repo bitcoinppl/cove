@@ -92,6 +92,9 @@ impl RustWalletViewModel {
         // delete the secret key from the keychain
         Keychain::global().delete_wallet_key(&wallet_id);
 
+        // delete the xpub from keychain
+        Keychain::global().delete_wallet_key(&wallet_id);
+
         // reset the default route to list wallets
         FfiApp::global().reset_default_route_to(Route::ListWallets);
 
@@ -125,6 +128,17 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn wallet_metadata(&self) -> WalletMetadata {
         self.state.read().wallet_metadata.clone()
+    }
+
+    #[uniffi::method]
+    pub fn fingerprint(&self) -> String {
+        let xpub = Keychain::global()
+            .get_wallet_xpub(&self.wallet_metadata().id)
+            .ok()
+            .flatten();
+
+        xpub.map(|xpub| xpub.fingerprint().to_string())
+            .unwrap_or_else(|| "Unknown".to_string())
     }
 
     #[uniffi::method]

@@ -2,6 +2,7 @@
 
 use std::{str::FromStr as _, sync::Arc};
 
+use bdk_wallet::bitcoin::bip32::Xpub;
 use bip39::Mnemonic;
 use log::warn;
 use once_cell::sync::OnceCell;
@@ -83,8 +84,44 @@ impl Keychain {
         let key = wallet_mnemonic_key_name(id);
         self.0.delete(key)
     }
+
+    pub fn save_wallet_xpub(&self, id: &WalletId, xpub: Xpub) -> Result<(), KeychainError> {
+        let key = wallet_xpub_key_name(id);
+        let xpub_string = xpub.to_string();
+
+        self.0.save(key, xpub_string)?;
+
+        Ok(())
+    }
+
+    pub fn get_wallet_xpub(&self, id: &WalletId) -> Result<Option<Xpub>, KeychainError> {
+        let key = wallet_xpub_key_name(id);
+        let Some(xpub_string) = self.0.get(key) else {
+            return Ok(None);
+        };
+
+        let xpub = Xpub::from_str(&xpub_string).map_err(|error| {
+            let error = format!(
+                "Unable to parse saved xpub, something went wrong \
+                    with saving, this should not happen {error}"
+            );
+
+            KeychainError::UnableToParseSavedValue(error)
+        })?;
+
+        Ok(Some(xpub))
+    }
+
+    pub fn delete_wallet_xpub(&self, id: &WalletId) -> bool {
+        let key = wallet_xpub_key_name(id);
+        self.0.delete(key)
+    }
 }
 
 fn wallet_mnemonic_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_mnemonic")
+}
+
+fn wallet_xpub_key_name(id: &WalletId) -> String {
+    format!("{id}::wallet_xpub")
 }

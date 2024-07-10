@@ -1710,6 +1710,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
      */
     func dispatch(action: WalletViewModelAction)
 
+    func fingerprint() -> String
+
     func listenForUpdates(reconciler: WalletViewModelReconciler)
 
     func markWalletAsVerified() throws
@@ -1779,6 +1781,12 @@ open class RustWalletViewModel:
         uniffi_cove_fn_method_rustwalletviewmodel_dispatch(self.uniffiClonePointer(),
                                                            FfiConverterTypeWalletViewModelAction.lower(action), $0)
     }
+    }
+
+    open func fingerprint() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_fingerprint(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func listenForUpdates(reconciler: WalletViewModelReconciler) { try! rustCall {
@@ -2390,14 +2398,16 @@ public struct WalletMetadata {
     public var name: String
     public var color: WalletColor
     public var verified: Bool
+    public var network: Network
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network) {
         self.id = id
         self.name = name
         self.color = color
         self.verified = verified
+        self.network = network
     }
 }
 
@@ -2415,6 +2425,9 @@ extension WalletMetadata: Equatable, Hashable {
         if lhs.verified != rhs.verified {
             return false
         }
+        if lhs.network != rhs.network {
+            return false
+        }
         return true
     }
 
@@ -2423,6 +2436,7 @@ extension WalletMetadata: Equatable, Hashable {
         hasher.combine(name)
         hasher.combine(color)
         hasher.combine(verified)
+        hasher.combine(network)
     }
 }
 
@@ -2433,7 +2447,8 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 id: FfiConverterTypeWalletId.read(from: &buf),
                 name: FfiConverterString.read(from: &buf),
                 color: FfiConverterTypeWalletColor.read(from: &buf),
-                verified: FfiConverterBool.read(from: &buf)
+                verified: FfiConverterBool.read(from: &buf),
+                network: FfiConverterTypeNetwork.read(from: &buf)
             )
     }
 
@@ -2442,6 +2457,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterString.write(value.name, into: &buf)
         FfiConverterTypeWalletColor.write(value.color, into: &buf)
         FfiConverterBool.write(value.verified, into: &buf)
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
     }
 }
 
@@ -2777,6 +2793,52 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
 extension DatabaseError: Equatable, Hashable {}
 
 extension DatabaseError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+public enum Error {
+    case BdkError(String
+    )
+    case UnsupportedWallet(String
+    )
+}
+
+public struct FfiConverterTypeError: FfiConverterRustBuffer {
+    typealias SwiftType = Error
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Error {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .BdkError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .UnsupportedWallet(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Error, into buf: inout [UInt8]) {
+        switch value {
+        case let .BdkError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .UnsupportedWallet(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension Error: Equatable, Hashable {}
+
+extension Error: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -4473,6 +4535,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064 {

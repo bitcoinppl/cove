@@ -6,7 +6,8 @@ use parking_lot::RwLock;
 use crate::{
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WalletMetadata, WordAccess},
+    mnemonic::{MnemonicExt as _, WordAccess as _},
+    wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WalletMetadata},
 };
 
 type Error = PendingWalletViewModelError;
@@ -118,8 +119,15 @@ impl RustPendingWalletViewModel {
 
         let keychain = Keychain::global();
 
+        // save mnemonic for private key
         keychain
             .save_wallet_key(&wallet_metadata.id, state.wallet.mnemonic.clone())
+            .map_err(WalletCreationError::from)?;
+
+        // save public key in keychain too
+        let xpub = state.wallet.mnemonic.xpub(wallet_metadata.network.into());
+        keychain
+            .save_wallet_xpub(&wallet_metadata.id, xpub)
             .map_err(WalletCreationError::from)?;
 
         let database = Database::global();
