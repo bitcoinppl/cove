@@ -132,7 +132,13 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub fn fingerprint(&self) -> String {
-        todo!()
+        let xpub = Keychain::global()
+            .get_wallet_xpub(&self.wallet_metadata().id)
+            .ok()
+            .flatten();
+
+        xpub.map(|xpub| xpub.fingerprint().to_string())
+            .unwrap_or_else(|| "Unknown".to_string())
     }
 
     #[uniffi::method]

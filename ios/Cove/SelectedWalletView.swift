@@ -34,6 +34,8 @@ struct SelectedWalletView: View {
                         .foregroundColor(model.walletMetadata.color.toCardColors()[0].opacity(0.8))
                         .font(.title2)
 
+                    Text(model.rust.fingerprint())
+
                     Button(role: .destructive) {
                         showingDeleteConfirmation = true
                     } label: {
