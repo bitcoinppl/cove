@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import UIKit
 
+@MainActor
 class KeyboardObserver: ObservableObject {
     @Published var keyboardIsShowing = false
 
@@ -11,14 +12,18 @@ class KeyboardObserver: ObservableObject {
     }
 
     @objc func keyboardWillShow() {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            keyboardIsShowing = true
+        Task { @MainActor in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                self.keyboardIsShowing = true
+            }
         }
     }
 
     @objc func keyboardWillHide() {
-        withAnimation(.easeInOut(duration: 0.25)) {
-            keyboardIsShowing = false
+        Task { @MainActor in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                self.keyboardIsShowing = false
+            }
         }
     }
 }
