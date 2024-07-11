@@ -41,6 +41,9 @@ struct SelectedWalletView: View {
                     }
                 }
                 .navigationTitle(model.walletMetadata.name)
+                .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
                 .sheet(isPresented: $showSettings) {
                     WalletSettingsView(model: model)
                 }
