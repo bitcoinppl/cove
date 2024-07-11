@@ -8,13 +8,13 @@ use crate::{
     database::{error::DatabaseError, Database},
     keychain::{Keychain, KeychainError},
     router::Route,
-    wallet::{WalletId, WalletMetadata},
+    wallet::{WalletColor, WalletId, WalletMetadata},
     word_validator::WordValidator,
 };
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
-    NoOp,
+    WalletMetadataChanged(WalletMetadata),
 }
 
 #[uniffi::export(callback_interface)]
@@ -35,9 +35,10 @@ pub struct WalletViewModelState {
     pub wallet_metadata: WalletMetadata,
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelAction {
-    NoOp,
+    UpdateName(String),
+    UpdateColor(WalletColor),
 }
 
 pub type Error = WalletViewModelError;
@@ -160,7 +161,26 @@ impl RustWalletViewModel {
         let _state = self.state.clone();
 
         match action {
-            WalletViewModelAction::NoOp => {}
+            WalletViewModelAction::UpdateName(name) => {
+                let mut state = self.state.write();
+                state.wallet_metadata.name = name;
+
+                self.reconciler
+                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                        state.wallet_metadata.clone(),
+                    ))
+                    .unwrap();
+            }
+            WalletViewModelAction::UpdateColor(color) => {
+                let mut state = self.state.write();
+                state.wallet_metadata.color = color;
+
+                self.reconciler
+                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                        state.wallet_metadata.clone(),
+                    ))
+                    .unwrap();
+            }
         }
     }
 }

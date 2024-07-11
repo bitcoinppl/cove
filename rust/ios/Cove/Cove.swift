@@ -3641,7 +3641,10 @@ extension WalletTableError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum WalletViewModelAction {
-    case noOp
+    case updateName(String
+    )
+    case updateColor(WalletColor
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
@@ -3650,7 +3653,11 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletViewModelAction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .noOp
+        case 1: return try .updateName(FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .updateColor(FfiConverterTypeWalletColor.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3658,8 +3665,13 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
 
     public static func write(_ value: WalletViewModelAction, into buf: inout [UInt8]) {
         switch value {
-        case .noOp:
+        case let .updateName(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .updateColor(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeWalletColor.write(v1, into: &buf)
         }
     }
 }
@@ -3736,7 +3748,8 @@ extension WalletViewModelError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum WalletViewModelReconcileMessage {
-    case noOp
+    case walletMetadataChanged(WalletMetadata
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustBuffer {
@@ -3745,7 +3758,8 @@ public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletViewModelReconcileMessage {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .noOp
+        case 1: return try .walletMetadataChanged(FfiConverterTypeWalletMetadata.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3753,8 +3767,9 @@ public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustB
 
     public static func write(_ value: WalletViewModelReconcileMessage, into buf: inout [UInt8]) {
         switch value {
-        case .noOp:
+        case let .walletMetadataChanged(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterTypeWalletMetadata.write(v1, into: &buf)
         }
     }
 }

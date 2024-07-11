@@ -24,8 +24,8 @@ import SwiftUI
                 logger.debug("Reconcile: \(message)")
 
                 switch message {
-                case .noOp:
-                    break
+                case let .walletMetadataChanged(metadata):
+                    walletMetadata = metadata
                 }
             }
         }

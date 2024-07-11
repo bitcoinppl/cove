@@ -70,22 +70,26 @@ struct WalletSettingsView: View {
     @Environment(\.presentationMode) var presentationMode
 
     @State private var showingDeleteConfirmation = false
-    @State private var walletName: String = "Demo"
-    @State private var walletColor: Color = .red
 
-    let colors: [Color] = [.red, .orange, .yellow, .green, .blue, .purple, .pink]
+    let colors: [WalletColor] = WalletColor.red.all()
 
     var body: some View {
         NavigationView {
             List {
                 Section(header: Text("Basic Settings")) {
-                    TextField("Wallet Name", text: $walletName)
+                    TextField("Wallet Name", text: Binding(
+                        get: { model.walletMetadata.name },
+                        set: { model.dispatch(action: .updateName($0)) }
+                    ))
 
-                    Picker("Wallet Color", selection: $walletColor) {
+                    Picker("Wallet Color", selection: Binding(
+                        get: { model.walletMetadata.color },
+                        set: { model.dispatch(action: .updateColor($0)) }
+                    )) {
                         ForEach(colors, id: \.self) { color in
-                            Text(color.description)
+                            Text(color.toColor().description)
                                 .foregroundColor(.clear)
-                                .background(color)
+                                .background(color.toColor())
                                 .frame(width: 30, height: 30)
                                 .clipShape(Circle())
                                 .tag(color)

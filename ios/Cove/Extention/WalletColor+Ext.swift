@@ -1,6 +1,18 @@
 import SwiftUI
 
 extension WalletColor {
+    func all() -> [WalletColor] {
+        [
+            .red,
+            .blue,
+            .green,
+            .yellow,
+            .orange,
+            .purple,
+            .pink,
+        ]
+    }
+
     func toCardColors() -> [Color] {
         switch self {
         case .red:
@@ -63,7 +75,7 @@ extension Color {
         case .pink:
             return .pink
         case let color:
-            let (red, green, blue, _opacity) = color.getRGB()
+            let (red, green, blue, _) = color.getRGB()
             return .custom(r: UInt8(red), g: UInt8(green), b: UInt8(blue))
         }
     }

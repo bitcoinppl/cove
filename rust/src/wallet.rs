@@ -65,7 +65,7 @@ impl WalletId {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct WalletMetadata {
     pub id: WalletId,
     pub name: String,
@@ -88,7 +88,7 @@ impl WalletMetadata {
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletColor {
     Red,
     Blue,
