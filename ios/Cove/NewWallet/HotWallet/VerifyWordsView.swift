@@ -112,25 +112,23 @@ struct VerifyWordsView: View {
                     .frame(height: cardHeight)
                     .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
                     .toolbar {
-                        if !filteredSuggestions.isEmpty {
-                            ToolbarItemGroup(placement: .keyboard) {
-                                HStack {
-                                    ForEach(filteredSuggestions, id: \.self) { word in
-                                        Spacer()
-                                        Button(word) {
-                                            guard let focusField = focusField else { return }
-                                            let (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
-                                            let innerIndex = remainder - 1
-                                            enteredWords[outerIndex][innerIndex] = word
-                                            self.focusField = focusField + 1
-                                        }
-                                        .foregroundColor(.secondary)
-                                        Spacer()
+                        ToolbarItemGroup(placement: .keyboard) {
+                            HStack {
+                                ForEach(filteredSuggestions, id: \.self) { word in
+                                    Spacer()
+                                    Button(word) {
+                                        guard let focusField = focusField else { return }
+                                        let (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
+                                        let innerIndex = remainder - 1
+                                        enteredWords[outerIndex][innerIndex] = word
+                                        self.focusField = focusField + 1
+                                    }
+                                    .foregroundColor(.secondary)
+                                    Spacer()
 
-                                        // only show divider in the middle
-                                        if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
-                                            Divider()
-                                        }
+                                    // only show divider in the middle
+                                    if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
+                                        Divider()
                                     }
                                 }
                             }
