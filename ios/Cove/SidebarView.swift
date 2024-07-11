@@ -30,8 +30,6 @@ struct SidebarView: View {
                     colors: [
                         Color.blue,
                         Color.blue.opacity(0.9),
-                        Color.blue.opacity(0.8),
-                        Color.blue.opacity(0.7),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -40,7 +38,7 @@ struct SidebarView: View {
             return
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.8), Color.white.opacity(0.7),
+                        Color.primary.opacity(0.8), Color.primary.opacity(0.7),
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing

@@ -57,11 +57,16 @@ impl Router {
     pub fn new() -> Self {
         let database = Database::global();
 
+        let mut default_route = Route::ListWallets;
+
         // when there are no wallets, show the new wallet screen
-        let default_route = if database.wallets.is_empty().unwrap_or(true) {
-            Route::NewWallet(Default::default())
-        } else {
-            Route::ListWallets
+        if database.wallets.is_empty().unwrap_or(true) {
+            default_route = Route::NewWallet(Default::default())
+        };
+
+        // when there is a selected wallet, show the selected wallet screen
+        if let Some(selected_wallet) = database.global_config().selected_wallet() {
+            default_route = Route::SelectedWallet(selected_wallet);
         };
 
         Self {

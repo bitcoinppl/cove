@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crossbeam::channel::{Receiver, Sender};
+use log::error;
 use parking_lot::RwLock;
 
 use crate::{
@@ -8,13 +9,13 @@ use crate::{
     database::{error::DatabaseError, Database},
     keychain::{Keychain, KeychainError},
     router::Route,
-    wallet::{WalletId, WalletMetadata},
+    wallet::{WalletColor, WalletId, WalletMetadata},
     word_validator::WordValidator,
 };
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
-    NoOp,
+    WalletMetadataChanged(WalletMetadata),
 }
 
 #[uniffi::export(callback_interface)]
@@ -35,9 +36,10 @@ pub struct WalletViewModelState {
     pub wallet_metadata: WalletMetadata,
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelAction {
-    NoOp,
+    UpdateName(String),
+    UpdateColor(WalletColor),
 }
 
 pub type Error = WalletViewModelError;
@@ -139,6 +141,7 @@ impl RustWalletViewModel {
 
         xpub.map(|xpub| xpub.fingerprint().to_string())
             .unwrap_or_else(|| "Unknown".to_string())
+            .to_ascii_uppercase()
     }
 
     #[uniffi::method]
@@ -156,10 +159,35 @@ impl RustWalletViewModel {
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
-        let _state = self.state.clone();
-
         match action {
-            WalletViewModelAction::NoOp => {}
+            WalletViewModelAction::UpdateName(name) => {
+                let mut state = self.state.write();
+                state.wallet_metadata.name = name;
+
+                self.reconciler
+                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                        state.wallet_metadata.clone(),
+                    ))
+                    .unwrap();
+            }
+            WalletViewModelAction::UpdateColor(color) => {
+                let mut state = self.state.write();
+                state.wallet_metadata.color = color;
+
+                self.reconciler
+                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                        state.wallet_metadata.clone(),
+                    ))
+                    .unwrap();
+            }
+        }
+
+        // update wallet_metadata in the database
+        if let Err(error) = Database::global()
+            .wallets
+            .update_wallet_metadata(self.state.read().wallet_metadata.clone())
+        {
+            error!("Unable to update wallet metadata: {error:?}")
         }
     }
 }

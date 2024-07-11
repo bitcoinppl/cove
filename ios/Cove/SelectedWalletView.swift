@@ -13,21 +13,12 @@ struct SelectedWalletView: View {
 
     let id: WalletId
     @State private var model: WalletViewModel? = nil
-    @State private var showingDeleteConfirmation = false
-
-    func deleteWallet(model: WalletViewModel) {
-        do {
-            try model.rust.deleteWallet()
-        } catch {
-            Log.error("Unable to delete wallet: \(error)")
-        }
-    }
+    @State private var showSettings = false
 
     var body: some View {
         Group {
             if let model = model {
                 VStack {
-                    VerifyReminder(walletId: id, isVerified: model.isVerified)
                     Spacer()
 
                     Text("\(model.walletMetadata.name)")
@@ -36,24 +27,25 @@ struct SelectedWalletView: View {
 
                     Text(model.rust.fingerprint())
 
-                    Button(role: .destructive) {
-                        showingDeleteConfirmation = true
-                    } label: {
-                        Image(systemName: "trash")
-                        Text("Delete Wallet")
-                            .bold()
-                    }
-                    .padding(.top, 20)
-                    .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
-                        Button("Delete", role: .destructive) {
-                            deleteWallet(model: model)
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("This action cannot be undone.")
-                    }
-
                     Spacer()
+                    VerifyReminder(walletId: id, isVerified: model.isVerified)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            showSettings = true
+                        }) {
+                            Image(systemName: "gear")
+                                .foregroundColor(.primary.opacity(0.8))
+                        }
+                    }
+                }
+                .navigationTitle(model.walletMetadata.name)
+                .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .sheet(isPresented: $showSettings) {
+                    WalletSettingsView(model: model)
                 }
             } else {
                 Text("Loading...")
@@ -75,6 +67,81 @@ struct SelectedWalletView: View {
     #endif
 }
 
+struct WalletSettingsView: View {
+    let model: WalletViewModel
+    @Environment(\.navigate) private var navigate
+    @Environment(\.presentationMode) var presentationMode
+
+    @State private var showingDeleteConfirmation = false
+
+    let colors: [WalletColor] = WalletColor.red.all()
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Basic Settings")) {
+                    TextField("Wallet Name", text: Binding(
+                        get: { model.walletMetadata.name },
+                        set: { model.dispatch(action: .updateName($0)) }
+                    ))
+
+                    Picker("Wallet Color", selection: Binding(
+                        get: { model.walletMetadata.color },
+                        set: { model.dispatch(action: .updateColor($0)) }
+                    )) {
+                        ForEach(colors, id: \.self) { color in
+                            Text(color.toColor().description)
+                                .foregroundColor(.clear)
+                                .background(color.toColor())
+                                .frame(width: 30, height: 30)
+                                .clipShape(Circle())
+                                .tag(color)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+
+                Section {
+                    Button(action: {
+                        presentationMode.wrappedValue.dismiss()
+                        navigate(Route.settings)
+                    }) {
+                        Label("App Settings", systemImage: "gear")
+                            .foregroundColor(.blue)
+                    }
+                }
+
+                Section {
+                    Button {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Wallet", systemImage: "trash")
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .listStyle(InsetGroupedListStyle())
+            .navigationTitle("Wallet Settings")
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
+            .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
+                Button("Delete", role: .destructive) {
+                    do {
+                        try model.rust.deleteWallet()
+                        presentationMode.wrappedValue.dismiss()
+                    } catch {
+                        Log.error("Unable to delete wallet: \(error)")
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This action cannot be undone.")
+            }
+        }
+    }
+}
+
 struct VerifyReminder: View {
     @Environment(\.navigate) private var navigate
     let walletId: WalletId
@@ -88,13 +155,11 @@ struct VerifyReminder: View {
                 }) {
                     Text("verify wallet")
                         .font(.caption)
-                        .foregroundColor(.primary)
-                        .padding()
+                        .foregroundColor(.primary.opacity(0.8))
+                        .padding(.top, 20)
                 }
-                // .frame(maxWidth: .infinity)
-                .background(Color.yellow.opacity(0.6))
-                .shadow(radius: 2)
-                .enableInjection()
+                .frame(maxWidth: .infinity)
+                .background(Color.yellow.gradient)
             }
         }
     }

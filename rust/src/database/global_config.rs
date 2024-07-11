@@ -66,7 +66,15 @@ impl GlobalConfigTable {
             .unwrap_or(None)
             .unwrap_or("bitcoin".to_string());
 
-        let network = Network::try_from(network.as_str()).unwrap_or(Network::Bitcoin);
+        let network = match Network::try_from(network.as_str()) {
+            Ok(network) => network,
+            Err(_) => {
+                self.set_selected_network(Network::Bitcoin)
+                    .expect("failed to set network, please report this bug");
+
+                Network::Bitcoin
+            }
+        };
 
         network
     }
