@@ -14,6 +14,7 @@ struct SelectedWalletView: View {
     let id: WalletId
     @State private var model: WalletViewModel? = nil
     @State private var showingDeleteConfirmation = false
+    @State private var showSettings = false
 
     func deleteWallet(model: WalletViewModel) {
         do {
@@ -27,7 +28,6 @@ struct SelectedWalletView: View {
         Group {
             if let model = model {
                 VStack {
-                    VerifyReminder(walletId: id, isVerified: model.isVerified)
                     Spacer()
 
                     Text("\(model.walletMetadata.name)")
@@ -54,7 +54,19 @@ struct SelectedWalletView: View {
                     }
 
                     Spacer()
+                    VerifyReminder(walletId: id, isVerified: model.isVerified)
                 }
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            showSettings = true
+                        }) {
+                            Image(systemName: "gear")
+                                .foregroundColor(.primary.opacity(0.8))
+                        }
+                    }
+                }
+                .navigationTitle(model.walletMetadata.name)
             } else {
                 Text("Loading...")
             }
@@ -88,13 +100,11 @@ struct VerifyReminder: View {
                 }) {
                     Text("verify wallet")
                         .font(.caption)
-                        .foregroundColor(.primary)
-                        .padding()
+                        .foregroundColor(.primary.opacity(0.8))
+                        .padding(.top, 20)
                 }
-                // .frame(maxWidth: .infinity)
-                .background(Color.yellow.opacity(0.6))
-                .shadow(radius: 2)
-                .enableInjection()
+                .frame(maxWidth: .infinity)
+                .background(Color.yellow.gradient)
             }
         }
     }

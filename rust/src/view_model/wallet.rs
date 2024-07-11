@@ -139,6 +139,7 @@ impl RustWalletViewModel {
 
         xpub.map(|xpub| xpub.fingerprint().to_string())
             .unwrap_or_else(|| "Unknown".to_string())
+            .to_ascii_uppercase()
     }
 
     #[uniffi::method]
