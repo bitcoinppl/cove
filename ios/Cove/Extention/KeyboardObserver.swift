@@ -11,13 +11,13 @@ class KeyboardObserver: ObservableObject {
     }
 
     @objc func keyboardWillShow() {
-        withAnimation {
+        withAnimation(.easeInOut(duration: 0.25)) {
             keyboardIsShowing = true
         }
     }
 
     @objc func keyboardWillHide() {
-        withAnimation {
+        withAnimation(.easeInOut(duration: 0.25)) {
             keyboardIsShowing = false
         }
     }

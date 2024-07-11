@@ -47,7 +47,7 @@ struct VerifyWordsView: View {
     }
 
     var cardHeight: CGFloat {
-        keyboardIsShowing ? 350 : 450
+        keyboardIsShowing ? 375 : 450
     }
 
     var buttonIsDisabled: Bool {
@@ -93,13 +93,17 @@ struct VerifyWordsView: View {
                     }
 
                     FixedGlassCard {
-                        TabView(selection: $tabIndex) {
-                            ForEach(Array(validator.groupedWords().enumerated()), id: \.offset) { index, wordGroup in
-                                CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)
-                                    .tag(index)
+                        VStack {
+                            TabView(selection: $tabIndex) {
+                                ForEach(Array(validator.groupedWords().enumerated()), id: \.offset) { index, wordGroup in
+                                    VStack {
+                                        CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)
+                                            .tag(index)
+                                            .padding(.bottom, keyboardIsShowing ? 60 : 10)
+                                    }
+                                }
+                                .padding(.horizontal, 30)
                             }
-                            .padding(.horizontal, 30)
-                            .padding(.vertical, 30)
                         }
                     }
                     .frame(height: cardHeight)
@@ -150,7 +154,7 @@ struct VerifyWordsView: View {
                     title: Text("Skip verifying words?"),
                     message: Text("Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"),
                     primaryButton: .destructive(Text("Yes, Verify Later")) {
-                        navigate(Route.listWallets)
+                        appModel.resetRoute(to: Route.selectedWallet(id))
                     },
                     secondaryButton: .cancel(Text("Cancel"))
                 )
@@ -172,24 +176,23 @@ struct CardTab: View {
     @Binding var fields: [String]
     @Binding var focusField: Int?
 
-    func zIndex(index: Int) -> Double {
-        // if focused, on the bottom half, don't set zIndex
-        // because we want the suggestions to show on top
-        if let field = focusField, (field % 6) == 0 || (field % 6) > 3 {
-            return 1
-        }
+    @StateObject private var keyboardObserver = KeyboardObserver()
 
-        return 6 - Double(index)
+    var keyboardIsShowing: Bool {
+        keyboardObserver.keyboardIsShowing
+    }
+
+    var cardSpacing: CGFloat {
+        keyboardIsShowing ? 15 : 20
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: cardSpacing) {
             ForEach(Array(self.wordGroup.enumerated()), id: \.offset) { index, word in
                 AutocompleteField(autocompleter: Bip39AutoComplete(),
                                   word: word,
                                   text: self.$fields[index],
                                   focusField: self.$focusField)
-                    .zIndex(zIndex(index: index))
             }
 
         }.onAppear {
@@ -251,34 +254,12 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
         return .none
     }
 
-    var offsetCalc: CGFloat {
-        // bottom half word, show suggestions above the word
-        if word.number % 6 == 0 || word.number % 6 > 3 {
-            return -60 - frameHeight
-        }
-
-        // top half word, show suggestions below the word
-        return 0
-    }
-
     var body: some View {
         HStack {
             Text("\(String(format: "%02d", self.word.number)). ")
                 .foregroundColor(.secondary)
 
             textField
-                .overlay(alignment: Alignment(horizontal: .center, vertical: .top)) {
-                    Group {
-                        if self.showSuggestions {
-                            SuggestionList(suggestions: self.filteredSuggestions, selection: self.$text)
-                                .transition(.move(edge: .top))
-                                .frame(height: frameHeight)
-                                .offset(y: offsetCalc)
-                        }
-                    }
-                    .offset(y: 40)
-                    .zIndex(20)
-                }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -289,7 +270,6 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
-        .enableInjection()
     }
 
     func submitFocusField() {
@@ -308,6 +288,8 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
             .frame(alignment: .trailing)
             .padding(.trailing, 8)
             .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .keyboardType(.asciiCapable)
             .focused($isFocused)
             .onChange(of: isFocused) {
                 if !self.isFocused { return self.showSuggestions = false }
@@ -347,31 +329,6 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
 
                 self.showSuggestions = !self.text.isEmpty && !self.filteredSuggestions.isEmpty
             }
-    }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
-}
-
-struct SuggestionList: View {
-    let suggestions: [String]
-    @Binding var selection: String
-
-    var body: some View {
-        List(suggestions, id: \.self) { suggestion in
-            Text(suggestion)
-                .onTapGesture {
-                    self.selection = suggestion
-                }
-                .padding(.vertical, 4)
-                .foregroundColor(.black.opacity(0.75))
-        }
-        .listStyle(.inset)
-        .cornerRadius(10)
-        .shadow(radius: 5)
-        .padding(.trailing, 20)
-        .enableInjection()
     }
 
     #if DEBUG
