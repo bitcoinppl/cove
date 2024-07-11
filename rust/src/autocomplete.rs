@@ -6,7 +6,9 @@ pub trait AutoComplete: Send + Sync + std::fmt::Debug + 'static {
 }
 
 #[derive(Debug, Copy, Clone, uniffi::Object)]
-pub struct Bip39AutoComplete;
+pub struct Bip39AutoComplete {
+    max_auto_complete: usize,
+}
 
 impl_default_for!(Bip39AutoComplete);
 
@@ -14,7 +16,9 @@ impl_default_for!(Bip39AutoComplete);
 impl Bip39AutoComplete {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        Self
+        Self {
+            max_auto_complete: 3,
+        }
     }
 }
 
@@ -32,7 +36,7 @@ impl AutoComplete for Bip39AutoComplete {
             .word_list()
             .iter()
             .filter(|w| w.starts_with(&word))
-            .take(5)
+            .take(self.max_auto_complete)
             .map(|w| w.to_string())
             .collect()
     }
