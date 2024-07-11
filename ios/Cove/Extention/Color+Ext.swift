@@ -33,4 +33,16 @@ extension Color {
             opacity: Double(a) / 255
         )
     }
+
+    func getRGB() -> (red: Int, green: Int, blue: Int, opacity: Double) {
+        let cgColor = UIColor(self).cgColor
+        let components = cgColor.components ?? []
+
+        return (
+            red: Int(components[0] * 255),
+            green: Int(components[1] * 255),
+            blue: Int(components[2] * 255),
+            opacity: cgColor.alpha
+        )
+    }
 }

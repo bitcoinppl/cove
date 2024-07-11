@@ -22,6 +22,51 @@ extension WalletColor {
             return [color, color.opacity(0.6)]
         }
     }
+
+    func toColor() -> Color {
+        switch self {
+        case .red:
+            return .red
+        case .blue:
+            return .blue
+        case .green:
+            return .green
+        case .yellow:
+            return .yellow
+        case .orange:
+            return .orange
+        case .purple:
+            return .purple
+        case .pink:
+            return .pink
+        case let .custom(r, g, b):
+            return Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
+        }
+    }
+}
+
+extension Color {
+    func toWalletColor() -> WalletColor {
+        switch self {
+        case .red:
+            return .red
+        case .blue:
+            return .blue
+        case .green:
+            return .green
+        case .yellow:
+            return .yellow
+        case .orange:
+            return .orange
+        case .purple:
+            return .purple
+        case .pink:
+            return .pink
+        case let color:
+            let (red, green, blue, _opacity) = color.getRGB()
+            return .custom(r: UInt8(red), g: UInt8(green), b: UInt8(blue))
+        }
+    }
 }
 
 func customToColor(r: UInt8, g: UInt8, b: UInt8) -> Color {

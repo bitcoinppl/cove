@@ -13,16 +13,7 @@ struct SelectedWalletView: View {
 
     let id: WalletId
     @State private var model: WalletViewModel? = nil
-    @State private var showingDeleteConfirmation = false
     @State private var showSettings = false
-
-    func deleteWallet(model: WalletViewModel) {
-        do {
-            try model.rust.deleteWallet()
-        } catch {
-            Log.error("Unable to delete wallet: \(error)")
-        }
-    }
 
     var body: some View {
         Group {
@@ -35,23 +26,6 @@ struct SelectedWalletView: View {
                         .font(.title2)
 
                     Text(model.rust.fingerprint())
-
-                    Button(role: .destructive) {
-                        showingDeleteConfirmation = true
-                    } label: {
-                        Image(systemName: "trash")
-                        Text("Delete Wallet")
-                            .bold()
-                    }
-                    .padding(.top, 20)
-                    .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
-                        Button("Delete", role: .destructive) {
-                            deleteWallet(model: model)
-                        }
-                        Button("Cancel", role: .cancel) {}
-                    } message: {
-                        Text("This action cannot be undone.")
-                    }
 
                     Spacer()
                     VerifyReminder(walletId: id, isVerified: model.isVerified)
@@ -67,6 +41,9 @@ struct SelectedWalletView: View {
                     }
                 }
                 .navigationTitle(model.walletMetadata.name)
+                .sheet(isPresented: $showSettings) {
+                    WalletSettingsView(model: model)
+                }
             } else {
                 Text("Loading...")
             }
@@ -85,6 +62,77 @@ struct SelectedWalletView: View {
     #if DEBUG
         @ObserveInjection var forceRedraw
     #endif
+}
+
+struct WalletSettingsView: View {
+    let model: WalletViewModel
+    @Environment(\.navigate) private var navigate
+    @Environment(\.presentationMode) var presentationMode
+
+    @State private var showingDeleteConfirmation = false
+    @State private var walletName: String = "Demo"
+    @State private var walletColor: Color = .red
+
+    let colors: [Color] = [.red, .orange, .yellow, .green, .blue, .purple, .pink]
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Basic Settings")) {
+                    TextField("Wallet Name", text: $walletName)
+
+                    Picker("Wallet Color", selection: $walletColor) {
+                        ForEach(colors, id: \.self) { color in
+                            Text(color.description)
+                                .foregroundColor(.clear)
+                                .background(color)
+                                .frame(width: 30, height: 30)
+                                .clipShape(Circle())
+                                .tag(color)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+
+                Section {
+                    Button(action: {
+                        presentationMode.wrappedValue.dismiss()
+                        navigate(Route.settings)
+                    }) {
+                        Label("App Settings", systemImage: "gear")
+                            .foregroundColor(.blue)
+                    }
+                }
+
+                Section {
+                    Button {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Wallet", systemImage: "trash")
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .listStyle(InsetGroupedListStyle())
+            .navigationTitle("Wallet Settings")
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
+            .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
+                Button("Delete", role: .destructive) {
+                    do {
+                        try model.rust.deleteWallet()
+                        presentationMode.wrappedValue.dismiss()
+                    } catch {
+                        Log.error("Unable to delete wallet: \(error)")
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This action cannot be undone.")
+            }
+        }
+    }
 }
 
 struct VerifyReminder: View {
