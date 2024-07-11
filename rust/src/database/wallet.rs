@@ -114,7 +114,23 @@ impl WalletTable {
             }
         });
 
-        self.save(Network::Bitcoin, wallets)?;
+        self.save(network, wallets)?;
+
+        Ok(())
+    }
+
+    pub fn update_wallet_metadata(&self, metadata: WalletMetadata) -> Result<(), Error> {
+        let network = metadata.network;
+        let mut wallets = self.get(network)?;
+
+        // update the wallet
+        wallets.iter_mut().for_each(|wallet| {
+            if wallet.id == metadata.id {
+                *wallet = metadata.clone();
+            }
+        });
+
+        self.save(network, wallets)?;
 
         Ok(())
     }

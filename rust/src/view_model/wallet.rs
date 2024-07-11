@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crossbeam::channel::{Receiver, Sender};
+use log::error;
 use parking_lot::RwLock;
 
 use crate::{
@@ -158,8 +159,6 @@ impl RustWalletViewModel {
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
-        let _state = self.state.clone();
-
         match action {
             WalletViewModelAction::UpdateName(name) => {
                 let mut state = self.state.write();
@@ -181,6 +180,14 @@ impl RustWalletViewModel {
                     ))
                     .unwrap();
             }
+        }
+
+        // update wallet_metadata in the database
+        if let Err(error) = Database::global()
+            .wallets
+            .update_wallet_metadata(self.state.read().wallet_metadata.clone())
+        {
+            error!("Unable to update wallet metadata: {error:?}")
         }
     }
 }
