@@ -22,10 +22,13 @@ struct VerifyWordsView: View {
 
     @StateObject private var keyboardObserver = KeyboardObserver()
 
-    @State private var model: WalletViewModel? = nil
+    @State var model: WalletViewModel? = nil
     @State private var validator: WordValidator? = nil
-    @State private var groupedWords: [[GroupedWord]] = [[]]
-    @State private var enteredWords: [[String]] = [[]]
+
+    @State var groupedWords: [[GroupedWord]] = [[]]
+    @State var enteredWords: [[String]] = [[]]
+    @State var textFields: [String] = []
+    @State var filteredSuggestions: [String] = []
 
     func initOnAppear() {
         do {
@@ -36,7 +39,7 @@ struct VerifyWordsView: View {
             self.model = model
             self.validator = validator
             self.groupedWords = groupedWords
-            enteredWords = groupedWords.map { _ in Array(repeating: "", count: 6) }
+            enteredWords = groupedWords.map { $0.map { _ in "" }}
         } catch {
             Log.error("VerifyWords failed to initialize: \(error)")
         }
@@ -93,17 +96,44 @@ struct VerifyWordsView: View {
                     }
 
                     FixedGlassCard {
-                        TabView(selection: $tabIndex) {
-                            ForEach(Array(validator.groupedWords().enumerated()), id: \.offset) { index, wordGroup in
-                                CardTab(wordGroup: wordGroup, fields: $enteredWords[index], focusField: $focusField)
-                                    .tag(index)
+                        VStack {
+                            TabView(selection: $tabIndex) {
+                                ForEach(Array(validator.groupedWords().enumerated()), id: \.offset) { index, wordGroup in
+                                    VStack {
+                                        CardTab(wordGroup: wordGroup, fields: $enteredWords[index], filteredSuggestions: $filteredSuggestions, focusField: $focusField)
+                                            .tag(index)
+                                            .padding(.bottom, keyboardIsShowing ? 60 : 20)
+                                    }
+                                }
+                                .padding(.horizontal, 30)
                             }
-                            .padding(.horizontal, 30)
-                            .padding(.vertical, 30)
                         }
                     }
                     .frame(height: cardHeight)
                     .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            HStack {
+                                ForEach(filteredSuggestions, id: \.self) { word in
+                                    Spacer()
+                                    Button(word) {
+                                        guard let focusField = focusField else { return }
+                                        let (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
+                                        let innerIndex = remainder - 1
+                                        enteredWords[outerIndex][innerIndex] = word
+                                        self.focusField = focusField + 1
+                                    }
+                                    .foregroundColor(.secondary)
+                                    Spacer()
+
+                                    // only show divider in the middle
+                                    if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
+                                        Divider()
+                                    }
+                                }
+                            }
+                        }
+                    }
                     .padding(.horizontal, 30)
 
                     Spacer()
@@ -150,10 +180,13 @@ struct VerifyWordsView: View {
                     title: Text("Skip verifying words?"),
                     message: Text("Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"),
                     primaryButton: .destructive(Text("Yes, Verify Later")) {
-                        navigate(Route.listWallets)
+                        appModel.resetRoute(to: Route.selectedWallet(id))
                     },
                     secondaryButton: .cancel(Text("Cancel"))
                 )
+            }
+            .onChange(of: focusField) { _, _ in
+                filteredSuggestions = []
             }
             .enableInjection()
         } else {
@@ -170,26 +203,27 @@ struct VerifyWordsView: View {
 struct CardTab: View {
     let wordGroup: [GroupedWord]
     @Binding var fields: [String]
+    @Binding var filteredSuggestions: [String]
     @Binding var focusField: Int?
 
-    func zIndex(index: Int) -> Double {
-        // if focused, on the bottom half, don't set zIndex
-        // because we want the suggestions to show on top
-        if let field = focusField, (field % 6) == 0 || (field % 6) > 3 {
-            return 1
-        }
+    @StateObject private var keyboardObserver = KeyboardObserver()
 
-        return 6 - Double(index)
+    var keyboardIsShowing: Bool {
+        keyboardObserver.keyboardIsShowing
+    }
+
+    var cardSpacing: CGFloat {
+        keyboardIsShowing ? 15 : 20
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: cardSpacing) {
             ForEach(Array(self.wordGroup.enumerated()), id: \.offset) { index, word in
-                AutocompleteField(autocompleter: Bip39AutoComplete(),
+                AutocompleteField(autocomplete: Bip39AutoComplete(),
                                   word: word,
                                   text: self.$fields[index],
+                                  filteredSuggestions: $filteredSuggestions,
                                   focusField: self.$focusField)
-                    .zIndex(zIndex(index: index))
             }
 
         }.onAppear {
@@ -203,24 +237,17 @@ struct CardTab: View {
     #endif
 }
 
-struct AutocompleteField<AutoCompleter: AutoComplete>: View {
-    let autocompleter: AutoCompleter
+struct AutocompleteField: View {
+    let autocomplete: Bip39AutoComplete
     let word: GroupedWord
 
     @Binding var text: String
+    @Binding var filteredSuggestions: [String]
     @Binding var focusField: Int?
 
     @State private var showSuggestions = false
     @State private var offset: CGPoint = .zero
     @FocusState private var isFocused: Bool
-
-    var filteredSuggestions: [String] {
-        autocompleter.autocomplete(word: text)
-    }
-
-    var frameHeight: CGFloat {
-        CGFloat(filteredSuggestions.count) * 50
-    }
 
     var borderColor: Color? {
         // starting state
@@ -251,34 +278,12 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
         return .none
     }
 
-    var offsetCalc: CGFloat {
-        // bottom half word, show suggestions above the word
-        if word.number % 6 == 0 || word.number % 6 > 3 {
-            return -60 - frameHeight
-        }
-
-        // top half word, show suggestions below the word
-        return 0
-    }
-
     var body: some View {
         HStack {
             Text("\(String(format: "%02d", self.word.number)). ")
                 .foregroundColor(.secondary)
 
             textField
-                .overlay(alignment: Alignment(horizontal: .center, vertical: .top)) {
-                    Group {
-                        if self.showSuggestions {
-                            SuggestionList(suggestions: self.filteredSuggestions, selection: self.$text)
-                                .transition(.move(edge: .top))
-                                .frame(height: frameHeight)
-                                .offset(y: offsetCalc)
-                        }
-                    }
-                    .offset(y: 40)
-                    .zIndex(20)
-                }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -289,10 +294,10 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
-        .enableInjection()
     }
 
     func submitFocusField() {
+        filteredSuggestions = []
         guard let focusField = focusField else {
             return
         }
@@ -302,12 +307,14 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
 
     var textField: some View {
         TextField("", text: $text,
-                  prompt: Text("Placeholder text")
+                  prompt: Text("enter secret word...")
                       .foregroundColor(.white.opacity(0.65)))
             .foregroundColor(borderColor ?? .white)
             .frame(alignment: .trailing)
             .padding(.trailing, 8)
             .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .keyboardType(.asciiCapable)
             .focused($isFocused)
             .onChange(of: isFocused) {
                 if !self.isFocused { return self.showSuggestions = false }
@@ -326,52 +333,15 @@ struct AutocompleteField<AutoCompleter: AutoComplete>: View {
                 }
             }
             .onChange(of: text) {
-                if !self.isFocused {
-                    return self.showSuggestions = false
-                }
-
-                if self.text.lowercased() == self.word.word {
-                    return self.showSuggestions = false
-                }
-
-                if self.filteredSuggestions.count == 1 {
-                    self.showSuggestions = false
-                }
+                filteredSuggestions = autocomplete.autocomplete(word: text)
 
                 if self.filteredSuggestions.count == 1 && self.filteredSuggestions.first == word.word {
-                    self.showSuggestions = false
                     self.text = self.filteredSuggestions.first!
+
                     submitFocusField()
                     return
                 }
-
-                self.showSuggestions = !self.text.isEmpty && !self.filteredSuggestions.isEmpty
             }
-    }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
-}
-
-struct SuggestionList: View {
-    let suggestions: [String]
-    @Binding var selection: String
-
-    var body: some View {
-        List(suggestions, id: \.self) { suggestion in
-            Text(suggestion)
-                .onTapGesture {
-                    self.selection = suggestion
-                }
-                .padding(.vertical, 4)
-                .foregroundColor(.black.opacity(0.75))
-        }
-        .listStyle(.inset)
-        .cornerRadius(10)
-        .shadow(radius: 5)
-        .padding(.trailing, 20)
-        .enableInjection()
     }
 
     #if DEBUG

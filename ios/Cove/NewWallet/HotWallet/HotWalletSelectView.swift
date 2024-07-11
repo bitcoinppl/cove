@@ -11,51 +11,56 @@ struct HotWalletSelectView: View {
     @State private var isSheetShown = false
 
     var body: some View {
-        VStack {
+        VStack(spacing: 20) {
+            Text("Select Wallet Option")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .padding(.top)
+
+            Spacer()
+
             Button(action: { isSheetShown = true }) {
-                Text("Create Wallet")
-                    .font(.title3)
-                    .bold()
-                    .foregroundStyle(.white)
-                    .frame(minWidth: 250, minHeight: 90)
-                    .confirmationDialog("Background Color", isPresented: $isSheetShown) {
-                        NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twelve).intoRoute()) {
-                            Text("12 Words")
-                        }
-                        NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twentyFour).intoRoute()) {
-                            Text("24 Words")
-                        }
-                    }
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Create Wallet")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 25)
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
             }
-            .background(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(.green)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 15)
-                    .stroke(Color.green, lineWidth: 2)
-                    .brightness(-0.1)
-            )
-            .padding(.vertical, 15)
+            .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
+                NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twelve).intoRoute()) {
+                    Text("12 Words")
+                }
+                NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twentyFour).intoRoute()) {
+                    Text("24 Words")
+                }
+            }
 
             NavigationLink(value: HotWalletRoute.import.intoRoute()) {
-                Text("Restore Wallet")
-                    .font(.title3)
-                    .bold()
-                    .foregroundStyle(.primary)
-                    .frame(minWidth: 250, minHeight: 90)
+                HStack {
+                    Image(systemName: "arrow.down.circle.fill")
+                    Text("Restore Wallet")
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 25)
+                .background(Color.secondary.opacity(0.1))
+                .foregroundColor(.primary)
+                .cornerRadius(10)
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: 15)
-                    .stroke(Color.primary, lineWidth: 2)
-            )
-            .padding(.vertical, 15)
+
+            Spacer()
+            Spacer()
         }
+        .padding()
+        .navigationBarTitleDisplayMode(.inline)
         .enableInjection()
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 
