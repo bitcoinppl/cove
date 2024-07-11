@@ -67,81 +67,6 @@ struct SelectedWalletView: View {
     #endif
 }
 
-struct WalletSettingsView: View {
-    let model: WalletViewModel
-    @Environment(\.navigate) private var navigate
-    @Environment(\.presentationMode) var presentationMode
-
-    @State private var showingDeleteConfirmation = false
-
-    let colors: [WalletColor] = WalletColor.red.all()
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section(header: Text("Basic Settings")) {
-                    TextField("Wallet Name", text: Binding(
-                        get: { model.walletMetadata.name },
-                        set: { model.dispatch(action: .updateName($0)) }
-                    ))
-
-                    Picker("Wallet Color", selection: Binding(
-                        get: { model.walletMetadata.color },
-                        set: { model.dispatch(action: .updateColor($0)) }
-                    )) {
-                        ForEach(colors, id: \.self) { color in
-                            Text(color.toColor().description)
-                                .foregroundColor(.clear)
-                                .background(color.toColor())
-                                .frame(width: 30, height: 30)
-                                .clipShape(Circle())
-                                .tag(color)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                }
-
-                Section {
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                        navigate(Route.settings)
-                    }) {
-                        Label("App Settings", systemImage: "gear")
-                            .foregroundColor(.blue)
-                    }
-                }
-
-                Section {
-                    Button {
-                        showingDeleteConfirmation = true
-                    } label: {
-                        Label("Delete Wallet", systemImage: "trash")
-                            .foregroundColor(.red)
-                    }
-                }
-            }
-            .listStyle(InsetGroupedListStyle())
-            .navigationTitle("Wallet Settings")
-            .navigationBarItems(trailing: Button("Done") {
-                presentationMode.wrappedValue.dismiss()
-            })
-            .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
-                Button("Delete", role: .destructive) {
-                    do {
-                        try model.rust.deleteWallet()
-                        presentationMode.wrappedValue.dismiss()
-                    } catch {
-                        Log.error("Unable to delete wallet: \(error)")
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This action cannot be undone.")
-            }
-        }
-    }
-}
-
 struct VerifyReminder: View {
     @Environment(\.navigate) private var navigate
     let walletId: WalletId
@@ -162,7 +87,12 @@ struct VerifyReminder: View {
                 .background(Color.yellow.gradient)
             }
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 }
 
 #Preview {

@@ -83,5 +83,10 @@ struct SettingsView: View {
             )
         }
         .preferredColorScheme(app.colorScheme)
+        .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 }

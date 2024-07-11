@@ -10,6 +10,7 @@
 		0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */; };
 		2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19224F788C8E6EEDE418212E /* ColorSchemeSelection+Ext.swift */; };
 		382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */; };
+		4998F4A296FA2217EC2BD80F /* WalletSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80049549984BDDA80E72D91C /* WalletSettings.swift */; };
 		4B7D31B349728B3C573472DD /* Network+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5398BBCAD30C0F26920CC75C /* Network+Ext.swift */; };
 		50B3D54BE1FF7EAE394ACC68 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D546639077F0CA261D89D71C /* SettingsView.swift */; };
 		52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6032F09EA34DFDCB18090A /* RouteView.swift */; };
@@ -67,6 +68,7 @@
 		4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardObserver.swift; sourceTree = "<group>"; };
 		5398BBCAD30C0F26920CC75C /* Network+Ext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Network+Ext.swift"; sourceTree = "<group>"; };
 		5D722195526284FA0FD24DDE /* WalletColor+Ext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "WalletColor+Ext.swift"; sourceTree = "<group>"; };
+		80049549984BDDA80E72D91C /* WalletSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalletSettings.swift; sourceTree = "<group>"; };
 		AC07617C2C31A527007B4540 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListWalletsView.swift; sourceTree = "<group>"; };
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
@@ -208,6 +210,7 @@
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				D546639077F0CA261D89D71C /* SettingsView.swift */,
+				80049549984BDDA80E72D91C /* WalletSettings.swift */,
 			);
 			indentWidth = 4;
 			path = Cove;
@@ -333,6 +336,7 @@
 				50B3D54BE1FF7EAE394ACC68 /* SettingsView.swift in Sources */,
 				4B7D31B349728B3C573472DD /* Network+Ext.swift in Sources */,
 				2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */,
+				4998F4A296FA2217EC2BD80F /* WalletSettings.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
