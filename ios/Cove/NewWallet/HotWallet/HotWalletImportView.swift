@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct HotWalletImportView: View {
+    let autocomplete = Bip39AutoComplete()
     @State var numberOfWords: NumberOfBip39Words
 
     @Environment(\.navigate) private var navigate
@@ -40,11 +41,11 @@ struct HotWalletImportView: View {
     }
 
     var buttonIsDisabled: Bool {
-        true
+        return enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(false)
     }
 
     var isAllWordsValid: Bool {
-        true
+        return !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(false)
     }
 
     var navDisplay: NavigationBarItem.TitleDisplayMode {
@@ -62,7 +63,9 @@ struct HotWalletImportView: View {
         }
     }
 
-    func confirm(_: WalletViewModel, _: WordValidator) {}
+    func importWallet() {
+        print("import wallet")
+    }
 
     var body: some View {
         VStack {
@@ -93,8 +96,15 @@ struct HotWalletImportView: View {
                             Spacer()
                             Button(word) {
                                 guard let focusField = focusField else { return }
+
                                 let (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
-                                let innerIndex = remainder - 1
+                                let innerIndex = min(remainder - 1, 0)
+
+                                // check indexes are in bounds
+                                if innerIndex > 5, outerIndex > lastIndex {
+                                    return
+                                }
+
                                 enteredWords[outerIndex][innerIndex] = word
                                 self.focusField = focusField + 1
                             }
@@ -115,7 +125,7 @@ struct HotWalletImportView: View {
             Spacer()
 
             if tabIndex == lastIndex {
-                Button("Confirm") {}
+                Button("Import") { importWallet() }
                     .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
                     .padding(.top, 20)
 
@@ -143,6 +153,13 @@ struct HotWalletImportView: View {
         }
         .enableInjection()
         .onAppear(perform: initOnAppear)
+        .onChange(of: enteredWords) {
+            if !buttonIsDisabled && tabIndex < lastIndex {
+                withAnimation {
+                    tabIndex += 1
+                }
+            }
+        }
     }
 }
 
@@ -283,6 +300,21 @@ private struct AutocompleteField: View {
             .onChange(of: text) { oldText, newText in
                 filteredSuggestions = autocomplete.autocomplete(word: newText)
 
+                if oldText.count > newText.count {
+                    // erasing, reset state
+                    state = .initial
+                }
+
+                // empty is always initial
+                if newText == "" {
+                    return state = .initial
+                }
+
+                // invalid, no words match
+                if filteredSuggestions.isEmpty {
+                    return state = .invalid
+                }
+
                 // if only one suggestion left and if we added a letter (not backspace)
                 // then auto select the first selection, because we want auto selection
                 // but also allow the user to fix a wrong word
@@ -290,7 +322,12 @@ private struct AutocompleteField: View {
                     if self.text != word {
                         self.text = word
                         submitFocusField()
+                        return
                     }
+                }
+            }.onAppear {
+                if let focusField = self.focusField, focusField == number {
+                    isFocused = true
                 }
             }
     }
