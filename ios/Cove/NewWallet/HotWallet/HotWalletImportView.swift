@@ -97,16 +97,22 @@ struct HotWalletImportView: View {
                             Button(word) {
                                 guard let focusField = focusField else { return }
 
-                                let (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
-                                let innerIndex = min(remainder - 1, 0)
+                                var (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
+                                var innerIndex = remainder - 1
 
-                                // check indexes are in bounds
-                                if innerIndex > 5, outerIndex > lastIndex {
+                                // adjust for last word
+                                if innerIndex < 0 {
+                                    innerIndex = 5
+                                    outerIndex = outerIndex - 1
+                                }
+
+                                if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
                                     return
                                 }
 
                                 enteredWords[outerIndex][innerIndex] = word
                                 self.focusField = focusField + 1
+                                filteredSuggestions = []
                             }
                             .foregroundColor(.secondary)
                             Spacer()
@@ -325,7 +331,8 @@ private struct AutocompleteField: View {
                         return
                     }
                 }
-            }.onAppear {
+            }
+            .onAppear {
                 if let focusField = self.focusField, focusField == number {
                     isFocused = true
                 }
