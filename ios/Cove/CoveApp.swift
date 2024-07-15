@@ -31,9 +31,9 @@ struct CoveApp: App {
 
     var tintColor: Color {
         switch model.router.routes.last {
-        case .newWallet(.hotWallet(.select)):
-            Color.blue
-        case .newWallet(.hotWallet(_)):
+        case .newWallet(.hotWallet(.create(_))):
+            Color.white
+        case .newWallet(.hotWallet(.verifyWords(_))):
             Color.white
         default:
             Color.blue

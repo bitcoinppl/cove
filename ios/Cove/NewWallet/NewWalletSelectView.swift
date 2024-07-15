@@ -57,7 +57,7 @@ struct NewWalletSelect: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 25)
-            .background(color.opacity(colorScheme == .dark ? 0.6 : 0.8))
+            .background(color.opacity(colorScheme == .dark ? 0.85 : 1))
             .foregroundColor(.white)
             .cornerRadius(12)
         }

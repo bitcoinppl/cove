@@ -7,8 +7,23 @@
 
 import SwiftUI
 
+enum NextScreenDialog {
+    case import_
+    case create
+}
+
 struct HotWalletSelectView: View {
     @State private var isSheetShown = false
+    @State private var nextScreen: NextScreenDialog = .create
+
+    func route(_ words: NumberOfBip39Words) -> Route {
+        switch nextScreen {
+        case .import_:
+            HotWalletRoute.import(words).intoRoute()
+        case .create:
+            HotWalletRoute.create(words).intoRoute()
+        }
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -19,7 +34,7 @@ struct HotWalletSelectView: View {
 
             Spacer()
 
-            Button(action: { isSheetShown = true }) {
+            Button(action: { isSheetShown = true; nextScreen = .create }) {
                 HStack {
                     Image(systemName: "plus.circle.fill")
                     Text("Create Wallet")
@@ -31,18 +46,18 @@ struct HotWalletSelectView: View {
                 .cornerRadius(10)
             }
             .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
-                NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twelve).intoRoute()) {
+                NavigationLink(value: route(.twelve)) {
                     Text("12 Words")
                 }
-                NavigationLink(value: HotWalletRoute.create(words: NumberOfBip39Words.twentyFour).intoRoute()) {
+                NavigationLink(value: route(.twentyFour)) {
                     Text("24 Words")
                 }
             }
 
-            NavigationLink(value: HotWalletRoute.import.intoRoute()) {
+            Button(action: { isSheetShown = true; nextScreen = .import_ }) {
                 HStack {
                     Image(systemName: "arrow.down.circle.fill")
-                    Text("Restore Wallet")
+                    Text("Import Wallet")
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 25)

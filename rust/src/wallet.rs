@@ -129,6 +129,16 @@ pub enum NumberOfBip39Words {
     TwentyFour,
 }
 
+#[uniffi::export]
+pub fn number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec<String>> {
+    me.in_groups_of(of as usize)
+}
+
+#[uniffi::export]
+pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
+    me.to_word_count() as u8
+}
+
 impl NumberOfBip39Words {
     pub const fn to_word_count(self) -> usize {
         match self {
@@ -161,6 +171,11 @@ impl NumberOfBip39Words {
                 Mnemonic::from_entropy(&random_bytes).expect("failed to create mnemonic")
             }
         }
+    }
+
+    pub fn in_groups_of(&self, groups_of: usize) -> Vec<Vec<String>> {
+        let number_of_groups = self.to_word_count() / groups_of as usize;
+        vec![vec![String::new(); groups_of]; number_of_groups]
     }
 }
 

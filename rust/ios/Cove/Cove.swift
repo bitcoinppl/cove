@@ -468,6 +468,8 @@ private struct FfiConverterString: FfiConverter {
 
 public protocol AutoComplete: AnyObject {
     func autocomplete(word: String) -> [String]
+
+    func isValidWord(word: String) -> Bool
 }
 
 open class AutoCompleteImpl:
@@ -516,6 +518,13 @@ open class AutoCompleteImpl:
                                                             FfiConverterString.lower(word), $0)
         })
     }
+
+    open func isValidWord(word: String) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_autocomplete_is_valid_word(self.uniffiClonePointer(),
+                                                             FfiConverterString.lower(word), $0)
+        })
+    }
 }
 
 // Magic number for the Rust proxy to call using the same mechanism as every other method,
@@ -548,6 +557,29 @@ private enum UniffiCallbackInterfaceAutoComplete {
             }
 
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterSequenceString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        isValidWord: { (
+            uniffiHandle: UInt64,
+            word: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeAutoComplete.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.isValidWord(
+                    word: FfiConverterString.lift(word)
+                )
+            }
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
@@ -612,6 +644,8 @@ public func FfiConverterTypeAutoComplete_lower(_ value: AutoComplete) -> UnsafeM
 
 public protocol Bip39AutoCompleteProtocol: AnyObject {
     func autocomplete(word: String) -> [String]
+
+    func isValidWord(word: String) -> Bool
 }
 
 open class Bip39AutoComplete:
@@ -665,6 +699,13 @@ open class Bip39AutoComplete:
         return try! FfiConverterSequenceString.lift(try! rustCall {
             uniffi_cove_fn_method_bip39autocomplete_autocomplete(self.uniffiClonePointer(),
                                                                  FfiConverterString.lower(word), $0)
+        })
+    }
+
+    open func isValidWord(word: String) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_bip39autocomplete_is_valid_word(self.uniffiClonePointer(),
+                                                                  FfiConverterString.lower(word), $0)
         })
     }
 }
@@ -1543,6 +1584,116 @@ public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeM
     return FfiConverterTypeRouteFactory.lower(value)
 }
 
+public protocol RustImportWalletViewModelProtocol: AnyObject {
+    /**
+     * Action from the frontend to change the state of the view model
+     */
+    func dispatch(action: ImportWalletViewModelAction)
+
+    func listenForUpdates(reconciler: ImportWalletViewModelReconciler)
+}
+
+open class RustImportWalletViewModel:
+    RustImportWalletViewModelProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_rustimportwalletviewmodel(self.pointer, $0) }
+    }
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_rustimportwalletviewmodel_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustimportwalletviewmodel(pointer, $0) }
+    }
+
+    /**
+     * Action from the frontend to change the state of the view model
+     */
+    open func dispatch(action: ImportWalletViewModelAction) { try! rustCall {
+        uniffi_cove_fn_method_rustimportwalletviewmodel_dispatch(self.uniffiClonePointer(),
+                                                                 FfiConverterTypeImportWalletViewModelAction.lower(action), $0)
+    }
+    }
+
+    open func listenForUpdates(reconciler: ImportWalletViewModelReconciler) { try! rustCall {
+        uniffi_cove_fn_method_rustimportwalletviewmodel_listen_for_updates(self.uniffiClonePointer(),
+                                                                           FfiConverterCallbackInterfaceImportWalletViewModelReconciler.lower(reconciler), $0)
+    }
+    }
+}
+
+public struct FfiConverterTypeRustImportWalletViewModel: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = RustImportWalletViewModel
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> RustImportWalletViewModel {
+        return RustImportWalletViewModel(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: RustImportWalletViewModel) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustImportWalletViewModel {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: RustImportWalletViewModel, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeRustImportWalletViewModel_lift(_ pointer: UnsafeMutableRawPointer) throws -> RustImportWalletViewModel {
+    return try FfiConverterTypeRustImportWalletViewModel.lift(pointer)
+}
+
+public func FfiConverterTypeRustImportWalletViewModel_lower(_ value: RustImportWalletViewModel) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeRustImportWalletViewModel.lower(value)
+}
+
 public protocol RustPendingWalletViewModelProtocol: AnyObject {
     func bip39Words() -> [String]
 
@@ -2319,6 +2470,37 @@ public func FfiConverterTypeGroupedWord_lower(_ value: GroupedWord) -> RustBuffe
     return FfiConverterTypeGroupedWord.lower(value)
 }
 
+public struct ImportWalletViewModelState {
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init() {}
+}
+
+extension ImportWalletViewModelState: Equatable, Hashable {
+    public static func == (_: ImportWalletViewModelState, _: ImportWalletViewModelState) -> Bool {
+        return true
+    }
+
+    public func hash(into _: inout Hasher) {}
+}
+
+public struct FfiConverterTypeImportWalletViewModelState: FfiConverterRustBuffer {
+    public static func read(from _: inout (data: Data, offset: Data.Index)) throws -> ImportWalletViewModelState {
+        return
+            ImportWalletViewModelState()
+    }
+
+    public static func write(_: ImportWalletViewModelState, into _: inout [UInt8]) {}
+}
+
+public func FfiConverterTypeImportWalletViewModelState_lift(_ buf: RustBuffer) throws -> ImportWalletViewModelState {
+    return try FfiConverterTypeImportWalletViewModelState.lift(buf)
+}
+
+public func FfiConverterTypeImportWalletViewModelState_lower(_ value: ImportWalletViewModelState) -> RustBuffer {
+    return FfiConverterTypeImportWalletViewModelState.lower(value)
+}
+
 public struct PendingWalletViewModelState {
     public var numberOfWords: NumberOfBip39Words
     public var wallet: PendingWallet
@@ -3027,9 +3209,10 @@ extension GlobalFlagTableError: Foundation.LocalizedError {
 
 public enum HotWalletRoute {
     case select
-    case create(words: NumberOfBip39Words
+    case create(NumberOfBip39Words
     )
-    case `import`
+    case `import`(NumberOfBip39Words
+    )
     case verifyWords(WalletId
     )
 }
@@ -3042,10 +3225,11 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
         switch variant {
         case 1: return .select
 
-        case 2: return try .create(words: FfiConverterTypeNumberOfBip39Words.read(from: &buf)
+        case 2: return try .create(FfiConverterTypeNumberOfBip39Words.read(from: &buf)
             )
 
-        case 3: return .import
+        case 3: return try .import(FfiConverterTypeNumberOfBip39Words.read(from: &buf)
+            )
 
         case 4: return try .verifyWords(FfiConverterTypeWalletId.read(from: &buf)
             )
@@ -3059,12 +3243,13 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
         case .select:
             writeInt(&buf, Int32(1))
 
-        case let .create(words):
+        case let .create(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeNumberOfBip39Words.write(words, into: &buf)
+            FfiConverterTypeNumberOfBip39Words.write(v1, into: &buf)
 
-        case .import:
+        case let .import(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeNumberOfBip39Words.write(v1, into: &buf)
 
         case let .verifyWords(v1):
             writeInt(&buf, Int32(4))
@@ -3082,6 +3267,80 @@ public func FfiConverterTypeHotWalletRoute_lower(_ value: HotWalletRoute) -> Rus
 }
 
 extension HotWalletRoute: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ImportWalletViewModelAction {
+    case noOp
+}
+
+public struct FfiConverterTypeImportWalletViewModelAction: FfiConverterRustBuffer {
+    typealias SwiftType = ImportWalletViewModelAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportWalletViewModelAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .noOp
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ImportWalletViewModelAction, into buf: inout [UInt8]) {
+        switch value {
+        case .noOp:
+            writeInt(&buf, Int32(1))
+        }
+    }
+}
+
+public func FfiConverterTypeImportWalletViewModelAction_lift(_ buf: RustBuffer) throws -> ImportWalletViewModelAction {
+    return try FfiConverterTypeImportWalletViewModelAction.lift(buf)
+}
+
+public func FfiConverterTypeImportWalletViewModelAction_lower(_ value: ImportWalletViewModelAction) -> RustBuffer {
+    return FfiConverterTypeImportWalletViewModelAction.lower(value)
+}
+
+extension ImportWalletViewModelAction: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ImportWalletViewModelReconcileMessage {
+    case noOp
+}
+
+public struct FfiConverterTypeImportWalletViewModelReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = ImportWalletViewModelReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportWalletViewModelReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .noOp
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ImportWalletViewModelReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+        case .noOp:
+            writeInt(&buf, Int32(1))
+        }
+    }
+}
+
+public func FfiConverterTypeImportWalletViewModelReconcileMessage_lift(_ buf: RustBuffer) throws -> ImportWalletViewModelReconcileMessage {
+    return try FfiConverterTypeImportWalletViewModelReconcileMessage.lift(buf)
+}
+
+public func FfiConverterTypeImportWalletViewModelReconcileMessage_lower(_ value: ImportWalletViewModelReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeImportWalletViewModelReconcileMessage.lower(value)
+}
+
+extension ImportWalletViewModelReconcileMessage: Equatable, Hashable {}
 
 public enum KeychainError {
     case UnableToSave
@@ -3859,6 +4118,81 @@ extension FfiConverterCallbackInterfaceFfiReconcile: FfiConverter {
     }
 }
 
+public protocol ImportWalletViewModelReconciler: AnyObject {
+    /**
+     * Tells the frontend to reconcile the view model changes
+     */
+    func reconcile(message: ImportWalletViewModelReconcileMessage)
+}
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+private enum UniffiCallbackInterfaceImportWalletViewModelReconciler {
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceImportWalletViewModelReconciler = .init(
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            _: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceImportWalletViewModelReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.reconcile(
+                    message: FfiConverterTypeImportWalletViewModelReconcileMessage.lift(message)
+                )
+            }
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) in
+            let result = try? FfiConverterCallbackInterfaceImportWalletViewModelReconciler.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface ImportWalletViewModelReconciler: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitImportWalletViewModelReconciler() {
+    uniffi_cove_fn_init_callback_vtable_importwalletviewmodelreconciler(&UniffiCallbackInterfaceImportWalletViewModelReconciler.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+private enum FfiConverterCallbackInterfaceImportWalletViewModelReconciler {
+    fileprivate static var handleMap = UniffiHandleMap<ImportWalletViewModelReconciler>()
+}
+
+extension FfiConverterCallbackInterfaceImportWalletViewModelReconciler: FfiConverter {
+    typealias SwiftType = ImportWalletViewModelReconciler
+    typealias FfiType = UInt64
+
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
 public protocol KeychainAccess: AnyObject {
     func save(key: String, value: String) throws
 
@@ -4413,6 +4747,23 @@ public func networkToString(network: Network) -> String {
     })
 }
 
+public func numberOfWordsInGroups(me: NumberOfBip39Words, of: UInt8) -> [[String]] {
+    return try! FfiConverterSequenceSequenceString.lift(try! rustCall {
+        uniffi_cove_fn_func_number_of_words_in_groups(
+            FfiConverterTypeNumberOfBip39Words.lower(me),
+            FfiConverterUInt8.lower(of), $0
+        )
+    })
+}
+
+public func numberOfWordsToWordCount(me: NumberOfBip39Words) -> UInt8 {
+    return try! FfiConverterUInt8.lift(try! rustCall {
+        uniffi_cove_fn_func_number_of_words_to_word_count(
+            FfiConverterTypeNumberOfBip39Words.lower(me), $0
+        )
+    })
+}
+
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -4441,10 +4792,22 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_network_to_string() != 60660 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_func_number_of_words_in_groups() != 14214 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_number_of_words_to_word_count() != 24846 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_autocomplete_is_valid_word() != 18021 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 21847 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_bip39autocomplete_is_valid_word() != 19081 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_database_global_config() != 4476 {
@@ -4520,6 +4883,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustimportwalletviewmodel_dispatch() != 54003 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustimportwalletviewmodel_listen_for_updates() != 3156 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustpendingwalletviewmodel_bip_39_words() != 43976 {
@@ -4603,6 +4972,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_routefactory_new() != 4959 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_constructor_rustimportwalletviewmodel_new() != 30630 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_constructor_rustpendingwalletviewmodel_new() != 47075 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4610,6 +4982,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffireconcile_reconcile() != 54238 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_importwalletviewmodelreconciler_reconcile() != 63459 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_keychainaccess_save() != 63039 {
@@ -4630,6 +5005,7 @@ private var initializationResult: InitializationResult = {
 
     uniffiCallbackInitAutoComplete()
     uniffiCallbackInitFfiReconcile()
+    uniffiCallbackInitImportWalletViewModelReconciler()
     uniffiCallbackInitKeychainAccess()
     uniffiCallbackInitPendingWalletViewModelReconciler()
     uniffiCallbackInitWalletViewModelReconciler()

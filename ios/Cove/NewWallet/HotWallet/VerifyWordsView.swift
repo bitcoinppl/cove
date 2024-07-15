@@ -194,13 +194,9 @@ struct VerifyWordsView: View {
                 .onAppear(perform: initOnAppear)
         }
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
-struct CardTab: View {
+private struct CardTab: View {
     let wordGroup: [GroupedWord]
     @Binding var fields: [String]
     @Binding var filteredSuggestions: [String]
@@ -237,7 +233,7 @@ struct CardTab: View {
     #endif
 }
 
-struct AutocompleteField: View {
+private struct AutocompleteField: View {
     let autocomplete: Bip39AutoComplete
     let word: GroupedWord
 
@@ -294,7 +290,12 @@ struct AutocompleteField: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
+        .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 
     func submitFocusField() {
         filteredSuggestions = []
@@ -343,10 +344,6 @@ struct AutocompleteField: View {
                 }
             }
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 #Preview {

@@ -3,6 +3,7 @@ use crate::impl_default_for;
 #[uniffi::export(with_foreign)]
 pub trait AutoComplete: Send + Sync + std::fmt::Debug + 'static {
     fn autocomplete(&self, word: String) -> Vec<String>;
+    fn is_valid_word(&self, word: String) -> bool;
 }
 
 #[derive(Debug, Copy, Clone, uniffi::Object)]
@@ -30,7 +31,7 @@ impl AutoComplete for Bip39AutoComplete {
             return vec![];
         }
 
-        let word = word.to_lowercase();
+        let word = word.to_ascii_lowercase();
 
         bip39::Language::English
             .word_list()
@@ -39,5 +40,14 @@ impl AutoComplete for Bip39AutoComplete {
             .take(self.max_auto_complete)
             .map(|w| w.to_string())
             .collect()
+    }
+
+    #[uniffi::method]
+    fn is_valid_word(&self, word: String) -> bool {
+        let word = word.to_ascii_lowercase();
+
+        bip39::Language::English
+            .word_list()
+            .contains(&word.as_str())
     }
 }
