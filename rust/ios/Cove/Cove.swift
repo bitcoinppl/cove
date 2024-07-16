@@ -748,6 +748,116 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
     return FfiConverterTypeBip39AutoComplete.lower(value)
 }
 
+public protocol Bip39WordSpecificAutocompleteProtocol: AnyObject {
+    func autocomplete(word: String, allWords: [[String]]) -> [String]
+
+    func isValidWord(word: String, allWords: [[String]]) -> Bool
+}
+
+open class Bip39WordSpecificAutocomplete:
+    Bip39WordSpecificAutocompleteProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_bip39wordspecificautocomplete(self.pointer, $0) }
+    }
+
+    public convenience init(wordNumber: UInt16, numberOfWords: NumberOfBip39Words) {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_bip39wordspecificautocomplete_new(
+                    FfiConverterUInt16.lower(wordNumber),
+                    FfiConverterTypeNumberOfBip39Words.lower(numberOfWords), $0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_bip39wordspecificautocomplete(pointer, $0) }
+    }
+
+    open func autocomplete(word: String, allWords: [[String]]) -> [String] {
+        return try! FfiConverterSequenceString.lift(try! rustCall {
+            uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(self.uniffiClonePointer(),
+                                                                             FfiConverterString.lower(word),
+                                                                             FfiConverterSequenceSequenceString.lower(allWords), $0)
+        })
+    }
+
+    open func isValidWord(word: String, allWords: [[String]]) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(self.uniffiClonePointer(),
+                                                                              FfiConverterString.lower(word),
+                                                                              FfiConverterSequenceSequenceString.lower(allWords), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeBip39WordSpecificAutocomplete: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Bip39WordSpecificAutocomplete
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Bip39WordSpecificAutocomplete {
+        return Bip39WordSpecificAutocomplete(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Bip39WordSpecificAutocomplete) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bip39WordSpecificAutocomplete {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Bip39WordSpecificAutocomplete, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeBip39WordSpecificAutocomplete_lift(_ pointer: UnsafeMutableRawPointer) throws -> Bip39WordSpecificAutocomplete {
+    return try FfiConverterTypeBip39WordSpecificAutocomplete.lift(pointer)
+}
+
+public func FfiConverterTypeBip39WordSpecificAutocomplete_lower(_ value: Bip39WordSpecificAutocomplete) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBip39WordSpecificAutocomplete.lower(value)
+}
+
 public protocol DatabaseProtocol: AnyObject {
     func globalConfig() -> GlobalConfigTable
 
@@ -4887,6 +4997,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_bip39autocomplete_is_valid_word() != 19081 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete() != 34680 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 4400 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_database_global_config() != 4476 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5038,6 +5154,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_bip39autocomplete_new() != 41839 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new() != 49814 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_database_new() != 41458 {

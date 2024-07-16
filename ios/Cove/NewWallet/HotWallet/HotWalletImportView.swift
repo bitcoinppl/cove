@@ -9,7 +9,7 @@ import SwiftUI
 
 struct HotWalletImportView: View {
     let autocomplete = Bip39AutoComplete()
-    @State var numberOfWords: NumberOfBip39Words
+    let numberOfWords: NumberOfBip39Words
 
     @Environment(\.navigate) private var navigate
     @Environment(MainViewModel.self) private var appModel
@@ -93,7 +93,12 @@ struct HotWalletImportView: View {
                     TabView(selection: $tabIndex) {
                         ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
                             VStack {
-                                CardTab(fields: $enteredWords[index], groupIndex: index, filteredSuggestions: $filteredSuggestions, focusField: $focusField)
+                                CardTab(fields: $enteredWords[index],
+                                        groupIndex: index,
+                                        filteredSuggestions: $filteredSuggestions,
+                                        focusField: $focusField,
+                                        allEnteredWords: enteredWords,
+                                        numberOfWords: numberOfWords)
                                     .tag(index)
                                     .padding(.bottom, keyboardIsShowing ? 60 : 20)
                             }
@@ -195,6 +200,9 @@ private struct CardTab: View {
     @Binding var filteredSuggestions: [String]
     @Binding var focusField: Int?
 
+    let allEnteredWords: [[String]]
+    let numberOfWords: NumberOfBip39Words
+
     @StateObject private var keyboardObserver = KeyboardObserver()
 
     var keyboardIsShowing: Bool {
@@ -210,24 +218,21 @@ private struct CardTab: View {
             ForEach(Array(fields.enumerated()), id: \.offset) { index, _ in
                 AutocompleteField(
                     number: (groupIndex * 6) + (index + 1),
-                    autocomplete: Bip39AutoComplete(),
+                    autocomplete: Bip39WordSpecificAutocomplete(wordNumber: UInt16((groupIndex * 6) + (index + 1)), numberOfWords: numberOfWords),
+                    allEnteredWords: allEnteredWords,
                     text: $fields[index],
                     filteredSuggestions: $filteredSuggestions,
                     focusField: self.$focusField
                 )
             }
         }
-        .enableInjection()
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 private struct AutocompleteField: View {
     let number: Int
-    let autocomplete: Bip39AutoComplete
+    let autocomplete: Bip39WordSpecificAutocomplete
+    let allEnteredWords: [[String]]
 
     @Binding var text: String
     @Binding var filteredSuggestions: [String]
@@ -288,7 +293,7 @@ private struct AutocompleteField: View {
             return
         }
 
-        if autocomplete.isValidWord(word: text) {
+        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
             state = .valid
         } else {
             state = .invalid
@@ -311,6 +316,8 @@ private struct AutocompleteField: View {
             .onChange(of: isFocused) {
                 if !self.isFocused { return self.showSuggestions = false }
 
+                filteredSuggestions = autocomplete.autocomplete(word: text, allWords: allEnteredWords)
+
                 if isFocused {
                     focusField = number
                 }
@@ -325,7 +332,7 @@ private struct AutocompleteField: View {
                 }
             }
             .onChange(of: text) { oldText, newText in
-                filteredSuggestions = autocomplete.autocomplete(word: newText)
+                filteredSuggestions = autocomplete.autocomplete(word: newText, allWords: allEnteredWords)
 
                 if oldText.count > newText.count {
                     // erasing, reset state
