@@ -26,11 +26,12 @@ pub fn generate_possible_final_words(phrase: &str) -> Result<Vec<String>, Error>
             let encoded = partial_result.clone() | BigUint::from(candidate);
 
             let encoded_bytes = encoded.to_bytes_be();
-            let mut padding = vec![0; byte_width - encoded_bytes.len()];
+            let mut padding = vec![];
 
-            // encoded_bytes less than byte width we are looking for
-            // so pad at the front
+            // encoded_bytes less than byte width we are looking for so pad at the front
             let final_byte_array = if encoded_bytes.len() < byte_width {
+                padding.resize(byte_width - encoded_bytes.len(), 0);
+
                 padding.extend_from_slice(encoded_bytes.as_slice());
                 padding.as_slice()
             } else {
