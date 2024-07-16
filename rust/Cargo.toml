@@ -62,6 +62,12 @@ itertools = "0.13"
 # bindings
 uniffi = { version = "=0.28" }
 
+# hashing
+sha2 = "0.10.8"
+
+# bit manipulation
+num-bigint = "0.4"
+
 [build-dependencies]
 uniffi = { version = "=0.28", features = ["build"] }
 

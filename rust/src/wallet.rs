@@ -197,8 +197,6 @@ impl Wallet {
         let extended_descriptor: ExtendedDescriptor =
             self.bdk.public_descriptor(KeychainKind::External).clone();
 
-        println!("extended descriptor: {extended_descriptor:#?}");
-
         let key = match extended_descriptor {
             Descriptor::Pkh(pk) => pk.into_inner(),
             Descriptor::Wpkh(pk) => pk.into_inner(),
