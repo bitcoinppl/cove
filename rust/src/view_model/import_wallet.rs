@@ -121,6 +121,11 @@ impl RustImportWalletViewModel {
         let database = Database::global();
         database.wallets.save_wallet(wallet_metadata.clone())?;
 
+        // set this wallet as the selected wallet
+        database
+            .global_config
+            .select_wallet(wallet_metadata.id.clone())?;
+
         Ok(wallet_metadata)
     }
 

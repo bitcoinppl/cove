@@ -54,7 +54,6 @@ import SwiftUI
     }
 
     func resetRoute(to route: Route) {
-        router.routes = []
         rust.resetDefaultRouteTo(route: route)
     }
 
@@ -62,7 +61,6 @@ import SwiftUI
         Task {
             await MainActor.run {
                 logger.debug("Update: \(message)")
-                print("update \(message)")
 
                 switch message {
                 case let .routeUpdated(routes: routes):

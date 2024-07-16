@@ -53,12 +53,14 @@ struct SelectedWalletView: View {
         }
         .onAppear {
             do {
+                Log.debug("Getting wallet \(id)")
                 model = try WalletViewModel(id: id)
             } catch {
                 Log.error("Something went very wrong: \(error)")
                 navigate(Route.listWallets)
             }
         }
+        .tint(.white)
         .enableInjection()
     }
 
@@ -91,7 +93,7 @@ struct VerifyReminder: View {
     }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
+        @ObserveInjection var forceRedraw
     #endif
 }
 

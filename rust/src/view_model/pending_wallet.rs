@@ -137,6 +137,12 @@ impl RustPendingWalletViewModel {
             .save_wallet(wallet_metadata.clone())
             .map_err(WalletCreationError::from)?;
 
+        // set this wallet as the selected wallet
+        database
+            .global_config
+            .select_wallet(wallet_metadata.id.clone())
+            .map_err(WalletCreationError::from)?;
+
         Ok(wallet_metadata)
     }
 

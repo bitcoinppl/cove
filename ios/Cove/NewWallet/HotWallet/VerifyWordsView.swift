@@ -180,6 +180,7 @@ struct VerifyWordsView: View {
                     title: Text("Skip verifying words?"),
                     message: Text("Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"),
                     primaryButton: .destructive(Text("Yes, Verify Later")) {
+                        Log.debug("Skipping verification, going to wallet id: \(id)")
                         appModel.resetRoute(to: Route.selectedWallet(id))
                     },
                     secondaryButton: .cancel(Text("Cancel"))
