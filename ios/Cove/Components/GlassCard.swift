@@ -16,16 +16,16 @@ struct GlassCard<Content: View>: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 10)
                 .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
 
             // Glass effect layer
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 10)
                 .fill(.ultraThinMaterial)
                 .shadow(color: shadowColor, radius: shadowRadius)
 
             // Border layer
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 10)
                 .stroke(.background.opacity(0.2), lineWidth: 1)
 
             // content
