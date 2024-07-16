@@ -2,59 +2,17 @@ use crate::{
     database::Database,
     impl_default_for,
     keys::{Descriptor, DescriptorSecretKey},
+    network::Network,
     new_type,
 };
 use bdk_wallet::{
-    bitcoin::{self, bip32::Fingerprint},
-    descriptor::ExtendedDescriptor,
-    keys::DescriptorPublicKey,
+    bitcoin::bip32::Fingerprint, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey,
     KeychainKind,
 };
 use bip39::Mnemonic;
 use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
-
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    Hash,
-    Eq,
-    PartialEq,
-    uniffi::Enum,
-    derive_more::Display,
-    strum::EnumIter,
-    Serialize,
-    Deserialize,
-)]
-pub enum Network {
-    Bitcoin,
-    Testnet,
-}
-
-#[uniffi::export]
-pub fn network_to_string(network: Network) -> String {
-    network.to_string()
-}
-
-#[uniffi::export]
-pub fn all_networks() -> Vec<Network> {
-    Network::iter().collect()
-}
-
-impl TryFrom<&str> for Network {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "bitcoin" | "Bitcoin" => Ok(Network::Bitcoin),
-            "testnet" | "Testnet" => Ok(Network::Testnet),
-            _ => Err(format!("Unknown network: {}", value)),
-        }
-    }
-}
 
 new_type!(WalletId, String);
 impl_default_for!(WalletId);
@@ -71,7 +29,7 @@ pub struct WalletMetadata {
     pub name: String,
     pub color: WalletColor,
     pub verified: bool,
-    pub network: crate::wallet::Network,
+    pub network: Network,
 }
 
 impl WalletMetadata {
@@ -174,17 +132,9 @@ impl NumberOfBip39Words {
     }
 
     pub fn in_groups_of(&self, groups_of: usize) -> Vec<Vec<String>> {
-        let number_of_groups = self.to_word_count() / groups_of as usize;
+        let number_of_groups = self.to_word_count() / groups_of;
         vec![vec![String::new(); groups_of]; number_of_groups]
     }
-}
-
-#[derive(Debug, uniffi::Object)]
-pub struct PendingWallet {
-    pub wallet: Wallet,
-    pub mnemonic: Mnemonic,
-    pub network: Network,
-    pub passphrase: Option<String>,
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -275,51 +225,6 @@ impl Wallet {
     pub fn master_fingerprint(&self) -> Result<Fingerprint, Error> {
         let key = self.get_pub_key()?;
         Ok(key.master_fingerprint())
-    }
-}
-
-impl PendingWallet {
-    pub fn new(number_of_words: NumberOfBip39Words, passphrase: Option<String>) -> Self {
-        let network = Database::global().global_config.selected_network();
-
-        let mnemonic = number_of_words.to_mnemonic().clone();
-
-        let wallet = Wallet::try_new_from_mnemonic(mnemonic.clone(), passphrase.clone())
-            .expect("failed to create wallet");
-
-        Self {
-            wallet,
-            mnemonic,
-            network,
-            passphrase,
-        }
-    }
-
-    pub fn words(&self) -> Vec<String> {
-        self.words_iter().map(ToString::to_string).collect()
-    }
-
-    pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.mnemonic.word_iter()
-    }
-}
-
-impl From<Network> for bitcoin::Network {
-    fn from(network: Network) -> Self {
-        match network {
-            Network::Bitcoin => bitcoin::Network::Bitcoin,
-            Network::Testnet => bitcoin::Network::Testnet,
-        }
-    }
-}
-
-impl From<bitcoin::Network> for Network {
-    fn from(network: bitcoin::Network) -> Self {
-        match network {
-            bitcoin::Network::Bitcoin => Network::Bitcoin,
-            bitcoin::Network::Testnet => Network::Testnet,
-            network => panic!("unsupported network: {network:?}"),
-        }
     }
 }
 

@@ -5,7 +5,8 @@ use redb::TableDefinition;
 use crate::{
     app::reconcile::{Update, Updater},
     color_scheme::ColorSchemeSelection,
-    wallet::{Network, WalletId},
+    network::Network,
+    wallet::WalletId,
 };
 
 use super::Error;

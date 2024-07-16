@@ -7,7 +7,8 @@ use crate::{
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     mnemonic::{MnemonicExt as _, WordAccess as _},
-    wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WalletMetadata},
+    pending_wallet::PendingWallet,
+    wallet::{GroupedWord, NumberOfBip39Words, WalletMetadata},
 };
 
 type Error = PendingWalletViewModelError;

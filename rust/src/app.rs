@@ -8,8 +8,9 @@ use crate::{
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
     impl_default_for,
+    network::Network,
     router::{Route, Router},
-    wallet::{Network, WalletId},
+    wallet::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
 use log::{debug, error};

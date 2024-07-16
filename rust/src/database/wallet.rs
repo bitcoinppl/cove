@@ -5,8 +5,9 @@ use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
+    network::Network,
     redb::Json,
-    wallet::{Network, WalletId, WalletMetadata},
+    wallet::{WalletId, WalletMetadata},
 };
 
 use super::{Database, Error};
