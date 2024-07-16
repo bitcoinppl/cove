@@ -14,6 +14,15 @@ use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+pub enum WalletError {
+    #[error("failed to create wallet: {0}")]
+    BdkError(String),
+
+    #[error("unsupported wallet: {0}")]
+    UnsupportedWallet(String),
+}
+
 new_type!(WalletId, String);
 impl_default_for!(WalletId);
 impl WalletId {
@@ -140,23 +149,15 @@ impl NumberOfBip39Words {
 #[derive(Debug, uniffi::Object)]
 pub struct Wallet {
     pub id: WalletId,
+    pub network: Network,
     pub bdk: bdk_wallet::Wallet,
-}
-
-#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
-pub enum Error {
-    #[error("failed to create wallet: {0}")]
-    BdkError(String),
-
-    #[error("unsupported wallet: {0}")]
-    UnsupportedWallet(String),
 }
 
 impl Wallet {
     pub fn try_new(
         number_of_words: NumberOfBip39Words,
         passphrase: Option<String>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, WalletError> {
         let mnemonic = number_of_words.to_mnemonic();
         Self::try_new_from_mnemonic(mnemonic, passphrase)
     }
@@ -164,7 +165,7 @@ impl Wallet {
     pub fn try_new_from_mnemonic(
         mnemonic: Mnemonic,
         passphrase: Option<String>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
         let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
@@ -184,11 +185,12 @@ impl Wallet {
 
         Ok(Self {
             id: WalletId::new(),
+            network,
             bdk: wallet,
         })
     }
 
-    pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, Error> {
+    pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {
         use bdk_wallet::miniscript::descriptor::ShInner;
         use bdk_wallet::miniscript::Descriptor;
 
@@ -204,7 +206,7 @@ impl Wallet {
             Descriptor::Sh(pk) => match pk.into_inner() {
                 ShInner::Wpkh(pk) => pk.into_inner(),
                 _ => {
-                    return Err(Error::UnsupportedWallet(
+                    return Err(WalletError::UnsupportedWallet(
                         "unsupported wallet bare descriptor not wpkh".to_string(),
                     ))
                 }
@@ -213,7 +215,7 @@ impl Wallet {
             Descriptor::Bare(pk) => pk.as_inner().iter_pk().next().unwrap(),
             // multi-sig
             Descriptor::Wsh(_pk) => {
-                return Err(Error::UnsupportedWallet(
+                return Err(WalletError::UnsupportedWallet(
                     "unsupported wallet, multisig".to_string(),
                 ))
             }
@@ -222,7 +224,7 @@ impl Wallet {
         Ok(key)
     }
 
-    pub fn master_fingerprint(&self) -> Result<Fingerprint, Error> {
+    pub fn master_fingerprint(&self) -> Result<Fingerprint, WalletError> {
         let key = self.get_pub_key()?;
         Ok(key.master_fingerprint())
     }

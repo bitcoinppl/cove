@@ -115,7 +115,7 @@ impl WalletTable {
             }
         });
 
-        self.save(network, wallets)?;
+        self.save_all_wallets(network, wallets)?;
 
         Ok(())
     }
@@ -131,7 +131,7 @@ impl WalletTable {
             }
         });
 
-        self.save(network, wallets)?;
+        self.save_all_wallets(network, wallets)?;
 
         Ok(())
     }
@@ -141,7 +141,7 @@ impl WalletTable {
         let mut wallets = self.get(network)?;
 
         wallets.retain(|wallet| &wallet.id != id);
-        self.save(network, wallets)?;
+        self.save_all_wallets(network, wallets)?;
 
         Ok(())
     }
@@ -159,7 +159,21 @@ impl WalletTable {
         Ok(value)
     }
 
-    pub fn save(&self, network: Network, wallets: Vec<WalletMetadata>) -> Result<(), Error> {
+    pub fn save_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
+        let network = wallet.network;
+        let mut wallets = self.get(network)?;
+
+        wallets.push(wallet);
+        self.save_all_wallets(network, wallets)?;
+
+        Ok(())
+    }
+
+    pub fn save_all_wallets(
+        &self,
+        network: Network,
+        wallets: Vec<WalletMetadata>,
+    ) -> Result<(), Error> {
         let write_txn = self.db.begin_write()?;
 
         {

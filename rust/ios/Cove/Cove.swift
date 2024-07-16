@@ -1590,6 +1590,11 @@ public protocol RustImportWalletViewModelProtocol: AnyObject {
      */
     func dispatch(action: ImportWalletViewModelAction)
 
+    /**
+     * Import wallet view from entered words
+     */
+    func importWallet(enteredWords: [[String]]) throws -> WalletMetadata
+
     func listenForUpdates(reconciler: ImportWalletViewModelReconciler)
 }
 
@@ -1647,6 +1652,16 @@ open class RustImportWalletViewModel:
         uniffi_cove_fn_method_rustimportwalletviewmodel_dispatch(self.uniffiClonePointer(),
                                                                  FfiConverterTypeImportWalletViewModelAction.lower(action), $0)
     }
+    }
+
+    /**
+     * Import wallet view from entered words
+     */
+    open func importWallet(enteredWords: [[String]]) throws -> WalletMetadata {
+        return try FfiConverterTypeWalletMetadata.lift(rustCallWithError(FfiConverterTypeImportWalletError.lift) {
+            uniffi_cove_fn_method_rustimportwalletviewmodel_import_wallet(self.uniffiClonePointer(),
+                                                                          FfiConverterSequenceSequenceString.lower(enteredWords), $0)
+        })
     }
 
     open func listenForUpdates(reconciler: ImportWalletViewModelReconciler) { try! rustCall {
@@ -2980,52 +2995,6 @@ extension DatabaseError: Foundation.LocalizedError {
     }
 }
 
-public enum Error {
-    case BdkError(String
-    )
-    case UnsupportedWallet(String
-    )
-}
-
-public struct FfiConverterTypeError: FfiConverterRustBuffer {
-    typealias SwiftType = Error
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Error {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        case 1: return try .BdkError(
-                FfiConverterString.read(from: &buf)
-            )
-
-        case 2: return try .UnsupportedWallet(
-                FfiConverterString.read(from: &buf)
-            )
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: Error, into buf: inout [UInt8]) {
-        switch value {
-        case let .BdkError(v1):
-            writeInt(&buf, Int32(1))
-            FfiConverterString.write(v1, into: &buf)
-
-        case let .UnsupportedWallet(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(v1, into: &buf)
-        }
-    }
-}
-
-extension Error: Equatable, Hashable {}
-
-extension Error: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -3267,6 +3236,68 @@ public func FfiConverterTypeHotWalletRoute_lower(_ value: HotWalletRoute) -> Rus
 }
 
 extension HotWalletRoute: Equatable, Hashable {}
+
+public enum ImportWalletError {
+    case WalletImportError(String
+    )
+    case InvalidWordGroup(String
+    )
+    case KeychainError(KeychainError
+    )
+    case DatabaseError(DatabaseError
+    )
+}
+
+public struct FfiConverterTypeImportWalletError: FfiConverterRustBuffer {
+    typealias SwiftType = ImportWalletError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportWalletError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .WalletImportError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 2: return try .InvalidWordGroup(
+                FfiConverterString.read(from: &buf)
+            )
+        case 3: return try .KeychainError(
+                FfiConverterTypeKeychainError.read(from: &buf)
+            )
+        case 4: return try .DatabaseError(
+                FfiConverterTypeDatabaseError.read(from: &buf)
+            )
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ImportWalletError, into buf: inout [UInt8]) {
+        switch value {
+        case let .WalletImportError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .InvalidWordGroup(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .KeychainError(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeKeychainError.write(v1, into: &buf)
+
+        case let .DatabaseError(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeDatabaseError.write(v1, into: &buf)
+        }
+    }
+}
+
+extension ImportWalletError: Equatable, Hashable {}
+
+extension ImportWalletError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -3845,6 +3876,52 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
 extension WalletCreationError: Equatable, Hashable {}
 
 extension WalletCreationError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+public enum WalletError {
+    case BdkError(String
+    )
+    case UnsupportedWallet(String
+    )
+}
+
+public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
+    typealias SwiftType = WalletError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .BdkError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .UnsupportedWallet(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletError, into buf: inout [UInt8]) {
+        switch value {
+        case let .BdkError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .UnsupportedWallet(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension WalletError: Equatable, Hashable {}
+
+extension WalletError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -4886,6 +4963,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustimportwalletviewmodel_dispatch() != 54003 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustimportwalletviewmodel_import_wallet() != 22388 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustimportwalletviewmodel_listen_for_updates() != 3156 {

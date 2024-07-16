@@ -29,7 +29,6 @@ struct HotWalletImportView: View {
 
     func initOnAppear() {
         enteredWords = numberOfWords.inGroups()
-        print("enteredWords: \(enteredWords)")
     }
 
     var keyboardIsShowing: Bool {
@@ -127,6 +126,7 @@ struct HotWalletImportView: View {
             }
             .padding(.top, keyboardIsShowing ? 80 : 0)
             .padding(.horizontal, 30)
+            .cornerRadius(20)
 
             Spacer()
 
@@ -154,13 +154,15 @@ struct HotWalletImportView: View {
         } message: {
             Text("The words you entered does not create a valid wallet. Please check the words and try again.")
         }
-        .onChange(of: focusField) { _, _ in
+        .onChange(of: focusField) {
             filteredSuggestions = []
         }
         .enableInjection()
         .onAppear(perform: initOnAppear)
         .onChange(of: enteredWords) {
-            if !buttonIsDisabled && tabIndex < lastIndex {
+            // if its the last word on the non last card and all words are valid words, then go to next tab
+            // focusField will already have changed by now
+            if let focusField = self.focusField, !buttonIsDisabled && tabIndex < lastIndex && focusField % 6 == 1 {
                 withAnimation {
                     tabIndex += 1
                 }
@@ -193,7 +195,8 @@ private struct CardTab: View {
                     autocomplete: Bip39AutoComplete(),
                     text: $fields[index],
                     filteredSuggestions: $filteredSuggestions,
-                    focusField: self.$focusField)
+                    focusField: self.$focusField
+                )
             }
         }
         .enableInjection()
@@ -325,6 +328,9 @@ private struct AutocompleteField: View {
                 // then auto select the first selection, because we want auto selection
                 // but also allow the user to fix a wrong word
                 if let word = filteredSuggestions.last, filteredSuggestions.count == 1 && oldText.count < newText.count {
+                    state = .valid
+                    filteredSuggestions = []
+
                     if self.text != word {
                         self.text = word
                         submitFocusField()
