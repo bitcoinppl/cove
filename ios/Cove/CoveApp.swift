@@ -61,6 +61,7 @@ struct CoveApp: App {
                             }) {
                                 Image(systemName: "line.horizontal.3")
                             }
+                            .frame(minWidth: 50, minHeight: 50)
                         }
                     }
             }

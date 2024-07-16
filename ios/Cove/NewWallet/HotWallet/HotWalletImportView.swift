@@ -65,16 +65,18 @@ struct HotWalletImportView: View {
     func importWallet() {
         do {
             let walletMetadata = try model.rust.importWallet(enteredWords: enteredWords)
+            try appModel.rust.selectWallet(id: walletMetadata.id)
+            appModel.resetRoute(to: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
             switch error {
-            case .InvalidWordGroup(let error):
+            case let .InvalidWordGroup(error):
                 Log.debug("Invalid words: \(error)")
                 self.showErrorAlert = true
-            case .WalletImportError(let error):
+            case let .WalletImportError(error):
                 Log.error("Import error: \(error)")
-            case .KeychainError(let keychainError):
+            case let .KeychainError(keychainError):
                 Log.error("Unable to save wallet to keychain: \(keychainError)")
-            case .DatabaseError(let databaseError):
+            case let .DatabaseError(databaseError):
                 Log.error("Unable to save wallet metadata to database: \(databaseError)")
             }
         } catch {
