@@ -1139,6 +1139,111 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
     return FfiConverterTypeFfiApp.lower(value)
 }
 
+public protocol FingerprintProtocol: AnyObject {
+    func toLowercase() -> String
+
+    func toUppercase() -> String
+}
+
+open class Fingerprint:
+    FingerprintProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_fingerprint(self.pointer, $0) }
+    }
+
+    public convenience init(id: WalletId) throws {
+        let pointer =
+            try rustCallWithError(FfiConverterTypeFingerprintError.lift) {
+                uniffi_cove_fn_constructor_fingerprint_new(
+                    FfiConverterTypeWalletId.lower(id), $0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_fingerprint(pointer, $0) }
+    }
+
+    open func toLowercase() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_fingerprint_to_lowercase(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func toUppercase() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_fingerprint_to_uppercase(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeFingerprint: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Fingerprint
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Fingerprint {
+        return Fingerprint(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Fingerprint) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Fingerprint {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Fingerprint, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeFingerprint_lift(_ pointer: UnsafeMutableRawPointer) throws -> Fingerprint {
+    return try FfiConverterTypeFingerprint.lift(pointer)
+}
+
+public func FfiConverterTypeFingerprint_lower(_ value: Fingerprint) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFingerprint.lower(value)
+}
+
 public protocol GlobalConfigTableProtocol: AnyObject {
     func colorScheme() -> ColorSchemeSelection
 
@@ -3105,6 +3210,38 @@ extension DatabaseError: Foundation.LocalizedError {
     }
 }
 
+public enum FingerprintError {
+    case WalletNotFound
+}
+
+public struct FfiConverterTypeFingerprintError: FfiConverterRustBuffer {
+    typealias SwiftType = FingerprintError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FingerprintError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .WalletNotFound
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FingerprintError, into buf: inout [UInt8]) {
+        switch value {
+        case .WalletNotFound:
+            writeInt(&buf, Int32(1))
+        }
+    }
+}
+
+extension FingerprintError: Equatable, Hashable {}
+
+extension FingerprintError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -5030,6 +5167,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_state() != 19551 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_fingerprint_to_lowercase() != 27643 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_fingerprint_to_uppercase() != 23675 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_globalconfigtable_color_scheme() != 18859 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5163,6 +5306,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_ffiapp_new() != 11955 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_fingerprint_new() != 20831 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_keychain_new() != 34449 {

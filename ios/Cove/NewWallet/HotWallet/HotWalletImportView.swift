@@ -224,6 +224,7 @@ private struct CardTab: View {
                     number: (groupIndex * 6) + (index + 1),
                     autocomplete: Bip39WordSpecificAutocomplete(wordNumber: UInt16((groupIndex * 6) + (index + 1)), numberOfWords: numberOfWords),
                     allEnteredWords: allEnteredWords,
+                    numberOfWords: numberOfWords,
                     text: $fields[index],
                     filteredSuggestions: $filteredSuggestions,
                     focusField: self.$focusField
@@ -242,6 +243,7 @@ private struct AutocompleteField: View {
     let number: Int
     let autocomplete: Bip39WordSpecificAutocomplete
     let allEnteredWords: [[String]]
+    let numberOfWords: NumberOfBip39Words
 
     @Binding var text: String
     @Binding var filteredSuggestions: [String]

@@ -8,6 +8,7 @@ pub(crate) mod router;
 pub mod autocomplete;
 pub mod bip39;
 pub mod color_scheme;
+pub mod fingerprint;
 pub mod keychain;
 pub mod keys;
 pub mod mnemonic;
