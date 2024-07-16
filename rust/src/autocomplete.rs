@@ -71,8 +71,6 @@ impl Bip39WordSpecificAutocomplete {
 
     #[uniffi::method]
     pub fn autocomplete(&self, word: String, all_words: Vec<Vec<String>>) -> Vec<String> {
-        log::debug!("autocomplete called with {:?}, {:?}", word, all_words);
-
         match self {
             Self::Regular(ac) => ac.autocomplete(word),
             Self::LastWord(number_of_words) => {

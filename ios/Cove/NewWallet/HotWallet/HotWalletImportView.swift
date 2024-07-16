@@ -117,8 +117,9 @@ struct HotWalletImportView: View {
                         ForEach(filteredSuggestions, id: \.self) { word in
                             Spacer()
                             Button(word) {
-                                guard let focusField = focusField else { return }
+                                guard let focusFieldUnchecked = focusField else { return }
 
+                                let focusField = min(focusFieldUnchecked, numberOfWords.toWordCount())
                                 var (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
                                 var innerIndex = remainder - 1
 
@@ -129,11 +130,14 @@ struct HotWalletImportView: View {
                                 }
 
                                 if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
+                                    Log.error("Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)")
                                     return
                                 }
 
                                 enteredWords[outerIndex][innerIndex] = word
-                                self.focusField = focusField + 1
+
+                                // if its not the last word, go to next focusField
+                                self.focusField = min(focusField + 1, numberOfWords.toWordCount())
                                 filteredSuggestions = []
                             }
                             .foregroundColor(.secondary)
@@ -226,7 +230,12 @@ private struct CardTab: View {
                 )
             }
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+        @ObserveInjection var forceRedraw
+    #endif
 }
 
 private struct AutocompleteField: View {
@@ -299,7 +308,7 @@ private struct AutocompleteField: View {
             state = .invalid
         }
 
-        self.focusField = focusField + 1
+        self.focusField = min(focusField + 1, numberOfWords.toWordCount())
     }
 
     var textField: some View {
