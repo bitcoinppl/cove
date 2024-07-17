@@ -17,6 +17,8 @@ struct HotWalletImportView: View {
     @State private var tabIndex: Int = 0
 
     @State private var showErrorAlert = false
+    @State private var duplicateWallet: Optional<DuplicateWalletItem> = .none
+
     @State private var focusField: Int?
 
     @StateObject private var keyboardObserver = KeyboardObserver()
@@ -72,6 +74,8 @@ struct HotWalletImportView: View {
             case let .InvalidWordGroup(error):
                 Log.debug("Invalid words: \(error)")
                 self.showErrorAlert = true
+            case let .WalletAlreadyExists(walletId):
+                duplicateWallet = DuplicateWalletItem(id: UUID(), walletId: walletId)
             case let .WalletImportError(error):
                 Log.error("Import error: \(error)")
             case let .KeychainError(keychainError):
@@ -84,28 +88,93 @@ struct HotWalletImportView: View {
         }
     }
 
+    @ViewBuilder
+    var keyboardAutoCompleteView: some View {
+        HStack {
+            ForEach(filteredSuggestions, id: \.self) { word in
+                Spacer()
+                Button(word) {
+                    guard let focusFieldUnchecked = focusField else { return }
+
+                    let focusField = min(focusFieldUnchecked, numberOfWords.toWordCount())
+                    var (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
+                    var innerIndex = remainder - 1
+
+                    // adjust for last word
+                    if innerIndex < 0 {
+                        innerIndex = 5
+                        outerIndex = outerIndex - 1
+                    }
+
+                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
+                        Log.error("Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)")
+                        return
+                    }
+
+                    enteredWords[outerIndex][innerIndex] = word
+
+                    // if its not the last word, go to next focusField
+                    self.focusField = min(focusField + 1, numberOfWords.toWordCount())
+                    filteredSuggestions = []
+                }
+                .foregroundColor(.secondary)
+                Spacer()
+
+                // only show divider in the middle
+                if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
+                    Divider()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    var nextOrImportButton: some View {
+        if tabIndex == lastIndex {
+            Button("Import") { importWallet() }
+                .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
+                .padding(.top, 20)
+
+        } else {
+            Button("Next") {
+                withAnimation {
+                    tabIndex += 1
+                }
+            }
+            .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
+            .disabled(buttonIsDisabled)
+            .foregroundStyle(Color.red)
+            .padding(.top, 20)
+        }
+    }
+
+    @ViewBuilder
+    var mainContent: some View {
+        VStack {
+            TabView(selection: $tabIndex) {
+                ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
+                    VStack {
+                        CardTab(fields: $enteredWords[index],
+                                groupIndex: index,
+                                filteredSuggestions: $filteredSuggestions,
+                                focusField: $focusField,
+                                allEnteredWords: enteredWords,
+                                numberOfWords: numberOfWords)
+                            .tag(index)
+                            .padding(.bottom, keyboardIsShowing ? 60 : 20)
+                    }
+                }
+                .padding(.horizontal, 30)
+            }
+        }
+    }
+
     var body: some View {
         VStack {
             Spacer()
 
             GroupBox {
-                VStack {
-                    TabView(selection: $tabIndex) {
-                        ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
-                            VStack {
-                                CardTab(fields: $enteredWords[index],
-                                        groupIndex: index,
-                                        filteredSuggestions: $filteredSuggestions,
-                                        focusField: $focusField,
-                                        allEnteredWords: enteredWords,
-                                        numberOfWords: numberOfWords)
-                                    .tag(index)
-                                    .padding(.bottom, keyboardIsShowing ? 60 : 20)
-                            }
-                        }
-                        .padding(.horizontal, 30)
-                    }
-                }
+                mainContent
             }
             .frame(height: cardHeight)
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
@@ -113,42 +182,7 @@ struct HotWalletImportView: View {
             .navigationBarTitleDisplayMode(navDisplay)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
-                    HStack {
-                        ForEach(filteredSuggestions, id: \.self) { word in
-                            Spacer()
-                            Button(word) {
-                                guard let focusFieldUnchecked = focusField else { return }
-
-                                let focusField = min(focusFieldUnchecked, numberOfWords.toWordCount())
-                                var (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
-                                var innerIndex = remainder - 1
-
-                                // adjust for last word
-                                if innerIndex < 0 {
-                                    innerIndex = 5
-                                    outerIndex = outerIndex - 1
-                                }
-
-                                if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
-                                    Log.error("Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)")
-                                    return
-                                }
-
-                                enteredWords[outerIndex][innerIndex] = word
-
-                                // if its not the last word, go to next focusField
-                                self.focusField = min(focusField + 1, numberOfWords.toWordCount())
-                                filteredSuggestions = []
-                            }
-                            .foregroundColor(.secondary)
-                            Spacer()
-
-                            // only show divider in the middle
-                            if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
-                                Divider()
-                            }
-                        }
-                    }
+                    keyboardAutoCompleteView
                 }
             }
             .padding(.top, keyboardIsShowing ? 80 : 0)
@@ -157,34 +191,26 @@ struct HotWalletImportView: View {
 
             Spacer()
 
-            if tabIndex == lastIndex {
-                Button("Import") { importWallet() }
-                    .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
-                    .padding(.top, 20)
-
-            } else {
-                Button("Next") {
-                    withAnimation {
-                        tabIndex += 1
-                    }
-                }
-                .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
-                .disabled(buttonIsDisabled)
-                .foregroundStyle(Color.red)
-                .padding(.top, 20)
-            }
+            nextOrImportButton
 
             Spacer()
+        }
+        .onChange(of: focusField) {
+            filteredSuggestions = []
         }
         .alert("Words not valid", isPresented: $showErrorAlert) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("The words you entered does not create a valid wallet. Please check the words and try again.")
         }
-        .onChange(of: focusField) {
-            filteredSuggestions = []
+        .alert(item: $duplicateWallet) { duplicate in
+            Alert(title: Text("Duplicate Wallet"),
+                  message: Text("This wallet has already been imported!"),
+                  dismissButton: .default(Text("OK")) {
+                      try? appModel.rust.selectWallet(id: duplicate.walletId)
+                      appModel.resetRoute(to: .selectedWallet(duplicate.walletId))
+                  })
         }
-        .enableInjection()
         .onAppear(perform: initOnAppear)
         .onChange(of: enteredWords) {
             // if its the last word on the non last card and all words are valid words, then go to next tab
@@ -384,6 +410,11 @@ private struct AutocompleteField: View {
     #if DEBUG
         @ObserveInjection var forceRedraw
     #endif
+}
+
+private struct DuplicateWalletItem: Identifiable {
+    var id: UUID
+    var walletId: WalletId
 }
 
 #Preview {

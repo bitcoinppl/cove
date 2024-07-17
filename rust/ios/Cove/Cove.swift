@@ -3491,6 +3491,8 @@ public enum ImportWalletError {
     )
     case KeychainError(KeychainError
     )
+    case WalletAlreadyExists(WalletId
+    )
     case DatabaseError(DatabaseError
     )
 }
@@ -3510,7 +3512,10 @@ public struct FfiConverterTypeImportWalletError: FfiConverterRustBuffer {
         case 3: return try .KeychainError(
                 FfiConverterTypeKeychainError.read(from: &buf)
             )
-        case 4: return try .DatabaseError(
+        case 4: return try .WalletAlreadyExists(
+                FfiConverterTypeWalletId.read(from: &buf)
+            )
+        case 5: return try .DatabaseError(
                 FfiConverterTypeDatabaseError.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3531,8 +3536,12 @@ public struct FfiConverterTypeImportWalletError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
             FfiConverterTypeKeychainError.write(v1, into: &buf)
 
-        case let .DatabaseError(v1):
+        case let .WalletAlreadyExists(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+
+        case let .DatabaseError(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
         }
     }

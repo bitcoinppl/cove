@@ -137,7 +137,7 @@ impl RustWalletViewModel {
     pub fn fingerprint(&self) -> String {
         let wallet_id = self.state.read().wallet_metadata.id.clone();
 
-        Fingerprint::try_new(wallet_id)
+        Fingerprint::try_new(&wallet_id)
             .map(|f| f.to_uppercase())
             .unwrap_or_else(|_| "Unknown".to_string())
     }
