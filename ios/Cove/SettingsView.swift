@@ -9,7 +9,6 @@ struct SettingsView: View {
     @State private var showConfirmationAlert = false
 
     let themes = allColorSchemes()
-    let notificationOptions = [1, 2, 3, 4, 5]
 
     var body: some View {
         Form {

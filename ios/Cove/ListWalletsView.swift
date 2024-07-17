@@ -53,7 +53,9 @@ struct ListWalletsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("Wallets")
         .background(.background)
+        .padding(.top, 10)
         .enableInjection()
     }
 

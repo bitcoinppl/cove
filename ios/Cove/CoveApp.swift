@@ -30,7 +30,7 @@ struct CoveApp: App {
         model = MainViewModel()
     }
 
-    var tintColor: Color {
+    var navOpenButtonColor: Color {
         switch model.currentRoute {
         case .newWallet(.hotWallet(.create)):
             Color.white
@@ -59,17 +59,16 @@ struct CoveApp: App {
                                     }
                                 }) {
                                     Image(systemName: "line.horizontal.3")
+                                        .foregroundStyle(navOpenButtonColor)
                                 }
-                                .frame(minWidth: 50, minHeight: 50)
+                                .contentShape(Rectangle())
                             }
                         }
                 }
-                .tint(tintColor)
 
                 SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
             }
             .id(id)
-            .tint(tintColor)
             .environment(\.navigate) { route in
                 model.pushRoute(route)
             }

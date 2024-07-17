@@ -39,14 +39,11 @@ struct WalletSettingsView: View {
                     )) {
                         ForEach(colors, id: \.self) { color in
                             Text(color.toColor().description)
-                                .foregroundColor(.clear)
-                                .background(color.toColor())
-                                .frame(width: 30, height: 30)
-                                .clipShape(Circle())
                                 .tag(color)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
+                    .tint(model.walletMetadata.color.toColor())
                 }
 
                 Section(header: Text("App Settings")) {
