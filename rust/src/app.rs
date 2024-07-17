@@ -185,6 +185,17 @@ impl FfiApp {
     pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);
 
+        if route == Route::ListWallets {
+            // if we are going to the list wallets route, we should make sure no wallet is selected
+            let _ = Database::global().global_config.clear_selected_wallet();
+
+            if Database::global().wallets().is_empty().unwrap_or(true) {
+                // if there are no wallets, we should create a new wallet
+                self.reset_default_route_to(Route::NewWallet(Default::default()));
+                return;
+            }
+        }
+
         self.inner()
             .state
             .write()

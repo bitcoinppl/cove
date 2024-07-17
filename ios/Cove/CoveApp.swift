@@ -51,13 +51,6 @@ struct CoveApp: App {
                         .navigationDestination(for: Route.self, destination: { route in
                             RouteView(model: model, route: route)
                         })
-                        .onChange(of: model.router.routes) { old, new in
-                            if !old.isEmpty && new.isEmpty {
-                                id = UUID()
-                            }
-
-                            model.dispatch(action: AppAction.updateRoute(routes: new))
-                        }
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
                                 Button(action: {
@@ -82,6 +75,16 @@ struct CoveApp: App {
             }
             .environment(model)
             .preferredColorScheme(model.colorScheme)
+            .onChange(of: model.router.routes) { old, new in
+                if !old.isEmpty && new.isEmpty {
+                    id = UUID()
+                }
+
+                model.dispatch(action: AppAction.updateRoute(routes: new))
+            }
+            .onChange(of: model.selectedNetwork) {
+                id = UUID()
+            }
             .gesture(
                 model.router.routes.isEmpty ?
                     DragGesture()

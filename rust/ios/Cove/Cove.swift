@@ -1245,7 +1245,11 @@ public func FfiConverterTypeFingerprint_lower(_ value: Fingerprint) -> UnsafeMut
 }
 
 public protocol GlobalConfigTableProtocol: AnyObject {
+    func clearSelectedWallet() throws
+
     func colorScheme() -> ColorSchemeSelection
+
+    func delete(key: GlobalConfigKey) throws
 
     func get(key: GlobalConfigKey) throws -> String?
 
@@ -1302,10 +1306,21 @@ open class GlobalConfigTable:
         try! rustCall { uniffi_cove_fn_free_globalconfigtable(pointer, $0) }
     }
 
+    open func clearSelectedWallet() throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+        uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(self.uniffiClonePointer(), $0)
+    }
+    }
+
     open func colorScheme() -> ColorSchemeSelection {
         return try! FfiConverterTypeColorSchemeSelection.lift(try! rustCall {
             uniffi_cove_fn_method_globalconfigtable_color_scheme(self.uniffiClonePointer(), $0)
         })
+    }
+
+    open func delete(key: GlobalConfigKey) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+        uniffi_cove_fn_method_globalconfigtable_delete(self.uniffiClonePointer(),
+                                                       FfiConverterTypeGlobalConfigKey.lower(key), $0)
+    }
     }
 
     open func get(key: GlobalConfigKey) throws -> String? {
@@ -5182,7 +5197,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_fingerprint_to_uppercase() != 23675 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 22146 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_globalconfigtable_color_scheme() != 18859 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_globalconfigtable_delete() != 13364 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalconfigtable_get() != 52128 {
