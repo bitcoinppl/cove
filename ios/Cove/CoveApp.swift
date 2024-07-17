@@ -44,26 +44,30 @@ struct CoveApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack(path: $model.router.routes) {
-                RouteView(model: model)
-                    .navigationDestination(for: Route.self, destination: { route in
-                        RouteView(model: model, route: route)
-                    })
-                    .onChange(of: model.router.routes) { _, new in
-                        model.dispatch(action: AppAction.updateRoute(routes: new))
-                    }
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button(action: {
-                                withAnimation {
-                                    model.toggleSidebar()
-                                }
-                            }) {
-                                Image(systemName: "line.horizontal.3")
-                            }
-                            .frame(minWidth: 50, minHeight: 50)
+            ZStack {
+                NavigationStack(path: $model.router.routes) {
+                    RouteView(model: model)
+                        .navigationDestination(for: Route.self, destination: { route in
+                            RouteView(model: model, route: route)
+                        })
+                        .onChange(of: model.router.routes) { _, new in
+                            model.dispatch(action: AppAction.updateRoute(routes: new))
                         }
-                    }
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button(action: {
+                                    withAnimation {
+                                        model.toggleSidebar()
+                                    }
+                                }) {
+                                    Image(systemName: "line.horizontal.3")
+                                }
+                                .frame(minWidth: 50, minHeight: 50)
+                            }
+                        }
+                }
+
+                SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
             }
             .tint(tintColor)
             .environment(\.navigate) { route in
