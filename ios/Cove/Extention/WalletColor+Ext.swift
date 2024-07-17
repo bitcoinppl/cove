@@ -16,22 +16,22 @@ extension WalletColor {
     func toCardColors() -> [Color] {
         switch self {
         case .red:
-            return [.red, .red.opacity(0.6)]
+            return [.red, .red.opacity(0.99)]
         case .blue:
-            return [.blue, .blue.opacity(0.6)]
+            return [.blue, .blue.opacity(0.99)]
         case .green:
-            return [.green, .green.opacity(0.6)]
+            return [.green, .green.opacity(0.99)]
         case .yellow:
-            return [.yellow, .yellow.opacity(0.6)]
+            return [.yellow, .yellow.opacity(0.99)]
         case .orange:
-            return [.orange, .orange.opacity(0.6)]
+            return [.orange, .orange.opacity(0.99)]
         case .purple:
-            return [.purple, .purple.opacity(0.6)]
+            return [.purple, .purple.opacity(0.99)]
         case .pink:
-            return [.pink, .pink.opacity(0.6)]
+            return [.pink, .pink.opacity(0.99)]
         case let .custom(r, g, b):
             let color = customToColor(r: r, g: g, b: b)
-            return [color, color.opacity(0.6)]
+            return [color, color.opacity(0.99)]
         }
     }
 

@@ -7,7 +7,8 @@ use crate::{
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     mnemonic::{MnemonicExt as _, WordAccess as _},
-    wallet::{GroupedWord, NumberOfBip39Words, PendingWallet, WalletMetadata},
+    pending_wallet::PendingWallet,
+    wallet::{GroupedWord, NumberOfBip39Words, WalletMetadata},
 };
 
 type Error = PendingWalletViewModelError;
@@ -131,16 +132,15 @@ impl RustPendingWalletViewModel {
             .map_err(WalletCreationError::from)?;
 
         let database = Database::global();
-        let mut wallets = database
-            .wallets
-            .get(state.wallet.network)
-            .map_err(WalletCreationError::from)?;
-
-        wallets.push(wallet_metadata.clone());
-
         database
             .wallets
-            .save(state.wallet.network, wallets)
+            .save_wallet(wallet_metadata.clone())
+            .map_err(WalletCreationError::from)?;
+
+        // set this wallet as the selected wallet
+        database
+            .global_config
+            .select_wallet(wallet_metadata.id.clone())
             .map_err(WalletCreationError::from)?;
 
         Ok(wallet_metadata)

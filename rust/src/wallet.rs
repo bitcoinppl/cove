@@ -2,58 +2,25 @@ use crate::{
     database::Database,
     impl_default_for,
     keys::{Descriptor, DescriptorSecretKey},
+    network::Network,
     new_type,
 };
 use bdk_wallet::{
-    bitcoin::{self, bip32::Fingerprint},
-    descriptor::ExtendedDescriptor,
-    keys::DescriptorPublicKey,
+    bitcoin::bip32::Fingerprint, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey,
     KeychainKind,
 };
 use bip39::Mnemonic;
 use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    Hash,
-    Eq,
-    PartialEq,
-    uniffi::Enum,
-    derive_more::Display,
-    strum::EnumIter,
-    Serialize,
-    Deserialize,
-)]
-pub enum Network {
-    Bitcoin,
-    Testnet,
-}
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+pub enum WalletError {
+    #[error("failed to create wallet: {0}")]
+    BdkError(String),
 
-#[uniffi::export]
-pub fn network_to_string(network: Network) -> String {
-    network.to_string()
-}
-
-#[uniffi::export]
-pub fn all_networks() -> Vec<Network> {
-    Network::iter().collect()
-}
-
-impl TryFrom<&str> for Network {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "bitcoin" | "Bitcoin" => Ok(Network::Bitcoin),
-            "testnet" | "Testnet" => Ok(Network::Testnet),
-            _ => Err(format!("Unknown network: {}", value)),
-        }
-    }
+    #[error("unsupported wallet: {0}")]
+    UnsupportedWallet(String),
 }
 
 new_type!(WalletId, String);
@@ -71,7 +38,7 @@ pub struct WalletMetadata {
     pub name: String,
     pub color: WalletColor,
     pub verified: bool,
-    pub network: crate::wallet::Network,
+    pub network: Network,
 }
 
 impl WalletMetadata {
@@ -129,6 +96,16 @@ pub enum NumberOfBip39Words {
     TwentyFour,
 }
 
+#[uniffi::export]
+pub fn number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec<String>> {
+    me.in_groups_of(of as usize)
+}
+
+#[uniffi::export]
+pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
+    me.to_word_count() as u8
+}
+
 impl NumberOfBip39Words {
     pub const fn to_word_count(self) -> usize {
         match self {
@@ -162,36 +139,25 @@ impl NumberOfBip39Words {
             }
         }
     }
-}
 
-#[derive(Debug, uniffi::Object)]
-pub struct PendingWallet {
-    pub wallet: Wallet,
-    pub mnemonic: Mnemonic,
-    pub network: Network,
-    pub passphrase: Option<String>,
+    pub fn in_groups_of(&self, groups_of: usize) -> Vec<Vec<String>> {
+        let number_of_groups = self.to_word_count() / groups_of;
+        vec![vec![String::new(); groups_of]; number_of_groups]
+    }
 }
 
 #[derive(Debug, uniffi::Object)]
 pub struct Wallet {
     pub id: WalletId,
+    pub network: Network,
     pub bdk: bdk_wallet::Wallet,
-}
-
-#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
-pub enum Error {
-    #[error("failed to create wallet: {0}")]
-    BdkError(String),
-
-    #[error("unsupported wallet: {0}")]
-    UnsupportedWallet(String),
 }
 
 impl Wallet {
     pub fn try_new(
         number_of_words: NumberOfBip39Words,
         passphrase: Option<String>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, WalletError> {
         let mnemonic = number_of_words.to_mnemonic();
         Self::try_new_from_mnemonic(mnemonic, passphrase)
     }
@@ -199,7 +165,7 @@ impl Wallet {
     pub fn try_new_from_mnemonic(
         mnemonic: Mnemonic,
         passphrase: Option<String>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
         let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
@@ -219,18 +185,17 @@ impl Wallet {
 
         Ok(Self {
             id: WalletId::new(),
+            network,
             bdk: wallet,
         })
     }
 
-    pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, Error> {
+    pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {
         use bdk_wallet::miniscript::descriptor::ShInner;
         use bdk_wallet::miniscript::Descriptor;
 
         let extended_descriptor: ExtendedDescriptor =
             self.bdk.public_descriptor(KeychainKind::External).clone();
-
-        println!("extended descriptor: {extended_descriptor:#?}");
 
         let key = match extended_descriptor {
             Descriptor::Pkh(pk) => pk.into_inner(),
@@ -239,7 +204,7 @@ impl Wallet {
             Descriptor::Sh(pk) => match pk.into_inner() {
                 ShInner::Wpkh(pk) => pk.into_inner(),
                 _ => {
-                    return Err(Error::UnsupportedWallet(
+                    return Err(WalletError::UnsupportedWallet(
                         "unsupported wallet bare descriptor not wpkh".to_string(),
                     ))
                 }
@@ -248,7 +213,7 @@ impl Wallet {
             Descriptor::Bare(pk) => pk.as_inner().iter_pk().next().unwrap(),
             // multi-sig
             Descriptor::Wsh(_pk) => {
-                return Err(Error::UnsupportedWallet(
+                return Err(WalletError::UnsupportedWallet(
                     "unsupported wallet, multisig".to_string(),
                 ))
             }
@@ -257,54 +222,9 @@ impl Wallet {
         Ok(key)
     }
 
-    pub fn master_fingerprint(&self) -> Result<Fingerprint, Error> {
+    pub fn master_fingerprint(&self) -> Result<Fingerprint, WalletError> {
         let key = self.get_pub_key()?;
         Ok(key.master_fingerprint())
-    }
-}
-
-impl PendingWallet {
-    pub fn new(number_of_words: NumberOfBip39Words, passphrase: Option<String>) -> Self {
-        let network = Database::global().global_config.selected_network();
-
-        let mnemonic = number_of_words.to_mnemonic().clone();
-
-        let wallet = Wallet::try_new_from_mnemonic(mnemonic.clone(), passphrase.clone())
-            .expect("failed to create wallet");
-
-        Self {
-            wallet,
-            mnemonic,
-            network,
-            passphrase,
-        }
-    }
-
-    pub fn words(&self) -> Vec<String> {
-        self.words_iter().map(ToString::to_string).collect()
-    }
-
-    pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.mnemonic.word_iter()
-    }
-}
-
-impl From<Network> for bitcoin::Network {
-    fn from(network: Network) -> Self {
-        match network {
-            Network::Bitcoin => bitcoin::Network::Bitcoin,
-            Network::Testnet => bitcoin::Network::Testnet,
-        }
-    }
-}
-
-impl From<bitcoin::Network> for Network {
-    fn from(network: bitcoin::Network) -> Self {
-        match network {
-            bitcoin::Network::Bitcoin => Network::Bitcoin,
-            bitcoin::Network::Testnet => Network::Testnet,
-            network => panic!("unsupported network: {network:?}"),
-        }
     }
 }
 

@@ -11,7 +11,7 @@ use bdk_wallet::miniscript::descriptor::{DescriptorXKey, Wildcard};
 use bdk_wallet::template::{Bip84, Bip84Public, DescriptorTemplate as _};
 use bdk_wallet::KeychainKind;
 
-use crate::wallet::Network;
+use crate::network::Network;
 
 pub type Seed = [u8; 64];
 

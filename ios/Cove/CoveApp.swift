@@ -31,9 +31,11 @@ struct CoveApp: App {
 
     var tintColor: Color {
         switch model.router.routes.last {
-        case .newWallet(.hotWallet(.select)):
-            Color.blue
-        case .newWallet(.hotWallet(_)):
+        case .newWallet(.hotWallet(.create)):
+            Color.white
+        case .newWallet(.hotWallet(.verifyWords)):
+            Color.white
+        case .selectedWallet:
             Color.white
         default:
             Color.blue
@@ -59,6 +61,7 @@ struct CoveApp: App {
                             }) {
                                 Image(systemName: "line.horizontal.3")
                             }
+                            .frame(minWidth: 50, minHeight: 50)
                         }
                     }
             }

@@ -29,7 +29,14 @@ struct ListWalletsView: View {
             LazyVStack(spacing: 20) {
                 ForEach(wallets, id: \.id) { wallet in
                     GlassCard(colors: wallet.color.toCardColors()) {
-                        Text(wallet.name).foregroundColor(.white)
+                        VStack {
+                            Text(wallet.name).foregroundColor(.white).font(.title2)
+                            Text(
+                                (try? Fingerprint(id: wallet.id).toUppercase()) ?? "Unknown"
+                            )
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.footnote)
+                        }
                     }
                     .frame(width: 300, height: 200)
                     .onTapGesture {

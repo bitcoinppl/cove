@@ -7,6 +7,7 @@ use parking_lot::RwLock;
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
+    fingerprint::Fingerprint,
     keychain::{Keychain, KeychainError},
     router::Route,
     wallet::{WalletColor, WalletId, WalletMetadata},
@@ -134,14 +135,11 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub fn fingerprint(&self) -> String {
-        let xpub = Keychain::global()
-            .get_wallet_xpub(&self.wallet_metadata().id)
-            .ok()
-            .flatten();
+        let wallet_id = self.state.read().wallet_metadata.id.clone();
 
-        xpub.map(|xpub| xpub.fingerprint().to_string())
-            .unwrap_or_else(|| "Unknown".to_string())
-            .to_ascii_uppercase()
+        Fingerprint::try_new(&wallet_id)
+            .map(|f| f.to_uppercase())
+            .unwrap_or_else(|_| "Unknown".to_string())
     }
 
     #[uniffi::method]

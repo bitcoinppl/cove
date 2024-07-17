@@ -31,7 +31,12 @@ struct CustomCompletionView: View {
                 }
             }
         }
+        .enableInjection()
     }
+
+    #if DEBUG
+    @ObserveInjection var forceRedraw
+    #endif
 
     func updateCompletions(for input: String) {
         // Implement your custom completion logic here

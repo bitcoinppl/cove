@@ -24,17 +24,12 @@ pub enum NewWalletRoute {
     ColdWallet(ColdWalletRoute),
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, uniffi::Enum)]
 pub enum HotWalletRoute {
     #[default]
     Select,
-
-    Create {
-        words: NumberOfBip39Words,
-    },
-
-    Import,
-
+    Create(NumberOfBip39Words),
+    Import(NumberOfBip39Words),
     VerifyWords(WalletId),
 }
 

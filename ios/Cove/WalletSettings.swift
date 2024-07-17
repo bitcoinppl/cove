@@ -55,14 +55,13 @@ struct WalletSettingsView: View {
                         navigate(Route.settings)
                     }) {
                         HStack {
-                            Image(systemName: "gear")
-                                .padding(3)
-                                .foregroundColor(.white)
-                                .background(Color.blue)
-                                .cornerRadius(6)
-
                             Text("App Settings")
                                 .foregroundColor(.primary)
+
+                            Spacer()
+
+                            Image(systemName: "link")
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
@@ -90,6 +89,7 @@ struct WalletSettingsView: View {
             .navigationBarItems(trailing: Button("Done") {
                 presentationMode.wrappedValue.dismiss()
             })
+            .foregroundColor(.primary)
             .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
                     do {
