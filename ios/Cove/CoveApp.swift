@@ -82,6 +82,24 @@ struct CoveApp: App {
             }
             .environment(model)
             .preferredColorScheme(model.colorScheme)
+            .gesture(
+                model.router.routes.isEmpty ?
+                    DragGesture()
+                    .onChanged { gesture in
+                        if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                            withAnimation(.spring()) {
+                                model.isSidebarVisible = true
+                            }
+                        }
+                    }
+                    .onEnded { gesture in
+                        if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                            withAnimation(.spring()) {
+                                model.isSidebarVisible = true
+                            }
+                        }
+                    } : nil
+            )
         }
     }
 }

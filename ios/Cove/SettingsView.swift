@@ -54,22 +54,27 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-        .navigationBarBackButtonHidden(true)
+        .navigationBarBackButtonHidden(networkChanged)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: {
-                    if networkChanged {
-                        showConfirmationAlert = true
-                    } else {
-                        presentationMode.wrappedValue.dismiss()
+            networkChanged ?
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        if networkChanged {
+                            showConfirmationAlert = true
+                        } else {
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                    }) {
+                        HStack(spacing: 0) {
+                            Image(systemName: "chevron.left")
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 0)
+                            Text("Back")
+                                .offset(x: 5)
+                        }
+                        .offset(x: -8)
                     }
-                }) {
-                    HStack {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
-                    }
-                }
-            }
+                } : nil
         }
         .alert(isPresented: $showConfirmationAlert) {
             Alert(
@@ -83,6 +88,24 @@ struct SettingsView: View {
             )
         }
         .preferredColorScheme(app.colorScheme)
+        .gesture(
+            networkChanged ?
+                DragGesture()
+                .onChanged { gesture in
+                    if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                        withAnimation(.spring()) {
+                            showConfirmationAlert = true
+                        }
+                    }
+                }
+                .onEnded { gesture in
+                    if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                        withAnimation(.spring()) {
+                            showConfirmationAlert = true
+                        }
+                    }
+                } : nil
+        )
         .enableInjection()
     }
 
