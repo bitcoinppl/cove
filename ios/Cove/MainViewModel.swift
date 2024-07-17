@@ -37,6 +37,10 @@ import SwiftUI
         self.rust.listenForUpdates(updater: self)
     }
 
+    var currentRoute: Route {
+        router.routes.last ?? router.default
+    }
+
     func toggleSidebar() {
         isSidebarVisible.toggle()
     }

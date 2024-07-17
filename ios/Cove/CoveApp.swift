@@ -21,6 +21,7 @@ extension EnvironmentValues {
 @main
 struct CoveApp: App {
     @State var model: MainViewModel
+    @State var id = UUID()
 
     public init() {
         // initialize keychain
@@ -30,7 +31,7 @@ struct CoveApp: App {
     }
 
     var tintColor: Color {
-        switch model.router.routes.last {
+        switch model.currentRoute {
         case .newWallet(.hotWallet(.create)):
             Color.white
         case .newWallet(.hotWallet(.verifyWords)):
@@ -44,33 +45,64 @@ struct CoveApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack(path: $model.router.routes) {
-                RouteView(model: model)
-                    .navigationDestination(for: Route.self, destination: { route in
-                        RouteView(model: model, route: route)
-                    })
-                    .onChange(of: model.router.routes) { _, new in
-                        model.dispatch(action: AppAction.updateRoute(routes: new))
-                    }
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button(action: {
-                                withAnimation {
-                                    model.toggleSidebar()
+            ZStack {
+                NavigationStack(path: $model.router.routes) {
+                    RouteView(model: model)
+                        .navigationDestination(for: Route.self, destination: { route in
+                            RouteView(model: model, route: route)
+                        })
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button(action: {
+                                    withAnimation {
+                                        model.toggleSidebar()
+                                    }
+                                }) {
+                                    Image(systemName: "line.horizontal.3")
                                 }
-                            }) {
-                                Image(systemName: "line.horizontal.3")
+                                .frame(minWidth: 50, minHeight: 50)
                             }
-                            .frame(minWidth: 50, minHeight: 50)
                         }
-                    }
+                }
+                .tint(tintColor)
+
+                SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
             }
+            .id(id)
             .tint(tintColor)
             .environment(\.navigate) { route in
                 model.pushRoute(route)
             }
             .environment(model)
             .preferredColorScheme(model.colorScheme)
+            .onChange(of: model.router.routes) { old, new in
+                if !old.isEmpty && new.isEmpty {
+                    id = UUID()
+                }
+
+                model.dispatch(action: AppAction.updateRoute(routes: new))
+            }
+            .onChange(of: model.selectedNetwork) {
+                id = UUID()
+            }
+            .gesture(
+                model.router.routes.isEmpty ?
+                    DragGesture()
+                    .onChanged { gesture in
+                        if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                            withAnimation(.spring()) {
+                                model.isSidebarVisible = true
+                            }
+                        }
+                    }
+                    .onEnded { gesture in
+                        if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                            withAnimation(.spring()) {
+                                model.isSidebarVisible = true
+                            }
+                        }
+                    } : nil
+            )
         }
     }
 }

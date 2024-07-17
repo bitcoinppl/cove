@@ -10,10 +10,14 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
+
     @Binding var isShowing: Bool
+
     let currentRoute: Route
 
-    let screenWidth = UIScreen.main.bounds.width
+    @GestureState private var dragState = CGSize.zero
+    @State private var sidebarOffset = -1 * UIScreen.main.bounds.width
+    private let screenWidth = UIScreen.main.bounds.width
 
     var walletsIsEmpty: Bool {
         if let walletsIsEmpty = try? Database().wallets().isEmpty() {
@@ -48,59 +52,85 @@ struct SidebarView: View {
 
     var body: some View {
         ZStack {
-            if isShowing {
+            if sidebarOffset == 0 {
                 Rectangle()
-                    .foregroundStyle(.background.opacity(0.9))
                     .ignoresSafeArea()
+                    .opacity(0.95)
                     .onTapGesture {
                         withAnimation {
                             isShowing = false
                         }
                     }
+            }
 
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 30) {
-                        Spacer()
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 30) {
+                    Spacer()
 
-                        Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
-                            Label("New Wallet", systemImage: "wallet.pass.fill")
+                    Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
+                        Label("New Wallet", systemImage: "wallet.pass.fill")
+                            .foregroundStyle(
+                                setForeground(RouteFactory().newWalletSelect())
+                            )
+                            .padding(.leading, 30)
+                    }
+
+                    if !walletsIsEmpty {
+                        Button(action: { goTo(Route.listWallets) }) {
+                            Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
                                 .foregroundStyle(
-                                    setForeground(RouteFactory().newWalletSelect())
+                                    setForeground(Route.listWallets)
                                 )
                                 .padding(.leading, 30)
                         }
-
-                        if !walletsIsEmpty {
-                            Button(action: { goTo(Route.listWallets) }) {
-                                Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
-                                    .foregroundStyle(
-                                        setForeground(Route.listWallets)
-                                    )
-                                    .padding(.leading, 30)
-                            }
-                        }
-
-                        Spacer()
-                        HStack(alignment: .center) {
-                            Button(action: { goTo(.settings) }, label: {
-                                HStack {
-                                    Image(systemName: "gear")
-                                        .foregroundStyle(Color.primary.gradient.opacity(0.5))
-                                    Text("Settings")
-                                        .foregroundStyle(Color.primary.gradient)
-                                }
-                            })
-                            .frame(maxWidth: screenWidth * 0.75)
-                        }
                     }
-                    .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
-                    .background(.thickMaterial)
 
                     Spacer()
+                    HStack(alignment: .center) {
+                        Button(action: { goTo(.settings) }, label: {
+                            HStack {
+                                Image(systemName: "gear")
+                                    .foregroundStyle(Color.primary.gradient.opacity(0.5))
+                                Text("Settings")
+                                    .foregroundStyle(Color.primary.gradient)
+                            }
+                        })
+                        .frame(maxWidth: screenWidth * 0.75)
+                    }
                 }
-                .transition(.move(edge: .leading))
+                .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
+                .background(.thickMaterial)
+
+                Spacer()
+            }
+            .transition(.move(edge: .leading))
+        }
+        .gesture(
+            DragGesture()
+                .updating($dragState) { value, state, _ in
+                    state = CGSize(width: value.translation.width, height: 0)
+                }
+                .onEnded { gesture in
+                    let dragThreshold: CGFloat = 100
+                    let draggedRatio = -gesture.translation.width / screenWidth
+
+                    withAnimation(.spring()) {
+                        if draggedRatio > 0.5 || gesture.predictedEndTranslation.width < -dragThreshold {
+                            sidebarOffset = -screenWidth
+                            isShowing = false
+                        } else {
+                            sidebarOffset = 0
+                            isShowing = true
+                        }
+                    }
+                }
+        )
+        .onChange(of: isShowing) { _, newValue in
+            withAnimation {
+                sidebarOffset = newValue ? 0 : -1 * screenWidth
             }
         }
+        .offset(x: sidebarOffset)
         .enableInjection()
     }
 

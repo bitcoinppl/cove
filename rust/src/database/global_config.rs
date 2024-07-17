@@ -61,6 +61,12 @@ impl GlobalConfigTable {
         Some(wallet_id)
     }
 
+    pub fn clear_selected_wallet(&self) -> Result<(), Error> {
+        self.set(GlobalConfigKey::SelectedWalletId, "".to_string())?;
+
+        Ok(())
+    }
+
     pub fn selected_network(&self) -> Network {
         let network = self
             .get(GlobalConfigKey::SelectedNetwork)
@@ -135,6 +141,32 @@ impl GlobalConfigTable {
             let key: &'static str = key.into();
             table
                 .insert(key, value)
+                .map_err(|error| GlobalConfigTableError::SaveError(error.to_string()))?;
+        }
+
+        write_txn
+            .commit()
+            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
+
+        Updater::send_update(Update::DatabaseUpdated);
+
+        Ok(())
+    }
+
+    pub fn delete(&self, key: GlobalConfigKey) -> Result<(), Error> {
+        let write_txn = self
+            .db
+            .begin_write()
+            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
+
+        {
+            let mut table = write_txn
+                .open_table(TABLE)
+                .map_err(|error| Error::TableAccessError(error.to_string()))?;
+
+            let key: &'static str = key.into();
+            table
+                .remove(key)
                 .map_err(|error| GlobalConfigTableError::SaveError(error.to_string()))?;
         }
 
