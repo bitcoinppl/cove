@@ -21,6 +21,7 @@ extension EnvironmentValues {
 @main
 struct CoveApp: App {
     @State var model: MainViewModel
+    @State var id = UUID()
 
     public init() {
         // initialize keychain
@@ -30,7 +31,7 @@ struct CoveApp: App {
     }
 
     var tintColor: Color {
-        switch model.router.routes.last {
+        switch model.currentRoute {
         case .newWallet(.hotWallet(.create)):
             Color.white
         case .newWallet(.hotWallet(.verifyWords)):
@@ -50,7 +51,11 @@ struct CoveApp: App {
                         .navigationDestination(for: Route.self, destination: { route in
                             RouteView(model: model, route: route)
                         })
-                        .onChange(of: model.router.routes) { _, new in
+                        .onChange(of: model.router.routes) { old, new in
+                            if !old.isEmpty && new.isEmpty {
+                                id = UUID()
+                            }
+
                             model.dispatch(action: AppAction.updateRoute(routes: new))
                         }
                         .toolbar {
@@ -66,9 +71,11 @@ struct CoveApp: App {
                             }
                         }
                 }
+                .tint(tintColor)
 
                 SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
             }
+            .id(id)
             .tint(tintColor)
             .environment(\.navigate) { route in
                 model.pushRoute(route)
