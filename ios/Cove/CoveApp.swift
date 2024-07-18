@@ -30,7 +30,7 @@ struct CoveApp: App {
         model = MainViewModel()
     }
 
-    var navOpenButtonColor: Color {
+    var navBarColor: Color {
         switch model.currentRoute {
         case .newWallet(.hotWallet(.create)):
             Color.white
@@ -59,9 +59,10 @@ struct CoveApp: App {
                                     }
                                 }) {
                                     Image(systemName: "line.horizontal.3")
-                                        .foregroundStyle(navOpenButtonColor)
+                                        .foregroundStyle(navBarColor)
                                 }
                                 .contentShape(Rectangle())
+                                .foregroundStyle(navBarColor)
                             }
                         }
                 }
