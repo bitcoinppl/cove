@@ -55,6 +55,7 @@ struct SidebarView: View {
             if sidebarOffset == 0 {
                 Rectangle()
                     .ignoresSafeArea()
+                    .foregroundColor(.black)
                     .opacity(0.95)
                     .onTapGesture {
                         withAnimation {
@@ -91,6 +92,7 @@ struct SidebarView: View {
                             HStack {
                                 Image(systemName: "gear")
                                     .foregroundStyle(Color.primary.gradient.opacity(0.5))
+
                                 Text("Settings")
                                     .foregroundStyle(Color.primary.gradient)
                             }
