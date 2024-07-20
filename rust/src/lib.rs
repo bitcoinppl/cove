@@ -13,10 +13,12 @@ pub mod keychain;
 pub mod keys;
 pub mod mnemonic;
 pub mod network;
+pub mod node_connect;
 pub mod pending_wallet;
 pub mod redb;
 pub mod view_model;
 pub mod wallet;
 pub mod word_validator;
+pub mod node;
 
 uniffi::setup_scaffolding!();

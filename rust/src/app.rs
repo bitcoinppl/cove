@@ -9,6 +9,7 @@ use crate::{
     database::{error::DatabaseError, Database},
     impl_default_for,
     network::Network,
+    node::Node,
     router::{Route, Router},
     wallet::WalletId,
 };
@@ -46,6 +47,7 @@ pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
+    SetSelectedNode(Node),
 }
 
 impl_default_for!(App);
@@ -67,25 +69,26 @@ impl App {
         Updater::init(sender);
         let state = Arc::new(RwLock::new(AppState::new()));
 
-        // Create a background thread which checks for deadlocks every 10s
-        // TODO: FIX BEFORE RELEASE: remove deadlock detection
-        use std::thread;
-        thread::spawn(move || loop {
-            thread::sleep(std::time::Duration::from_secs(2));
-            let deadlocks = parking_lot::deadlock::check_deadlock();
-            if deadlocks.is_empty() {
-                continue;
-            }
-
-            error!("{} deadlocks detected", deadlocks.len());
-            for (i, threads) in deadlocks.iter().enumerate() {
-                error!("Deadlock #{}", i);
-                for t in threads {
-                    error!("Thread Id {:#?}", t.thread_id());
-                    error!("{:#?}", t.backtrace());
+        #[cfg(debug_assertions)]
+        {
+            // Create a background thread which checks for deadlocks every 10s
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                let deadlocks = parking_lot::deadlock::check_deadlock();
+                if deadlocks.is_empty() {
+                    continue;
                 }
-            }
-        });
+
+                error!("{} deadlocks detected", deadlocks.len());
+                for (i, threads) in deadlocks.iter().enumerate() {
+                    error!("Deadlock #{}", i);
+                    for t in threads {
+                        error!("Thread Id {:#?}", t.thread_id());
+                        error!("{:#?}", t.backtrace());
+                    }
+                }
+            });
+        }
 
         Self {
             update_receiver: Arc::new(receiver),
@@ -129,6 +132,17 @@ impl App {
                     .global_config
                     .set_color_scheme(color_scheme)
                     .expect("failed to set color scheme, please report this bug");
+            }
+
+            AppAction::SetSelectedNode(node) => {
+                debug!("Selected node change, NEW: {:?}", node);
+
+                match Database::global().global_config.set_selected_node(&node) {
+                    Ok(_) => {}
+                    Err(error) => {
+                        error!("Unable to set selected node: {error}");
+                    }
+                }
             }
         }
     }

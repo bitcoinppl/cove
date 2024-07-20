@@ -7,7 +7,9 @@ import SwiftUI
     var router: Router
     var database: Database
     var isSidebarVisible = false
+
     var colorSchemeSelection = Database().globalConfig().colorScheme()
+    var selectedNode = Database().globalConfig().selectedNode()
 
     public var selectedNetwork: Network {
         rust.network()
@@ -75,6 +77,9 @@ import SwiftUI
 
                 case let .colorSchemeChanged(colorSchemeSelection):
                     self.colorSchemeSelection = colorSchemeSelection
+
+                case let .selectedNodeChanged(node):
+                    self.selectedNode = node
 
                 case let .defaultRouteChanged(route):
                     // default changes, means root changes, set routes to []

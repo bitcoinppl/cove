@@ -6,6 +6,15 @@ use super::{
 type Error = DatabaseError;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum SerdeError {
+    #[error("failed to serialize: {0}")]
+    SerializationError(String),
+
+    #[error("failed to deserialize: {0}")]
+    DeserializationError(String),
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum DatabaseError {
     #[error("failed to open database: {0}")]
     DatabaseAccessError(String),
@@ -21,6 +30,9 @@ pub enum DatabaseError {
 
     #[error(transparent)]
     GlobalConfigError(#[from] GlobalConfigTableError),
+
+    #[error("unable to serialize or deserialize: {0}")]
+    SerializationError(#[from] SerdeError),
 }
 
 impl From<redb::TransactionError> for Error {
