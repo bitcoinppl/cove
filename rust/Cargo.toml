@@ -24,6 +24,7 @@ bdk_esplora = { version = "0.15", features = ["async-https"] }
 
 # TODO: update once this is merged: https://github.com/bitcoindevkit/bdk/pull/1491
 bdk_electrum = { git = "https://github.com/thunderbiscuit/bdk", branch = "feature/electrum-client-ring", features = ["use-rustls-ring"], default-features = false }
+electrum-client = { git = "https://github.com/thunderbiscuit/rust-electrum-client", branch = "feature/rustls-ring", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # crypto

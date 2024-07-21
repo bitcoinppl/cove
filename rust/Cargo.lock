@@ -513,6 +513,7 @@ dependencies = [
  "crossbeam",
  "derive_more",
  "dirs",
+ "electrum-client",
  "eyre",
  "itertools",
  "nid",
@@ -662,7 +663,7 @@ checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 [[package]]
 name = "electrum-client"
 version = "0.20.0"
-source = "git+https://github.com/thunderbiscuit/rust-electrum-client/?branch=feature/rustls-ring#c7a96f7264348537f4b57dd149fd114f22844b16"
+source = "git+https://github.com/thunderbiscuit/rust-electrum-client?branch=feature/rustls-ring#c7a96f7264348537f4b57dd149fd114f22844b16"
 dependencies = [
  "bitcoin",
  "byteorder",

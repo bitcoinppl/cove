@@ -4,11 +4,12 @@ use crate::{database::Database, impl_default_for, network::Network, node::Node};
 
 pub const BITCOIN_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/api/");
 
-const BITCOIN_ELECTRUM: [(&str, &str); 4] = [
-    ("bitcoin.lu.ke", "bitcoin.lu.ke"),
-    ("electrum.emzy.de", "electrum.emzy.de"),
-    ("electrum.bitaroo.net", "electrum.bitaroo.net"),
-    ("electrum.diynodes.com", "electrum.diynodes.com"),
+const BITCOIN_ELECTRUM: [(&str, &str); 2] = [
+    (
+        "electrum.blockstream.info",
+        "ssl://electrum.blockstream.info:50002",
+    ),
+    ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
 ];
 
 const TESTNET_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/testnet/api/");
@@ -48,6 +49,8 @@ impl NodeSelector {
         let selected_node = Database::global().global_config.selected_node();
 
         let node_list = node_list(network);
+        println!("node_list: {node_list:#?}");
+
         let node_selection_list = if node_list.contains(&selected_node) {
             node_list.into_iter().map(NodeSelection::Preset).collect()
         } else {
@@ -104,7 +107,7 @@ impl NodeSelector {
     pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
         node.check_url()
             .await
-            .map_err(|error| Error::NodeAccessError(error.to_string()))?;
+            .map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
 
         Ok(())
     }

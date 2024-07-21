@@ -3,8 +3,8 @@ use crate::{
     node_connect::{NodeSelection, BITCOIN_ESPLORA},
 };
 
-use bdk_electrum::electrum_client::ElectrumApi as _;
 use bdk_esplora::esplora_client;
+use electrum_client::ElectrumApi;
 use eyre::Context as _;
 
 #[derive(
@@ -84,7 +84,7 @@ impl Node {
             }
 
             ApiType::Electrum => {
-                let client = bdk_electrum::electrum_client::Client::new(&self.url)
+                let client = electrum_client::Client::new(&self.url)
                     .wrap_err("failed to create electrum client")?;
 
                 crate::unblock::run_blocking(move || client.ping())
