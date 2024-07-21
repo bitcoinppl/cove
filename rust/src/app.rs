@@ -14,7 +14,7 @@ use crate::{
     wallet::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
-use log::{debug, error};
+use tracing::{debug, error};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage, FfiReconcile, Updater};

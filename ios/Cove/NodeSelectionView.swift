@@ -10,37 +10,41 @@ import SwiftUI
 struct NodeSelectionView: View {
     let nodeSelector = NodeSelector()
 
-    @State private var selectedNode: NodeSelection?
+    @State private var selectedNodeName: String
+    private var nodeList: [NodeSelection]
+
     @State private var customUrl: String = ""
-    @State private var showCustomUrlField: Bool = false
+
+    init() {
+        self.selectedNodeName = nodeSelector.selectedNode().name
+        self.nodeList = nodeSelector.nodeList()
+    }
+
+    var showCustomUrlField: Bool {
+        selectedNodeName == "Custom"
+    }
 
     var body: some View {
         Section(header: Text("Node Selection")) {
-            Picker("Select Node", selection: $selectedNode) {
-                ForEach(nodeSelector.nodeList(), id: \.url) { (node: NodeSelection) in
+            Picker("Select Node", selection: $selectedNodeName) {
+                ForEach(nodeList, id: \.name) { (node: NodeSelection) in
                     Text(node.name)
-                        .tag(node.url)
+                        .tag(node.name)
                 }
+
                 Text("Custom").tag("Custom")
             }
-            .onChange(of: selectedNode) { _, newSelectedNode in
-                if case let .custom(node) = newSelectedNode {
-                    customUrl = node.url
-                    showCustomUrlField = true
-                }
-            }
-
             if showCustomUrlField {
                 TextField("Enter custom node URL", text: $customUrl)
 
                 Button("Save Custom Node") {
                     // Update app state with custom node
-//                        app.dispatch(action: .selectNode(node: Node(name: "Custom", url: customURL)))
+//                        app.dispatch(action: .selectNode(node: Nodejk(name: "Custom", url: customURL)))
                 }
             }
         }
-        .onAppear {
-            selectedNode = nodeSelector.selectedNode()
+        .onChange(of: selectedNodeName) { old, new in
+            print(old, new)
         }
     }
 }

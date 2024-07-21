@@ -77,42 +77,46 @@ impl Router {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
-pub struct RouteFactory;
+mod ffi {
+    use super::*;
 
-#[uniffi::export]
-impl RouteFactory {
-    #[uniffi::constructor]
-    pub fn new() -> Self {
-        Self
-    }
+    #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
+    pub struct RouteFactory;
 
-    pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {
-        if route == route_to_check {
-            return true;
+    #[uniffi::export]
+    impl RouteFactory {
+        #[uniffi::constructor]
+        pub fn new() -> Self {
+            Self
         }
 
-        matches!(
-            (route, route_to_check),
-            (Route::ListWallets, Route::ListWallets)
-                | (Route::SelectedWallet(_), Route::SelectedWallet(_))
-                | (Route::NewWallet(_), Route::NewWallet(_))
-        )
-    }
+        pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {
+            if route == route_to_check {
+                return true;
+            }
 
-    pub fn new_wallet_select(&self) -> Route {
-        Route::NewWallet(Default::default())
-    }
+            matches!(
+                (route, route_to_check),
+                (Route::ListWallets, Route::ListWallets)
+                    | (Route::SelectedWallet(_), Route::SelectedWallet(_))
+                    | (Route::NewWallet(_), Route::NewWallet(_))
+            )
+        }
 
-    pub fn new_hot_wallet(&self) -> Route {
-        Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
-    }
+        pub fn new_wallet_select(&self) -> Route {
+            Route::NewWallet(Default::default())
+        }
 
-    pub fn new_cold_wallet(&self) -> Route {
-        Route::NewWallet(NewWalletRoute::ColdWallet(Default::default()))
-    }
+        pub fn new_hot_wallet(&self) -> Route {
+            Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
+        }
 
-    pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
-        Route::NewWallet(NewWalletRoute::HotWallet(route))
+        pub fn new_cold_wallet(&self) -> Route {
+            Route::NewWallet(NewWalletRoute::ColdWallet(Default::default()))
+        }
+
+        pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
+            Route::NewWallet(NewWalletRoute::HotWallet(route))
+        }
     }
 }

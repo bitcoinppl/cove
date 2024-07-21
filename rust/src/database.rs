@@ -13,7 +13,7 @@ use global_flag::GlobalFlagTable;
 use wallet::WalletTable;
 
 use eyre::Context;
-use log::{error, info};
+use tracing::{error, info};
 use once_cell::sync::OnceCell;
 
 pub static DATABASE: OnceCell<Database> = OnceCell::new();

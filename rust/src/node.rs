@@ -39,7 +39,7 @@ impl Default for Node {
         Self {
             name: name.to_string(),
             network: Network::Bitcoin,
-            api_type: ApiType::Electrum,
+            api_type: ApiType::Esplora,
             url: url.to_string(),
         }
     }

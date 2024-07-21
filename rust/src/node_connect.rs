@@ -1,6 +1,7 @@
 use crate::{database::Database, impl_default_for, network::Network, node::Node};
 
 pub const BITCOIN_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/api/");
+
 const BITCOIN_ELECTRUM: [(&str, &str); 4] = [
     ("bitcoin.lu.ke", "bitcoin.lu.ke"),
     ("electrum.emzy.de", "electrum.emzy.de"),
@@ -12,6 +13,7 @@ const TESTNET_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct NodeSelector {
+    network: Network,
     selected_node: NodeSelection,
     node_list: Vec<NodeSelection>,
 }
@@ -32,6 +34,9 @@ impl NodeSelector {
 
         let node_list = node_list(network);
         let (node_selection_list, selected_node) = if node_list.contains(&selected_node) {
+            let node_selection_list = node_list.into_iter().map(NodeSelection::Preset).collect();
+            (node_selection_list, NodeSelection::Preset(selected_node))
+        } else {
             let mut node_selection_list = node_list
                 .into_iter()
                 .map(NodeSelection::Preset)
@@ -39,12 +44,10 @@ impl NodeSelector {
 
             node_selection_list.push(NodeSelection::Custom(selected_node.clone()));
             (node_selection_list, NodeSelection::Custom(selected_node))
-        } else {
-            let node_selection_list = node_list.into_iter().map(NodeSelection::Preset).collect();
-            (node_selection_list, NodeSelection::Preset(selected_node))
         };
 
         Self {
+            network,
             selected_node,
             node_list: node_selection_list,
         }
@@ -90,7 +93,28 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
+mod ffi {
+    use super::NodeSelection;
+    use crate::node::Node;
+
+    #[uniffi::export]
+    pub fn node_selection_to_node(node: NodeSelection) -> Node {
+        node.into()
+    }
+}
+
 #[uniffi::export]
-pub fn node_selection_to_node(node: NodeSelection) -> Node {
-    node.into()
+pub fn default_node_selection() -> NodeSelection {
+    let network = Database::global().global_config.selected_network();
+
+    let (name, url) = match network {
+        Network::Bitcoin => BITCOIN_ESPLORA,
+        Network::Testnet => TESTNET_ESPLORA,
+    };
+
+    NodeSelection::Preset(Node::new_esplora(
+        name.to_string(),
+        url.to_string(),
+        network,
+    ))
 }

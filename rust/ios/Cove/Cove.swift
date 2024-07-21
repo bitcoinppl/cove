@@ -5477,6 +5477,13 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
     })
 }
 
+public func defaultNodeSelection() -> NodeSelection {
+    return try! FfiConverterTypeNodeSelection.lift(try! rustCall {
+        uniffi_cove_fn_func_default_node_selection($0
+        )
+    })
+}
+
 public func networkToString(network: Network) -> String {
     return try! FfiConverterString.lift(try! rustCall {
         uniffi_cove_fn_func_network_to_string(
@@ -5533,6 +5540,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_color_scheme_selection_capitalized_string() != 42247 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_default_node_selection() != 14665 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_network_to_string() != 60660 {
