@@ -8,43 +8,39 @@
 import SwiftUI
 
 struct NodeSelectionView: View {
-    let app: MainViewModel
-    let nodeSelector: NodeSelector = .init()
+    let nodeSelector = NodeSelector()
 
-    @State
-    @State private var customURL: String = ""
-    @State private var showCustomURLField: Bool = false
+    @State private var selectedNode: NodeSelection?
+    @State private var customUrl: String = ""
+    @State private var showCustomUrlField: Bool = false
 
     var body: some View {
         Section(header: Text("Node Selection")) {
-            Picker("Select Node",
-                   selection: Binding(
-                       get: { app.selectedNode },
-                       set: { app.dispatch(action: .setSelectedNode($0)) }
-                   )) {
-                ForEach(nodeSelector.nodeList(), id: \.self) { node in
+            Picker("Select Node", selection: $selectedNode) {
+                ForEach(nodeSelector.nodeList(), id: \.url) { (node: NodeSelection) in
                     Text(node.name)
-                        .tag(node)
+                        .tag(node.url)
                 }
                 Text("Custom").tag("Custom")
             }
-            .onChange(of: app.selectedNode) { _, newValue in
-                showCustomURLField = (newValue == "Custom")
-                if newValue != "Custom" {
-                    customURL = ""
-                    // Update app state with selected node
-//                        app.dispatch(action: .selectNode(node: Node(name: newValue, url: "")))
+            .onChange(of: selectedNode) { _, newSelectedNode in
+                if case let .custom(node) = newSelectedNode {
+                    customUrl = node.url
+                    showCustomUrlField = true
                 }
             }
 
-            if showCustomURLField {
-                TextField("Enter custom node URL", text: $customURL)
+            if showCustomUrlField {
+                TextField("Enter custom node URL", text: $customUrl)
 
                 Button("Save Custom Node") {
                     // Update app state with custom node
 //                        app.dispatch(action: .selectNode(node: Node(name: "Custom", url: customURL)))
                 }
             }
+        }
+        .onAppear {
+            selectedNode = nodeSelector.selectedNode()
         }
     }
 }

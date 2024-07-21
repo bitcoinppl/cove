@@ -1619,7 +1619,9 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
 }
 
 public protocol NodeSelectorProtocol: AnyObject {
-    func nodeList() -> [Node]
+    func nodeList() -> [NodeSelection]
+
+    func selectedNode() -> NodeSelection
 }
 
 open class NodeSelector:
@@ -1669,9 +1671,15 @@ open class NodeSelector:
         try! rustCall { uniffi_cove_fn_free_nodeselector(pointer, $0) }
     }
 
-    open func nodeList() -> [Node] {
-        return try! FfiConverterSequenceTypeNode.lift(try! rustCall {
+    open func nodeList() -> [NodeSelection] {
+        return try! FfiConverterSequenceTypeNodeSelection.lift(try! rustCall {
             uniffi_cove_fn_method_nodeselector_node_list(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func selectedNode() -> NodeSelection {
+        return try! FfiConverterTypeNodeSelection.lift(try! rustCall {
+            uniffi_cove_fn_method_nodeselector_selected_node(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -4055,6 +4063,55 @@ extension NewWalletRoute: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum NodeSelection {
+    case preset(Node
+    )
+    case custom(Node
+    )
+}
+
+public struct FfiConverterTypeNodeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = NodeSelection
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeSelection {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .preset(FfiConverterTypeNode.read(from: &buf)
+            )
+
+        case 2: return try .custom(FfiConverterTypeNode.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeSelection, into buf: inout [UInt8]) {
+        switch value {
+        case let .preset(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeNode.write(v1, into: &buf)
+
+        case let .custom(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeNode.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeNodeSelection_lift(_ buf: RustBuffer) throws -> NodeSelection {
+    return try FfiConverterTypeNodeSelection.lift(buf)
+}
+
+public func FfiConverterTypeNodeSelection_lower(_ value: NodeSelection) -> RustBuffer {
+    return FfiConverterTypeNodeSelection.lower(value)
+}
+
+extension NodeSelection: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum NumberOfBip39Words {
     case twelve
     case twentyFour
@@ -5213,28 +5270,6 @@ private struct FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer {
     }
 }
 
-private struct FfiConverterSequenceTypeNode: FfiConverterRustBuffer {
-    typealias SwiftType = [Node]
-
-    public static func write(_ value: [Node], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeNode.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Node] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [Node]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            try seq.append(FfiConverterTypeNode.read(from: &buf))
-        }
-        return seq
-    }
-}
-
 private struct FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = [WalletMetadata]
 
@@ -5296,6 +5331,28 @@ private struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             try seq.append(FfiConverterTypeNetwork.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+private struct FfiConverterSequenceTypeNodeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeSelection]
+
+    public static func write(_ value: [NodeSelection], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeSelection.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeSelection] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeSelection]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeNodeSelection.read(from: &buf))
         }
         return seq
     }
@@ -5428,6 +5485,14 @@ public func networkToString(network: Network) -> String {
     })
 }
 
+public func nodeSelectionToNode(node: NodeSelection) -> Node {
+    return try! FfiConverterTypeNode.lift(try! rustCall {
+        uniffi_cove_fn_func_node_selection_to_node(
+            FfiConverterTypeNodeSelection.lower(node), $0
+        )
+    })
+}
+
 public func numberOfWordsInGroups(me: NumberOfBip39Words, of: UInt8) -> [[String]] {
     return try! FfiConverterSequenceSequenceString.lift(try! rustCall {
         uniffi_cove_fn_func_number_of_words_in_groups(
@@ -5471,6 +5536,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_network_to_string() != 60660 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_node_selection_to_node() != 57209 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_number_of_words_in_groups() != 14214 {
@@ -5575,7 +5643,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_nodeselector_node_list() != 7304 {
+    if uniffi_cove_checksum_method_nodeselector_node_list() != 23402 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_selected_node() != 29849 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {

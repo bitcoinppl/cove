@@ -23,6 +23,7 @@
 		AC595C732C32FE5300997733 /* SelectedWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC595C722C32FE5300997733 /* SelectedWalletView.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
 		AC8C1FAA2C49A4BC00158283 /* NodeSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8C1FA92C49A4BC00158283 /* NodeSelectionView.swift */; };
+		AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */; };
 		AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
@@ -82,6 +83,7 @@
 		AC595C722C32FE5300997733 /* SelectedWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedWalletView.swift; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
 		AC8C1FA92C49A4BC00158283 /* NodeSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeSelectionView.swift; sourceTree = "<group>"; };
+		AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NodeSelection+Ext.swift"; sourceTree = "<group>"; };
 		AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NumberOfWords+Ext.swift"; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
 		AC9AB5782C34956C00BAE3BE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
@@ -143,6 +145,7 @@
 				5398BBCAD30C0F26920CC75C /* Network+Ext.swift */,
 				19224F788C8E6EEDE418212E /* ColorSchemeSelection+Ext.swift */,
 				AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */,
+				AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */,
 			);
 			path = Extention;
 			sourceTree = "<group>";
@@ -348,6 +351,7 @@
 				0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */,
 				52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */,
 				50B3D54BE1FF7EAE394ACC68 /* SettingsView.swift in Sources */,
+				AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */,
 				4B7D31B349728B3C573472DD /* Network+Ext.swift in Sources */,
 				2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */,
 				4998F4A296FA2217EC2BD80F /* WalletSettings.swift in Sources */,

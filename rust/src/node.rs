@@ -1,4 +1,7 @@
-use crate::{network::Network, node_connect::BITCOIN_ESPLORA};
+use crate::{
+    network::Network,
+    node_connect::{NodeSelection, BITCOIN_ESPLORA},
+};
 
 #[derive(
     Debug,
@@ -58,6 +61,15 @@ impl Node {
             network,
             api_type: ApiType::Esplora,
             url,
+        }
+    }
+}
+
+impl From<NodeSelection> for Node {
+    fn from(node: NodeSelection) -> Self {
+        match node {
+            NodeSelection::Preset(node) => node,
+            NodeSelection::Custom(node) => node,
         }
     }
 }

@@ -44,7 +44,7 @@ struct SettingsView: View {
                     .pickerStyle(SegmentedPickerStyle())
                 }
 
-                NodeSelectionView(appModel: app)
+//                NodeSelectionView(app: app)
 
                 Section(header: Text("About")) {
                     HStack {
