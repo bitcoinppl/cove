@@ -3,6 +3,10 @@ use crate::{
     node_connect::{NodeSelection, BITCOIN_ESPLORA},
 };
 
+use bdk_electrum::electrum_client::ElectrumApi as _;
+use bdk_esplora::esplora_client;
+use eyre::Context as _;
+
 #[derive(
     Debug,
     Copy,
@@ -61,6 +65,39 @@ impl Node {
             network,
             api_type: ApiType::Esplora,
             url,
+        }
+    }
+
+    pub async fn check_url(&self) -> eyre::Result<()> {
+        match self.api_type {
+            ApiType::Esplora => {
+                let client = esplora_client::Builder::new(&self.url)
+                    .build_async()
+                    .wrap_err("failed to create esplora client")?;
+
+                client
+                    .get_height()
+                    .await
+                    .wrap_err("failed to connect to esplora node")?;
+
+                Ok(())
+            }
+
+            ApiType::Electrum => {
+                let client = bdk_electrum::electrum_client::Client::new(&self.url)
+                    .wrap_err("failed to create electrum client")?;
+
+                crate::unblock::run_blocking(move || client.ping())
+                    .await
+                    .wrap_err("failed to connect to electrum node")?;
+
+                Ok(())
+            }
+
+            ApiType::Rpc => {
+                // TODO: implement rpc check, with auth
+                todo!()
+            }
         }
     }
 }

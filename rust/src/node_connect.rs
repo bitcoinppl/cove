@@ -1,3 +1,5 @@
+use tracing::error;
+
 use crate::{database::Database, impl_default_for, network::Network, node::Node};
 
 pub const BITCOIN_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/api/");
@@ -14,7 +16,6 @@ const TESTNET_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct NodeSelector {
     network: Network,
-    selected_node: NodeSelection,
     node_list: Vec<NodeSelection>,
 }
 
@@ -24,8 +25,22 @@ pub enum NodeSelection {
     Custom(Node),
 }
 
+type Error = NodeSelectorError;
+
+#[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash, thiserror::Error)]
+pub enum NodeSelectorError {
+    #[error("node with name {0} not found")]
+    NodeNotFound(String),
+
+    #[error("unable to set selected node: {0}")]
+    SetSelectedNodeError(String),
+
+    #[error("unable to access node: {0}")]
+    NodeAccessError(String),
+}
+
 impl_default_for!(NodeSelector);
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 impl NodeSelector {
     #[uniffi::constructor]
     pub fn new() -> Self {
@@ -33,9 +48,8 @@ impl NodeSelector {
         let selected_node = Database::global().global_config.selected_node();
 
         let node_list = node_list(network);
-        let (node_selection_list, selected_node) = if node_list.contains(&selected_node) {
-            let node_selection_list = node_list.into_iter().map(NodeSelection::Preset).collect();
-            (node_selection_list, NodeSelection::Preset(selected_node))
+        let node_selection_list = if node_list.contains(&selected_node) {
+            node_list.into_iter().map(NodeSelection::Preset).collect()
         } else {
             let mut node_selection_list = node_list
                 .into_iter()
@@ -43,12 +57,11 @@ impl NodeSelector {
                 .collect::<Vec<NodeSelection>>();
 
             node_selection_list.push(NodeSelection::Custom(selected_node.clone()));
-            (node_selection_list, NodeSelection::Custom(selected_node))
+            node_selection_list
         };
 
         Self {
             network,
-            selected_node,
             node_list: node_selection_list,
         }
     }
@@ -60,7 +73,40 @@ impl NodeSelector {
 
     #[uniffi::method]
     pub fn selected_node(&self) -> NodeSelection {
-        self.selected_node.clone()
+        let selected_node = Database::global().global_config.selected_node();
+
+        if node_list(self.network).contains(&selected_node) {
+            NodeSelection::Preset(selected_node)
+        } else {
+            NodeSelection::Custom(selected_node)
+        }
+    }
+
+    #[uniffi::method]
+    pub fn select_preset_node(&self, name: String) -> Result<Node, Error> {
+        let Some(node) = node_list(self.network)
+            .into_iter()
+            .find(|node| node.name == name)
+        else {
+            error!("node with name {name} not found");
+            return Err(NodeSelectorError::NodeNotFound(name));
+        };
+
+        Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .map_err(|error| NodeSelectorError::SetSelectedNodeError(error.to_string()))?;
+
+        Ok(node)
+    }
+
+    #[uniffi::method]
+    pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
+        node.check_url()
+            .await
+            .map_err(|error| Error::NodeAccessError(error.to_string()))?;
+
+        Ok(())
     }
 }
 

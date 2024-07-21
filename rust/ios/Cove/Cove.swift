@@ -1619,7 +1619,11 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
 }
 
 public protocol NodeSelectorProtocol: AnyObject {
+    func checkSelectedNode(node: Node) async throws
+
     func nodeList() -> [NodeSelection]
+
+    func selectPresetNode(name: String) throws -> Node
 
     func selectedNode() -> NodeSelection
 }
@@ -1671,9 +1675,33 @@ open class NodeSelector:
         try! rustCall { uniffi_cove_fn_free_nodeselector(pointer, $0) }
     }
 
+    open func checkSelectedNode(node: Node) async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_nodeselector_check_selected_node(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeNode.lower(node)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_void,
+                completeFunc: ffi_cove_rust_future_complete_void,
+                freeFunc: ffi_cove_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeNodeSelectorError.lift
+            )
+    }
+
     open func nodeList() -> [NodeSelection] {
         return try! FfiConverterSequenceTypeNodeSelection.lift(try! rustCall {
             uniffi_cove_fn_method_nodeselector_node_list(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func selectPresetNode(name: String) throws -> Node {
+        return try FfiConverterTypeNode.lift(rustCallWithError(FfiConverterTypeNodeSelectorError.lift) {
+            uniffi_cove_fn_method_nodeselector_select_preset_node(self.uniffiClonePointer(),
+                                                                  FfiConverterString.lower(name), $0)
         })
     }
 
@@ -4109,6 +4137,59 @@ public func FfiConverterTypeNodeSelection_lower(_ value: NodeSelection) -> RustB
 
 extension NodeSelection: Equatable, Hashable {}
 
+public enum NodeSelectorError {
+    case NodeNotFound(String
+    )
+    case SetSelectedNodeError(String
+    )
+    case NodeAccessError(String
+    )
+}
+
+public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
+    typealias SwiftType = NodeSelectorError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeSelectorError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .NodeNotFound(
+                FfiConverterString.read(from: &buf)
+            )
+        case 2: return try .SetSelectedNodeError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 3: return try .NodeAccessError(
+                FfiConverterString.read(from: &buf)
+            )
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeSelectorError, into buf: inout [UInt8]) {
+        switch value {
+        case let .NodeNotFound(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .SetSelectedNodeError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .NodeAccessError(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension NodeSelectorError: Equatable, Hashable {}
+
+extension NodeSelectorError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -5455,6 +5536,53 @@ public func FfiConverterTypeWalletId_lower(_ value: WalletId) -> RustBuffer {
     return FfiConverterTypeWalletId.lower(value)
 }
 
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
+
+private let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+private func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> Void,
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> Void,
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call uniffiEnsureInitialized() since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsureInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                uniffiFutureContinuationCallback,
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+private func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
+    }
+}
+
 public func allColorSchemes() -> [ColorSchemeSelection] {
     return try! FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall {
         uniffi_cove_fn_func_all_color_schemes($0
@@ -5653,7 +5781,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_nodeselector_check_selected_node() != 19872 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_nodeselector_node_list() != 23402 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_select_preset_node() != 36330 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_nodeselector_selected_node() != 29849 {

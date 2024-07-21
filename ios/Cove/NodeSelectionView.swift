@@ -16,8 +16,8 @@ struct NodeSelectionView: View {
     @State private var customUrl: String = ""
 
     init() {
-        self.selectedNodeName = nodeSelector.selectedNode().name
-        self.nodeList = nodeSelector.nodeList()
+        selectedNodeName = nodeSelector.selectedNode().name
+        nodeList = nodeSelector.nodeList()
     }
 
     var showCustomUrlField: Bool {
@@ -43,8 +43,17 @@ struct NodeSelectionView: View {
                 }
             }
         }
-        .onChange(of: selectedNodeName) { old, new in
-            print(old, new)
+        .onChange(of: selectedNodeName) { _, newSelectedNodeName in
+            guard let node = try? nodeSelector.selectPresetNode(name: newSelectedNodeName) else { return }
+
+            Task {
+                do {
+                    try await nodeSelector.checkSelectedNode(node: node)
+                    print("node connected success")
+                } catch {
+                    print("error checking node: \(error)")
+                }
+            }
         }
     }
 }

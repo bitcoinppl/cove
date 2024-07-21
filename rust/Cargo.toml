@@ -19,6 +19,13 @@ default = ["uniffi/cli"]
 bdk_wallet = { version = "1.0.0-alpha.13", features = ["keys-bip39"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
+# bitcoin nodes
+bdk_esplora = { version = "0.15", features = ["async-https"] }
+
+# TODO: update once this is merged: https://github.com/bitcoindevkit/bdk/pull/1491
+bdk_electrum = { git = "https://github.com/thunderbiscuit/bdk", branch = "feature/electrum-client-ring", features = ["use-rustls-ring"], default-features = false }
+# bdk_bitcoind_rpc = { version = "0.12", features = [] }
+
 # crypto
 rand = "0.8.5"
 zeroize = "1.8.1"
@@ -62,7 +69,7 @@ serde_json = "1.0"
 itertools = "0.13"
 
 # bindings
-uniffi = { version = "=0.28" }
+uniffi = { version = "=0.28", features = ["tokio"] }
 
 # hashing
 sha2 = "0.10.8"
