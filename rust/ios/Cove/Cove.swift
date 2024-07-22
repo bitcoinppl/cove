@@ -1619,9 +1619,19 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
 }
 
 public protocol NodeSelectorProtocol: AnyObject {
+    /**
+     * Check the node url and set it as selected node if it is valid
+     */
+    func checkAndSaveNode(node: Node) async throws
+
     func checkSelectedNode(node: Node) async throws
 
     func nodeList() -> [NodeSelection]
+
+    /**
+     * Use the url and name of the custom node to set it as the selected node
+     */
+    func parseCustomNode(url: String, name: String) throws -> Node
 
     func selectPresetNode(name: String) throws -> Node
 
@@ -1675,6 +1685,26 @@ open class NodeSelector:
         try! rustCall { uniffi_cove_fn_free_nodeselector(pointer, $0) }
     }
 
+    /**
+     * Check the node url and set it as selected node if it is valid
+     */
+    open func checkAndSaveNode(node: Node) async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_nodeselector_check_and_save_node(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeNode.lower(node)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_void,
+                completeFunc: ffi_cove_rust_future_complete_void,
+                freeFunc: ffi_cove_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeNodeSelectorError.lift
+            )
+    }
+
     open func checkSelectedNode(node: Node) async throws {
         return
             try await uniffiRustCallAsync(
@@ -1695,6 +1725,17 @@ open class NodeSelector:
     open func nodeList() -> [NodeSelection] {
         return try! FfiConverterSequenceTypeNodeSelection.lift(try! rustCall {
             uniffi_cove_fn_method_nodeselector_node_list(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    /**
+     * Use the url and name of the custom node to set it as the selected node
+     */
+    open func parseCustomNode(url: String, name: String) throws -> Node {
+        return try FfiConverterTypeNode.lift(rustCallWithError(FfiConverterTypeNodeSelectorError.lift) {
+            uniffi_cove_fn_method_nodeselector_parse_custom_node(self.uniffiClonePointer(),
+                                                                 FfiConverterString.lower(url),
+                                                                 FfiConverterString.lower(name), $0)
         })
     }
 
@@ -4144,6 +4185,8 @@ public enum NodeSelectorError {
     )
     case NodeAccessError(String
     )
+    case ParseNodeUrlError(String
+    )
 }
 
 public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
@@ -4159,6 +4202,9 @@ public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
                 FfiConverterString.read(from: &buf)
             )
         case 3: return try .NodeAccessError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 4: return try .ParseNodeUrlError(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4177,6 +4223,10 @@ public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
 
         case let .NodeAccessError(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .ParseNodeUrlError(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
         }
     }
@@ -5781,10 +5831,16 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 48519 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_nodeselector_check_selected_node() != 19872 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_nodeselector_node_list() != 23402 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 14050 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_nodeselector_select_preset_node() != 36330 {

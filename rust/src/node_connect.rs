@@ -1,4 +1,5 @@
 use tracing::error;
+use url::Url;
 
 use crate::{database::Database, impl_default_for, network::Network, node::Node};
 
@@ -38,6 +39,9 @@ pub enum NodeSelectorError {
 
     #[error("unable to access node: {0}")]
     NodeAccessError(String),
+
+    #[error("unable to parse node url: {0}")]
+    ParseNodeUrlError(String),
 }
 
 impl_default_for!(NodeSelector);
@@ -49,7 +53,6 @@ impl NodeSelector {
         let selected_node = Database::global().global_config.selected_node();
 
         let node_list = node_list(network);
-        println!("node_list: {node_list:#?}");
 
         let node_selection_list = if node_list.contains(&selected_node) {
             node_list.into_iter().map(NodeSelection::Preset).collect()
@@ -111,6 +114,49 @@ impl NodeSelector {
 
         Ok(())
     }
+
+    #[uniffi::method]
+    /// Use the url and name of the custom node to set it as the selected node
+    pub fn parse_custom_node(&self, url: String, name: String) -> Result<Node, Error> {
+        let name = name.to_ascii_lowercase();
+
+        let url =
+            parse_node_url(&url).map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
+
+        if !url.domain().unwrap_or_default().contains('.') {
+            return Err(Error::ParseNodeUrlError(
+                "invalid url, no domain".to_string(),
+            ));
+        }
+
+        let url_string = url.to_string();
+
+        let node = if name.contains("electrum") {
+            Node::new_electrum(name, url_string, self.network)
+        } else if name.contains("esplora") {
+            Node::new_esplora(name, url_string, self.network)
+        } else {
+            error!("invalid node name: {name}");
+            Node::default()
+        };
+
+        Ok(node)
+    }
+
+    #[uniffi::method]
+    /// Check the node url and set it as selected node if it is valid
+    pub async fn check_and_save_node(&self, node: Node) -> Result<(), Error> {
+        node.check_url()
+            .await
+            .map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
+
+        Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .map_err(|error| Error::SetSelectedNodeError(error.to_string()))?;
+
+        Ok(())
+    }
 }
 
 fn node_list(network: Network) -> Vec<Node> {
@@ -140,6 +186,38 @@ fn node_list(network: Network) -> Vec<Node> {
             )]
         }
     }
+}
+
+fn parse_node_url(url: &str) -> Result<Url, url::ParseError> {
+    let mut url = if url.contains("://") {
+        Url::parse(url)?
+    } else {
+        let url_str = format!("none://{url}/");
+        Url::parse(&url_str)?
+    };
+
+    // set the scheme properly, use the port as a hint
+    match (url.scheme(), url.port()) {
+        ("https", _) => url.set_scheme("ssl").expect("set scheme"),
+        ("http", _) => url.set_scheme("tcp").expect("set scheme"),
+        ("none", Some(50002)) => url.set_scheme("ssl").expect("set scheme"),
+        ("none", Some(50001)) => url.set_scheme("tcp").expect("set scheme"),
+        ("none", _) => url.set_scheme("tcp").expect("set scheme"),
+        _ => {}
+    };
+
+    // set the port to if not set, default to 50002 for ssl and 50001 for tcp
+    match (url.port(), url.scheme()) {
+        (Some(_), _) => {}
+        (None, "ssl") => url.set_port(Some(50002)).expect("set port"),
+        (None, "tcp") => url.set_port(Some(50001)).expect("set port"),
+        (None, _) => {
+            error!("invalid node url: {url}, should already be set");
+            url.set_port(Some(50002)).expect("set port")
+        }
+    };
+
+    Ok(url)
 }
 
 mod ffi {

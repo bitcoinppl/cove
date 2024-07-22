@@ -24,6 +24,8 @@
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
 		AC8C1FAA2C49A4BC00158283 /* NodeSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8C1FA92C49A4BC00158283 /* NodeSelectionView.swift */; };
 		AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */; };
+		AC8C1FAF2C4E9E2C00158283 /* PopupView in Frameworks */ = {isa = PBXBuildFile; productRef = AC8C1FAE2C4E9E2C00158283 /* PopupView */; };
+		AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */ = {isa = PBXBuildFile; productRef = AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */; };
 		AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */; };
 		AC97D1EC2C287D4F00873092 /* CommonButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */; };
 		AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
@@ -117,6 +119,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */,
+				AC8C1FAF2C4E9E2C00158283 /* PopupView in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
 				ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */,
 				ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */,
@@ -260,6 +264,8 @@
 			packageProductDependencies = (
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
 				ACF5B3482C2BA4BC00DDDEB9 /* Inject */,
+				AC8C1FAE2C4E9E2C00158283 /* PopupView */,
+				AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -292,6 +298,8 @@
 			packageReferences = (
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
 				ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */,
+				AC8C1FAD2C4E9E2C00158283 /* XCRemoteSwiftPackageReference "PopupView" */,
+				AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -574,6 +582,22 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AC8C1FAD2C4E9E2C00158283 /* XCRemoteSwiftPackageReference "PopupView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/exyte/PopupView.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.0.4;
+			};
+		};
+		AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/exyte/ActivityIndicatorView";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.1;
+			};
+		};
 		ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/evgenyneu/keychain-swift";
@@ -593,6 +617,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AC8C1FAE2C4E9E2C00158283 /* PopupView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AC8C1FAD2C4E9E2C00158283 /* XCRemoteSwiftPackageReference "PopupView" */;
+			productName = PopupView;
+		};
+		AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */;
+			productName = ActivityIndicatorView;
+		};
 		ACA4CBEE2C2365430008F63E /* KeychainSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */;

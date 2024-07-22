@@ -513,7 +513,6 @@ dependencies = [
  "crossbeam",
  "derive_more",
  "dirs",
- "electrum-client",
  "eyre",
  "itertools",
  "nid",
@@ -532,6 +531,7 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "uniffi",
+ "url",
  "zeroize",
 ]
 
