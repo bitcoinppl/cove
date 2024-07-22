@@ -5,10 +5,16 @@
 //  Created by Praveen Perera on 7/18/24.
 //
 
+import PopupView
 import SwiftUI
 
 struct NodeSelectionView: View {
-    let nodeSelector = NodeSelector()
+    // public
+    @Binding var showPopup: Bool
+    @Binding var popupState: PopupState
+
+    // private
+    private let nodeSelector = NodeSelector()
 
     @State private var selectedNodeName: String
     private var nodeList: [NodeSelection]
@@ -19,13 +25,27 @@ struct NodeSelectionView: View {
     @State private var showParseUrlAlert = false
     @State private var parseUrlMessage = ""
 
-    init() {
+    init(showPopup: Binding<Bool>, popupState: Binding<PopupState>) {
+        _showPopup = showPopup
+        _popupState = popupState
+
         selectedNodeName = nodeSelector.selectedNode().name
         nodeList = nodeSelector.nodeList()
     }
 
     var showCustomUrlField: Bool {
         selectedNodeName.hasPrefix("Custom")
+    }
+
+    @MainActor
+    private func startLoading() {
+        showPopup = true
+        popupState = .loading
+    }
+
+    @MainActor
+    private func completeLoading(_ state: PopupState) {
+        popupState = state
     }
 
     @ViewBuilder
@@ -50,8 +70,13 @@ struct NodeSelectionView: View {
 
             if let node = node {
                 Task {
-                    try await nodeSelector.checkAndSaveNode(node: node)
-                    print("node connected success")
+                    await startLoading()
+                    let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
+
+                    switch result {
+                    case .success: await completeLoading(.success("Node is healthy"))
+                    case let .failure(error): await completeLoading(.failure("Failed to connect to node \(error.localizedDescription)"))
+                    }
                 }
             }
         }
@@ -81,12 +106,13 @@ struct NodeSelectionView: View {
 
             guard let node = try? nodeSelector.selectPresetNode(name: newSelectedNodeName) else { return }
 
+            startLoading()
             Task {
                 do {
                     try await nodeSelector.checkSelectedNode(node: node)
-                    print("node connected success")
+                    completeLoading(.success("Succesfully connected to \(node.url)"))
                 } catch {
-                    print("error checking node: \(error)")
+                    completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
                 }
             }
         }
@@ -104,5 +130,5 @@ struct NodeSelectionView: View {
 }
 
 #Preview {
-    NodeSelectionView()
+    NodeSelectionView(showPopup: Binding.constant(false), popupState: Binding.constant(PopupState.initial))
 }

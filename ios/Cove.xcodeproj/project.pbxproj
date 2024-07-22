@@ -19,6 +19,8 @@
 		AC07617D2C31A527007B4540 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617C2C31A527007B4540 /* GlassCard.swift */; };
 		AC07617F2C31BAA9007B4540 /* ListWalletsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */; };
 		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
+		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
+		AC1290332C4EF4EA00E72ECF /* PopupMiddleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* PopupMiddleView.swift */; };
 		AC269AE22C289F17005481A8 /* VerifyWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC269AE12C289F17005481A8 /* VerifyWordsView.swift */; };
 		AC595C732C32FE5300997733 /* SelectedWalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC595C722C32FE5300997733 /* SelectedWalletView.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
@@ -80,6 +82,8 @@
 		AC07617C2C31A527007B4540 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		AC07617E2C31BAA9007B4540 /* ListWalletsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListWalletsView.swift; sourceTree = "<group>"; };
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
+		AC1290322C4EF4EA00E72ECF /* PopupMiddleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopupMiddleView.swift; sourceTree = "<group>"; };
 		AC269AE12C289F17005481A8 /* VerifyWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsView.swift; sourceTree = "<group>"; };
 		AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
 		AC595C722C32FE5300997733 /* SelectedWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectedWalletView.swift; sourceTree = "<group>"; };
@@ -150,6 +154,7 @@
 				19224F788C8E6EEDE418212E /* ColorSchemeSelection+Ext.swift */,
 				AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */,
 				AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */,
+				AC1290302C4EE8A500E72ECF /* Result+Ext.swift */,
 			);
 			path = Extention;
 			sourceTree = "<group>";
@@ -216,6 +221,7 @@
 				ACC301662C20C11D006790DF /* Extention */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				AC8C1FA92C49A4BC00158283 /* NodeSelectionView.swift */,
+				AC1290322C4EF4EA00E72ECF /* PopupMiddleView.swift */,
 				AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */,
 				AC595C722C32FE5300997733 /* SelectedWalletView.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
@@ -346,8 +352,10 @@
 				AC8C1FAA2C49A4BC00158283 /* NodeSelectionView.swift in Sources */,
 				ACC301652C207787006790DF /* NewWalletView.swift in Sources */,
 				ACC301762C21D698006790DF /* HotWalletCreateView.swift in Sources */,
+				AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */,
 				ACC301742C211281006790DF /* HotWalletSelectView.swift in Sources */,
 				AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */,
+				AC1290332C4EF4EA00E72ECF /* PopupMiddleView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
 				ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */,
 				ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */,

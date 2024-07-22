@@ -1,3 +1,4 @@
+import PopupView
 import SwiftUI
 
 struct SettingsView: View {
@@ -7,6 +8,9 @@ struct SettingsView: View {
     @State private var notificationFrequency = 1
     @State private var networkChanged = false
     @State private var showConfirmationAlert = false
+
+    @State private var showPopup = false
+    @State private var popUpState = PopupState.initial
 
     let themes = allColorSchemes()
 
@@ -43,7 +47,7 @@ struct SettingsView: View {
                 .pickerStyle(SegmentedPickerStyle())
             }
 
-            NodeSelectionView()
+            NodeSelectionView(showPopup: $showPopup, popupState: $popUpState)
 
             Section(header: Text("About")) {
                 HStack {
@@ -89,6 +93,16 @@ struct SettingsView: View {
             )
         }
         .preferredColorScheme(app.colorScheme)
+        .popup(isPresented: $showPopup) {
+            PopupMiddleView(state: popUpState)
+        } customize: {
+            $0.autohideIn(popUpState == .loading ? 1000 : 5)
+                .type(.default)
+                .position(.center)
+                .animation(.spring())
+                .closeOnTapOutside(popUpState != .loading)
+                .backgroundColor(.black.opacity(0.5))
+        }
         .gesture(
             networkChanged ?
                 DragGesture()
@@ -107,6 +121,7 @@ struct SettingsView: View {
                     }
                 } : nil
         )
+
         .enableInjection()
     }
 
