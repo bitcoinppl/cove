@@ -10,7 +10,6 @@ import SwiftUI
 
 struct NodeSelectionView: View {
     // public
-    @Binding var showPopup: Bool
     @Binding var popupState: PopupState
 
     // private
@@ -25,8 +24,7 @@ struct NodeSelectionView: View {
     @State private var showParseUrlAlert = false
     @State private var parseUrlMessage = ""
 
-    init(showPopup: Binding<Bool>, popupState: Binding<PopupState>) {
-        _showPopup = showPopup
+    init(popupState: Binding<PopupState>) {
         _popupState = popupState
 
         selectedNodeName = nodeSelector.selectedNode().name
@@ -39,7 +37,6 @@ struct NodeSelectionView: View {
 
     @MainActor
     private func startLoading() {
-        showPopup = true
         popupState = .loading
     }
 
@@ -130,5 +127,5 @@ struct NodeSelectionView: View {
 }
 
 #Preview {
-    NodeSelectionView(showPopup: Binding.constant(false), popupState: Binding.constant(PopupState.initial))
+    NodeSelectionView(popupState: Binding.constant(PopupState.initial))
 }

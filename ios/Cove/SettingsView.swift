@@ -1,3 +1,4 @@
+import ActivityIndicatorView
 import PopupView
 import SwiftUI
 
@@ -13,6 +14,19 @@ struct SettingsView: View {
     @State private var popUpState = PopupState.initial
 
     let themes = allColorSchemes()
+
+    var popupAutoHide: Double? {
+        switch popUpState {
+        case .initial:
+            0
+        case .loading:
+            nil
+        case .failure(let string):
+            nil
+        case .success(let string):
+            5
+        }
+    }
 
     var body: some View {
         Form {
@@ -47,7 +61,7 @@ struct SettingsView: View {
                 .pickerStyle(SegmentedPickerStyle())
             }
 
-            NodeSelectionView(showPopup: $showPopup, popupState: $popUpState)
+            NodeSelectionView(popupState: $popUpState)
 
             Section(header: Text("About")) {
                 HStack {
@@ -58,6 +72,24 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+        }
+        .popup(isPresented: $showPopup) {
+            PopupMiddleView(state: popUpState)
+        } customize: {
+            $0.autohideIn(popupAutoHide)
+                .type(.default)
+                .position(.center)
+                .animation(.spring())
+                .closeOnTapOutside(popUpState != .loading)
+                .isOpaque(true)
+                .backgroundColor(.black.opacity(0.8))
+        }
+        .onChange(of: popUpState) { _, _ in
+            if popUpState == .initial {
+                showPopup = false
+            } else {
+                showPopup = true
+            }
         }
         .navigationBarBackButtonHidden(networkChanged)
         .toolbar {
@@ -93,16 +125,6 @@ struct SettingsView: View {
             )
         }
         .preferredColorScheme(app.colorScheme)
-        .popup(isPresented: $showPopup) {
-            PopupMiddleView(state: popUpState)
-        } customize: {
-            $0.autohideIn(popUpState == .loading ? 1000 : 5)
-                .type(.default)
-                .position(.center)
-                .animation(.spring())
-                .closeOnTapOutside(popUpState != .loading)
-                .backgroundColor(.black.opacity(0.5))
-        }
         .gesture(
             networkChanged ?
                 DragGesture()
