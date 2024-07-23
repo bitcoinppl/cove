@@ -90,13 +90,21 @@ impl NodeSelector {
 
     #[uniffi::method]
     pub fn select_preset_node(&self, name: String) -> Result<Node, Error> {
-        let Some(node) = node_list(self.network)
+        let node = node_list(self.network)
             .into_iter()
             .find(|node| node.name == name)
-        else {
-            error!("node with name {name} not found");
-            return Err(NodeSelectorError::NodeNotFound(name));
-        };
+            .or_else(|| {
+                let selected_node = Database::global().global_config.selected_node();
+                if selected_node.name == name {
+                    Some(selected_node)
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                error!("node with name {name} not found");
+                NodeSelectorError::NodeNotFound(name)
+            })?;
 
         Database::global()
             .global_config

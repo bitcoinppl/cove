@@ -108,6 +108,18 @@ struct NodeSelectionView: View {
         }
         .onChange(of: selectedNodeName) { _, newSelectedNodeName in
             if selectedNodeName.hasPrefix("Custom") {
+                if case let .custom(savedSelectedNode) = nodeSelector.selectedNode() {
+                    if savedSelectedNode.apiType == .electrum && selectedNodeName.contains("Electrum") {
+                        customUrl = savedSelectedNode.url
+                        customNodeName = savedSelectedNode.name
+                    }
+
+                    if savedSelectedNode.apiType == .esplora && selectedNodeName.contains("Esplora") {
+                        customUrl = savedSelectedNode.url
+                        customNodeName = savedSelectedNode.name
+                    }
+                }
+
                 return
             }
 
