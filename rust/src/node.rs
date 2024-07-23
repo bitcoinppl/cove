@@ -84,7 +84,10 @@ impl Node {
             }
 
             ApiType::Electrum => {
-                let client = electrum_client::Client::new(&self.url)
+                println!("checking electrum node at {:?}", self.url);
+                let url = self.url.strip_suffix('/').unwrap_or(&self.url);
+
+                let client = electrum_client::Client::new(url)
                     .wrap_err("failed to create electrum client")?;
 
                 crate::unblock::run_blocking(move || client.ping())

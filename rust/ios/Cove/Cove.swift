@@ -1631,7 +1631,7 @@ public protocol NodeSelectorProtocol: AnyObject {
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-    func parseCustomNode(url: String, name: String) throws -> Node
+    func parseCustomNode(url: String, name: String, enteredName: String) throws -> Node
 
     func selectPresetNode(name: String) throws -> Node
 
@@ -1731,11 +1731,12 @@ open class NodeSelector:
     /**
      * Use the url and name of the custom node to set it as the selected node
      */
-    open func parseCustomNode(url: String, name: String) throws -> Node {
+    open func parseCustomNode(url: String, name: String, enteredName: String) throws -> Node {
         return try FfiConverterTypeNode.lift(rustCallWithError(FfiConverterTypeNodeSelectorError.lift) {
             uniffi_cove_fn_method_nodeselector_parse_custom_node(self.uniffiClonePointer(),
                                                                  FfiConverterString.lower(url),
-                                                                 FfiConverterString.lower(name), $0)
+                                                                 FfiConverterString.lower(name),
+                                                                 FfiConverterString.lower(enteredName), $0)
         })
     }
 
@@ -5840,7 +5841,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_nodeselector_node_list() != 23402 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 14050 {
+    if uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 54190 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_nodeselector_select_preset_node() != 36330 {

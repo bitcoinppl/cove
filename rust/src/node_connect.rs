@@ -117,8 +117,13 @@ impl NodeSelector {
 
     #[uniffi::method]
     /// Use the url and name of the custom node to set it as the selected node
-    pub fn parse_custom_node(&self, url: String, name: String) -> Result<Node, Error> {
-        let name = name.to_ascii_lowercase();
+    pub fn parse_custom_node(
+        &self,
+        url: String,
+        name: String,
+        entered_name: String,
+    ) -> Result<Node, Error> {
+        let node_type = name.to_ascii_lowercase();
 
         let url =
             parse_node_url(&url).map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
@@ -131,12 +136,18 @@ impl NodeSelector {
 
         let url_string = url.to_string();
 
-        let node = if name.contains("electrum") {
+        let name = if entered_name.is_empty() {
+            url.domain().unwrap_or(url_string.as_str()).to_string()
+        } else {
+            entered_name
+        };
+
+        let node = if node_type.contains("electrum") {
             Node::new_electrum(name, url_string, self.network)
-        } else if name.contains("esplora") {
+        } else if node_type.contains("esplora") {
             Node::new_esplora(name, url_string, self.network)
         } else {
-            error!("invalid node name: {name}");
+            error!("invalid node type: {node_type}");
             Node::default()
         };
 
@@ -146,9 +157,10 @@ impl NodeSelector {
     #[uniffi::method]
     /// Check the node url and set it as selected node if it is valid
     pub async fn check_and_save_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url()
-            .await
-            .map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
+        node.check_url().await.map_err(|error| {
+            tracing::warn!("error checking node: {error:?}");
+            Error::NodeAccessError(error.to_string())
+        })?;
 
         Database::global()
             .global_config

@@ -19,6 +19,7 @@ struct NodeSelectionView: View {
     private var nodeList: [NodeSelection]
 
     @State private var nodeIsChecking = false
+    @State private var customNodeName: String = ""
     @State private var customUrl: String = ""
 
     @State private var showParseUrlAlert = false
@@ -48,18 +49,23 @@ struct NodeSelectionView: View {
     @ViewBuilder
     var CustomFields: some View {
         TextField("Enter \(selectedNodeName) URL", text: $customUrl)
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+
+        TextField("Enter Node Name (optional)", text: $customNodeName)
             .textInputAutocapitalization(.never)
 
         Button("Save \(selectedNodeName)") {
             var node: Node? = nil
             do {
-                node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName)
-                customUrl = node?.url ?? ""
+                node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName, enteredName: customNodeName)
+                customUrl = node?.url ?? customUrl
+                customNodeName = node?.name ?? customNodeName
             } catch {
                 showParseUrlAlert = true
                 switch error {
-                case let NodeSelectorError.ParseNodeUrlError(error_string):
-                    parseUrlMessage = error_string
+                case let NodeSelectorError.ParseNodeUrlError(errorString):
+                    parseUrlMessage = errorString
                 default:
                     parseUrlMessage = "Unknown error \(error.localizedDescription)"
                 }
@@ -71,8 +77,12 @@ struct NodeSelectionView: View {
                     let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
 
                     switch result {
-                    case .success: await completeLoading(.success("Node is healthy"))
-                    case let .failure(error): await completeLoading(.failure("Failed to connect to node \(error.localizedDescription)"))
+                    case .success: await completeLoading(.success("Connected to node successfully"))
+                    case let .failure(error):
+                        let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
+                        let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
+
+                        await completeLoading(.failure(formattedMessage))
                     }
                 }
             }
