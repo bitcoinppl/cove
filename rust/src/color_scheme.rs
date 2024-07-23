@@ -1,7 +1,5 @@
 use std::fmt::Display;
 
-use strum::IntoEnumIterator as _;
-
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, strum::EnumIter)]
 pub enum ColorSchemeSelection {
     Light,
@@ -64,12 +62,17 @@ impl Display for ColorSchemeSelection {
     }
 }
 
-#[uniffi::export]
-pub fn all_color_schemes() -> Vec<ColorSchemeSelection> {
-    ColorSchemeSelection::iter().collect()
-}
+mod ffi {
+    use super::ColorSchemeSelection;
+    use strum::IntoEnumIterator as _;
 
-#[uniffi::export]
-pub fn color_scheme_selection_capitalized_string(color_scheme: ColorSchemeSelection) -> String {
-    color_scheme.to_capitalized_string().to_string()
+    #[uniffi::export]
+    pub fn all_color_schemes() -> Vec<ColorSchemeSelection> {
+        ColorSchemeSelection::iter().collect()
+    }
+
+    #[uniffi::export]
+    pub fn color_scheme_selection_capitalized_string(color_scheme: ColorSchemeSelection) -> String {
+        color_scheme.to_capitalized_string().to_string()
+    }
 }

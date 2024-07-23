@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crossbeam::channel::{Receiver, Sender};
-use log::error;
+use tracing::error;
 use parking_lot::RwLock;
 
 use crate::{
@@ -86,7 +86,7 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn delete_wallet(&self) -> Result<(), Error> {
         let wallet_id = self.state.read().wallet_metadata.id.clone();
-        log::debug!("deleting wallet {wallet_id}");
+        tracing::debug!("deleting wallet {wallet_id}");
 
         // delete the wallet from the database
         let database = Database::global();

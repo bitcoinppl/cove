@@ -96,14 +96,18 @@ pub enum NumberOfBip39Words {
     TwentyFour,
 }
 
-#[uniffi::export]
-pub fn number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec<String>> {
-    me.in_groups_of(of as usize)
-}
+mod ffi {
+    use super::*;
 
-#[uniffi::export]
-pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
-    me.to_word_count() as u8
+    #[uniffi::export]
+    pub fn number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec<String>> {
+        me.in_groups_of(of as usize)
+    }
+
+    #[uniffi::export]
+    pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
+        me.to_word_count() as u8
+    }
 }
 
 impl NumberOfBip39Words {

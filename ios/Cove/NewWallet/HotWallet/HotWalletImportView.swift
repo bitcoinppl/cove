@@ -89,7 +89,7 @@ struct HotWalletImportView: View {
     }
 
     @ViewBuilder
-    var keyboardAutoCompleteView: some View {
+    var KeyboardAutoCompleteView: some View {
         HStack {
             ForEach(filteredSuggestions, id: \.self) { word in
                 Spacer()
@@ -129,7 +129,7 @@ struct HotWalletImportView: View {
     }
 
     @ViewBuilder
-    var nextOrImportButton: some View {
+    var NextOrImportButton: some View {
         if tabIndex == lastIndex {
             Button("Import") { importWallet() }
                 .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
@@ -149,7 +149,7 @@ struct HotWalletImportView: View {
     }
 
     @ViewBuilder
-    var mainContent: some View {
+    var MainContent: some View {
         VStack {
             TabView(selection: $tabIndex) {
                 ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
@@ -174,7 +174,7 @@ struct HotWalletImportView: View {
             Spacer()
 
             GroupBox {
-                mainContent
+                MainContent
             }
             .frame(height: cardHeight)
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
@@ -182,7 +182,7 @@ struct HotWalletImportView: View {
             .navigationBarTitleDisplayMode(navDisplay)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
-                    keyboardAutoCompleteView
+                    KeyboardAutoCompleteView
                 }
             }
             .padding(.top, keyboardIsShowing ? 80 : 0)
@@ -191,7 +191,7 @@ struct HotWalletImportView: View {
 
             Spacer()
 
-            nextOrImportButton
+            NextOrImportButton
 
             Spacer()
         }

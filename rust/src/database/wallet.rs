@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use log::debug;
+use tracing::debug;
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 
 use crate::{

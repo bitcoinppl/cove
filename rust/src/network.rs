@@ -1,6 +1,5 @@
 use bdk_wallet::bitcoin;
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
 
 #[derive(
     Debug,
@@ -20,14 +19,19 @@ pub enum Network {
     Testnet,
 }
 
-#[uniffi::export]
-pub fn network_to_string(network: Network) -> String {
-    network.to_string()
-}
+mod ffi {
+    use super::Network;
+    use strum::IntoEnumIterator;
 
-#[uniffi::export]
-pub fn all_networks() -> Vec<Network> {
-    Network::iter().collect()
+    #[uniffi::export]
+    pub fn network_to_string(network: Network) -> String {
+        network.to_string()
+    }
+
+    #[uniffi::export]
+    pub fn all_networks() -> Vec<Network> {
+        Network::iter().collect()
+    }
 }
 
 impl TryFrom<&str> for Network {

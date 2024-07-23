@@ -1257,6 +1257,8 @@ public protocol GlobalConfigTableProtocol: AnyObject {
 
     func selectedNetwork() -> Network
 
+    func selectedNode() -> Node
+
     func selectedWallet() -> WalletId?
 
     func set(key: GlobalConfigKey, value: String) throws
@@ -1264,6 +1266,8 @@ public protocol GlobalConfigTableProtocol: AnyObject {
     func setColorScheme(colorScheme: ColorSchemeSelection) throws
 
     func setSelectedNetwork(network: Network) throws
+
+    func setSelectedNode(node: Node) throws
 }
 
 open class GlobalConfigTable:
@@ -1342,6 +1346,12 @@ open class GlobalConfigTable:
         })
     }
 
+    open func selectedNode() -> Node {
+        return try! FfiConverterTypeNode.lift(try! rustCall {
+            uniffi_cove_fn_method_globalconfigtable_selected_node(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func selectedWallet() -> WalletId? {
         return try! FfiConverterOptionTypeWalletId.lift(try! rustCall {
             uniffi_cove_fn_method_globalconfigtable_selected_wallet(self.uniffiClonePointer(), $0)
@@ -1364,6 +1374,12 @@ open class GlobalConfigTable:
     open func setSelectedNetwork(network: Network) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
         uniffi_cove_fn_method_globalconfigtable_set_selected_network(self.uniffiClonePointer(),
                                                                      FfiConverterTypeNetwork.lower(network), $0)
+    }
+    }
+
+    open func setSelectedNode(node: Node) throws { try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+        uniffi_cove_fn_method_globalconfigtable_set_selected_node(self.uniffiClonePointer(),
+                                                                  FfiConverterTypeNode.lower(node), $0)
     }
     }
 }
@@ -1600,6 +1616,180 @@ public func FfiConverterTypeKeychain_lift(_ pointer: UnsafeMutableRawPointer) th
 
 public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRawPointer {
     return FfiConverterTypeKeychain.lower(value)
+}
+
+public protocol NodeSelectorProtocol: AnyObject {
+    /**
+     * Check the node url and set it as selected node if it is valid
+     */
+    func checkAndSaveNode(node: Node) async throws
+
+    func checkSelectedNode(node: Node) async throws
+
+    func nodeList() -> [NodeSelection]
+
+    /**
+     * Use the url and name of the custom node to set it as the selected node
+     */
+    func parseCustomNode(url: String, name: String, enteredName: String) throws -> Node
+
+    func selectPresetNode(name: String) throws -> Node
+
+    func selectedNode() -> NodeSelection
+}
+
+open class NodeSelector:
+    NodeSelectorProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_nodeselector(self.pointer, $0) }
+    }
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_nodeselector_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_nodeselector(pointer, $0) }
+    }
+
+    /**
+     * Check the node url and set it as selected node if it is valid
+     */
+    open func checkAndSaveNode(node: Node) async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_nodeselector_check_and_save_node(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeNode.lower(node)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_void,
+                completeFunc: ffi_cove_rust_future_complete_void,
+                freeFunc: ffi_cove_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeNodeSelectorError.lift
+            )
+    }
+
+    open func checkSelectedNode(node: Node) async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_nodeselector_check_selected_node(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeNode.lower(node)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_void,
+                completeFunc: ffi_cove_rust_future_complete_void,
+                freeFunc: ffi_cove_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeNodeSelectorError.lift
+            )
+    }
+
+    open func nodeList() -> [NodeSelection] {
+        return try! FfiConverterSequenceTypeNodeSelection.lift(try! rustCall {
+            uniffi_cove_fn_method_nodeselector_node_list(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    /**
+     * Use the url and name of the custom node to set it as the selected node
+     */
+    open func parseCustomNode(url: String, name: String, enteredName: String) throws -> Node {
+        return try FfiConverterTypeNode.lift(rustCallWithError(FfiConverterTypeNodeSelectorError.lift) {
+            uniffi_cove_fn_method_nodeselector_parse_custom_node(self.uniffiClonePointer(),
+                                                                 FfiConverterString.lower(url),
+                                                                 FfiConverterString.lower(name),
+                                                                 FfiConverterString.lower(enteredName), $0)
+        })
+    }
+
+    open func selectPresetNode(name: String) throws -> Node {
+        return try FfiConverterTypeNode.lift(rustCallWithError(FfiConverterTypeNodeSelectorError.lift) {
+            uniffi_cove_fn_method_nodeselector_select_preset_node(self.uniffiClonePointer(),
+                                                                  FfiConverterString.lower(name), $0)
+        })
+    }
+
+    open func selectedNode() -> NodeSelection {
+        return try! FfiConverterTypeNodeSelection.lift(try! rustCall {
+            uniffi_cove_fn_method_nodeselector_selected_node(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeNodeSelector: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = NodeSelector
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NodeSelector {
+        return NodeSelector(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: NodeSelector) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeSelector {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: NodeSelector, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeNodeSelector_lift(_ pointer: UnsafeMutableRawPointer) throws -> NodeSelector {
+    return try FfiConverterTypeNodeSelector.lift(pointer)
+}
+
+public func FfiConverterTypeNodeSelector_lower(_ value: NodeSelector) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeNodeSelector.lower(value)
 }
 
 public protocol PendingWalletProtocol: AnyObject {}
@@ -2746,6 +2936,74 @@ public func FfiConverterTypeImportWalletViewModelState_lower(_ value: ImportWall
     return FfiConverterTypeImportWalletViewModelState.lower(value)
 }
 
+public struct Node {
+    public var name: String
+    public var network: Network
+    public var apiType: ApiType
+    public var url: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, network: Network, apiType: ApiType, url: String) {
+        self.name = name
+        self.network = network
+        self.apiType = apiType
+        self.url = url
+    }
+}
+
+extension Node: Equatable, Hashable {
+    public static func == (lhs: Node, rhs: Node) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.network != rhs.network {
+            return false
+        }
+        if lhs.apiType != rhs.apiType {
+            return false
+        }
+        if lhs.url != rhs.url {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(network)
+        hasher.combine(apiType)
+        hasher.combine(url)
+    }
+}
+
+public struct FfiConverterTypeNode: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Node {
+        return
+            try Node(
+                name: FfiConverterString.read(from: &buf),
+                network: FfiConverterTypeNetwork.read(from: &buf),
+                apiType: FfiConverterTypeApiType.read(from: &buf),
+                url: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: Node, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterTypeApiType.write(value.apiType, into: &buf)
+        FfiConverterString.write(value.url, into: &buf)
+    }
+}
+
+public func FfiConverterTypeNode_lift(_ buf: RustBuffer) throws -> Node {
+    return try FfiConverterTypeNode.lift(buf)
+}
+
+public func FfiConverterTypeNode_lower(_ value: Node) -> RustBuffer {
+    return FfiConverterTypeNode.lower(value)
+}
+
 public struct PendingWalletViewModelState {
     public var numberOfWords: NumberOfBip39Words
     public var wallet: PendingWallet
@@ -2943,12 +3201,63 @@ public func FfiConverterTypeWalletViewModelState_lower(_ value: WalletViewModelS
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum ApiType {
+    case esplora
+    case electrum
+    case rpc
+}
+
+public struct FfiConverterTypeApiType: FfiConverterRustBuffer {
+    typealias SwiftType = ApiType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ApiType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .esplora
+
+        case 2: return .electrum
+
+        case 3: return .rpc
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ApiType, into buf: inout [UInt8]) {
+        switch value {
+        case .esplora:
+            writeInt(&buf, Int32(1))
+
+        case .electrum:
+            writeInt(&buf, Int32(2))
+
+        case .rpc:
+            writeInt(&buf, Int32(3))
+        }
+    }
+}
+
+public func FfiConverterTypeApiType_lift(_ buf: RustBuffer) throws -> ApiType {
+    return try FfiConverterTypeApiType.lift(buf)
+}
+
+public func FfiConverterTypeApiType_lower(_ value: ApiType) -> RustBuffer {
+    return FfiConverterTypeApiType.lower(value)
+}
+
+extension ApiType: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum AppAction {
     case updateRoute(routes: [Route]
     )
     case changeNetwork(network: Network
     )
     case changeColorScheme(ColorSchemeSelection
+    )
+    case setSelectedNode(Node
     )
 }
 
@@ -2965,6 +3274,9 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             )
 
         case 3: return try .changeColorScheme(FfiConverterTypeColorSchemeSelection.read(from: &buf)
+            )
+
+        case 4: return try .setSelectedNode(FfiConverterTypeNode.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -2984,6 +3296,10 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case let .changeColorScheme(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
+
+        case let .setSelectedNode(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeNode.write(v1, into: &buf)
         }
     }
 }
@@ -3009,6 +3325,8 @@ public enum AppStateReconcileMessage {
     case databaseUpdated
     case colorSchemeChanged(ColorSchemeSelection
     )
+    case selectedNodeChanged(Node
+    )
 }
 
 public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
@@ -3026,6 +3344,9 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case 3: return .databaseUpdated
 
         case 4: return try .colorSchemeChanged(FfiConverterTypeColorSchemeSelection.read(from: &buf)
+            )
+
+        case 5: return try .selectedNodeChanged(FfiConverterTypeNode.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -3048,6 +3369,10 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case let .colorSchemeChanged(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
+
+        case let .selectedNodeChanged(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeNode.write(v1, into: &buf)
         }
     }
 }
@@ -3165,6 +3490,8 @@ public enum DatabaseError {
     )
     case GlobalConfigError(GlobalConfigTableError
     )
+    case SerializationError(SerdeError
+    )
 }
 
 public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
@@ -3187,6 +3514,9 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
             )
         case 5: return try .GlobalConfigError(
                 FfiConverterTypeGlobalConfigTableError.read(from: &buf)
+            )
+        case 6: return try .SerializationError(
+                FfiConverterTypeSerdeError.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3213,6 +3543,10 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
         case let .GlobalConfigError(v1):
             writeInt(&buf, Int32(5))
             FfiConverterTypeGlobalConfigTableError.write(v1, into: &buf)
+
+        case let .SerializationError(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeSerdeError.write(v1, into: &buf)
         }
     }
 }
@@ -3263,6 +3597,8 @@ extension FingerprintError: Foundation.LocalizedError {
 public enum GlobalConfigKey {
     case selectedWalletId
     case selectedNetwork
+    case selectedNode(Network
+    )
     case colorScheme
 }
 
@@ -3276,7 +3612,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case 2: return .selectedNetwork
 
-        case 3: return .colorScheme
+        case 3: return try .selectedNode(FfiConverterTypeNetwork.read(from: &buf)
+            )
+
+        case 4: return .colorScheme
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -3290,8 +3629,12 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case .selectedNetwork:
             writeInt(&buf, Int32(2))
 
-        case .colorScheme:
+        case let .selectedNode(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeNetwork.write(v1, into: &buf)
+
+        case .colorScheme:
+            writeInt(&buf, Int32(4))
         }
     }
 }
@@ -3790,6 +4133,117 @@ extension NewWalletRoute: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum NodeSelection {
+    case preset(Node
+    )
+    case custom(Node
+    )
+}
+
+public struct FfiConverterTypeNodeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = NodeSelection
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeSelection {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .preset(FfiConverterTypeNode.read(from: &buf)
+            )
+
+        case 2: return try .custom(FfiConverterTypeNode.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeSelection, into buf: inout [UInt8]) {
+        switch value {
+        case let .preset(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeNode.write(v1, into: &buf)
+
+        case let .custom(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeNode.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeNodeSelection_lift(_ buf: RustBuffer) throws -> NodeSelection {
+    return try FfiConverterTypeNodeSelection.lift(buf)
+}
+
+public func FfiConverterTypeNodeSelection_lower(_ value: NodeSelection) -> RustBuffer {
+    return FfiConverterTypeNodeSelection.lower(value)
+}
+
+extension NodeSelection: Equatable, Hashable {}
+
+public enum NodeSelectorError {
+    case NodeNotFound(String
+    )
+    case SetSelectedNodeError(String
+    )
+    case NodeAccessError(String
+    )
+    case ParseNodeUrlError(String
+    )
+}
+
+public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
+    typealias SwiftType = NodeSelectorError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeSelectorError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .NodeNotFound(
+                FfiConverterString.read(from: &buf)
+            )
+        case 2: return try .SetSelectedNodeError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 3: return try .NodeAccessError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 4: return try .ParseNodeUrlError(
+                FfiConverterString.read(from: &buf)
+            )
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeSelectorError, into buf: inout [UInt8]) {
+        switch value {
+        case let .NodeNotFound(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .SetSelectedNodeError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .NodeAccessError(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .ParseNodeUrlError(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension NodeSelectorError: Equatable, Hashable {}
+
+extension NodeSelectorError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum NumberOfBip39Words {
     case twelve
     case twentyFour
@@ -4016,6 +4470,52 @@ public func FfiConverterTypeRoute_lower(_ value: Route) -> RustBuffer {
 }
 
 extension Route: Equatable, Hashable {}
+
+public enum SerdeError {
+    case SerializationError(String
+    )
+    case DeserializationError(String
+    )
+}
+
+public struct FfiConverterTypeSerdeError: FfiConverterRustBuffer {
+    typealias SwiftType = SerdeError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SerdeError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .SerializationError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .DeserializationError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SerdeError, into buf: inout [UInt8]) {
+        switch value {
+        case let .SerializationError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .DeserializationError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension SerdeError: Equatable, Hashable {}
+
+extension SerdeError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -4968,6 +5468,28 @@ private struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceTypeNodeSelection: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeSelection]
+
+    public static func write(_ value: [NodeSelection], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeSelection.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeSelection] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeSelection]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeNodeSelection.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     typealias SwiftType = [Route]
 
@@ -5065,6 +5587,53 @@ public func FfiConverterTypeWalletId_lower(_ value: WalletId) -> RustBuffer {
     return FfiConverterTypeWalletId.lower(value)
 }
 
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
+
+private let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+private func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> Void,
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> Void,
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call uniffiEnsureInitialized() since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsureInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                uniffiFutureContinuationCallback,
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+private func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
+    }
+}
+
 public func allColorSchemes() -> [ColorSchemeSelection] {
     return try! FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall {
         uniffi_cove_fn_func_all_color_schemes($0
@@ -5087,10 +5656,25 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
     })
 }
 
+public func defaultNodeSelection() -> NodeSelection {
+    return try! FfiConverterTypeNodeSelection.lift(try! rustCall {
+        uniffi_cove_fn_func_default_node_selection($0
+        )
+    })
+}
+
 public func networkToString(network: Network) -> String {
     return try! FfiConverterString.lift(try! rustCall {
         uniffi_cove_fn_func_network_to_string(
             FfiConverterTypeNetwork.lower(network), $0
+        )
+    })
+}
+
+public func nodeSelectionToNode(node: NodeSelection) -> Node {
+    return try! FfiConverterTypeNode.lift(try! rustCall {
+        uniffi_cove_fn_func_node_selection_to_node(
+            FfiConverterTypeNodeSelection.lower(node), $0
         )
     })
 }
@@ -5137,7 +5721,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_color_scheme_selection_capitalized_string() != 42247 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_func_default_node_selection() != 14665 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_func_network_to_string() != 60660 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_node_selection_to_node() != 57209 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_number_of_words_in_groups() != 14214 {
@@ -5215,6 +5805,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalconfigtable_selected_network() != 7657 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_globalconfigtable_selected_node() != 31353 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_globalconfigtable_selected_wallet() != 51568 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5227,6 +5820,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 34312 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 35090 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_globalflagtable_get() != 42810 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5234,6 +5830,24 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 48519 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_check_selected_node() != 19872 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_node_list() != 23402 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 54190 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_select_preset_node() != 36330 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nodeselector_selected_node() != 29849 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {
@@ -5342,6 +5956,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_keychain_new() != 34449 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_nodeselector_new() != 61659 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_routefactory_new() != 4959 {

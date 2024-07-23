@@ -6,18 +6,32 @@ use crate::{
     app::reconcile::{Update, Updater},
     color_scheme::ColorSchemeSelection,
     network::Network,
+    node::Node,
     wallet::WalletId,
 };
 
-use super::Error;
+use super::{error::SerdeError, Error};
 
 pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("global_config");
 
-#[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, uniffi::Enum)]
 pub enum GlobalConfigKey {
     SelectedWalletId,
     SelectedNetwork,
+    SelectedNode(Network),
     ColorScheme,
+}
+
+impl From<GlobalConfigKey> for &'static str {
+    fn from(key: GlobalConfigKey) -> Self {
+        match key {
+            GlobalConfigKey::SelectedWalletId => "selected_wallet_id",
+            GlobalConfigKey::SelectedNetwork => "selected_network",
+            GlobalConfigKey::SelectedNode(Network::Bitcoin) => "selected_node_bitcoin",
+            GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
+            GlobalConfigKey::ColorScheme => "color_scheme",
+        }
+    }
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -84,6 +98,31 @@ impl GlobalConfigTable {
         };
 
         network
+    }
+
+    pub fn selected_node(&self) -> Node {
+        let network = self.selected_network();
+        let selected_node_key = GlobalConfigKey::SelectedNode(network);
+
+        let node_json = self
+            .get(selected_node_key)
+            .unwrap_or(None)
+            .unwrap_or("".to_string());
+
+        serde_json::from_str(&node_json).unwrap_or_default()
+    }
+
+    pub fn set_selected_node(&self, node: &Node) -> Result<(), Error> {
+        let network = node.network;
+        let node_json = serde_json::to_string(node)
+            .map_err(|error| SerdeError::SerializationError(error.to_string()))?;
+
+        let selected_node_key = GlobalConfigKey::SelectedNode(network);
+
+        self.set(selected_node_key, node_json)?;
+        Updater::send_update(Update::SelectedNodeChanged(node.clone()));
+
+        Ok(())
     }
 
     pub fn color_scheme(&self) -> ColorSchemeSelection {
@@ -177,5 +216,21 @@ impl GlobalConfigTable {
         Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::network::Network;
+
+    #[test]
+    fn test_selected_node_key() {
+        use super::GlobalConfigKey;
+
+        let key: &str = GlobalConfigKey::SelectedNode(Network::Bitcoin).into();
+        assert_eq!(key, "selected_node_bitcoin");
+
+        let key: &str = GlobalConfigKey::SelectedNode(Network::Testnet).into();
+        assert_eq!(key, "selected_node_testnet");
     }
 }

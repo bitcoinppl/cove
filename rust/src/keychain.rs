@@ -4,7 +4,7 @@ use std::{str::FromStr as _, sync::Arc};
 
 use bdk_wallet::bitcoin::bip32::Xpub;
 use bip39::Mnemonic;
-use log::warn;
+use tracing::warn;
 use once_cell::sync::OnceCell;
 
 use crate::wallet::WalletId;

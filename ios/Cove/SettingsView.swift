@@ -1,3 +1,5 @@
+import ActivityIndicatorView
+import PopupView
 import SwiftUI
 
 struct SettingsView: View {
@@ -8,7 +10,23 @@ struct SettingsView: View {
     @State private var networkChanged = false
     @State private var showConfirmationAlert = false
 
+    @State private var showPopup = false
+    @State private var popUpState = PopupState.initial
+
     let themes = allColorSchemes()
+
+    var popupAutoHide: Double? {
+        switch popUpState {
+        case .initial:
+            0
+        case .loading:
+            nil
+        case .failure(let string):
+            nil
+        case .success(let string):
+            5
+        }
+    }
 
     var body: some View {
         Form {
@@ -43,6 +61,8 @@ struct SettingsView: View {
                 .pickerStyle(SegmentedPickerStyle())
             }
 
+            NodeSelectionView(popupState: $popUpState)
+
             Section(header: Text("About")) {
                 HStack {
                     Text("Version")
@@ -52,6 +72,24 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+        }
+        .popup(isPresented: $showPopup) {
+            PopupMiddleView(state: popUpState)
+        } customize: {
+            $0.autohideIn(popupAutoHide)
+                .type(.default)
+                .position(.center)
+                .animation(.spring())
+                .closeOnTapOutside(popUpState != .loading)
+                .isOpaque(true)
+                .backgroundColor(.black.opacity(0.8))
+        }
+        .onChange(of: popUpState) { _, _ in
+            if popUpState == .initial {
+                showPopup = false
+            } else {
+                showPopup = true
+            }
         }
         .navigationBarBackButtonHidden(networkChanged)
         .toolbar {
@@ -105,10 +143,16 @@ struct SettingsView: View {
                     }
                 } : nil
         )
+
         .enableInjection()
     }
 
     #if DEBUG
         @ObserveInjection var forceRedraw
     #endif
+}
+
+#Preview {
+    SettingsView()
+        .environment(MainViewModel())
 }
