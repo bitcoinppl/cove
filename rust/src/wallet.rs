@@ -1,4 +1,9 @@
-use std::path::PathBuf;
+pub mod amount;
+pub mod balance;
+pub mod fingerprint;
+pub mod metadata;
+
+use std::{ops::Deref, path::PathBuf};
 
 use crate::{
     consts::ROOT_DATA_DIR,

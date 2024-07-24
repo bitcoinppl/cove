@@ -29,6 +29,9 @@ bdk_electrum = { git = "https://github.com/thunderbiscuit/bdk", branch = "featur
 bdk_file_store = "0.14.0"
 bdk_chain = "0.17"
 
+bitcoin-units = "0.1"
+
+
 # crypto
 rand = "0.8.5"
 zeroize = "1.8.1"
