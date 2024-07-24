@@ -10,6 +10,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     router::Route,
     wallet::{
+        balance::Balance,
         fingerprint::Fingerprint,
         metadata::{WalletColor, WalletId, WalletMetadata},
         Wallet, WalletError,
@@ -20,6 +21,9 @@ use crate::{
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
     WalletMetadataChanged(WalletMetadata),
+    WalletBalanceChanged(Balance),
+    StartedWalletScan,
+    CompletedWalletScan,
 }
 
 #[uniffi::export(callback_interface)]
@@ -158,9 +162,8 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn wallet_balance(&self) -> u64 {
-        let balance = self.wallet.balance();
-        todo!()
+    pub fn wallet_balance(&self) -> Balance {
+        self.wallet.balance()
     }
 
     #[uniffi::method]
