@@ -6,11 +6,14 @@ use parking_lot::RwLock;
 
 use crate::{
     database::{self, Database},
-    fingerprint::Fingerprint,
     impl_default_for,
     keychain::{Keychain, KeychainError},
     mnemonic::MnemonicExt as _,
-    wallet::{Wallet, WalletColor, WalletId, WalletMetadata},
+    wallet::{
+        fingerprint::Fingerprint,
+        metadata::{WalletColor, WalletId, WalletMetadata},
+        Wallet,
+    },
 };
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

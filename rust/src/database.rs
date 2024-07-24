@@ -12,9 +12,10 @@ use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
 use wallet::WalletTable;
 
-use eyre::Context;
-use tracing::{error, info};
 use once_cell::sync::OnceCell;
+use tracing::{error, info};
+
+use crate::consts::ROOT_DATA_DIR;
 
 pub static DATABASE: OnceCell<Database> = OnceCell::new();
 
@@ -99,20 +100,5 @@ fn get_or_create_database() -> redb::Database {
 }
 
 fn database_location() -> PathBuf {
-    let parent = dirs::home_dir()
-        .expect("failed to get home document directory")
-        .join("Library/Application Support/.data");
-
-    if !parent.exists() {
-        std::fs::create_dir_all(&parent)
-            .wrap_err_with(|| {
-                format!(
-                    "failed to create data directory at {}",
-                    parent.to_string_lossy()
-                )
-            })
-            .unwrap();
-    }
-
-    parent.join("cove.db")
+    ROOT_DATA_DIR.join("cove.db")
 }

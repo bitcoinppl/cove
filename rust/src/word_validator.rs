@@ -1,6 +1,6 @@
 use bip39::Mnemonic;
 
-use crate::{mnemonic::WordAccess as _, wallet::GroupedWord};
+use crate::{mnemonic::GroupedWord, mnemonic::WordAccess as _};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct WordValidator {

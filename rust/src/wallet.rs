@@ -6,8 +6,8 @@ use crate::{
     impl_default_for,
     keychain::KeychainError,
     keys::{Descriptor, DescriptorSecretKey},
+    mnemonic::NumberOfBip39Words,
     network::Network,
-    new_type,
 };
 use bdk_file_store::Store;
 use bdk_wallet::{
@@ -15,9 +15,7 @@ use bdk_wallet::{
     KeychainKind,
 };
 use bip39::Mnemonic;
-use nid::Nanoid;
-use rand::Rng as _;
-use serde::{Deserialize, Serialize};
+use metadata::WalletId;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum WalletError {
@@ -41,133 +39,6 @@ pub enum WalletError {
 
     #[error("wallet not found")]
     WalletNotFound,
-}
-
-new_type!(WalletId, String);
-impl_default_for!(WalletId);
-impl WalletId {
-    pub fn new() -> Self {
-        let nanoid: Nanoid = Nanoid::new();
-        Self(nanoid.to_string())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct WalletMetadata {
-    pub id: WalletId,
-    pub name: String,
-    pub color: WalletColor,
-    pub verified: bool,
-    pub network: Network,
-}
-
-impl WalletMetadata {
-    pub fn new(name: impl Into<String>) -> Self {
-        let network = Database::global().global_config.selected_network();
-
-        Self {
-            id: WalletId::new(),
-            name: name.into(),
-            color: WalletColor::random(),
-            verified: false,
-            network,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletColor {
-    Red,
-    Blue,
-    Green,
-    Yellow,
-    Orange,
-    Purple,
-    Pink,
-    Custom { r: u8, g: u8, b: u8 },
-}
-
-impl WalletColor {
-    pub fn random() -> Self {
-        let options = [
-            WalletColor::Red,
-            WalletColor::Blue,
-            WalletColor::Green,
-            WalletColor::Yellow,
-            WalletColor::Orange,
-            WalletColor::Purple,
-            WalletColor::Pink,
-        ];
-
-        let random_index = rand::thread_rng().gen_range(0..options.len());
-        options[random_index]
-    }
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct GroupedWord {
-    pub number: u8,
-    pub word: String,
-}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum NumberOfBip39Words {
-    Twelve,
-    TwentyFour,
-}
-
-mod ffi {
-    use super::*;
-
-    #[uniffi::export]
-    pub fn number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec<String>> {
-        me.in_groups_of(of as usize)
-    }
-
-    #[uniffi::export]
-    pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
-        me.to_word_count() as u8
-    }
-}
-
-impl NumberOfBip39Words {
-    pub const fn to_word_count(self) -> usize {
-        match self {
-            NumberOfBip39Words::Twelve => 12,
-            NumberOfBip39Words::TwentyFour => 24,
-        }
-    }
-
-    pub const fn to_entropy_bits(self) -> usize {
-        match self {
-            NumberOfBip39Words::Twelve => 128,
-            NumberOfBip39Words::TwentyFour => 256,
-        }
-    }
-
-    pub const fn to_entropy_bytes(self) -> usize {
-        self.to_entropy_bits() / 8
-    }
-
-    pub fn to_mnemonic(self) -> Mnemonic {
-        match self {
-            NumberOfBip39Words::Twelve => {
-                // 128 / 8  = 16
-                let random_bytes = rand::thread_rng().gen::<[u8; 16]>();
-                Mnemonic::from_entropy(&random_bytes).expect("failed to create mnemonic")
-            }
-            NumberOfBip39Words::TwentyFour => {
-                // 256 / 8  = 32
-                let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
-                Mnemonic::from_entropy(&random_bytes).expect("failed to create mnemonic")
-            }
-        }
-    }
-
-    pub fn in_groups_of(&self, groups_of: usize) -> Vec<Vec<String>> {
-        let number_of_groups = self.to_word_count() / groups_of;
-        vec![vec![String::new(); groups_of]; number_of_groups]
-    }
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -277,6 +148,14 @@ impl Wallet {
     }
 }
 
+impl Deref for Wallet {
+    type Target = bdk_wallet::PersistedWallet;
+
+    fn deref(&self) -> &Self::Target {
+        &self.bdk
+    }
+}
+
 pub fn delete_data_path(wallet_id: &WalletId) -> Result<(), std::io::Error> {
     let path = data_path(wallet_id);
     std::fs::remove_file(path)?;
@@ -291,29 +170,6 @@ fn data_path(wallet_id: &WalletId) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_number_of_bip39_words() {
-        assert_eq!(NumberOfBip39Words::Twelve.to_entropy_bits(), 128);
-        assert_eq!(NumberOfBip39Words::TwentyFour.to_entropy_bits(), 256);
-
-        assert_eq!(NumberOfBip39Words::Twelve.to_mnemonic().word_count(), 12);
-
-        assert_eq!(
-            NumberOfBip39Words::TwentyFour.to_mnemonic().word_count(),
-            24
-        );
-
-        assert_eq!(
-            NumberOfBip39Words::Twelve.to_word_count(),
-            NumberOfBip39Words::Twelve.to_mnemonic().word_count()
-        );
-
-        assert_eq!(
-            NumberOfBip39Words::TwentyFour.to_word_count(),
-            NumberOfBip39Words::TwentyFour.to_mnemonic().word_count()
-        );
-    }
 
     #[test]
     fn test_fingerprint() {

@@ -1,13 +1,13 @@
 use std::{fmt::Display, sync::Arc};
 
-use tracing::debug;
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
+use tracing::debug;
 
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
     network::Network,
     redb::Json,
-    wallet::{WalletId, WalletMetadata},
+    wallet::metadata::{WalletId, WalletMetadata},
 };
 
 use super::{Database, Error};

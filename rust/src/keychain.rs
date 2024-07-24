@@ -7,7 +7,8 @@ use bip39::Mnemonic;
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
-use crate::{encryption::Cryptor, wallet::WalletId};
+use crate::encryption::Cryptor;
+use crate::wallet::metadata::WalletId;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum KeychainError {

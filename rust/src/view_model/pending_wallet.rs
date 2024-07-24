@@ -6,9 +6,9 @@ use parking_lot::RwLock;
 use crate::{
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    mnemonic::{MnemonicExt as _, WordAccess as _},
+    mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
     pending_wallet::PendingWallet,
-    wallet::{GroupedWord, NumberOfBip39Words, WalletMetadata},
+    wallet::metadata::WalletMetadata,
 };
 
 type Error = PendingWalletViewModelError;

@@ -11,13 +11,13 @@ use crate::{
     network::Network,
     node::Node,
     router::{Route, Router},
-    wallet::WalletId,
+    wallet::metadata::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
-use tracing::{debug, error};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage, FfiReconcile, Updater};
+use tracing::{debug, error};
 
 pub static APP: OnceCell<App> = OnceCell::new();
 

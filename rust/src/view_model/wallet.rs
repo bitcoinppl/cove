@@ -7,10 +7,13 @@ use tracing::error;
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
-    fingerprint::Fingerprint,
     keychain::{Keychain, KeychainError},
     router::Route,
-    wallet::{WalletColor, WalletError, WalletId, WalletMetadata},
+    wallet::{
+        fingerprint::Fingerprint,
+        metadata::{WalletColor, WalletId, WalletMetadata},
+        Wallet, WalletError,
+    },
     word_validator::WordValidator,
 };
 
@@ -30,6 +33,7 @@ pub struct RustWalletViewModel {
     pub state: Arc<RwLock<WalletViewModelState>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+    pub wallet: Arc<Wallet>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -77,12 +81,15 @@ impl RustWalletViewModel {
             .map_err(|error| Error::GetSelectedWalletError(error.to_string()))?
             .ok_or(Error::WalletDoesNotExist)?;
 
-        let state = WalletViewModelState::new(wallet_metadata);
+        let id = wallet_metadata.id.clone();
+        let state = WalletViewModelState::try_new(wallet_metadata)?;
+        let wallet = Wallet::try_load_persisted(id)?;
 
         Ok(Self {
             state: Arc::new(RwLock::new(state)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
+            wallet: Arc::new(wallet),
         })
     }
 
@@ -151,6 +158,12 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub fn wallet_balance(&self) -> u64 {
+        let balance = self.wallet.balance();
+        todo!()
+    }
+
+    #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
@@ -199,7 +212,7 @@ impl RustWalletViewModel {
 }
 
 impl WalletViewModelState {
-    pub fn new(wallet_metadata: WalletMetadata) -> Self {
-        Self { wallet_metadata }
+    pub fn try_new(wallet_metadata: WalletMetadata) -> Result<Self, Error> {
+        Ok(Self { wallet_metadata })
     }
 }

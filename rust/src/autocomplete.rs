@@ -1,4 +1,4 @@
-use crate::{impl_default_for, wallet::NumberOfBip39Words};
+use crate::{impl_default_for, mnemonic::NumberOfBip39Words};
 
 #[uniffi::export(with_foreign)]
 pub trait AutoComplete: Send + Sync + std::fmt::Debug + 'static {
