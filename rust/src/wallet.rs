@@ -11,7 +11,7 @@ use crate::{
     impl_default_for,
     keychain::KeychainError,
     keys::{Descriptor, DescriptorSecretKey},
-    mnemonic::NumberOfBip39Words,
+    mnemonic::MnemonicExt as _,
     network::Network,
 };
 use bdk_file_store::Store;
@@ -20,7 +20,8 @@ use bdk_wallet::{
     KeychainKind,
 };
 use bip39::Mnemonic;
-use metadata::WalletId;
+use metadata::{WalletId, WalletMetadata};
+use tracing::{error, warn};
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum WalletError {
@@ -54,19 +55,92 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    pub fn try_new_persisted(
-        number_of_words: NumberOfBip39Words,
-        passphrase: Option<String>,
-    ) -> Result<Self, WalletError> {
-        let mnemonic = number_of_words.to_mnemonic();
-        Self::try_new_persisted_from_mnemonic(mnemonic, passphrase)
-    }
-
-    pub fn try_new_persisted_from_mnemonic(
+    /// Create a new wallet from the given mnemonic, save the bdk wallet filestore, save in our
+    /// database and select it
+    pub fn try_new_persisted_and_selected(
+        metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
     ) -> Result<Self, WalletError> {
-        let id = WalletId::new();
+        let keychain = Keychain::global();
+        let database = Database::global();
+
+        let create_wallet = || -> Result<Self, WalletError> {
+            // create bdk wallet filestore, set id to metadata id
+            let me = Wallet::try_new_persisted_from_mnemonic(
+                metadata.id.clone(),
+                mnemonic.clone(),
+                passphrase,
+            )?;
+
+            // save mnemonic for private key
+            keychain.save_wallet_key(&me.id, mnemonic.clone())?;
+
+            // save public key in keychain too
+            let xpub = mnemonic.xpub(me.network.into());
+            keychain.save_wallet_xpub(&me.id, xpub)?;
+
+            // save wallet_metadata to database
+            database.wallets.save_wallet(metadata.clone())?;
+
+            // set this wallet as the selected wallet
+            database.global_config.select_wallet(me.id.clone())?;
+
+            Ok(me)
+        };
+
+        // clean up if we fail to create the wallet
+        let me = match create_wallet() {
+            Ok(me) => me,
+            Err(error) => {
+                error!("failed to create wallet: {error}");
+
+                keychain.delete_wallet_key(&metadata.id);
+                keychain.delete_wallet_xpub(&metadata.id);
+
+                if let Err(error) = delete_data_path(&metadata.id) {
+                    warn!("clean up failed, failed to delete wallet data: {error}");
+                };
+
+                if let Err(error) = database.wallets.delete(&metadata.id) {
+                    warn!("clean up failed, failed to delete wallet: {error}");
+                }
+
+                if let Err(error) = database.global_config.clear_selected_wallet() {
+                    warn!("clean up failed, failed to clear selected wallet: {error}");
+                }
+
+                return Err(error);
+            }
+        };
+
+        Ok(me)
+    }
+
+    pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
+        let network = Database::global().global_config.selected_network();
+
+        let mut db =
+            Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
+                .map_err(|error| WalletError::LoadError(error.to_string()))?;
+
+        let wallet = bdk_wallet::Wallet::load()
+            .load_wallet(&mut db)
+            .map_err(|error| WalletError::LoadError(error.to_string()))?
+            .ok_or(WalletError::WalletNotFound)?;
+
+        Ok(Self {
+            id,
+            network,
+            bdk: wallet,
+        })
+    }
+
+    fn try_new_persisted_from_mnemonic(
+        id: WalletId,
+        mnemonic: Mnemonic,
+        passphrase: Option<String>,
+    ) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
         let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
@@ -96,23 +170,8 @@ impl Wallet {
         })
     }
 
-    pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
-        let network = Database::global().global_config.selected_network();
-
-        let mut db =
-            Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
-                .map_err(|error| WalletError::LoadError(error.to_string()))?;
-
-        let wallet = bdk_wallet::Wallet::load()
-            .load_wallet(&mut db)
-            .map_err(|error| WalletError::LoadError(error.to_string()))?
-            .ok_or(WalletError::WalletNotFound)?;
-
-        Ok(Self {
-            id,
-            network,
-            bdk: wallet,
-        })
+    pub fn balance(&self) -> Balance {
+        self.bdk.balance().into()
     }
 
     pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {

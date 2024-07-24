@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
+use tap::TapFallible as _;
 use tracing::error;
 
 use crate::{
@@ -51,8 +52,14 @@ pub enum WalletViewModelAction {
     UpdateColor(WalletColor),
 }
 
-pub type Error = WalletViewModelError;
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletLoadState {
+    Loading,
+    Scanning,
+    Loaded,
+}
 
+pub type Error = WalletViewModelError;
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum WalletViewModelError {
     #[error("failed to get selected wallet: {0}")]
@@ -102,19 +109,34 @@ impl RustWalletViewModel {
         let wallet_id = self.state.read().wallet_metadata.id.clone();
         tracing::debug!("deleting wallet {wallet_id}");
 
-        // delete the wallet from the database
         let database = Database::global();
+        let keychain = Keychain::global();
+
+        // delete the wallet from the database
         database.wallets.delete(&wallet_id)?;
 
         // delete the secret key from the keychain
-        Keychain::global().delete_wallet_key(&wallet_id);
+        keychain.delete_wallet_key(&wallet_id);
 
         // delete the xpub from keychain
-        Keychain::global().delete_wallet_xpub(&wallet_id);
+        keychain.delete_wallet_xpub(&wallet_id);
 
         // delete the wallet persisted bdk data
         if let Err(error) = crate::wallet::delete_data_path(&wallet_id) {
             error!("Unable to delete wallet persisted bdk data: {error}");
+        }
+
+        // unselect the wallet in the database
+        match database.global_config.selected_wallet() {
+            Some(selected_wallet_id) if selected_wallet_id == wallet_id => {
+                let _ = database
+                    .global_config
+                    .clear_selected_wallet()
+                    .tap_err(|error| {
+                        error!("Unable to clear selected wallet: {error}");
+                    });
+            }
+            _ => (),
         }
 
         // reset the default route to list wallets

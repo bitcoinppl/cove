@@ -4,6 +4,7 @@ import SwiftUI
     private let logger = Log(id: "WalletViewModel")
     var rust: RustWalletViewModel
     var walletMetadata: WalletMetadata
+    var loadState: WalletLoadState = .loading
 
     public init(id: WalletId) throws {
         let rust = try RustWalletViewModel(id: id)
@@ -26,6 +27,12 @@ import SwiftUI
                 switch message {
                 case let .walletMetadataChanged(metadata):
                     walletMetadata = metadata
+                case let .walletBalanceChanged(balance):
+                    ()
+                case .completedWalletScan:
+                    ()
+                case .startedWalletScan:
+                    ()
                 }
             }
         }

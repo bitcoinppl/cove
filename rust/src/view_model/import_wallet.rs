@@ -7,7 +7,7 @@ use parking_lot::RwLock;
 use crate::{
     database::{self, Database},
     impl_default_for,
-    keychain::{Keychain, KeychainError},
+    keychain::KeychainError,
     mnemonic::MnemonicExt as _,
     wallet::{
         fingerprint::Fingerprint,
@@ -60,6 +60,9 @@ pub enum ImportWalletError {
 
     #[error("failed to save wallet: {0}")]
     DatabaseError(#[from] database::Error),
+
+    #[error("failed to create wallet: {0}")]
+    BdkError(String),
 }
 
 pub type Error = ImportWalletError;
@@ -101,14 +104,13 @@ impl RustImportWalletViewModel {
         let mnemonic = Mnemonic::parse_in_normalized(Language::English, &words)
             .map_err(|e| ImportWalletError::InvalidWordGroup(e.to_string()))?;
 
-        let wallet = Wallet::try_new_persisted_from_mnemonic(mnemonic.clone(), None)
-            .map_err(|e| ImportWalletError::WalletImportError(e.to_string()))?;
+        let network = Database::global().global_config.selected_network();
 
         // make sure its not already imported
-        let fingerprint: Fingerprint = mnemonic.xpub(wallet.network.into()).fingerprint().into();
+        let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
         let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
             .wallets
-            .get(wallet.network)
+            .get(network)
             .map(|wallets| {
                 wallets
                     .into_iter()
@@ -129,33 +131,19 @@ impl RustImportWalletViewModel {
         }
 
         // get current number of wallets and add one;
-        let number_of_wallets = Database::global().wallets.len(wallet.network).unwrap_or(0);
+        let number_of_wallets = Database::global().wallets.len(network).unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
         let wallet_metadata = WalletMetadata {
-            id: wallet.id,
+            id: WalletId::new(),
             name,
-            network: wallet.network,
+            network,
             color: WalletColor::random(),
             verified: true,
         };
 
-        // save mnemonic for private key
-        let keychain = Keychain::global();
-        keychain.save_wallet_key(&wallet_metadata.id, mnemonic.clone())?;
-
-        // save public key in keychain too
-        let xpub = mnemonic.xpub(wallet_metadata.network.into());
-        keychain.save_wallet_xpub(&wallet_metadata.id, xpub)?;
-
-        // save wallet_metadata to database
-        let database = Database::global();
-        database.wallets.save_wallet(wallet_metadata.clone())?;
-
-        // set this wallet as the selected wallet
-        database
-            .global_config
-            .select_wallet(wallet_metadata.id.clone())?;
+        Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
+            .map_err(|e| ImportWalletError::WalletImportError(e.to_string()))?;
 
         Ok(wallet_metadata)
     }

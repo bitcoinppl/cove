@@ -31,6 +31,8 @@ bdk_chain = "0.17"
 
 bitcoin-units = "0.1"
 
+# async / actors
+tokio = { version = "1.38", features = ["rt"] }
 
 # crypto
 rand = "0.8.5"
@@ -45,8 +47,6 @@ once_cell = "1.19.0"
 eyre = "0.6"
 thiserror = "1.0"
 
-# async
-tokio = { version = "1.38", features = ["rt"] }
 
 # logging
 tracing = "0.1"
@@ -66,6 +66,9 @@ nid = "3.0"
 # derive stuff
 derive_more = "0.99.18"
 strum = {version = "0.26", features = ["derive"]}
+
+# helpers
+tap = "1.0.1"
 
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
