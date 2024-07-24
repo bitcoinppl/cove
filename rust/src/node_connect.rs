@@ -5,11 +5,12 @@ use crate::{database::Database, impl_default_for, network::Network, node::Node};
 
 pub const BITCOIN_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/api/");
 
-const BITCOIN_ELECTRUM: [(&str, &str); 2] = [
+const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
     (
         "electrum.blockstream.info",
         "ssl://electrum.blockstream.info:50002",
     ),
+    ("mempool.space", "ssl://mempool.space:50002"),
     ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
 ];
 

@@ -212,13 +212,23 @@ checksum = "163b064557cee078e8ee5dd2c88944204506f7b2b1524f78e8fcba38c346da7b"
 dependencies = [
  "bitcoin",
  "miniscript",
+]
+
+[[package]]
+name = "bdk_chain"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50d03673ebb8fe45a2d65dbb24f1fa810dcbf7d350ef7dae084ebad312e2cae7"
+dependencies = [
+ "bitcoin",
+ "miniscript",
  "serde",
 ]
 
 [[package]]
 name = "bdk_chain"
-version = "0.16.0"
-source = "git+https://github.com/thunderbiscuit/bdk?branch=feature/electrum-client-ring#730831cb5da649ecb1eae513a87a0584f7f9e28e"
+version = "0.17.0"
+source = "git+https://github.com/thunderbiscuit/bdk?branch=feature/electrum-client-ring#a0d0fa3491360177b913218fbcc0308d4ec70107"
 dependencies = [
  "bitcoin",
  "miniscript",
@@ -226,10 +236,10 @@ dependencies = [
 
 [[package]]
 name = "bdk_electrum"
-version = "0.15.0"
-source = "git+https://github.com/thunderbiscuit/bdk?branch=feature/electrum-client-ring#730831cb5da649ecb1eae513a87a0584f7f9e28e"
+version = "0.16.0"
+source = "git+https://github.com/thunderbiscuit/bdk?branch=feature/electrum-client-ring#a0d0fa3491360177b913218fbcc0308d4ec70107"
 dependencies = [
- "bdk_chain 0.16.0 (git+https://github.com/thunderbiscuit/bdk?branch=feature/electrum-client-ring)",
+ "bdk_chain 0.17.0 (git+https://github.com/thunderbiscuit/bdk?branch=feature/electrum-client-ring)",
  "electrum-client",
 ]
 
@@ -240,25 +250,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "089babab213bbb32518bad79a7313ebb4c85a52c18c8b558402dfa810c27de3f"
 dependencies = [
  "async-trait",
- "bdk_chain 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bdk_chain 0.16.0",
  "esplora-client",
  "futures",
  "miniscript",
 ]
 
 [[package]]
-name = "bdk_wallet"
-version = "1.0.0-alpha.13"
+name = "bdk_file_store"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2926afdbfc54ebf7df2caa51af5be4435b90c01c6fbe5578b51b7c2c0a264bd9"
+checksum = "39bed010acc658fa64fed1a9e1f572ae1bf29f3bbbaaaa74d08db794b01485ed"
 dependencies = [
- "bdk_chain 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bdk_chain 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bincode",
+ "serde",
+]
+
+[[package]]
+name = "bdk_wallet"
+version = "1.0.0-beta.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49d37a46443951e1a587c433420657a7448bce4a601116869c90d29111281b3e"
+dependencies = [
+ "bdk_chain 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bdk_file_store",
  "bip39",
  "bitcoin",
- "getrandom",
- "js-sys",
  "miniscript",
- "rand",
+ "rand_core",
  "serde",
  "serde_json",
 ]
@@ -506,8 +526,10 @@ checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 name = "cove"
 version = "0.1.0"
 dependencies = [
+ "bdk_chain 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bdk_electrum",
  "bdk_esplora",
+ "bdk_file_store",
  "bdk_wallet",
  "bip39",
  "crossbeam",
@@ -941,6 +963,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "hermit-abi"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
+
+[[package]]
 name = "hex-conservative"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1207,13 +1235,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.11"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
+checksum = "4569e456d394deccd22ce1c1913e6ea0e54519f577285001215d33557431afe4"
 dependencies = [
+ "hermit-abi",
  "libc",
  "wasi",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1667,7 +1696,7 @@ dependencies = [
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.102.5",
+ "rustls-webpki 0.102.6",
  "subtle",
  "zeroize",
 ]
@@ -1699,9 +1728,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.5"
+version = "0.102.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9a6fccd794a42c2c105b513a2f62bc3fd8f3ba57a4593677ceb0bd035164d78"
+checksum = "8e6b52d4fda176fd835fdc55a835d4a89b8499cad995885a21149d5ad62f852e"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -1966,9 +1995,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
-version = "2.0.71"
+version = "2.0.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b146dcf730474b4bcd16c311627b31ede9ab149045db4d6088b3becaea046462"
+checksum = "dc4b9b9bf2add8093d3f2c0204471e951b2285580335de42f9d2534f3ae7a8af"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2080,9 +2109,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.38.1"
+version = "1.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb2caba9f80616f438e09748d5acda951967e1ea58508ef53d9c6402485a46df"
+checksum = "9c3318c4fc7126c339a40fbc025927d0328ca32259f68bfe4321660644c1f626"
 dependencies = [
  "backtrace",
  "bytes",
@@ -2090,7 +2119,7 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "socket2",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

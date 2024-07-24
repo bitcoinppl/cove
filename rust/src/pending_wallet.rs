@@ -8,7 +8,6 @@ use crate::{
 
 #[derive(Debug, uniffi::Object)]
 pub struct PendingWallet {
-    pub wallet: Wallet,
     pub mnemonic: Mnemonic,
     pub network: Network,
     pub passphrase: Option<String>,
@@ -20,11 +19,7 @@ impl PendingWallet {
 
         let mnemonic = number_of_words.to_mnemonic().clone();
 
-        let wallet = Wallet::try_new_from_mnemonic(mnemonic.clone(), passphrase.clone())
-            .expect("failed to create wallet");
-
         Self {
-            wallet,
             mnemonic,
             network,
             passphrase,
