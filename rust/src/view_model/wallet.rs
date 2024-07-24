@@ -104,6 +104,21 @@ impl RustWalletViewModel {
         })
     }
 
+    #[uniffi::constructor]
+    pub fn preview_new_wallet() -> Self {
+        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let wallet = Wallet::preview_new_wallet();
+        let metadata = WalletMetadata::preview_new();
+        let state = WalletViewModelState::try_new(metadata.clone()).unwrap();
+
+        Self {
+            state: Arc::new(RwLock::new(state)),
+            reconciler: sender,
+            reconcile_receiver: Arc::new(receiver),
+            wallet: Arc::new(wallet),
+        }
+    }
+
     #[uniffi::method]
     pub fn delete_wallet(&self) -> Result<(), Error> {
         let wallet_id = self.state.read().wallet_metadata.id.clone();

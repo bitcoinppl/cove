@@ -13,40 +13,11 @@ struct SelectedWalletView: View {
 
     let id: WalletId
     @State private var model: WalletViewModel? = nil
-    @State private var showSettings = false
 
     var body: some View {
         Group {
             if let model = model {
-                VStack {
-                    Spacer()
-
-                    Text("\(model.walletMetadata.name)")
-                        .foregroundColor(model.walletMetadata.color.toCardColors()[0].opacity(0.8))
-                        .font(.title2)
-
-                    Text(model.rust.fingerprint())
-
-                    Spacer()
-                    VerifyReminder(walletId: id, isVerified: model.isVerified)
-                }
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: {
-                            showSettings = true
-                        }) {
-                            Image(systemName: "gear")
-                                .foregroundColor(.primary.opacity(0.8))
-                        }
-                    }
-                }
-                .navigationTitle(model.walletMetadata.name)
-                .toolbarColorScheme(.dark, for: .navigationBar)
-                .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
-                .sheet(isPresented: $showSettings) {
-                    WalletSettingsView(model: model)
-                }
+                SelectedWalletViewInner(model: model)
             } else {
                 Text("Loading...")
             }
@@ -67,6 +38,51 @@ struct SelectedWalletView: View {
     #if DEBUG
         @ObserveInjection var forceRedraw
     #endif
+}
+
+struct SelectedWalletViewInner: View {
+    @Environment(MainViewModel.self) private var app
+    @Environment(\.navigate) private var navigate
+
+    @State var model: WalletViewModel
+
+    // private
+    @State private var showSettings = false
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            Text("\(model.walletMetadata.name)")
+                .foregroundColor(model.walletMetadata.color.toCardColors()[0].opacity(0.8))
+                .font(.title2)
+
+            Text(model.rust.fingerprint())
+
+            Spacer()
+            VerifyReminder(walletId: model.id, isVerified: model.isVerified)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    showSettings = true
+                }) {
+                    Image(systemName: "gear")
+                        .foregroundColor(.primary.opacity(0.8))
+                }
+            }
+        }
+        .navigationTitle(model.walletMetadata.name)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .sheet(isPresented: $showSettings) {
+            WalletSettingsView(model: model)
+        }
+        .onAppear{
+            
+        }
+    }
 }
 
 struct VerifyReminder: View {
@@ -97,6 +113,12 @@ struct VerifyReminder: View {
     #endif
 }
 
-#Preview {
+#Preview("Loading") {
     SelectedWalletView(id: WalletId())
+        .environment(MainViewModel())
+}
+
+#Preview("Loaded Wallet") {
+    SelectedWalletViewInner(model: WalletViewModel(preview: "preview_only"))
+        .environment(MainViewModel())
 }

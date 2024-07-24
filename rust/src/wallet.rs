@@ -3,7 +3,7 @@ pub mod balance;
 pub mod fingerprint;
 pub mod metadata;
 
-use std::{ops::Deref, path::PathBuf};
+use std::{ops::Deref, path::PathBuf, str::FromStr as _};
 
 use crate::{
     consts::ROOT_DATA_DIR,
@@ -143,25 +143,18 @@ impl Wallet {
     ) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
-        let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
-
         let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
             id.to_string().as_bytes(),
             data_path(&id),
         )
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
-        let descriptor =
-            Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::External, network);
-
-        let change_descriptor =
-            Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::Internal, network);
-
-        let wallet =
-            bdk_wallet::Wallet::create(descriptor.to_tuple(), change_descriptor.to_tuple())
-                .network(network.into())
-                .create_wallet(&mut db)
-                .map_err(|error| WalletError::BdkError(error.to_string()))?;
+        let descriptors = mnemonic.into_descriptors(passphrase, network);
+        let wallet = descriptors
+            .to_create_params()
+            .network(network.into())
+            .create_wallet(&mut db)
+            .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         Ok(Self {
             id,
@@ -212,6 +205,23 @@ impl Wallet {
     }
 }
 
+#[uniffi::export]
+impl Wallet {
+    // Create a dummy wallet for xcode previews
+    #[uniffi::constructor(name = "previewNewWallet")]
+    pub fn preview_new_wallet() -> Self {
+        let mnemonic = Mnemonic::from_str("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
+        let passphrase = None;
+        let wallet_id = WalletId::preview_new();
+
+        Self::try_new_persisted_from_mnemonic(wallet_id, mnemonic, passphrase).unwrap()
+    }
+
+    pub fn id(&self) -> WalletId {
+        self.id.clone()
+    }
+}
+
 impl Deref for Wallet {
     type Target = bdk_wallet::PersistedWallet;
 
@@ -240,8 +250,11 @@ mod tests {
         let mnemonic = Mnemonic::parse_normalized(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
 
-        let wallet = Wallet::try_new_persisted_from_mnemonic(mnemonic, None).unwrap();
+        let id = WalletId::new();
+        let wallet = Wallet::try_new_persisted_from_mnemonic(id.clone(), mnemonic, None).unwrap();
         let fingerprint = wallet.master_fingerprint();
+
+        delete_data_path(&id).unwrap();
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }

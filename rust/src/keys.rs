@@ -9,7 +9,7 @@ use bdk_wallet::keys::{
 use bdk_wallet::keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap};
 use bdk_wallet::miniscript::descriptor::{DescriptorXKey, Wildcard};
 use bdk_wallet::template::{Bip84, Bip84Public, DescriptorTemplate as _};
-use bdk_wallet::KeychainKind;
+use bdk_wallet::{CreateParams, KeychainKind};
 
 use crate::network::Network;
 
@@ -25,9 +25,23 @@ pub enum Error {
 pub struct DescriptorSecretKey(pub(crate) BdkDescriptorSecretKey);
 
 #[derive(Debug)]
+pub struct Descriptors {
+    /// The external descriptor, main account
+    pub external: Descriptor,
+    /// The change descriptor
+    pub internal: Descriptor,
+}
+
+#[derive(Debug)]
 pub struct Descriptor {
     pub extended_descriptor: ExtendedDescriptor,
     pub key_map: KeyMap,
+}
+
+impl Descriptors {
+    pub fn to_create_params(self) -> CreateParams {
+        bdk_wallet::Wallet::create(self.external.to_tuple(), self.internal.to_tuple())
+    }
 }
 
 impl Descriptor {

@@ -11,6 +11,10 @@ impl WalletId {
         let nanoid: Nanoid = Nanoid::new();
         Self(nanoid.to_string())
     }
+
+    pub fn preview_new() -> Self {
+        Self("testtesttest".to_string())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
@@ -32,6 +36,16 @@ impl WalletMetadata {
             color: WalletColor::random(),
             verified: false,
             network,
+        }
+    }
+
+    pub fn preview_new() -> Self {
+        Self {
+            id: WalletId::preview_new(),
+            name: "Test Wallet".to_string(),
+            color: WalletColor::random(),
+            verified: false,
+            network: Network::Bitcoin,
         }
     }
 }

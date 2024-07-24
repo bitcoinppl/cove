@@ -6,6 +6,8 @@ use bip39::Mnemonic;
 use itertools::Itertools as _;
 use rand::Rng as _;
 
+use crate::keys::Descriptors;
+
 // word access
 pub trait WordAccess {
     fn bip_39_words_groups_of(&self, groups: usize) -> Vec<Vec<GroupedWord>>;
@@ -33,10 +35,44 @@ impl WordAccess for Mnemonic {
 
 // public key
 pub trait MnemonicExt {
+    fn into_descriptors(
+        self,
+        passphrase: Option<String>,
+        network: impl Into<crate::network::Network>,
+    ) -> Descriptors;
+
     fn xpub(&self, network: Network) -> Xpub;
 }
 
 impl MnemonicExt for Mnemonic {
+    fn into_descriptors(
+        self,
+        passphrase: Option<String>,
+        network: impl Into<crate::network::Network>,
+    ) -> Descriptors {
+        use crate::keys::{Descriptor, DescriptorSecretKey};
+
+        let network = network.into();
+        let descriptor_secret_key = DescriptorSecretKey::new(network, self, passphrase);
+
+        let descriptor = Descriptor::new_bip84(
+            &descriptor_secret_key,
+            bdk_wallet::KeychainKind::External,
+            network,
+        );
+
+        let change_descriptor = Descriptor::new_bip84(
+            &descriptor_secret_key,
+            bdk_wallet::KeychainKind::Internal,
+            network,
+        );
+
+        Descriptors {
+            external: descriptor,
+            internal: change_descriptor,
+        }
+    }
+
     fn xpub(&self, network: Network) -> Xpub {
         let seed = self.to_seed("");
         let xkey: ExtendedKey = seed

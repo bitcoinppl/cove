@@ -2355,6 +2355,13 @@ open class RustWalletViewModel:
         try! rustCall { uniffi_cove_fn_free_rustwalletviewmodel(pointer, $0) }
     }
 
+    public static func previewNewWallet() -> RustWalletViewModel {
+        return try! FfiConverterTypeRustWalletViewModel.lift(try! rustCall {
+            uniffi_cove_fn_constructor_rustwalletviewmodel_preview_new_wallet($0
+            )
+        })
+    }
+
     open func deleteWallet() throws { try rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
         uniffi_cove_fn_method_rustwalletviewmodel_delete_wallet(self.uniffiClonePointer(), $0)
     }
@@ -2437,7 +2444,9 @@ public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewMod
     return FfiConverterTypeRustWalletViewModel.lower(value)
 }
 
-public protocol WalletProtocol: AnyObject {}
+public protocol WalletProtocol: AnyObject {
+    func id() -> WalletId
+}
 
 open class Wallet:
     WalletProtocol
@@ -2477,6 +2486,19 @@ open class Wallet:
         }
 
         try! rustCall { uniffi_cove_fn_free_wallet(pointer, $0) }
+    }
+
+    public static func previewNewWallet() -> Wallet {
+        return try! FfiConverterTypeWallet.lift(try! rustCall {
+            uniffi_cove_fn_constructor_wallet_previewnewwallet($0
+            )
+        })
+    }
+
+    open func id() -> WalletId {
+        return try! FfiConverterTypeWalletId.lift(try! rustCall {
+            uniffi_cove_fn_method_wallet_id(self.uniffiClonePointer(), $0)
+        })
     }
 }
 
@@ -5985,6 +6007,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_wallet_id() != 39072 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_wallettable_all() != 50582 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6037,6 +6062,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_rustwalletviewmodel_new() != 37675 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_rustwalletviewmodel_preview_new_wallet() != 37026 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_wallet_previewnewwallet() != 56877 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffireconcile_reconcile() != 54238 {
