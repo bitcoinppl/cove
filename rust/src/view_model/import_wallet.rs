@@ -98,7 +98,7 @@ impl RustImportWalletViewModel {
         let mnemonic = Mnemonic::parse_in_normalized(Language::English, &words)
             .map_err(|e| ImportWalletError::InvalidWordGroup(e.to_string()))?;
 
-        let wallet = Wallet::try_new_from_mnemonic(mnemonic.clone(), None)
+        let wallet = Wallet::try_new_persisted_from_mnemonic(mnemonic.clone(), None)
             .map_err(|e| ImportWalletError::WalletImportError(e.to_string()))?;
 
         // make sure its not already imported

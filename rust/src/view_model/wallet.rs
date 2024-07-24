@@ -32,7 +32,7 @@ pub struct RustWalletViewModel {
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct WalletViewModelState {
     pub wallet_metadata: WalletMetadata,
 }
@@ -45,7 +45,7 @@ pub enum WalletViewModelAction {
 
 pub type Error = WalletViewModelError;
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum WalletViewModelError {
     #[error("failed to get selected wallet: {0}")]
     GetSelectedWalletError(String),
@@ -58,6 +58,9 @@ pub enum WalletViewModelError {
 
     #[error("unable to mark wallet as verified")]
     MarkWalletAsVerifiedError(#[from] DatabaseError),
+
+    #[error("unable to load wallet: {0}")]
+    LoadWalletError(#[from] WalletError),
 }
 
 #[uniffi::export]
@@ -96,7 +99,12 @@ impl RustWalletViewModel {
         Keychain::global().delete_wallet_key(&wallet_id);
 
         // delete the xpub from keychain
-        Keychain::global().delete_wallet_key(&wallet_id);
+        Keychain::global().delete_wallet_xpub(&wallet_id);
+
+        // delete the wallet persisted bdk data
+        if let Err(error) = crate::wallet::delete_data_path(&wallet_id) {
+            error!("Unable to delete wallet persisted bdk data: {error}");
+        }
 
         // reset the default route to list wallets
         FfiApp::global().reset_default_route_to(Route::ListWallets);

@@ -154,25 +154,32 @@ impl NumberOfBip39Words {
 pub struct Wallet {
     pub id: WalletId,
     pub network: Network,
-    pub bdk: bdk_wallet::Wallet,
+    pub bdk: bdk_wallet::PersistedWallet,
 }
 
 impl Wallet {
-    pub fn try_new(
+    pub fn try_new_persisted(
         number_of_words: NumberOfBip39Words,
         passphrase: Option<String>,
     ) -> Result<Self, WalletError> {
         let mnemonic = number_of_words.to_mnemonic();
-        Self::try_new_from_mnemonic(mnemonic, passphrase)
+        Self::try_new_persisted_from_mnemonic(mnemonic, passphrase)
     }
 
-    pub fn try_new_from_mnemonic(
+    pub fn try_new_persisted_from_mnemonic(
         mnemonic: Mnemonic,
         passphrase: Option<String>,
     ) -> Result<Self, WalletError> {
+        let id = WalletId::new();
         let network = Database::global().global_config.selected_network();
 
         let descriptor_secret_key = DescriptorSecretKey::new(network, mnemonic.clone(), passphrase);
+
+        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
+            id.to_string().as_bytes(),
+            data_path(&id),
+        )
+        .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         let descriptor =
             Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::External, network);
@@ -180,15 +187,33 @@ impl Wallet {
         let change_descriptor =
             Descriptor::new_bip84(&descriptor_secret_key, KeychainKind::Internal, network);
 
-        let wallet = bdk_wallet::Wallet::new(
-            descriptor.to_tuple(),
-            change_descriptor.to_tuple(),
-            network.into(),
-        )
-        .expect("failed to create wallet");
+        let wallet =
+            bdk_wallet::Wallet::create(descriptor.to_tuple(), change_descriptor.to_tuple())
+                .network(network.into())
+                .create_wallet(&mut db)
+                .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         Ok(Self {
-            id: WalletId::new(),
+            id,
+            network,
+            bdk: wallet,
+        })
+    }
+
+    pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
+        let network = Database::global().global_config.selected_network();
+
+        let mut db =
+            Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
+                .map_err(|error| WalletError::LoadError(error.to_string()))?;
+
+        let wallet = bdk_wallet::Wallet::load()
+            .load_wallet(&mut db)
+            .map_err(|error| WalletError::LoadError(error.to_string()))?
+            .ok_or(WalletError::WalletNotFound)?;
+
+        Ok(Self {
+            id,
             network,
             bdk: wallet,
         })
@@ -232,6 +257,16 @@ impl Wallet {
     }
 }
 
+pub fn delete_data_path(wallet_id: &WalletId) -> Result<(), std::io::Error> {
+    let path = data_path(wallet_id);
+    std::fs::remove_file(path)?;
+    Ok(())
+}
+
+fn data_path(wallet_id: &WalletId) -> PathBuf {
+    let db = format!("bdk_wallet_{}.db", wallet_id.as_str().to_lowercase());
+    ROOT_DATA_DIR.join(db)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,7 +299,7 @@ mod tests {
         let mnemonic = Mnemonic::parse_normalized(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
 
-        let wallet = Wallet::try_new_from_mnemonic(mnemonic, None).unwrap();
+        let wallet = Wallet::try_new_persisted_from_mnemonic(mnemonic, None).unwrap();
         let fingerprint = wallet.master_fingerprint();
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
