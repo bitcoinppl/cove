@@ -20,14 +20,14 @@ bdk_wallet = { version = "1.0.0-beta.1", features = ["keys-bip39", "file_store"]
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
-bdk_esplora = { version = "0.15", features = ["async-https"] }
+bdk_esplora = { version = "0.16", features = ["async-https"] }
 # todo: update once this is merged: https://github.com/bitcoindevkit/bdk/pull/1491
-bdk_electrum = { git = "https://github.com/thunderbiscuit/bdk", branch = "feature/electrum-client-ring", features = ["use-rustls-ring"], default-features = false }
+bdk_electrum = { version = "0.16.0" }
+# bdk_electrum = { git = "https://github.com/thunderbiscuit/bdk", branch = "feature/electrum-client-ring", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # store bdk wallet data
 bdk_file_store = "0.14.0"
-bdk_chain = "0.17"
 
 bitcoin-units = "0.1"
 

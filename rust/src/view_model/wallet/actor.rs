@@ -59,7 +59,21 @@ impl WalletActor {
         }
 
         let node_client = self.node_client.as_ref().expect("just set it");
-        node_client.start_wallet_scan(&self.wallet).await?;
+        let graph = self.wallet.tx_graph();
+
+        let full_scan_request = self.wallet.start_full_scan();
+
+        let mut full_scan_result = node_client
+            .start_wallet_scan(graph, full_scan_request)
+            .await?;
+
+        let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
+        let _ = full_scan_result
+            .graph_update
+            .update_last_seen_unconfirmed(now);
+
+        self.wallet.apply_update(full_scan_result)?;
+        self.wallet.persist()?;
 
         Produces::ok(())
     }

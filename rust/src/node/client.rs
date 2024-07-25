@@ -1,14 +1,21 @@
 use std::sync::Arc;
 
-use bdk_electrum::{
-    bdk_chain::TxGraph,
-    electrum_client::{self, ElectrumApi},
+use bdk_electrum::electrum_client::{self, ElectrumApi};
+use bdk_esplora::{esplora_client, EsploraAsyncExt as _};
+use bdk_wallet::{
+    chain::{
+        spk_client::{FullScanRequest, FullScanResult},
+        ConfirmationBlockTime, TxGraph,
+    },
+    KeychainKind,
 };
-use bdk_esplora::esplora_client;
 
-use crate::{node::Node, wallet::Wallet};
+use crate::node::Node;
 
 use super::ApiType;
+
+const STOP_GAP: usize = 50;
+const BATCH_SIZE: usize = 5;
 
 pub enum NodeClient {
     Esplora(esplora_client::r#async::AsyncClient),
@@ -33,10 +40,16 @@ pub enum Error {
     CreateElectrumClientError(electrum_client::Error),
 
     #[error("failed to connect to node: {0}")]
-    EsploraConnectError(#[from] esplora_client::Error),
+    EsploraConnectError(esplora_client::Error),
 
     #[error("failed to connect to node: {0}")]
-    ElectrumConnectError(#[from] electrum_client::Error),
+    ElectrumConnectError(electrum_client::Error),
+
+    #[error("failed to complete wallet scan: {0}")]
+    ElectrumScanError(electrum_client::Error),
+
+    #[error("failed to complete wallet scan: {0}")]
+    EsploraScanError(Box<esplora_client::Error>),
 }
 
 impl NodeClient {
@@ -71,24 +84,46 @@ impl NodeClient {
     pub async fn check_url(&self) -> Result<(), Error> {
         match self {
             NodeClient::Esplora(client) => {
-                client.get_height().await?;
+                client
+                    .get_height()
+                    .await
+                    .map_err(Error::EsploraConnectError)?;
             }
 
             NodeClient::Electrum(client) => {
                 let client = client.clone();
-                crate::unblock::run_blocking(move || client.inner.ping()).await?;
+                crate::unblock::run_blocking(move || client.inner.ping())
+                    .await
+                    .map_err(Error::ElectrumConnectError)?;
             }
         }
 
         Ok(())
     }
 
-    pub async fn start_wallet_scan(&self, wallet: &Wallet) -> Result<(), Error> {
+    pub async fn start_wallet_scan(
+        &self,
+        tx_graph: &TxGraph<ConfirmationBlockTime>,
+        full_scan_request: FullScanRequest<KeychainKind>,
+    ) -> Result<FullScanResult<KeychainKind>, Error> {
+        // TODO: uncomment when this is merged: https://github.com/bitcoindevkit/bdk/pull/1491
         if let NodeClient::Electrum(client) = self {
             let client = client.clone();
-            // crate::unblock::run_blocking(move || client.populate_tx_cache(wallet.tx_graph())).await;
+            let tx_graph = tx_graph.clone();
+            crate::unblock::run_blocking(move || client.populate_tx_cache(tx_graph)).await;
         }
 
-        Ok(())
+        let full_scan_result = match self {
+            NodeClient::Esplora(client) => client
+                .full_scan(full_scan_request, STOP_GAP, BATCH_SIZE)
+                .await
+                .map_err(Error::EsploraScanError)?,
+
+            NodeClient::Electrum(client) => client
+                .full_scan(full_scan_request, STOP_GAP, BATCH_SIZE, false)
+                .map_err(Error::ElectrumScanError)?,
+        };
+
+        Ok(full_scan_result)
     }
 }

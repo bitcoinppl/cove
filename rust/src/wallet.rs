@@ -3,7 +3,11 @@ pub mod balance;
 pub mod fingerprint;
 pub mod metadata;
 
-use std::{ops::Deref, path::PathBuf, str::FromStr as _};
+use std::{
+    ops::{Deref, DerefMut},
+    path::PathBuf,
+    str::FromStr as _,
+};
 
 use crate::{
     consts::ROOT_DATA_DIR,
@@ -52,6 +56,7 @@ pub struct Wallet {
     pub id: WalletId,
     pub network: Network,
     pub bdk: bdk_wallet::PersistedWallet,
+    db: Store<bdk_wallet::ChangeSet>,
 }
 
 impl Wallet {
@@ -133,6 +138,7 @@ impl Wallet {
             id,
             network,
             bdk: wallet,
+            db,
         })
     }
 
@@ -160,6 +166,7 @@ impl Wallet {
             id,
             network,
             bdk: wallet,
+            db,
         })
     }
 
@@ -203,6 +210,14 @@ impl Wallet {
         let key = self.get_pub_key()?;
         Ok(key.master_fingerprint())
     }
+
+    pub fn persist(&mut self) -> Result<(), WalletError> {
+        self.bdk
+            .persist(&mut self.db)
+            .map_err(|error| WalletError::PersistError(error.to_string()))?;
+
+        Ok(())
+    }
 }
 
 #[uniffi::export]
@@ -227,6 +242,12 @@ impl Deref for Wallet {
 
     fn deref(&self) -> &Self::Target {
         &self.bdk
+    }
+}
+
+impl DerefMut for Wallet {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.bdk
     }
 }
 
