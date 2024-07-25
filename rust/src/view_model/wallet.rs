@@ -1,5 +1,9 @@
+mod actor;
+
 use std::sync::Arc;
 
+use act_zero::{call, runtimes::tokio::spawn_actor, Addr};
+use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
@@ -21,6 +25,7 @@ use crate::{
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
+    NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
     WalletBalanceChanged(Balance),
     StartedWalletScan,
@@ -35,15 +40,10 @@ pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustWalletViewModel {
-    pub state: Arc<RwLock<WalletViewModelState>>,
+    pub actor: Addr<WalletActor>,
+    pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
-    pub wallet: Arc<Wallet>,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct WalletViewModelState {
-    pub wallet_metadata: WalletMetadata,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -76,6 +76,12 @@ pub enum WalletViewModelError {
 
     #[error("unable to load wallet: {0}")]
     LoadWalletError(#[from] WalletError),
+
+    #[error("unable to connect to node: {0}")]
+    NodeConnectionFailed(String),
+
+    #[error("unable to start wallet scan: {0}")]
+    WalletScanError(String),
 }
 
 #[uniffi::export]
@@ -86,42 +92,27 @@ impl RustWalletViewModel {
 
         let network = Database::global().global_config.selected_network();
 
-        let wallet_metadata = Database::global()
+        let metadata = Database::global()
             .wallets
             .get_selected_wallet(id, network)
             .map_err(|error| Error::GetSelectedWalletError(error.to_string()))?
             .ok_or(Error::WalletDoesNotExist)?;
 
-        let id = wallet_metadata.id.clone();
-        let state = WalletViewModelState::try_new(wallet_metadata)?;
+        let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id)?;
+        let actor = spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Ok(Self {
-            state: Arc::new(RwLock::new(state)),
+            actor,
+            metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
-            wallet: Arc::new(wallet),
         })
-    }
-
-    #[uniffi::constructor]
-    pub fn preview_new_wallet() -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
-        let wallet = Wallet::preview_new_wallet();
-        let metadata = WalletMetadata::preview_new();
-        let state = WalletViewModelState::try_new(metadata.clone()).unwrap();
-
-        Self {
-            state: Arc::new(RwLock::new(state)),
-            reconciler: sender,
-            reconcile_receiver: Arc::new(receiver),
-            wallet: Arc::new(wallet),
-        }
     }
 
     #[uniffi::method]
     pub fn delete_wallet(&self) -> Result<(), Error> {
-        let wallet_id = self.state.read().wallet_metadata.id.clone();
+        let wallet_id = self.metadata.read().id.clone();
         tracing::debug!("deleting wallet {wallet_id}");
 
         let database = Database::global();
@@ -161,24 +152,25 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn word_validator(&self) -> Result<WordValidator, Error> {
-        let mnemonic = Keychain::global()
-            .get_wallet_key(&self.state.read().wallet_metadata.id)?
-            .ok_or(Error::WalletDoesNotExist)?;
+    pub async fn start_wallet_scan(&self) -> Result<(), Error> {
+        call!(self.actor.start_wallet_scan())
+            .await
+            .map_err(|error| {
+                error!("Unable to start wallet scan: {error:?}");
+                Error::WalletScanError(error.to_string())
+            })?;
 
-        let validator = WordValidator::new(mnemonic);
-
-        Ok(validator)
+        Ok(())
     }
 
     #[uniffi::method]
     pub fn mark_wallet_as_verified(&self) -> Result<(), Error> {
-        let wallet_metadata = self.state.read().wallet_metadata.clone();
+        let wallet_metadata = &self.metadata.read();
 
         let database = Database::global();
         database
             .wallets
-            .mark_wallet_as_verified(wallet_metadata.id)
+            .mark_wallet_as_verified(wallet_metadata.id.clone())
             .map_err(Error::MarkWalletAsVerifiedError)?;
 
         Ok(())
@@ -186,21 +178,27 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub fn wallet_metadata(&self) -> WalletMetadata {
-        self.state.read().wallet_metadata.clone()
+        self.metadata.read().clone()
     }
 
     #[uniffi::method]
     pub fn fingerprint(&self) -> String {
-        let wallet_id = self.state.read().wallet_metadata.id.clone();
+        let wallet_id = &self.metadata.read().id;
 
-        Fingerprint::try_new(&wallet_id)
+        Fingerprint::try_new(wallet_id)
             .map(|f| f.to_uppercase())
             .unwrap_or_else(|_| "Unknown".to_string())
     }
 
     #[uniffi::method]
-    pub fn wallet_balance(&self) -> Balance {
-        self.wallet.balance()
+    pub fn word_validator(&self) -> Result<WordValidator, Error> {
+        let mnemonic = Keychain::global()
+            .get_wallet_key(&self.metadata.read().id)?
+            .ok_or(Error::WalletDoesNotExist)?;
+
+        let validator = WordValidator::new(mnemonic);
+
+        Ok(validator)
     }
 
     #[uniffi::method]
@@ -220,22 +218,22 @@ impl RustWalletViewModel {
     pub fn dispatch(&self, action: WalletViewModelAction) {
         match action {
             WalletViewModelAction::UpdateName(name) => {
-                let mut state = self.state.write();
-                state.wallet_metadata.name = name;
+                let mut metadata = self.metadata.write();
+                metadata.name = name;
 
                 self.reconciler
                     .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
-                        state.wallet_metadata.clone(),
+                        metadata.clone(),
                     ))
                     .unwrap();
             }
             WalletViewModelAction::UpdateColor(color) => {
-                let mut state = self.state.write();
-                state.wallet_metadata.color = color;
+                let mut metadata = self.metadata.write();
+                metadata.color = color;
 
                 self.reconciler
                     .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
-                        state.wallet_metadata.clone(),
+                        metadata.clone(),
                     ))
                     .unwrap();
             }
@@ -244,15 +242,28 @@ impl RustWalletViewModel {
         // update wallet_metadata in the database
         if let Err(error) = Database::global()
             .wallets
-            .update_wallet_metadata(self.state.read().wallet_metadata.clone())
+            .update_wallet_metadata(self.metadata.read().clone())
         {
             error!("Unable to update wallet metadata: {error:?}")
         }
     }
 }
 
-impl WalletViewModelState {
-    pub fn try_new(wallet_metadata: WalletMetadata) -> Result<Self, Error> {
-        Ok(Self { wallet_metadata })
+#[uniffi::export]
+impl RustWalletViewModel {
+    #[uniffi::constructor]
+    pub fn preview_new_wallet() -> Self {
+        let (sender, receiver) = crossbeam::channel::bounded(1000);
+
+        let wallet = Wallet::preview_new_wallet();
+        let metadata = WalletMetadata::preview_new();
+        let actor = spawn_actor(WalletActor::new(wallet, sender.clone()));
+
+        Self {
+            actor,
+            metadata: Arc::new(RwLock::new(metadata)),
+            reconciler: sender,
+            reconcile_receiver: Arc::new(receiver),
+        }
     }
 }

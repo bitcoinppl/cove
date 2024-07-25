@@ -33,6 +33,8 @@ bitcoin-units = "0.1"
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }
+act-zero = {version = "0.4.0", features = ["default-tokio"]}
+async-trait = "0.1.81"
 
 # crypto
 rand = "0.8.5"

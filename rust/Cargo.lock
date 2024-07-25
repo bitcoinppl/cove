@@ -3,6 +3,18 @@
 version = 3
 
 [[package]]
+name = "act-zero"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cba76c324cd26c4ed1ee5cd9f37f667af1d23f92bfe8113c05398b7fc3dcb97"
+dependencies = [
+ "async-trait",
+ "futures",
+ "log",
+ "tokio",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -571,6 +583,8 @@ checksum = "06ea2b9bc92be3c2baa9334a323ebca2d6f074ff852cd1d7b11064035cd3868f"
 name = "cove"
 version = "0.1.0"
 dependencies = [
+ "act-zero",
+ "async-trait",
  "bdk_chain 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bdk_electrum",
  "bdk_esplora",
