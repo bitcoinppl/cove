@@ -14,6 +14,7 @@ use crate::{
     database::{error::DatabaseError, Database},
     keychain::{Keychain, KeychainError},
     router::Route,
+    transaction::Transactions,
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -25,11 +26,13 @@ use crate::{
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
+    StartedWalletScan,
+    AvailableTransactions(Arc<Transactions>),
+    ScanComplete(Arc<Transactions>),
+
     NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
     WalletBalanceChanged(Balance),
-    StartedWalletScan,
-    CompletedWalletScan,
 }
 
 #[uniffi::export(callback_interface)]
@@ -55,8 +58,8 @@ pub enum WalletViewModelAction {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletLoadState {
     Loading,
-    Scanning,
-    Loaded,
+    Scanning(Arc<Transactions>),
+    Loaded(Arc<Transactions>),
 }
 
 pub type Error = WalletViewModelError;
@@ -82,6 +85,12 @@ pub enum WalletViewModelError {
 
     #[error("unable to start wallet scan: {0}")]
     WalletScanError(String),
+
+    #[error("unable to get transactions: {0}")]
+    TransactionsRetrievalError(String),
+
+    #[error("unable to get wallet balance: {0}")]
+    WalletBalanceError(String),
 }
 
 #[uniffi::export]
@@ -152,13 +161,55 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub fn transactions(&self) -> Transactions {
+        todo!()
+    }
+
+    #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
-        call!(self.actor.start_wallet_scan())
-            .await
-            .map_err(|error| {
-                error!("Unable to start wallet scan: {error:?}");
-                Error::WalletScanError(error.to_string())
-            })?;
+        use WalletViewModelReconcileMessage as Msg;
+
+        // notify the frontend that the wallet is starting to scan
+        self.send(Msg::StartedWalletScan);
+
+        // get the initial balance and transactions
+        {
+            let initial_balance = call!(self.actor.balance())
+                .await
+                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
+
+            self.send(Msg::WalletBalanceChanged(initial_balance));
+
+            let initial_transactions = call!(self.actor.transactions())
+                .await
+                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
+                .into();
+
+            self.send(Msg::AvailableTransactions(initial_transactions))
+        }
+
+        // start the wallet scan and send balnce and transactions after scan is complete
+        {
+            // start the wallet scan
+            call!(self.actor.start_wallet_scan())
+                .await
+                .map_err(|error| Error::WalletScanError(error.to_string()))?;
+
+            // get and send wallet balance
+            let balance = call!(self.actor.balance())
+                .await
+                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
+
+            self.send(Msg::WalletBalanceChanged(balance));
+
+            //get and send transactions
+            let transactions = call!(self.actor.transactions())
+                .await
+                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
+                .into();
+
+            self.send(Msg::ScanComplete(transactions));
+        }
 
         Ok(())
     }
@@ -246,6 +297,12 @@ impl RustWalletViewModel {
         {
             error!("Unable to update wallet metadata: {error:?}")
         }
+    }
+}
+
+impl RustWalletViewModel {
+    fn send(&self, msg: WalletViewModelReconcileMessage) {
+        self.reconciler.send(msg).unwrap();
     }
 }
 

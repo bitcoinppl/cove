@@ -19,6 +19,7 @@ pub mod node;
 pub mod node_connect;
 pub mod pending_wallet;
 pub mod redb;
+pub mod transaction;
 pub mod unblock;
 pub mod view_model;
 pub mod wallet;

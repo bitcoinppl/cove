@@ -1,4 +1,9 @@
-use crate::{database::Database, node::client::NodeClient, wallet::Wallet};
+use crate::{
+    database::Database,
+    node::client::NodeClient,
+    transaction::{Transaction, Transactions},
+    wallet::{balance::Balance, Wallet},
+};
 use act_zero::*;
 use crossbeam::channel::Sender;
 use tracing::error;
@@ -34,6 +39,11 @@ impl WalletActor {
             wallet,
             node_client: None,
         }
+    }
+
+    pub async fn balance(&mut self) -> ActorResult<Balance> {
+        let balance = self.wallet.balance();
+        Produces::ok(balance)
     }
 
     pub async fn start_wallet_scan(&mut self) -> ActorResult<()> {
@@ -76,5 +86,13 @@ impl WalletActor {
         self.wallet.persist()?;
 
         Produces::ok(())
+    }
+
+    pub async fn transactions(&mut self) -> ActorResult<Transactions> {
+        let transactions: Vec<Transaction> =
+            self.wallet.transactions().map(Transaction::from).collect();
+
+        let transactions = Transactions::from(transactions);
+        Produces::ok(transactions)
     }
 }

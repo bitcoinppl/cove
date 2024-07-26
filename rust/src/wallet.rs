@@ -216,6 +216,7 @@ impl Wallet {
             .persist(&mut self.db)
             .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
+
         Ok(())
     }
 }
