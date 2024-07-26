@@ -20,6 +20,12 @@ pub struct Transactions {
     tx_ref: Vec<TransactionRef>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum TxnDirection {
+    Incoming,
+    Outgoing,
+}
+
 impl From<Vec<Transaction>> for Transactions {
     fn from(inner: Vec<Transaction>) -> Self {
         let tx_ref = inner
@@ -39,13 +45,19 @@ pub struct TransactionRef(u64);
 #[uniffi::export]
 impl Transactions {
     #[uniffi::method]
-    pub fn vec(&self) -> Vec<TransactionRef> {
+    pub fn id(&self, tx_ref: TransactionRef) -> TxId {
+        self.inner[tx_ref.0 as usize].txid
+    }
+
+    #[uniffi::method]
+    pub fn into_inner(&self) -> Vec<TransactionRef> {
         self.tx_ref.clone()
     }
 
     #[uniffi::method]
-    pub fn id(&self, tx_ref: TransactionRef) -> TxId {
-        self.inner[tx_ref.0 as usize].txid
+    pub fn direction_transaction(&self, tx_ref: TransactionRef) -> TxnDirection {
+        let tx = &self.inner[tx_ref.0 as usize];
+        todo!()
     }
 
     // #[uniffi::method]
@@ -66,29 +78,6 @@ pub struct Transaction {
     pub chain_position: ChainPosition,
     pub txn: Arc<BdkTransaction>,
 }
-
-impl From<CanonicalTx<'_, Arc<BdkTransaction>, ConfirmationBlockTime>> for Transaction {
-    fn from(tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>) -> Self {
-        Self {
-            txid: tx.tx_node.txid.into(),
-            chain_position: tx.chain_position.into(),
-            txn: Arc::clone(&tx.tx_node.tx),
-        }
-    }
-}
-
-// #[uniffi::export]
-// impl Transaction {
-//     #[uniffi::method]
-//     pub fn txid(&self) -> TxId {
-//         self.txid
-//     }
-//
-//     #[uniffi::method]
-//     pub fn value(&self) -> Amount {
-//         self.value
-//     }
-// }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct TxId(BdkTxid);
@@ -111,6 +100,16 @@ pub struct TxIn {
 pub struct OutPoint {
     pub txid: TxId,
     pub vout: u32,
+}
+
+impl From<CanonicalTx<'_, Arc<BdkTransaction>, ConfirmationBlockTime>> for Transaction {
+    fn from(tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>) -> Self {
+        Self {
+            txid: tx.tx_node.txid.into(),
+            chain_position: tx.chain_position.into(),
+            txn: Arc::clone(&tx.tx_node.tx),
+        }
+    }
 }
 
 impl From<BdkTxOut> for TxOut {
