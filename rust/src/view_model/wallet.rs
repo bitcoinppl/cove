@@ -208,6 +208,8 @@ impl RustWalletViewModel {
                 .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
                 .into();
 
+            println!("{:?}", transactions);
+
             self.send(Msg::ScanComplete(transactions));
         }
 

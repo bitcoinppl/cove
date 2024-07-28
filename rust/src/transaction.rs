@@ -4,14 +4,11 @@ use crate::wallet::amount::Amount;
 use bdk_chain::{
     bitcoin::{Sequence, Witness},
     tx_graph::CanonicalTx,
-    ChainPosition as BdkChainPosition,
+    ChainPosition as BdkChainPosition, ConfirmationBlockTime,
 };
-use bdk_wallet::{
-    bitcoin::{
-        blockdata::transaction::Transaction as BdkTransaction, OutPoint as BdkOutPoint, ScriptBuf,
-        TxIn as BdkTxIn, TxOut as BdkTxOut, Txid as BdkTxid,
-    },
-    chain::ConfirmationBlockTime,
+use bdk_wallet::bitcoin::{
+    OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
+    TxOut as BdkTxOut, Txid as BdkTxid,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
