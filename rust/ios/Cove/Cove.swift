@@ -407,19 +407,6 @@ private struct FfiConverterUInt16: FfiConverterPrimitive {
     }
 }
 
-private struct FfiConverterUInt64: FfiConverterPrimitive {
-    typealias FfiType = UInt64
-    typealias SwiftType = UInt64
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
-        return try lift(readInt(&buf))
-    }
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
 private struct FfiConverterBool: FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -2315,8 +2302,6 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func markWalletAsVerified() throws
 
-    func walletBalance() -> UInt64
-
     func walletMetadata() -> WalletMetadata
 
     func wordValidator() throws -> WordValidator
@@ -2399,12 +2384,6 @@ open class RustWalletViewModel:
     open func markWalletAsVerified() throws { try rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
         uniffi_cove_fn_method_rustwalletviewmodel_mark_wallet_as_verified(self.uniffiClonePointer(), $0)
     }
-    }
-
-    open func walletBalance() -> UInt64 {
-        return try! FfiConverterUInt64.lift(try! rustCall {
-            uniffi_cove_fn_method_rustwalletviewmodel_wallet_balance(self.uniffiClonePointer(), $0)
-        })
     }
 
     open func walletMetadata() -> WalletMetadata {
@@ -4013,6 +3992,10 @@ public enum KeychainError {
     case UnableToDelete
     case UnableToParseSavedValue(String
     )
+    case UnableToEncrypt(String
+    )
+    case UnableToDecrypt(String
+    )
 }
 
 public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
@@ -4024,6 +4007,12 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
         case 1: return .UnableToSave
         case 2: return .UnableToDelete
         case 3: return try .UnableToParseSavedValue(
+                FfiConverterString.read(from: &buf)
+            )
+        case 4: return try .UnableToEncrypt(
+                FfiConverterString.read(from: &buf)
+            )
+        case 5: return try .UnableToDecrypt(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -4040,6 +4029,14 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
 
         case let .UnableToParseSavedValue(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .UnableToEncrypt(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .UnableToDecrypt(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
         }
     }
@@ -4682,6 +4679,10 @@ public enum WalletError {
     )
     case LoadError(String
     )
+    case KeychainError(KeychainError
+    )
+    case DatabaseError(DatabaseError
+    )
     case WalletNotFound
 }
 
@@ -4703,7 +4704,13 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
         case 4: return try .LoadError(
                 FfiConverterString.read(from: &buf)
             )
-        case 5: return .WalletNotFound
+        case 5: return try .KeychainError(
+                FfiConverterTypeKeychainError.read(from: &buf)
+            )
+        case 6: return try .DatabaseError(
+                FfiConverterTypeDatabaseError.read(from: &buf)
+            )
+        case 7: return .WalletNotFound
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -4726,8 +4733,16 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
 
-        case .WalletNotFound:
+        case let .KeychainError(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeKeychainError.write(v1, into: &buf)
+
+        case let .DatabaseError(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeDatabaseError.write(v1, into: &buf)
+
+        case .WalletNotFound:
+            writeInt(&buf, Int32(7))
         }
     }
 }
@@ -5962,9 +5977,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_mark_wallet_as_verified() != 64306 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_wallet_balance() != 56156 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_wallet_metadata() != 44518 {

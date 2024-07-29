@@ -1,10 +1,15 @@
+use std::path::PathBuf;
+
 use crate::{
-    database::Database,
+    consts::ROOT_DATA_DIR,
+    database::{self, Database},
     impl_default_for,
+    keychain::KeychainError,
     keys::{Descriptor, DescriptorSecretKey},
     network::Network,
     new_type,
 };
+use bdk_file_store::Store;
 use bdk_wallet::{
     bitcoin::bip32::Fingerprint, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey,
     KeychainKind,
@@ -14,13 +19,28 @@ use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum WalletError {
     #[error("failed to create wallet: {0}")]
     BdkError(String),
 
     #[error("unsupported wallet: {0}")]
     UnsupportedWallet(String),
+
+    #[error("failed to save wallet: {0}")]
+    PersistError(String),
+
+    #[error("failed to load wallet: {0}")]
+    LoadError(String),
+
+    #[error("failed to save in keychain: {0}")]
+    KeychainError(#[from] KeychainError),
+
+    #[error("failed to save in database: {0}")]
+    DatabaseError(#[from] database::Error),
+
+    #[error("wallet not found")]
+    WalletNotFound,
 }
 
 new_type!(WalletId, String);
@@ -267,6 +287,7 @@ fn data_path(wallet_id: &WalletId) -> PathBuf {
     let db = format!("bdk_wallet_{}.db", wallet_id.as_str().to_lowercase());
     ROOT_DATA_DIR.join(db)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

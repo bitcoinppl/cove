@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crossbeam::channel::{Receiver, Sender};
-use tracing::error;
 use parking_lot::RwLock;
+use tracing::error;
 
 use crate::{
     app::FfiApp,
@@ -10,7 +10,7 @@ use crate::{
     fingerprint::Fingerprint,
     keychain::{Keychain, KeychainError},
     router::Route,
-    wallet::{WalletColor, WalletId, WalletMetadata},
+    wallet::{WalletColor, WalletError, WalletId, WalletMetadata},
     word_validator::WordValidator,
 };
 

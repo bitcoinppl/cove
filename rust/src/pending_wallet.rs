@@ -1,10 +1,6 @@
 use bip39::Mnemonic;
 
-use crate::{
-    database::Database,
-    network::Network,
-    wallet::{NumberOfBip39Words, Wallet},
-};
+use crate::{database::Database, network::Network, wallet::NumberOfBip39Words};
 
 #[derive(Debug, uniffi::Object)]
 pub struct PendingWallet {
