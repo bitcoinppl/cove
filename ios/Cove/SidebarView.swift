@@ -65,24 +65,26 @@ struct SidebarView: View {
             }
 
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 30) {
+                VStack(spacing: 40) {
                     Spacer()
 
                     Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
                         Label("New Wallet", systemImage: "wallet.pass.fill")
-                            .foregroundStyle(
-                                setForeground(RouteFactory().newWalletSelect())
-                            )
-                            .padding(.leading, 30)
+                            .foregroundStyle(.white)
+                            .font(.headline)
+                            .frame(minWidth: screenWidth * 0.55, minHeight: 45)
+                            .background(Color.blue)
+                            .cornerRadius(10)
                     }
 
                     if !walletsIsEmpty {
                         Button(action: { goTo(Route.listWallets) }) {
                             Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
-                                .foregroundStyle(
-                                    setForeground(Route.listWallets)
-                                )
-                                .padding(.leading, 30)
+                                .foregroundStyle(.white)
+                                .font(.headline)
+                                .frame(minWidth: screenWidth * 0.55, minHeight: 45)
+                                .background(Color.blue)
+                                .cornerRadius(10)
                         }
                     }
 
@@ -91,18 +93,21 @@ struct SidebarView: View {
                         Button(action: { goTo(.settings) }, label: {
                             HStack {
                                 Image(systemName: "gear")
-                                    .foregroundStyle(Color.primary.gradient.opacity(0.5))
+                                    .foregroundStyle(Color.white.gradient.opacity(0.5))
 
                                 Text("Settings")
-                                    .foregroundStyle(Color.primary.gradient)
+                                    .foregroundStyle(Color.white.gradient)
                             }
                         })
                         .frame(maxWidth: screenWidth * 0.75)
                     }
                 }
                 .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
-                .background(.thickMaterial)
-
+                .background(
+                    LinearGradient(gradient:
+                        Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
+                        startPoint: .bottomTrailing, endPoint: .topLeading)
+                )
                 Spacer()
             }
             .transition(.move(edge: .leading))
@@ -132,6 +137,11 @@ struct SidebarView: View {
                 sidebarOffset = newValue ? 0 : -1 * screenWidth
             }
         }
+        .onAppear {
+            if isShowing {
+                sidebarOffset = 0
+            }
+        }
         .offset(x: sidebarOffset)
         .enableInjection()
     }
@@ -155,5 +165,6 @@ struct SidebarView: View {
     ZStack {
         SidebarView(isShowing: Binding.constant(true), currentRoute: Route.listWallets)
     }
+    .environment(MainViewModel())
     .background(Color.white)
 }
