@@ -28,13 +28,17 @@ import SwiftUI
                 logger.debug("Reconcile: \(message)")
 
                 switch message {
+                case .startedWalletScan:
+                    ()
                 case let .walletMetadataChanged(metadata):
                     walletMetadata = metadata
-                case let .walletBalanceChanged(balance):
+                case let .availableTransactions(txns):
                     ()
-                case .completedWalletScan:
+                case let .nodeConnectionFailed(error):
+                    logger.error(error)
+                case let .scanComplete(txns):
                     ()
-                case .startedWalletScan:
+                case .walletBalanceChanged:
                     ()
                 }
             }
