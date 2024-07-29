@@ -2,7 +2,7 @@ mod actor;
 
 use std::sync::Arc;
 
-use act_zero::{call, runtimes::tokio::spawn_actor, Addr};
+use act_zero::{call, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
@@ -14,6 +14,7 @@ use crate::{
     database::{error::DatabaseError, Database},
     keychain::{Keychain, KeychainError},
     router::Route,
+    task,
     transaction::Transactions,
     wallet::{
         balance::Balance,
@@ -93,7 +94,7 @@ pub enum WalletViewModelError {
     WalletBalanceError(String),
 }
 
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 impl RustWalletViewModel {
     #[uniffi::constructor(name = "new")]
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
@@ -109,7 +110,7 @@ impl RustWalletViewModel {
 
         let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id)?;
-        let actor = spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Ok(Self {
             actor,
@@ -316,7 +317,7 @@ impl RustWalletViewModel {
 
         let wallet = Wallet::preview_new_wallet();
         let metadata = WalletMetadata::preview_new();
-        let actor = spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Self {
             actor,

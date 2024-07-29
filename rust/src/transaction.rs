@@ -53,7 +53,7 @@ impl Transactions {
 
     #[uniffi::method]
     pub fn direction_transaction(&self, tx_ref: TransactionRef) -> TxnDirection {
-        let tx = &self.inner[tx_ref.0 as usize];
+        let _tx = &self.inner[tx_ref.0 as usize];
         todo!()
     }
 

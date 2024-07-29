@@ -12,12 +12,11 @@ use std::{
 use crate::{
     consts::ROOT_DATA_DIR,
     database::{self, Database},
-    impl_default_for,
-    keychain::KeychainError,
-    keys::{Descriptor, DescriptorSecretKey},
+    keychain::{Keychain, KeychainError},
     mnemonic::MnemonicExt as _,
     network::Network,
 };
+use balance::Balance;
 use bdk_file_store::Store;
 use bdk_wallet::{
     bitcoin::bip32::Fingerprint, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey,
@@ -215,7 +214,6 @@ impl Wallet {
         self.bdk
             .persist(&mut self.db)
             .map_err(|error| WalletError::PersistError(error.to_string()))?;
-
 
         Ok(())
     }
