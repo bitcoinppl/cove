@@ -4,10 +4,10 @@ use std::{str::FromStr as _, sync::Arc};
 
 use bdk_wallet::bitcoin::bip32::Xpub;
 use bip39::Mnemonic;
-use tracing::warn;
 use once_cell::sync::OnceCell;
+use tracing::warn;
 
-use crate::wallet::WalletId;
+use crate::{encryption::Cryptor, wallet::WalletId};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum KeychainError {
@@ -19,6 +19,12 @@ pub enum KeychainError {
 
     #[error("unable to parse saved value")]
     UnableToParseSavedValue(String),
+
+    #[error("unable to encrypt: {0}")]
+    UnableToEncrypt(String),
+
+    #[error("unable to decrypt: {0}")]
+    UnableToDecrypt(String),
 }
 
 #[uniffi::export(callback_interface)]
@@ -59,10 +65,18 @@ impl Keychain {
         id: &WalletId,
         secret_key: Mnemonic,
     ) -> Result<(), KeychainError> {
-        let key = wallet_mnemonic_key_name(id);
-        let secret = secret_key.to_string();
+        let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
+        let cryptor = Cryptor::new();
 
-        self.0.save(key, secret)?;
+        let key = wallet_mnemonic_key_name(id);
+        let encrypted_secret_key = cryptor
+            .encrypt_to_string(secret_key.to_string())
+            .map_err(|error| KeychainError::UnableToEncrypt(error.to_string()))?;
+
+        let encryption_key = cryptor.serialize_to_string();
+
+        self.0.save(encryption_key_key, encryption_key)?;
+        self.0.save(key, encrypted_secret_key)?;
 
         Ok(())
     }
@@ -70,18 +84,35 @@ impl Keychain {
     pub fn get_wallet_key(&self, id: &WalletId) -> Result<Option<Mnemonic>, KeychainError> {
         let key = wallet_mnemonic_key_name(id);
 
-        let Some(secret) = self.0.get(key) else {
+        let Some(encrypted_secret_key) = self.0.get(key) else {
             return Ok(None);
         };
 
-        let mnemonic = Mnemonic::from_str(&secret)
+        let Some(encryption_key) = self
+            .0
+            .get(wallet_mnemonic_encryption_and_nonce_key_name(id))
+        else {
+            return Ok(None);
+        };
+
+        let cryptor = Cryptor::try_from_string(encryption_key)
+            .map_err(|error| KeychainError::UnableToDecrypt(error.to_string()))?;
+
+        let secret_key = cryptor
+            .decrypt_from_string(&encrypted_secret_key)
+            .map_err(|error| KeychainError::UnableToDecrypt(error.to_string()))?;
+
+        let mnemonic = Mnemonic::from_str(&secret_key)
             .map_err(|error| KeychainError::UnableToParseSavedValue(error.to_string()))?;
 
         Ok(Some(mnemonic))
     }
 
     pub fn delete_wallet_key(&self, id: &WalletId) -> bool {
+        let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
         let key = wallet_mnemonic_key_name(id);
+
+        self.0.delete(encryption_key_key);
         self.0.delete(key)
     }
 
@@ -124,4 +155,8 @@ fn wallet_mnemonic_key_name(id: &WalletId) -> String {
 
 fn wallet_xpub_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_xpub")
+}
+
+fn wallet_mnemonic_encryption_and_nonce_key_name(id: &WalletId) -> String {
+    format!("{id}::wallet_mnemonic_encryption_key_and_nonce")
 }
