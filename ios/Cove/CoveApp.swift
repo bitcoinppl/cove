@@ -29,11 +29,6 @@ struct CoveApp: App {
 
         let model = MainViewModel()
         self.model = model
-
-        Task {
-            await model.rust.initAsyncRuntime()
-            Log.debug("async init")
-        }
     }
 
     var navBarColor: Color {
@@ -109,6 +104,12 @@ struct CoveApp: App {
                         }
                     } : nil
             )
+            .task {
+                await model.rust.initAsyncRuntime()
+                await MainActor.run {
+                    model.asyncRuntimeReady = true
+                }
+            }
         }
     }
 }

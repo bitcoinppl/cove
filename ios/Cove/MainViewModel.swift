@@ -7,6 +7,7 @@ import SwiftUI
     var router: Router
     var database: Database
     var isSidebarVisible = false
+    var asyncRuntimeReady = false
 
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
