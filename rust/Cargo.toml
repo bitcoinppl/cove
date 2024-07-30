@@ -96,6 +96,9 @@ url = "2.5"
 chacha20poly1305 = "0.10.1"
 data-encoding = "2.6.0"
 
+# fast hashmap
+ahash = "0.8.11"
+
 
 [build-dependencies]
 uniffi = { version = "=0.28", features = ["build"] }

@@ -1,5 +1,6 @@
-use super::amount::Amount;
 use std::sync::Arc;
+
+use crate::transaction::Amount;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct Balance {
@@ -7,6 +8,21 @@ pub struct Balance {
     pub trusted_pending: Arc<Amount>,
     pub untrusted_pending: Arc<Amount>,
     pub confirmed: Arc<Amount>,
+}
+
+impl Default for Balance {
+    fn default() -> Self {
+        bdk_wallet::Balance::default().into()
+    }
+}
+
+mod ffi {
+    use super::*;
+
+    #[uniffi::export]
+    pub fn balance_zero() -> Balance {
+        Balance::default()
+    }
 }
 
 impl From<bdk_wallet::Balance> for Balance {

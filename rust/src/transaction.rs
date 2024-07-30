@@ -1,6 +1,9 @@
+mod amount;
+mod ref_map;
+mod sent_and_received;
+
 use std::sync::Arc;
 
-use crate::wallet::amount::Amount;
 use bdk_chain::{
     bitcoin::{Sequence, Witness},
     tx_graph::CanonicalTx,
@@ -11,36 +14,36 @@ use bdk_wallet::bitcoin::{
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
 
+pub type TransactionRefMap = ref_map::TransactionRefMap;
+pub type Amount = amount::Amount;
+pub type SentAndReceived = sent_and_received::SentAndReceived;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct Transactions {
-    inner: Vec<Transaction>,
+    pub inner: Vec<Transaction>,
     tx_ref: Vec<TransactionRef>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
-pub enum TxnDirection {
-    Incoming,
-    Outgoing,
-}
-
-impl From<Vec<Transaction>> for Transactions {
-    fn from(inner: Vec<Transaction>) -> Self {
-        let tx_ref = inner
-            .iter()
-            .enumerate()
-            .map(|(index, _tx)| TransactionRef(index as u64))
-            .collect();
-
-        Self { inner, tx_ref }
-    }
 }
 
 uniffi::custom_newtype!(TransactionRef, u64);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TransactionRef(u64);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum TransactionDirection {
+    Incoming,
+    Outgoing,
+}
+
 #[uniffi::export]
 impl Transactions {
+    #[uniffi::constructor]
+    pub fn empty() -> Self {
+        Self {
+            inner: vec![],
+            tx_ref: vec![],
+        }
+    }
+
     #[uniffi::method]
     pub fn id(&self, tx_ref: TransactionRef) -> TxId {
         self.inner[tx_ref.0 as usize].txid
@@ -50,17 +53,12 @@ impl Transactions {
     pub fn into_inner(&self) -> Vec<TransactionRef> {
         self.tx_ref.clone()
     }
+}
 
-    #[uniffi::method]
-    pub fn direction_transaction(&self, tx_ref: TransactionRef) -> TxnDirection {
-        let _tx = &self.inner[tx_ref.0 as usize];
-        todo!()
+impl Transactions {
+    pub fn get(&self, tx_ref: TransactionRef) -> Option<&Transaction> {
+        self.inner.get(tx_ref.0 as usize)
     }
-
-    // #[uniffi::method]
-    // pub fn value(&self, tx_ref: TransactionRef) -> Amount {
-    //     self.inner[tx_ref.0 as usize].value
-    // }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -77,7 +75,7 @@ pub struct Transaction {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct TxId(BdkTxid);
+pub struct TxId(pub BdkTxid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct TxOut {
@@ -152,5 +150,17 @@ impl From<BdkChainPosition<&ConfirmationBlockTime>> for ChainPosition {
                 Self::Confirmed(*confirmation_blocktime)
             }
         }
+    }
+}
+
+impl From<Vec<Transaction>> for Transactions {
+    fn from(inner: Vec<Transaction>) -> Self {
+        let tx_ref = inner
+            .iter()
+            .enumerate()
+            .map(|(index, _tx)| TransactionRef(index as u64))
+            .collect();
+
+        Self { inner, tx_ref }
     }
 }

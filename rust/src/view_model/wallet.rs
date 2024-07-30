@@ -5,9 +5,10 @@ use std::sync::Arc;
 use act_zero::{call, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
+use nid::Nanoid;
 use parking_lot::RwLock;
 use tap::TapFallible as _;
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::{
     app::FfiApp,
@@ -44,6 +45,7 @@ pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustWalletViewModel {
+    pub id: Nanoid,
     pub actor: Addr<WalletActor>,
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
@@ -105,7 +107,7 @@ impl RustWalletViewModel {
         let metadata = Database::global()
             .wallets
             .get_selected_wallet(id, network)
-            .map_err(|error| Error::GetSelectedWalletError(error.to_string()))?
+            .map_err(|e| Error::GetSelectedWalletError(e.to_string()))?
             .ok_or(Error::WalletDoesNotExist)?;
 
         let id = metadata.id.clone();
@@ -113,11 +115,17 @@ impl RustWalletViewModel {
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Ok(Self {
+            id: Nanoid::new(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         })
+    }
+
+    #[uniffi::method]
+    pub async fn balance(&self) -> Balance {
+        call!(self.actor.balance()).await.unwrap_or_default()
     }
 
     #[uniffi::method]
@@ -162,12 +170,8 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn transactions(&self) -> Transactions {
-        todo!()
-    }
-
-    #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
+        debug!("start_wallet_scan: {}", self.id);
         use WalletViewModelReconcileMessage as Msg;
 
         // notify the frontend that the wallet is starting to scan
@@ -203,13 +207,11 @@ impl RustWalletViewModel {
 
             self.send(Msg::WalletBalanceChanged(balance));
 
-            //get and send transactions
-            let transactions = call!(self.actor.transactions())
+            // get and send transactions
+            let transactions: Arc<Transactions> = call!(self.actor.transactions())
                 .await
                 .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
                 .into();
-
-            println!("{:?}", transactions);
 
             self.send(Msg::ScanComplete(transactions));
         }
@@ -320,6 +322,7 @@ impl RustWalletViewModel {
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Self {
+            id: Nanoid::new(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,

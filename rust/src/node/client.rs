@@ -9,6 +9,7 @@ use bdk_wallet::{
     },
     KeychainKind,
 };
+use tracing::debug;
 
 use crate::node::Node;
 
@@ -106,11 +107,12 @@ impl NodeClient {
         tx_graph: &TxGraph<ConfirmationBlockTime>,
         full_scan_request: FullScanRequest<KeychainKind>,
     ) -> Result<FullScanResult<KeychainKind>, Error> {
-        // TODO: uncomment when this is merged: https://github.com/bitcoindevkit/bdk/pull/1491
         if let NodeClient::Electrum(client) = self {
+            debug!("start populate_tx_cache");
             let client = client.clone();
             let tx_graph = tx_graph.clone();
             crate::unblock::run_blocking(move || client.populate_tx_cache(tx_graph)).await;
+            debug!("populate_tx_cache done");
         }
 
         let full_scan_result = match self {

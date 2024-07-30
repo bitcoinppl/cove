@@ -1,4 +1,3 @@
-import ActivityIndicatorView
 import PopupView
 import SwiftUI
 
@@ -21,9 +20,9 @@ struct SettingsView: View {
             0
         case .loading:
             nil
-        case .failure(let string):
+        case .failure:
             nil
-        case .success(let string):
+        case .success:
             5
         }
     }

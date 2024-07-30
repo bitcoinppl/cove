@@ -1,7 +1,19 @@
+use bdk_wallet::bitcoin::Amount as BdkAmount;
+
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Object, derive_more::From, derive_more::Deref,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    uniffi::Object,
+    derive_more::From,
+    derive_more::Deref,
 )]
-pub struct Amount(bitcoin_units::Amount);
+pub struct Amount(BdkAmount);
 
 #[uniffi::export]
 impl Amount {
@@ -15,11 +27,11 @@ impl Amount {
         Self(bitcoin_units::Amount::ONE_SAT)
     }
 
-    pub fn to_btc(&self) -> f64 {
+    pub fn as_btc(&self) -> f64 {
         self.0.to_btc()
     }
 
-    pub fn to_sats(&self) -> u64 {
+    pub fn as_sats(&self) -> u64 {
         self.0.to_sat()
     }
 }

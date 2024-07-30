@@ -1,4 +1,3 @@
-pub mod amount;
 pub mod balance;
 pub mod fingerprint;
 pub mod metadata;

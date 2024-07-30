@@ -79,8 +79,12 @@ struct SelectedWalletViewInner: View {
         .sheet(isPresented: $showSettings) {
             WalletSettingsView(model: model)
         }
-        .onAppear{
-            
+        .task {
+            do {
+                try await model.rust.startWalletScan()
+            } catch {
+                Log.error("Wallet Scan Failed \(error.localizedDescription)")
+            }
         }
     }
 }

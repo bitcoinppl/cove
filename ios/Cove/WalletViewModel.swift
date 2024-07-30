@@ -7,6 +7,7 @@ import SwiftUI
     var rust: RustWalletViewModel
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
+    var balance: Balance = .init()
 
     public init(id: WalletId) throws {
         self.id = id
@@ -29,17 +30,27 @@ import SwiftUI
 
                 switch message {
                 case .startedWalletScan:
-                    ()
+                    loadState = .loading
+
+                case let .availableTransactions(txns):
+                    loadState = .scanning(txns)
+
+                case let .scanComplete(txns):
+                    loadState = .loaded(txns)
+
+                case .walletBalanceChanged:
+                    Task {
+                        let balance = await rust.balance()
+                        await MainActor.run {
+                            self.balance = balance
+                        }
+                    }
+
                 case let .walletMetadataChanged(metadata):
                     walletMetadata = metadata
-                case let .availableTransactions(txns):
-                    ()
+
                 case let .nodeConnectionFailed(error):
                     logger.error(error)
-                case let .scanComplete(txns):
-                    ()
-                case .walletBalanceChanged:
-                    ()
                 }
             }
         }
