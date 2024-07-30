@@ -16,62 +16,72 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         let rust = try RustWalletViewModel(id: id)
 
         self.rust = rust
-        walletMetadata = rust.walletMetadata()
+        self.walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
     var isVerified: Bool {
-        walletMetadata.verified
+        self.walletMetadata.verified
     }
 
     func reconcile(message: WalletViewModelReconcileMessage) {
-        Task {
-            await MainActor.run {
-                logger.debug("Reconcile: \(message)")
+        let rust = self.rust
 
-                switch message {
-                case .startedWalletScan:
-                    loadState = .loading
+        self.logger.debug("Reconcile: \(message)")
 
-                case let .availableTransactions(txns):
-                    loadState = .scanning(txns)
+        switch message {
+        case .startedWalletScan:
+            self.loadState = .loading
 
-                case let .scanComplete(txns):
-                    loadState = .loaded(txns)
+        case let .availableTransactions(txns):
+            self.loadState = .scanning(txns)
 
-                case .walletBalanceChanged:
-                    Task {
-                        let balance = await rust.balance()
-                        await MainActor.run {
-                            self.balance = balance
-                        }
-                    }
+        case let .scanComplete(txns):
+            self.loadState = .loaded(txns)
 
-                case let .walletMetadataChanged(metadata):
-                    walletMetadata = metadata
-
-                case let .nodeConnectionFailed(error):
-                    logger.error(error)
+        case .walletBalanceChanged:
+            Task {
+                let balance = await rust.balance()
+                await MainActor.run {
+                    self.balance = balance
                 }
             }
+
+        case let .walletMetadataChanged(metadata):
+            self.walletMetadata = metadata
+
+        case let .nodeConnectionFailed(error):
+            self.logger.error(error)
         }
     }
 
     public func dispatch(action: WalletViewModelAction) {
-        rust.dispatch(action: action)
+        self.rust.dispatch(action: action)
     }
 
     // PREVIEW only
     public init(preview: String) {
         assert(preview == "preview_only")
 
-        id = WalletId()
+        self.id = WalletId()
         let rust = RustWalletViewModel.previewNewWallet()
 
         self.rust = rust
-        walletMetadata = rust.walletMetadata()
+        self.walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: self)
+    }
+}
+
+private class WeakReconciler: WalletViewModelReconciler {
+    weak var reconciler: WalletViewModelReconciler?
+
+    init(_ reconciler: WalletViewModelReconciler) {
+        self.reconciler = reconciler
+    }
+
+    func reconcile(message: WalletViewModelReconcileMessage) {
+        self.reconciler?.reconcile(message: message)
     }
 }

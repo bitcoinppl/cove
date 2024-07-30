@@ -14,6 +14,18 @@ struct SelectedWalletView: View {
     let id: WalletId
     @State private var model: WalletViewModel? = nil
 
+    func loadModel() {
+        if model != nil { return }
+
+        do {
+            Log.debug("Getting wallet \(id)")
+            model = try WalletViewModel(id: id)
+        } catch {
+            Log.error("Something went very wrong: \(error)")
+            navigate(Route.listWallets)
+        }
+    }
+
     var body: some View {
         Group {
             if let model = model {
@@ -22,15 +34,8 @@ struct SelectedWalletView: View {
                 Text("Loading...")
             }
         }
-        .onAppear {
-            do {
-                Log.debug("Getting wallet \(id)")
-                model = try WalletViewModel(id: id)
-            } catch {
-                Log.error("Something went very wrong: \(error)")
-                navigate(Route.listWallets)
-            }
-        }
+
+        .onAppear(perform: loadModel)
         .tint(.white)
         .enableInjection()
     }

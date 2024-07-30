@@ -330,3 +330,10 @@ impl RustWalletViewModel {
         }
     }
 }
+
+impl Drop for RustWalletViewModel {
+    fn drop(&mut self) {
+        debug!("[DROP] Dropping wallet view model {}", self.id);
+        // self.actor.stop();
+    }
+}

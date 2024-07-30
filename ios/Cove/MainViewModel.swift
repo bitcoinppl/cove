@@ -12,6 +12,9 @@ import SwiftUI
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
 
+    @ObservationIgnored
+    weak var walletViewModel: WalletViewModel?
+
     public var selectedNetwork: Network {
         rust.network()
     }
@@ -38,6 +41,20 @@ import SwiftUI
         database = Database()
 
         self.rust.listenForUpdates(updater: self)
+    }
+
+    public func getWalletViewModel(id: WalletId) throws -> WalletViewModel {
+        if let walletvm = walletViewModel, walletvm.id == id {
+            logger.debug("found and using vm for \(id)")
+            return walletvm
+        }
+
+        logger.debug("did not find vm for \(id), creating new vm: \(walletViewModel?.id ?? "none")")
+
+        let walletvm = try WalletViewModel(id: id)
+        walletViewModel = walletvm
+
+        return walletViewModel!
     }
 
     var currentRoute: Route {

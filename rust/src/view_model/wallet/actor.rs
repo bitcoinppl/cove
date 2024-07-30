@@ -15,7 +15,7 @@ use super::WalletViewModelReconcileMessage;
 #[derive(Debug)]
 pub struct WalletActor {
     pub id: Nanoid,
-    pub addr: Addr<Self>,
+    pub addr: WeakAddr<Self>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
@@ -26,7 +26,7 @@ pub struct WalletActor {
 #[async_trait::async_trait]
 impl Actor for WalletActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
-        self.addr = addr;
+        self.addr = addr.downgrade();
         Produces::ok(())
     }
 
@@ -108,12 +108,13 @@ impl WalletActor {
 
         let full_scan_request = self.wallet.start_full_scan();
 
-        debug!("starting full scan");
+        debug!("starting full scan {}", self.id);
         let mut full_scan_result = node_client
             .start_wallet_scan(graph, full_scan_request)
             .await?;
 
-        debug!("applying full scan result");
+        debug!("applying full scan result: {}", self.id);
+
         let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
         let _ = full_scan_result
             .graph_update
@@ -132,5 +133,11 @@ impl WalletActor {
 
         let transactions = Transactions::from(transactions);
         Produces::ok(transactions)
+    }
+}
+
+impl Drop for WalletActor {
+    fn drop(&mut self) {
+        debug!("[DROP] Dropping wallet actor for id: {}", self.id);
     }
 }
