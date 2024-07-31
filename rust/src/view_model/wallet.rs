@@ -5,7 +5,6 @@ use std::sync::Arc;
 use act_zero::{call, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
-use nid::Nanoid;
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
@@ -45,7 +44,7 @@ pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustWalletViewModel {
-    pub id: Nanoid,
+    pub id: WalletId,
     pub actor: Addr<WalletActor>,
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
@@ -111,11 +110,11 @@ impl RustWalletViewModel {
             .ok_or(Error::WalletDoesNotExist)?;
 
         let id = metadata.id.clone();
-        let wallet = Wallet::try_load_persisted(id)?;
+        let wallet = Wallet::try_load_persisted(id.clone())?;
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Ok(Self {
-            id: Nanoid::new(),
+            id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
@@ -322,7 +321,7 @@ impl RustWalletViewModel {
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Self {
-            id: Nanoid::new(),
+            id: metadata.id.clone(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
@@ -333,7 +332,6 @@ impl RustWalletViewModel {
 
 impl Drop for RustWalletViewModel {
     fn drop(&mut self) {
-        debug!("[DROP] Dropping wallet view model {}", self.id);
-        // self.actor.stop();
+        debug!("[DROP] Wallet View Model");
     }
 }

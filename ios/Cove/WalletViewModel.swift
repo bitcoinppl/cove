@@ -25,6 +25,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         self.walletMetadata.verified
     }
 
+    @MainActor
     func reconcile(message: WalletViewModelReconcileMessage) {
         let rust = self.rust
 
@@ -71,17 +72,5 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         self.walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: self)
-    }
-}
-
-private class WeakReconciler: WalletViewModelReconciler {
-    weak var reconciler: WalletViewModelReconciler?
-
-    init(_ reconciler: WalletViewModelReconciler) {
-        self.reconciler = reconciler
-    }
-
-    func reconcile(message: WalletViewModelReconcileMessage) {
-        self.reconciler?.reconcile(message: message)
     }
 }

@@ -6,7 +6,6 @@ use crate::{
 };
 use act_zero::*;
 use crossbeam::channel::Sender;
-use nid::Nanoid;
 use tokio::time::Instant;
 use tracing::{debug, error, info};
 
@@ -14,7 +13,6 @@ use super::WalletViewModelReconcileMessage;
 
 #[derive(Debug)]
 pub struct WalletActor {
-    pub id: Nanoid,
     pub addr: WeakAddr<Self>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub wallet: Wallet,
@@ -39,7 +37,6 @@ impl Actor for WalletActor {
 impl WalletActor {
     pub fn new(wallet: Wallet, reconciler: Sender<WalletViewModelReconcileMessage>) -> Self {
         Self {
-            id: Nanoid::new(),
             addr: Default::default(),
             reconciler,
             wallet,
@@ -75,7 +72,7 @@ impl WalletActor {
 
     pub async fn start_wallet_scan(&mut self) -> ActorResult<()> {
         use WalletViewModelReconcileMessage as Msg;
-        debug!("start_wallet_scan: {}", self.id);
+        debug!("start_wallet_scan");
 
         if let Some(last_scan) = self.last_scan_finished {
             if last_scan.elapsed().as_secs() < 10 {
@@ -108,12 +105,12 @@ impl WalletActor {
 
         let full_scan_request = self.wallet.start_full_scan();
 
-        debug!("starting full scan {}", self.id);
+        debug!("starting full scan");
         let mut full_scan_result = node_client
             .start_wallet_scan(graph, full_scan_request)
             .await?;
 
-        debug!("applying full scan result: {}", self.id);
+        debug!("applying full scan result");
 
         let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
         let _ = full_scan_result
@@ -138,6 +135,6 @@ impl WalletActor {
 
 impl Drop for WalletActor {
     fn drop(&mut self) {
-        debug!("[DROP] Dropping wallet actor for id: {}", self.id);
+        debug!("[DROP] Wallet Actor");
     }
 }
