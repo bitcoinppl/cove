@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bdk_chain::spk_client::{SyncRequest, SyncResult};
 use bdk_electrum::electrum_client::{self, ElectrumApi};
 use bdk_esplora::{esplora_client, EsploraAsyncExt as _};
 use bdk_wallet::{
@@ -121,11 +122,47 @@ impl NodeClient {
                 .await
                 .map_err(Error::EsploraScanError)?,
 
-            NodeClient::Electrum(client) => client
-                .full_scan(full_scan_request, STOP_GAP, BATCH_SIZE, false)
-                .map_err(Error::ElectrumScanError)?,
+            NodeClient::Electrum(client) => {
+                let client = client.clone();
+                crate::unblock::run_blocking(move || {
+                    client.full_scan(full_scan_request, STOP_GAP, BATCH_SIZE, false)
+                })
+                .await
+                .map_err(Error::ElectrumScanError)?
+            }
         };
 
         Ok(full_scan_result)
+    }
+
+    pub async fn sync(
+        &self,
+        tx_graph: &TxGraph<ConfirmationBlockTime>,
+        scan_request: SyncRequest,
+    ) -> Result<SyncResult, Error> {
+        if let NodeClient::Electrum(client) = self {
+            debug!("start populate_tx_cache");
+            let client = client.clone();
+            let tx_graph = tx_graph.clone();
+            crate::unblock::run_blocking(move || client.populate_tx_cache(tx_graph)).await;
+            debug!("populate_tx_cache done");
+        }
+
+        let scan_result = match self {
+            NodeClient::Esplora(client) => client
+                .sync(scan_request, BATCH_SIZE)
+                .await
+                .map_err(Error::EsploraScanError)?,
+
+            NodeClient::Electrum(client) => {
+                let client = client.clone();
+
+                crate::unblock::run_blocking(move || client.sync(scan_request, BATCH_SIZE, false))
+                    .await
+                    .map_err(Error::ElectrumScanError)?
+            }
+        };
+
+        Ok(scan_result)
     }
 }
