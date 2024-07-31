@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    app::FfiApp,
-    database::Database,
-    impl_default_for,
-    wallet::{NumberOfBip39Words, WalletId},
+    app::FfiApp, database::Database, impl_default_for, mnemonic::NumberOfBip39Words,
+    wallet::metadata::WalletId,
 };
+
 use derive_more::From;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]

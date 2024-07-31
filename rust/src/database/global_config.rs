@@ -7,7 +7,7 @@ use crate::{
     color_scheme::ColorSchemeSelection,
     network::Network,
     node::Node,
-    wallet::WalletId,
+    wallet::metadata::WalletId,
 };
 
 use super::{error::SerdeError, Error};

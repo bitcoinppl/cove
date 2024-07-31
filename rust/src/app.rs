@@ -11,13 +11,13 @@ use crate::{
     network::Network,
     node::Node,
     router::{Route, Router},
-    wallet::WalletId,
+    wallet::metadata::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
-use tracing::{debug, error};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage, FfiReconcile, Updater};
+use tracing::{debug, error};
 
 pub static APP: OnceCell<App> = OnceCell::new();
 
@@ -166,7 +166,7 @@ impl App {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct FfiApp;
 
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 impl FfiApp {
     /// FFI constructor which wraps in an Arc
     #[uniffi::constructor(name = "new")]
@@ -219,6 +219,14 @@ impl FfiApp {
         Updater::send_update(AppStateReconcileMessage::DefaultRouteChanged(route));
     }
 
+    pub fn state(&self) -> AppState {
+        self.inner().get_state()
+    }
+
+    pub fn network(&self) -> Network {
+        Database::global().global_config.selected_network()
+    }
+
     /// Frontend calls this method to send events to the rust application logic
     pub fn dispatch(&self, action: AppAction) {
         self.inner().handle_action(action);
@@ -228,12 +236,9 @@ impl FfiApp {
         self.inner().listen_for_updates(updater);
     }
 
-    pub fn state(&self) -> AppState {
-        self.inner().get_state()
-    }
-
-    pub fn network(&self) -> Network {
-        Database::global().global_config.selected_network()
+    /// call an async function on app load so it initializes the async runtime
+    pub async fn init_async_runtime(&self) {
+        crate::task::init_tokio();
     }
 }
 

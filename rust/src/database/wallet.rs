@@ -1,13 +1,13 @@
 use std::{fmt::Display, sync::Arc};
 
-use tracing::debug;
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
+use tracing::debug;
 
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
     network::Network,
     redb::Json,
-    wallet::{WalletId, WalletMetadata},
+    wallet::metadata::{WalletId, WalletMetadata},
 };
 
 use super::{Database, Error};
@@ -63,7 +63,7 @@ impl WalletTable {
     }
 
     pub fn len(&self, network: Network) -> Result<u16, Error> {
-        let count = self.get(network).map(|wallets| wallets.len() as u16)?;
+        let count = self.get_all(network).map(|wallets| wallets.len() as u16)?;
         Ok(count)
     }
 
@@ -71,7 +71,7 @@ impl WalletTable {
         let network = Database::global().global_config.selected_network();
 
         debug!("getting all wallets for {network}");
-        let wallets = self.get(network)?;
+        let wallets = self.get_all(network)?;
 
         Ok(wallets)
     }
@@ -85,28 +85,9 @@ impl WalletTable {
         Self { db }
     }
 
-    pub fn get_selected_wallet(
-        &self,
-        id: WalletId,
-        network: Network,
-    ) -> Result<Option<WalletMetadata>, Error> {
-        let table = self.read_table()?;
-        let key = WalletKey::from(network).to_string();
-
-        let value = table
-            .get(key.as_str())
-            .map_err(|error| WalletTableError::ReadError(error.to_string()))?
-            .map(|value| value.value())
-            .expect("wallets not found");
-
-        let wallet_metadata = value.iter().find(|wallet| wallet.id == id).cloned();
-
-        Ok(wallet_metadata)
-    }
-
     pub fn mark_wallet_as_verified(&self, id: WalletId) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
-        let mut wallets = self.get(network)?;
+        let mut wallets = self.get_all(network)?;
 
         // update the wallet
         wallets.iter_mut().for_each(|wallet| {
@@ -120,9 +101,31 @@ impl WalletTable {
         Ok(())
     }
 
+    /// Get a wallet by id for that network
+    pub fn get(&self, id: &WalletId, network: Network) -> Result<Option<WalletMetadata>, Error> {
+        let wallets = self.get_all(network)?;
+        let wallet = wallets.into_iter().find(|wallet| &wallet.id == id);
+
+        Ok(wallet)
+    }
+
+    /// Get all wallets for a network
+    pub fn get_all(&self, network: Network) -> Result<Vec<WalletMetadata>, Error> {
+        let table = self.read_table()?;
+        let key = WalletKey::from(network).to_string();
+
+        let value = table
+            .get(key.as_str())
+            .map_err(|error| WalletTableError::ReadError(error.to_string()))?
+            .map(|value| value.value())
+            .unwrap_or(vec![]);
+
+        Ok(value)
+    }
+
     pub fn update_wallet_metadata(&self, metadata: WalletMetadata) -> Result<(), Error> {
         let network = metadata.network;
-        let mut wallets = self.get(network)?;
+        let mut wallets = self.get_all(network)?;
 
         // update the wallet
         wallets.iter_mut().for_each(|wallet| {
@@ -138,7 +141,7 @@ impl WalletTable {
 
     pub fn delete(&self, id: &WalletId) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
-        let mut wallets = self.get(network)?;
+        let mut wallets = self.get_all(network)?;
 
         wallets.retain(|wallet| &wallet.id != id);
         self.save_all_wallets(network, wallets)?;
@@ -146,22 +149,9 @@ impl WalletTable {
         Ok(())
     }
 
-    pub fn get(&self, network: Network) -> Result<Vec<WalletMetadata>, Error> {
-        let table = self.read_table()?;
-        let key = WalletKey::from(network).to_string();
-
-        let value = table
-            .get(key.as_str())
-            .map_err(|error| WalletTableError::ReadError(error.to_string()))?
-            .map(|value| value.value())
-            .unwrap_or(vec![]);
-
-        Ok(value)
-    }
-
     pub fn save_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
         let network = wallet.network;
-        let mut wallets = self.get(network)?;
+        let mut wallets = self.get_all(network)?;
 
         wallets.push(wallet);
         self.save_all_wallets(network, wallets)?;

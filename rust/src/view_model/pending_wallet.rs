@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
+use tracing::error;
 
 use crate::{
     database::{self, Database},
-    keychain::{Keychain, KeychainError},
-    mnemonic::{MnemonicExt as _, WordAccess as _},
+    keychain::KeychainError,
+    mnemonic::{GroupedWord, NumberOfBip39Words, WordAccess as _},
     pending_wallet::PendingWallet,
-    wallet::{GroupedWord, NumberOfBip39Words, WalletMetadata},
+    wallet::{metadata::WalletMetadata, Wallet},
 };
 
 type Error = PendingWalletViewModelError;
@@ -68,6 +69,9 @@ pub enum WalletCreationError {
 
     #[error("failed to save wallet: {0}")]
     DatabaseError(#[from] database::Error),
+
+    #[error("persist error: {0}")]
+    PersisError(String),
 }
 
 #[uniffi::export]
@@ -107,41 +111,21 @@ impl RustPendingWalletViewModel {
 
     #[uniffi::method]
     pub fn save_wallet(&self) -> Result<WalletMetadata, Error> {
-        let state = self.state.read();
-
         // get current number of wallets and add one;
         let number_of_wallets = Database::global()
             .wallets
-            .len(state.wallet.network)
+            .len(self.state.read().wallet.network)
             .unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
         let wallet_metadata = WalletMetadata::new(name);
 
-        let keychain = Keychain::global();
-
-        // save mnemonic for private key
-        keychain
-            .save_wallet_key(&wallet_metadata.id, state.wallet.mnemonic.clone())
-            .map_err(WalletCreationError::from)?;
-
-        // save public key in keychain too
-        let xpub = state.wallet.mnemonic.xpub(wallet_metadata.network.into());
-        keychain
-            .save_wallet_xpub(&wallet_metadata.id, xpub)
-            .map_err(WalletCreationError::from)?;
-
-        let database = Database::global();
-        database
-            .wallets
-            .save_wallet(wallet_metadata.clone())
-            .map_err(WalletCreationError::from)?;
-
-        // set this wallet as the selected wallet
-        database
-            .global_config
-            .select_wallet(wallet_metadata.id.clone())
-            .map_err(WalletCreationError::from)?;
+        // create, persist and select the wallet
+        Wallet::try_new_persisted_and_selected(
+            wallet_metadata.clone(),
+            self.state.read().wallet.mnemonic.clone(),
+            None,
+        )?;
 
         Ok(wallet_metadata)
     }
@@ -188,6 +172,32 @@ impl PendingWalletViewModelState {
         Self {
             number_of_words,
             wallet: PendingWallet::new(number_of_words, None).into(),
+        }
+    }
+}
+
+impl From<crate::wallet::WalletError> for PendingWalletViewModelError {
+    fn from(error: crate::wallet::WalletError) -> Self {
+        WalletCreationError::from(error).into()
+    }
+}
+
+impl From<crate::wallet::WalletError> for WalletCreationError {
+    fn from(error: crate::wallet::WalletError) -> Self {
+        use crate::wallet::WalletError;
+
+        match error {
+            WalletError::KeychainError(error) => Self::KeychainError(error),
+            WalletError::DatabaseError(error) => Self::DatabaseError(error),
+            WalletError::BdkError(error) => Self::BdkError(error),
+            WalletError::PersistError(error) => Self::PersisError(error),
+
+            WalletError::WalletNotFound => unreachable!("no wallet found in creation"),
+            WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),
+            WalletError::MetadataNotFound => unreachable!("no metadata found in creation"),
+            WalletError::UnsupportedWallet(error) => {
+                unreachable!("unreachable unsupported wallet: {error}")
+            }
         }
     }
 }

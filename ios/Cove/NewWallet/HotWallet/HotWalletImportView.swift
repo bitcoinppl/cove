@@ -82,6 +82,8 @@ struct HotWalletImportView: View {
                 Log.error("Unable to save wallet to keychain: \(keychainError)")
             case let .DatabaseError(databaseError):
                 Log.error("Unable to save wallet metadata to database: \(databaseError)")
+            case let .BdkError(error):
+                Log.error("Unable to import wallet: \(error)")
             }
         } catch {
             Log.error("Unknown error \(error)")

@@ -27,7 +27,8 @@ struct CoveApp: App {
         // initialize keychain
         _ = Keychain(keychain: KeychainAccessor())
 
-        model = MainViewModel()
+        let model = MainViewModel()
+        self.model = model
     }
 
     var navBarColor: Color {
@@ -103,6 +104,12 @@ struct CoveApp: App {
                         }
                     } : nil
             )
+            .task {
+                await model.rust.initAsyncRuntime()
+                await MainActor.run {
+                    model.asyncRuntimeReady = true
+                }
+            }
         }
     }
 }

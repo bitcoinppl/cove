@@ -1,11 +1,11 @@
+pub mod client;
+
 use crate::{
     network::Network,
     node_connect::{NodeSelection, BITCOIN_ESPLORA},
 };
 
-use bdk_electrum::electrum_client::{self, ElectrumApi};
-use bdk_esplora::esplora_client;
-use eyre::Context as _;
+use client::NodeClient;
 
 #[derive(
     Debug,
@@ -34,6 +34,12 @@ pub struct Node {
     pub network: Network,
     pub api_type: ApiType,
     pub url: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("failed to check node url: {0}")]
+    CheckUrlError(#[from] client::Error),
 }
 
 impl Default for Node {
@@ -68,40 +74,11 @@ impl Node {
         }
     }
 
-    pub async fn check_url(&self) -> eyre::Result<()> {
-        match self.api_type {
-            ApiType::Esplora => {
-                let client = esplora_client::Builder::new(&self.url)
-                    .build_async()
-                    .wrap_err("failed to create esplora client")?;
+    pub async fn check_url(&self) -> Result<(), Error> {
+        let client = NodeClient::new_from_node(self).await?;
+        client.check_url().await?;
 
-                client
-                    .get_height()
-                    .await
-                    .wrap_err("failed to connect to esplora node")?;
-
-                Ok(())
-            }
-
-            ApiType::Electrum => {
-                println!("checking electrum node at {:?}", self.url);
-                let url = self.url.strip_suffix('/').unwrap_or(&self.url);
-
-                let client = electrum_client::Client::new(url)
-                    .wrap_err("failed to create electrum client")?;
-
-                crate::unblock::run_blocking(move || client.ping())
-                    .await
-                    .wrap_err("failed to connect to electrum node")?;
-
-                Ok(())
-            }
-
-            ApiType::Rpc => {
-                // TODO: implement rpc check, with auth
-                todo!()
-            }
-        }
+        Ok(())
     }
 }
 

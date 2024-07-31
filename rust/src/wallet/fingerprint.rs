@@ -1,4 +1,4 @@
-use crate::{keychain::Keychain, wallet::WalletId};
+use crate::{keychain::Keychain, wallet::metadata::WalletId};
 use bdk_wallet::bitcoin::bip32::Fingerprint as BdkFingerprint;
 
 #[derive(Debug, Clone, uniffi::Object, derive_more::From, PartialEq, Eq, PartialOrd, Ord)]

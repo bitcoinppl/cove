@@ -1,3 +1,4 @@
+import ActivityIndicatorView
 import SwiftUI
 
 struct RouteView: View {
@@ -11,8 +12,18 @@ struct RouteView: View {
 
     var body: some View {
         ZStack {
-            routeToView(model: model, route: route)
-        }.onChange(of: model.router.default) { _, newRoute in
+            if model.asyncRuntimeReady {
+                routeToView(model: model, route: route)
+            } else {
+                VStack {
+                    ActivityIndicatorView(isVisible: Binding.constant(true), type: .growingArc(.orange, lineWidth: 4))
+                        .frame(width: 75, height: 75)
+                        .padding(.bottom, 100)
+                        .foregroundColor(.orange)
+                }
+            }
+        }
+        .onChange(of: model.router.default) { _, newRoute in
             self.route = newRoute
         }
         .enableInjection()

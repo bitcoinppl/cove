@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		09890D7BB033D5000D5EFA66 /* Balance+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9EF236DBA6E27BF588A0776 /* Balance+Ext.swift */; };
 		0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */; };
 		1BE5607DDD79FE6FA8A6B6F0 /* ImportWalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */; };
 		2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19224F788C8E6EEDE418212E /* ColorSchemeSelection+Ext.swift */; };
@@ -49,6 +50,7 @@
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
 		ACF44D142C2857E9008C5034 /* FixedGlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* FixedGlassCard.swift */; };
+		ACF479F82C59D785008A9362 /* WeakReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF479F72C59D785008A9362 /* WeakReconciler.swift */; };
 		ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = ACF5B3482C2BA4BC00DDDEB9 /* Inject */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
@@ -108,6 +110,8 @@
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
 		ACF44D132C2857E9008C5034 /* FixedGlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixedGlassCard.swift; sourceTree = "<group>"; };
+		ACF479F72C59D785008A9362 /* WeakReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeakReconciler.swift; sourceTree = "<group>"; };
+		C9EF236DBA6E27BF588A0776 /* Balance+Ext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Balance+Ext.swift"; sourceTree = "<group>"; };
 		D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Cove.xcframework; path = ../rust/ios/Cove.xcframework; sourceTree = "<group>"; };
 		D000B2F12C0F7BB100E32143 /* Cove.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Cove.swift; path = ../../rust/ios/Cove/Cove.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -155,6 +159,7 @@
 				AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */,
 				AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */,
 				AC1290302C4EE8A500E72ECF /* Result+Ext.swift */,
+				C9EF236DBA6E27BF588A0776 /* Balance+Ext.swift */,
 			);
 			path = Extention;
 			sourceTree = "<group>";
@@ -193,6 +198,14 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
+		ACF479F62C59D76E008A9362 /* FFI */ = {
+			isa = PBXGroup;
+			children = (
+				ACF479F72C59D785008A9362 /* WeakReconciler.swift */,
+			);
+			path = FFI;
+			sourceTree = "<group>";
+		};
 		D0245F432C0F7B4E0042B447 = {
 			isa = PBXGroup;
 			children = (
@@ -214,6 +227,7 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				ACF479F62C59D76E008A9362 /* FFI */,
 				D000B2F12C0F7BB100E32143 /* Cove.swift */,
 				AC97D1ED2C287FCE00873092 /* Styles */,
 				ACF44D102C2642BA008C5034 /* Components */,
@@ -285,7 +299,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 1540;
 				TargetAttributes = {
 					D0245F4B2C0F7B4E0042B447 = {
 						CreatedOnToolsVersion = 15.0.1;
@@ -373,6 +387,8 @@
 				4998F4A296FA2217EC2BD80F /* WalletSettings.swift in Sources */,
 				1BE5607DDD79FE6FA8A6B6F0 /* ImportWalletViewModel.swift in Sources */,
 				AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */,
+				ACF479F82C59D785008A9362 /* WeakReconciler.swift in Sources */,
+				09890D7BB033D5000D5EFA66 /* Balance+Ext.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
