@@ -4059,16 +4059,22 @@ public struct WalletMetadata {
     public var verified: Bool
     public var network: Network
     public var performedFullScan: Bool
+    public var selectedUnit: Unit
+    public var selectedFiatCurrency: String
+    public var sensitiveVisible: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool) {
         self.id = id
         self.name = name
         self.color = color
         self.verified = verified
         self.network = network
         self.performedFullScan = performedFullScan
+        self.selectedUnit = selectedUnit
+        self.selectedFiatCurrency = selectedFiatCurrency
+        self.sensitiveVisible = sensitiveVisible
     }
 }
 
@@ -4092,6 +4098,15 @@ extension WalletMetadata: Equatable, Hashable {
         if lhs.performedFullScan != rhs.performedFullScan {
             return false
         }
+        if lhs.selectedUnit != rhs.selectedUnit {
+            return false
+        }
+        if lhs.selectedFiatCurrency != rhs.selectedFiatCurrency {
+            return false
+        }
+        if lhs.sensitiveVisible != rhs.sensitiveVisible {
+            return false
+        }
         return true
     }
 
@@ -4102,6 +4117,9 @@ extension WalletMetadata: Equatable, Hashable {
         hasher.combine(verified)
         hasher.combine(network)
         hasher.combine(performedFullScan)
+        hasher.combine(selectedUnit)
+        hasher.combine(selectedFiatCurrency)
+        hasher.combine(sensitiveVisible)
     }
 }
 
@@ -4114,7 +4132,10 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 color: FfiConverterTypeWalletColor.read(from: &buf),
                 verified: FfiConverterBool.read(from: &buf),
                 network: FfiConverterTypeNetwork.read(from: &buf),
-                performedFullScan: FfiConverterBool.read(from: &buf)
+                performedFullScan: FfiConverterBool.read(from: &buf),
+                selectedUnit: FfiConverterTypeUnit.read(from: &buf),
+                selectedFiatCurrency: FfiConverterString.read(from: &buf),
+                sensitiveVisible: FfiConverterBool.read(from: &buf)
             )
     }
 
@@ -4125,6 +4146,9 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.verified, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterBool.write(value.performedFullScan, into: &buf)
+        FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
+        FfiConverterString.write(value.selectedFiatCurrency, into: &buf)
+        FfiConverterBool.write(value.sensitiveVisible, into: &buf)
     }
 }
 
@@ -5909,6 +5933,11 @@ public enum WalletViewModelAction {
     )
     case updateColor(WalletColor
     )
+    case updateUnit(Unit
+    )
+    case updateFiatCurrency(String
+    )
+    case toggleSensitiveVisibility
 }
 
 public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
@@ -5923,6 +5952,14 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
         case 2: return try .updateColor(FfiConverterTypeWalletColor.read(from: &buf)
             )
 
+        case 3: return try .updateUnit(FfiConverterTypeUnit.read(from: &buf)
+            )
+
+        case 4: return try .updateFiatCurrency(FfiConverterString.read(from: &buf)
+            )
+
+        case 5: return .toggleSensitiveVisibility
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5936,6 +5973,17 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
         case let .updateColor(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeWalletColor.write(v1, into: &buf)
+
+        case let .updateUnit(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeUnit.write(v1, into: &buf)
+
+        case let .updateFiatCurrency(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+
+        case .toggleSensitiveVisibility:
+            writeInt(&buf, Int32(5))
         }
     }
 }
@@ -7035,6 +7083,13 @@ public func unitToString(unit: Unit) -> String {
     })
 }
 
+public func walletMetadataPreview() -> WalletMetadata {
+    return try! FfiConverterTypeWalletMetadata.lift(try! rustCall {
+        uniffi_cove_fn_func_wallet_metadata_preview($0
+        )
+    })
+}
+
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -7082,6 +7137,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_unit_to_string() != 63080 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_wallet_metadata_preview() != 1229 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_amount_as_btc() != 7531 {

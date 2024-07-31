@@ -18,6 +18,7 @@ use bdk_wallet::bitcoin::{
 pub type TransactionRefMap = ref_map::TransactionRefMap;
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
+pub type Unit = unit::Unit;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct Transactions {

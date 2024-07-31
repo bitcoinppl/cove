@@ -1,5 +1,5 @@
 use bdk_wallet::bitcoin::Amount as BdkAmount;
-
+use numfmt::{Formatter, Precision};
 #[derive(
     Debug,
     Clone,
@@ -36,15 +36,22 @@ impl Amount {
         self.0.to_btc()
     }
 
+    pub fn as_sats(&self) -> u64 {
+        self.0.to_sat()
+    }
+
     pub fn btc_string(&self) -> String {
         format!("{:.8} BTC", self.as_btc())
     }
 
     pub fn sats_string(&self) -> String {
-        format!("{} SATS", self.as_sats())
-    }
+        let mut f = Formatter::new()
+            .separator(',')
+            .unwrap()
+            .suffix(" SATS")
+            .unwrap()
+            .precision(Precision::Decimals(0));
 
-    pub fn as_sats(&self) -> u64 {
-        self.0.to_sat()
+        f.fmt2(self.as_sats() as f64).to_string()
     }
 }

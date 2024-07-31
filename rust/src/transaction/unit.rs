@@ -1,9 +1,18 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum, strum::EnumIter)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum, strum::EnumIter,
+)]
 pub enum Unit {
     Btc,
     Sat,
+}
+
+impl Default for Unit {
+    fn default() -> Self {
+        Self::Btc
+    }
 }
 
 mod ffi {

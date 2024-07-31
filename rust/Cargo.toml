@@ -99,6 +99,9 @@ data-encoding = "2.6.0"
 # fast hashmap
 ahash = "0.8.11"
 
+# fmt currency
+numfmt = "1.1.1"
+
 
 [build-dependencies]
 uniffi = { version = "=0.28", features = ["build"] }

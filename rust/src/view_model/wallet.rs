@@ -15,7 +15,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     router::Route,
     task,
-    transaction::Transactions,
+    transaction::{Transactions, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -55,6 +55,9 @@ pub struct RustWalletViewModel {
 pub enum WalletViewModelAction {
     UpdateName(String),
     UpdateColor(WalletColor),
+    UpdateUnit(Unit),
+    UpdateFiatCurrency(String),
+    ToggleSensitiveVisibility,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -275,24 +278,35 @@ impl RustWalletViewModel {
             WalletViewModelAction::UpdateName(name) => {
                 let mut metadata = self.metadata.write();
                 metadata.name = name;
-
-                self.reconciler
-                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
-                        metadata.clone(),
-                    ))
-                    .unwrap();
             }
             WalletViewModelAction::UpdateColor(color) => {
                 let mut metadata = self.metadata.write();
                 metadata.color = color;
+            }
 
-                self.reconciler
-                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
-                        metadata.clone(),
-                    ))
-                    .unwrap();
+            WalletViewModelAction::UpdateUnit(unit) => {
+                let mut metadata = self.metadata.write();
+                metadata.selected_unit = unit;
+            }
+
+            WalletViewModelAction::UpdateFiatCurrency(fiat_currency) => {
+                let mut metadata = self.metadata.write();
+                metadata.selected_fiat_currency = fiat_currency;
+            }
+
+            WalletViewModelAction::ToggleSensitiveVisibility => {
+                let mut metadata = self.metadata.write();
+                metadata.sensitive_visible = !metadata.sensitive_visible;
             }
         }
+
+        let metadata = self.metadata.read();
+
+        self.reconciler
+            .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                metadata.clone(),
+            ))
+            .unwrap();
 
         // update wallet_metadata in the database
         if let Err(error) = Database::global()
