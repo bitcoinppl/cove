@@ -496,6 +496,10 @@ public protocol AmountProtocol: AnyObject {
     func asBtc() -> Double
 
     func asSats() -> UInt64
+
+    func btcString() -> String
+
+    func satsString() -> String
 }
 
 open class Amount:
@@ -538,6 +542,14 @@ open class Amount:
         try! rustCall { uniffi_cove_fn_free_amount(pointer, $0) }
     }
 
+    public static func fromSat(sats: UInt64) -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_constructor_amount_from_sat(
+                FfiConverterUInt64.lower(sats), $0
+            )
+        })
+    }
+
     public static func oneBtc() -> Amount {
         return try! FfiConverterTypeAmount.lift(try! rustCall {
             uniffi_cove_fn_constructor_amount_one_btc($0
@@ -561,6 +573,18 @@ open class Amount:
     open func asSats() -> UInt64 {
         return try! FfiConverterUInt64.lift(try! rustCall {
             uniffi_cove_fn_method_amount_as_sats(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func btcString() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_amount_btc_string(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func satsString() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_amount_sats_string(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -5504,6 +5528,49 @@ extension TransactionDirection: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum Unit {
+    case btc
+    case sat
+}
+
+public struct FfiConverterTypeUnit: FfiConverterRustBuffer {
+    typealias SwiftType = Unit
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Unit {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .btc
+
+        case 2: return .sat
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Unit, into buf: inout [UInt8]) {
+        switch value {
+        case .btc:
+            writeInt(&buf, Int32(1))
+
+        case .sat:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeUnit_lift(_ buf: RustBuffer) throws -> Unit {
+    return try FfiConverterTypeUnit.lift(buf)
+}
+
+public func FfiConverterTypeUnit_lower(_ value: Unit) -> RustBuffer {
+    return FfiConverterTypeUnit.lower(value)
+}
+
+extension Unit: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum WalletColor {
     case red
     case blue
@@ -6687,6 +6754,28 @@ private struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceTypeUnit: FfiConverterRustBuffer {
+    typealias SwiftType = [Unit]
+
+    public static func write(_ value: [Unit], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUnit.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Unit] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Unit]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeUnit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [[String]]
 
@@ -6876,6 +6965,13 @@ public func allNetworks() -> [Network] {
     })
 }
 
+public func allUnits() -> [Unit] {
+    return try! FfiConverterSequenceTypeUnit.lift(try! rustCall {
+        uniffi_cove_fn_func_all_units($0
+        )
+    })
+}
+
 public func balanceZero() -> Balance {
     return try! FfiConverterTypeBalance.lift(try! rustCall {
         uniffi_cove_fn_func_balance_zero($0
@@ -6931,6 +7027,14 @@ public func numberOfWordsToWordCount(me: NumberOfBip39Words) -> UInt8 {
     })
 }
 
+public func unitToString(unit: Unit) -> String {
+    return try! FfiConverterString.lift(try! rustCall {
+        uniffi_cove_fn_func_unit_to_string(
+            FfiConverterTypeUnit.lower(unit), $0
+        )
+    })
+}
+
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -6951,6 +7055,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_all_networks() != 30650 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_all_units() != 36925 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_balance_zero() != 63807 {
@@ -6974,10 +7081,19 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_number_of_words_to_word_count() != 24846 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_func_unit_to_string() != 63080 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_amount_as_btc() != 7531 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_amount_as_sats() != 62969 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_amount_btc_string() != 21387 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_amount_sats_string() != 36019 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748 {
@@ -7206,6 +7322,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wordvalidator_is_valid_word_group() != 6393 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_amount_from_sat() != 58319 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_amount_one_btc() != 59586 {

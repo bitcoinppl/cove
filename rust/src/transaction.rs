@@ -1,6 +1,7 @@
 mod amount;
 mod ref_map;
 mod sent_and_received;
+mod unit;
 
 use std::sync::Arc;
 
