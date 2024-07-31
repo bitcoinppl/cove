@@ -20,7 +20,7 @@ class WeakReconciler<Reconciler: AnyObject, Message>: AnyReconciler where Reconc
     }
 }
 
-protocol AnyReconciler {
+protocol AnyReconciler: AnyObject {
     associatedtype Message
     func reconcile(message: Message)
 }
