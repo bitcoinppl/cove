@@ -1,5 +1,8 @@
 import SwiftUI
 
+
+extension WalletViewModel: AnyReconciler {}
+
 @Observable class WalletViewModel: WalletViewModelReconciler {
     private let logger = Log(id: "WalletViewModel")
 
@@ -16,7 +19,7 @@ import SwiftUI
         self.rust = rust
         walletMetadata = rust.walletMetadata()
 
-        rust.listenForUpdates(reconciler: self)
+        rust.listenForUpdates(reconciler: WeakReconciler(self) as! WalletViewModelReconciler)
     }
 
     var isVerified: Bool {
