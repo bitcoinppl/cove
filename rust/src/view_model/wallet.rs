@@ -105,7 +105,7 @@ impl RustWalletViewModel {
 
         let metadata = Database::global()
             .wallets
-            .get_selected_wallet(id, network)
+            .get(&id, network)
             .map_err(|e| Error::GetSelectedWalletError(e.to_string()))?
             .ok_or(Error::WalletDoesNotExist)?;
 

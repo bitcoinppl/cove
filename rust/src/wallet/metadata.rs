@@ -24,6 +24,8 @@ pub struct WalletMetadata {
     pub color: WalletColor,
     pub verified: bool,
     pub network: Network,
+    #[serde(default)]
+    pub performed_full_scan: bool,
 }
 
 impl WalletMetadata {
@@ -36,6 +38,18 @@ impl WalletMetadata {
             color: WalletColor::random(),
             verified: false,
             network,
+            performed_full_scan: false,
+        }
+    }
+
+    pub fn new_imported(name: impl Into<String>, network: Network) -> Self {
+        Self {
+            id: WalletId::new(),
+            name: name.into(),
+            color: WalletColor::random(),
+            verified: true,
+            network,
+            performed_full_scan: false,
         }
     }
 
@@ -46,6 +60,7 @@ impl WalletMetadata {
             color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,
+            performed_full_scan: false,
         }
     }
 }

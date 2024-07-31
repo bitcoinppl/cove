@@ -193,10 +193,11 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             WalletError::PersistError(error) => Self::PersisError(error),
 
             WalletError::WalletNotFound => unreachable!("no wallet found in creation"),
+            WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),
+            WalletError::MetadataNotFound => unreachable!("no metadata found in creation"),
             WalletError::UnsupportedWallet(error) => {
                 unreachable!("unreachable unsupported wallet: {error}")
             }
-            WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),
         }
     }
 }

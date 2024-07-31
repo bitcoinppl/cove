@@ -47,6 +47,9 @@ pub enum WalletError {
 
     #[error("wallet not found")]
     WalletNotFound,
+
+    #[error("metadata not found")]
+    MetadataNotFound,
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -54,6 +57,7 @@ pub struct Wallet {
     pub id: WalletId,
     pub network: Network,
     pub bdk: bdk_wallet::PersistedWallet,
+    pub metadata: WalletMetadata,
     db: Store<bdk_wallet::ChangeSet>,
 }
 
@@ -132,9 +136,16 @@ impl Wallet {
             .map_err(|error| WalletError::LoadError(error.to_string()))?
             .ok_or(WalletError::WalletNotFound)?;
 
+        let metadata = Database::global()
+            .wallets
+            .get(&id, network)
+            .map_err(WalletError::DatabaseError)?
+            .ok_or(WalletError::WalletNotFound)?;
+
         Ok(Self {
             id,
             network,
+            metadata,
             bdk: wallet,
             db,
         })
@@ -160,8 +171,15 @@ impl Wallet {
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
+        let metadata = Database::global()
+            .wallets
+            .get(&id, network)
+            .map_err(WalletError::DatabaseError)?
+            .ok_or(WalletError::WalletNotFound)?;
+
         Ok(Self {
             id,
+            metadata,
             network,
             bdk: wallet,
             db,

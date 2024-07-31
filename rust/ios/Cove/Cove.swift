@@ -4034,15 +4034,17 @@ public struct WalletMetadata {
     public var color: WalletColor
     public var verified: Bool
     public var network: Network
+    public var performedFullScan: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool) {
         self.id = id
         self.name = name
         self.color = color
         self.verified = verified
         self.network = network
+        self.performedFullScan = performedFullScan
     }
 }
 
@@ -4063,6 +4065,9 @@ extension WalletMetadata: Equatable, Hashable {
         if lhs.network != rhs.network {
             return false
         }
+        if lhs.performedFullScan != rhs.performedFullScan {
+            return false
+        }
         return true
     }
 
@@ -4072,6 +4077,7 @@ extension WalletMetadata: Equatable, Hashable {
         hasher.combine(color)
         hasher.combine(verified)
         hasher.combine(network)
+        hasher.combine(performedFullScan)
     }
 }
 
@@ -4083,7 +4089,8 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 name: FfiConverterString.read(from: &buf),
                 color: FfiConverterTypeWalletColor.read(from: &buf),
                 verified: FfiConverterBool.read(from: &buf),
-                network: FfiConverterTypeNetwork.read(from: &buf)
+                network: FfiConverterTypeNetwork.read(from: &buf),
+                performedFullScan: FfiConverterBool.read(from: &buf)
             )
     }
 
@@ -4093,6 +4100,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletColor.write(value.color, into: &buf)
         FfiConverterBool.write(value.verified, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
+        FfiConverterBool.write(value.performedFullScan, into: &buf)
     }
 }
 
@@ -5651,6 +5659,7 @@ public enum WalletError {
     case DatabaseError(DatabaseError
     )
     case WalletNotFound
+    case MetadataNotFound
 }
 
 public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
@@ -5678,6 +5687,7 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
                 FfiConverterTypeDatabaseError.read(from: &buf)
             )
         case 7: return .WalletNotFound
+        case 8: return .MetadataNotFound
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -5710,6 +5720,9 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
 
         case .WalletNotFound:
             writeInt(&buf, Int32(7))
+
+        case .MetadataNotFound:
+            writeInt(&buf, Int32(8))
         }
     }
 }

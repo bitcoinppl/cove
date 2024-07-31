@@ -70,6 +70,14 @@ impl WalletActor {
         Produces::ok(sent_and_received)
     }
 
+    pub async fn transactions(&mut self) -> ActorResult<Transactions> {
+        let transactions: Vec<Transaction> =
+            self.wallet.transactions().map(Transaction::from).collect();
+
+        let transactions = Transactions::from(transactions);
+        Produces::ok(transactions)
+    }
+
     pub async fn start_wallet_scan(&mut self) -> ActorResult<()> {
         use WalletViewModelReconcileMessage as Msg;
         debug!("start_wallet_scan");
@@ -100,12 +108,26 @@ impl WalletActor {
             }
         }
 
-        let node_client = self.node_client.as_ref().expect("just set it");
-        let graph = self.wallet.tx_graph();
+        assert!(self.node_client.is_some());
 
-        let full_scan_request = self.wallet.start_full_scan();
+        if self.wallet.metadata.performed_full_scan {
+            self.perform_incremental_scan().await?;
+        } else {
+            self.perform_full_scan().await?;
+        }
 
+        Produces::ok(())
+    }
+
+    async fn perform_full_scan(&mut self) -> ActorResult<()> {
         debug!("starting full scan");
+        let full_scan_request = self.wallet.start_full_scan();
+        let graph = self.wallet.tx_graph();
+        let node_client = self
+            .node_client
+            .as_ref()
+            .ok_or(eyre::eyre!("node client not set"))?;
+
         let mut full_scan_result = node_client
             .start_wallet_scan(graph, full_scan_request)
             .await?;
@@ -121,15 +143,32 @@ impl WalletActor {
         self.wallet.persist()?;
         self.last_scan_finished = Some(Instant::now());
 
+        self.wallet.metadata.performed_full_scan = true;
+        Database::global()
+            .wallets
+            .update_wallet_metadata(self.wallet.metadata.clone())?;
+
         Produces::ok(())
     }
 
-    pub async fn transactions(&mut self) -> ActorResult<Transactions> {
-        let transactions: Vec<Transaction> =
-            self.wallet.transactions().map(Transaction::from).collect();
+    async fn perform_incremental_scan(&mut self) -> ActorResult<()> {
+        debug!("starting incremental scan");
+        let scan_request = self.wallet.start_sync_with_revealed_spks();
+        let graph = self.wallet.tx_graph();
+        let node_client = self
+            .node_client
+            .as_ref()
+            .ok_or(eyre::eyre!("node client not set"))?;
 
-        let transactions = Transactions::from(transactions);
-        Produces::ok(transactions)
+        let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
+        let mut sync_result = node_client.sync(graph, scan_request).await?;
+        let _ = sync_result.graph_update.update_last_seen_unconfirmed(now);
+
+        self.wallet.apply_update(sync_result)?;
+        self.wallet.persist()?;
+        self.last_scan_finished = Some(Instant::now());
+
+        Produces::ok(())
     }
 }
 

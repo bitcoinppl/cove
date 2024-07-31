@@ -11,7 +11,7 @@ use crate::{
     mnemonic::MnemonicExt as _,
     wallet::{
         fingerprint::Fingerprint,
-        metadata::{WalletColor, WalletId, WalletMetadata},
+        metadata::{WalletId, WalletMetadata},
         Wallet,
     },
 };
@@ -110,7 +110,7 @@ impl RustImportWalletViewModel {
         let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
         let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
             .wallets
-            .get(network)
+            .get_all(network)
             .map(|wallets| {
                 wallets
                     .into_iter()
@@ -134,13 +134,7 @@ impl RustImportWalletViewModel {
         let number_of_wallets = Database::global().wallets.len(network).unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
-        let wallet_metadata = WalletMetadata {
-            id: WalletId::new(),
-            name,
-            network,
-            color: WalletColor::random(),
-            verified: true,
-        };
+        let wallet_metadata = WalletMetadata::new_imported(name, network);
 
         Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
             .map_err(|e| ImportWalletError::WalletImportError(e.to_string()))?;
