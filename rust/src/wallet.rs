@@ -62,8 +62,9 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    /// Create a new wallet from the given mnemonic, save the bdk wallet filestore, save in our
-    /// database and select it
+    /// Create a new wallet from the given mnemonic
+    /// save the bdk wallet filestore,
+    /// save in our database and select it
     pub fn try_new_persisted_and_selected(
         metadata: WalletMetadata,
         mnemonic: Mnemonic,
@@ -74,8 +75,8 @@ impl Wallet {
 
         let create_wallet = || -> Result<Self, WalletError> {
             // create bdk wallet filestore, set id to metadata id
-            let me = Wallet::try_new_persisted_from_mnemonic(
-                metadata.id.clone(),
+            let me = Self::try_new_persisted_from_mnemonic(
+                metadata.clone(),
                 mnemonic.clone(),
                 passphrase,
             )?;
@@ -152,12 +153,13 @@ impl Wallet {
     }
 
     fn try_new_persisted_from_mnemonic(
-        id: WalletId,
+        metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
     ) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
+        let id = metadata.id.clone();
         let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
             id.to_string().as_bytes(),
             data_path(&id),
@@ -170,12 +172,6 @@ impl Wallet {
             .network(network.into())
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
-
-        let metadata = Database::global()
-            .wallets
-            .get(&id, network)
-            .map_err(WalletError::DatabaseError)?
-            .ok_or(WalletError::WalletNotFound)?;
 
         Ok(Self {
             id,
@@ -243,9 +239,9 @@ impl Wallet {
     pub fn preview_new_wallet() -> Self {
         let mnemonic = Mnemonic::from_str("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
         let passphrase = None;
-        let wallet_id = WalletId::preview_new();
+        let metadata = WalletMetadata::preview_new();
 
-        Self::try_new_persisted_from_mnemonic(wallet_id, mnemonic, passphrase).unwrap()
+        Self::try_new_persisted_from_mnemonic(metadata, mnemonic, passphrase).unwrap()
     }
 
     pub fn id(&self) -> WalletId {
