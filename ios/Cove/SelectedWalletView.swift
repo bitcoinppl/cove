@@ -128,6 +128,8 @@ struct VerifyReminder: View {
 }
 
 #Preview("Loaded Wallet") {
-    SelectedWalletViewInner(model: WalletViewModel(preview: "preview_only"))
-        .environment(MainViewModel())
+    AsyncPreview {
+        SelectedWalletViewInner(model: WalletViewModel(preview: "preview_only"))
+            .environment(MainViewModel())
+    }
 }

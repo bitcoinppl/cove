@@ -71,6 +71,6 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         self.rust = rust
         self.walletMetadata = rust.walletMetadata()
 
-        rust.listenForUpdates(reconciler: self)
+        rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 }
