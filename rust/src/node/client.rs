@@ -117,12 +117,16 @@ impl NodeClient {
         }
 
         let full_scan_result = match self {
-            NodeClient::Esplora(client) => client
-                .full_scan(full_scan_request, STOP_GAP, BATCH_SIZE)
-                .await
-                .map_err(Error::EsploraScanError)?,
+            NodeClient::Esplora(client) => {
+                debug!("starting esplora full scan");
+                client
+                    .full_scan(full_scan_request, STOP_GAP, BATCH_SIZE)
+                    .await
+                    .map_err(Error::EsploraScanError)?
+            }
 
             NodeClient::Electrum(client) => {
+                debug!("starting electrum full scan");
                 let client = client.clone();
                 crate::unblock::run_blocking(move || {
                     client.full_scan(full_scan_request, STOP_GAP, BATCH_SIZE, false)
@@ -149,12 +153,16 @@ impl NodeClient {
         }
 
         let scan_result = match self {
-            NodeClient::Esplora(client) => client
-                .sync(scan_request, BATCH_SIZE)
-                .await
-                .map_err(Error::EsploraScanError)?,
+            NodeClient::Esplora(client) => {
+                debug!("starting esplora sync");
+                client
+                    .sync(scan_request, BATCH_SIZE)
+                    .await
+                    .map_err(Error::EsploraScanError)?
+            }
 
             NodeClient::Electrum(client) => {
+                debug!("starting electrum sync");
                 let client = client.clone();
 
                 crate::unblock::run_blocking(move || client.sync(scan_request, BATCH_SIZE, false))
