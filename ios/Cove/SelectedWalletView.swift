@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 7/1/24.
 //
 
+import ActivityIndicatorView
 import SwiftUI
 
 struct SelectedWalletView: View {
@@ -49,23 +50,45 @@ struct SelectedWalletViewInner: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
-    @State var model: WalletViewModel
+    let model: WalletViewModel
 
     // private
     @State private var showSettings = false
 
+    func updater(_ action: WalletViewModelAction) {
+        model.dispatch(action: action)
+    }
+
     var body: some View {
         VStack {
-            Spacer()
+            WalletBalanceHeaderView(balance: model.balance.confirmed,
+                                    metadata: model.walletMetadata,
+                                    updater: updater)
+                .padding()
 
-            Text("\(model.walletMetadata.name)")
-                .foregroundColor(model.walletMetadata.color.toCardColors()[0].opacity(0.8))
-                .font(.title2)
+            Group {
+                switch model.loadState {
+                case .loading:
+                    Spacer()
+                    ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
+                        .frame(width: 50, height: 50)
+                    Spacer()
+                    Spacer()
+                case .scanning,
+                     .loaded:
 
-            Text(model.rust.fingerprint())
+                    VStack {
+                        Text("\(model.walletMetadata.name)")
+                            .foregroundColor(model.walletMetadata.color.toCardColors()[0].opacity(0.8))
+                            .font(.title2)
 
-            Spacer()
-            VerifyReminder(walletId: model.id, isVerified: model.isVerified)
+                        Text(model.rust.fingerprint())
+
+                        Spacer()
+                        VerifyReminder(walletId: model.id, isVerified: model.isVerified)
+                    }
+                }
+            }
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {

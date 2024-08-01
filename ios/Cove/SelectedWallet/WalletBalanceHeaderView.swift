@@ -32,7 +32,7 @@ struct WalletBalanceHeaderView: View {
         let btc = balance.asBtc()
         
         // Base font size
-        let baseFontSize: CGFloat = 38
+        let baseFontSize: CGFloat = 34
             
         // Calculate the number of digits
         let digits = btc > 0 ? Int(log10(btc)) + 1 : 1

@@ -25,7 +25,7 @@ use crate::{
     word_validator::WordValidator,
 };
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
     StartedWalletScan,
     AvailableTransactions(Arc<Transactions>),
@@ -177,7 +177,12 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
         debug!("start_wallet_scan: {}", self.id);
-        send!(self.actor.wallet_scan_and_notify());
+
+        let actor = self.actor.clone();
+
+        tokio::spawn(async move {
+            send!(actor.wallet_scan_and_notify());
+        });
 
         Ok(())
     }
@@ -302,5 +307,14 @@ impl RustWalletViewModel {
 impl Drop for RustWalletViewModel {
     fn drop(&mut self) {
         debug!("[DROP] Wallet View Model");
+    }
+}
+
+mod ffi {
+    use super::*;
+
+    #[uniffi::export]
+    fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
+        lhs == rhs
     }
 }

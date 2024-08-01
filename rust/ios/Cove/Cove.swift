@@ -6116,6 +6116,10 @@ public enum WalletViewModelReconcileMessage {
     )
     case walletBalanceChanged(Balance
     )
+    case walletError(WalletViewModelError
+    )
+    case unknownError(String
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustBuffer {
@@ -6139,6 +6143,12 @@ public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustB
             )
 
         case 6: return try .walletBalanceChanged(FfiConverterTypeBalance.read(from: &buf)
+            )
+
+        case 7: return try .walletError(FfiConverterTypeWalletViewModelError.read(from: &buf)
+            )
+
+        case 8: return try .unknownError(FfiConverterString.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -6169,6 +6179,14 @@ public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustB
         case let .walletBalanceChanged(v1):
             writeInt(&buf, Int32(6))
             FfiConverterTypeBalance.write(v1, into: &buf)
+
+        case let .walletError(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeWalletViewModelError.write(v1, into: &buf)
+
+        case let .unknownError(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(v1, into: &buf)
         }
     }
 }
@@ -7090,6 +7108,15 @@ public func walletMetadataPreview() -> WalletMetadata {
     })
 }
 
+public func walletStateIsEqual(lhs: WalletLoadState, rhs: WalletLoadState) -> Bool {
+    return try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_fn_func_wallet_state_is_equal(
+            FfiConverterTypeWalletLoadState.lower(lhs),
+            FfiConverterTypeWalletLoadState.lower(rhs), $0
+        )
+    })
+}
+
 private enum InitializationResult {
     case ok
     case contractVersionMismatch
@@ -7140,6 +7167,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_wallet_metadata_preview() != 1229 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_wallet_state_is_equal() != 27037 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_amount_as_btc() != 7531 {
