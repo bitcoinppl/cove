@@ -32,37 +32,39 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
 
             self.logger.debug("WalletViewModelReconcileMessage: \(message)")
 
-            switch message {
-            case .startedWalletScan:
-                self.loadState = .loading
+            await MainActor.run {
+                switch message {
+                case .startedWalletScan:
+                    self.loadState = .loading
 
-            case let .availableTransactions(txns):
-                self.loadState = .scanning(txns)
+                case let .availableTransactions(txns):
+                    self.loadState = .scanning(txns)
 
-            case let .scanComplete(txns):
-                self.loadState = .loaded(txns)
+                case let .scanComplete(txns):
+                    self.loadState = .loaded(txns)
 
-            case .walletBalanceChanged:
-                Task {
-                    let balance = await rust.balance()
-                    await MainActor.run {
-                        self.balance = balance
+                case .walletBalanceChanged:
+                    Task {
+                        let balance = await rust.balance()
+                        await MainActor.run {
+                            self.balance = balance
+                        }
                     }
+
+                case let .walletMetadataChanged(metadata):
+                    self.walletMetadata = metadata
+
+                case let .nodeConnectionFailed(error):
+                    self.logger.error(error)
+
+                case let .walletError(error):
+                    // TODO: show to user
+                    self.logger.error("WalletError \(error)")
+
+                case let .unknownError(error):
+                    // TODO: show to user
+                    self.logger.error("Unknown error \(error)")
                 }
-
-            case let .walletMetadataChanged(metadata):
-                self.walletMetadata = metadata
-
-            case let .nodeConnectionFailed(error):
-                self.logger.error(error)
-
-            case let .walletError(error):
-                // TODO: show to user
-                self.logger.error("WalletError \(error)")
-
-            case let .unknownError(error):
-                // TODO: show to user
-                self.logger.error("Unknown error \(error)")
             }
         }
     }

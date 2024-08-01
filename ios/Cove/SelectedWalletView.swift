@@ -35,8 +35,17 @@ struct SelectedWalletView: View {
                 Text("Loading...")
             }
         }
+        .task {
+            loadModel()
 
-        .onAppear(perform: loadModel)
+            if let model = self.model {
+                do {
+                    try await model.rust.startWalletScan()
+                } catch {
+                    Log.error("Wallet Scan Failed \(error.localizedDescription)")
+                }
+            }
+        }
         .tint(.white)
         .enableInjection()
     }
@@ -50,6 +59,7 @@ struct SelectedWalletViewInner: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
+    // public
     let model: WalletViewModel
 
     // private
@@ -76,17 +86,8 @@ struct SelectedWalletViewInner: View {
                     Spacer()
                 case .scanning,
                      .loaded:
-
-                    VStack {
-                        Text("\(model.walletMetadata.name)")
-                            .foregroundColor(model.walletMetadata.color.toCardColors()[0].opacity(0.8))
-                            .font(.title2)
-
-                        Text(model.rust.fingerprint())
-
-                        Spacer()
-                        VerifyReminder(walletId: model.id, isVerified: model.isVerified)
-                    }
+                    Text("")
+                    Spacer()
                 }
             }
         }
@@ -106,13 +107,6 @@ struct SelectedWalletViewInner: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .sheet(isPresented: $showSettings) {
             WalletSettingsView(model: model)
-        }
-        .task {
-            do {
-                try await model.rust.startWalletScan()
-            } catch {
-                Log.error("Wallet Scan Failed \(error.localizedDescription)")
-            }
         }
     }
 }
