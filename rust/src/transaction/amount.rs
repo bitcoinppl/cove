@@ -48,10 +48,9 @@ impl Amount {
         let mut f = Formatter::new()
             .separator(',')
             .unwrap()
-            .suffix(" SATS")
-            .unwrap()
             .precision(Precision::Decimals(0));
 
-        f.fmt2(self.as_sats() as f64).to_string()
+        let sats = f.fmt2(self.as_sats() as f64);
+        format!("{sats} SATS")
     }
 }
