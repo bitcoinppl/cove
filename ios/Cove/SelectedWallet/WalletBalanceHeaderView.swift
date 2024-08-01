@@ -12,7 +12,10 @@ struct WalletBalanceHeaderView: View {
     let balance: Amount
     let metadata: WalletMetadata
     let updater: (WalletViewModelAction) -> ()
-    let accentColor: Color
+    
+    var accentColor: Color {
+        Color(metadata.color)
+    }
     
     var balanceString: String {
         if !metadata.sensitiveVisible {
@@ -131,8 +134,7 @@ struct WalletBalanceHeaderView: View {
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () },
-            accentColor: .orange)
+            updater: { _ in () })
         .padding()
 }
 
@@ -140,13 +142,13 @@ struct WalletBalanceHeaderView: View {
     var metadata = walletMetadataPreview()
     metadata.selectedUnit = .sat
     metadata.sensitiveVisible = true
+    metadata.color = .blue
 
     return
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () },
-            accentColor: .blue)
+            updater: { _ in () })
 
         .padding()
 }
@@ -154,26 +156,26 @@ struct WalletBalanceHeaderView: View {
 #Preview("hidden") {
     var metadata = walletMetadataPreview()
     metadata.sensitiveVisible = false
+    metadata.color = .green
     
     return
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () },
-            accentColor: .green)
+            updater: { _ in () })
         .padding()
 }
 
 #Preview("lots of btc") {
     var metadata = walletMetadataPreview()
     metadata.sensitiveVisible = true
-    
+    metadata.color = .purple
+
     return
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 10_000_000_738),
             metadata: metadata,
-            updater: { _ in () },
-            accentColor: .purple)
+            updater: { _ in () })
 
         .padding()
 }

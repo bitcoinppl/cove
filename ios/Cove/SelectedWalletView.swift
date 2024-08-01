@@ -69,12 +69,15 @@ struct SelectedWalletViewInner: View {
         model.dispatch(action: action)
     }
 
+    var accentColor: Color {
+        Color(model.walletMetadata.color)
+    }
+
     var body: some View {
         VStack {
             WalletBalanceHeaderView(balance: model.balance.confirmed,
                                     metadata: model.walletMetadata,
-                                    updater: updater,
-                                    accentColor: model.walletMetadata.color.toColor())
+                                    updater: updater)
                 .padding()
 
             Group {
