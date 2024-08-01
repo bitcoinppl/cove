@@ -122,7 +122,8 @@ struct PopupMiddleView: View {
         }
         .frame(minWidth: screenWidth * 0.75)
         .padding(EdgeInsets(top: 37, leading: 24, bottom: 40, trailing: 24))
-        .background(Color.white.cornerRadius(20))
+        .background(Material.thick)
+        .cornerRadius(20)
         .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 0)
         .shadow(color: .black.opacity(0.16), radius: 24, x: 0, y: 0)
         .padding(.horizontal, 40)
