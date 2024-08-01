@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use crate::{
     database::Database,
     node::client::NodeClient,
     transaction::{SentAndReceived, Transaction, TransactionRef, TransactionRefMap, Transactions},
+    view_model::wallet::Error,
     wallet::{balance::Balance, Wallet},
 };
 use act_zero::*;
@@ -30,6 +33,14 @@ impl Actor for WalletActor {
 
     async fn error(&mut self, error: ActorError) -> bool {
         error!("WalletActor Error: {error:?}");
+        let error_string = error.to_string();
+
+        if let Some(error) = error.downcast::<Error>().ok().map(|e| *e) {
+            self.send(WalletViewModelReconcileMessage::WalletError(error));
+        } else {
+            self.send(WalletViewModelReconcileMessage::UnknownError(error_string));
+        };
+
         false
     }
 }
@@ -76,6 +87,64 @@ impl WalletActor {
 
         let transactions = Transactions::from(transactions);
         Produces::ok(transactions)
+    }
+
+    pub async fn wallet_scan_and_notify(&mut self) -> ActorResult<()> {
+        use WalletViewModelReconcileMessage as Msg;
+        debug!("wallet_scan_and_notify");
+
+        // notify the frontend that the wallet is starting to scan
+        self.send(Msg::StartedWalletScan);
+
+        // get the initial balance and transactions
+        {
+            let initial_balance = self
+                .balance()
+                .await?
+                .await
+                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
+
+            self.send(Msg::WalletBalanceChanged(initial_balance));
+
+            let initial_transactions = self
+                .transactions()
+                .await?
+                .await
+                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
+                .into();
+
+            self.send(Msg::AvailableTransactions(initial_transactions))
+        }
+
+        // start the wallet scan and send balnce and transactions after scan is complete
+        {
+            // start the wallet scan
+            self.start_wallet_scan()
+                .await?
+                .await
+                .map_err(|error| Error::WalletScanError(error.to_string()))?;
+
+            // get and send wallet balance
+            let balance = self
+                .balance()
+                .await?
+                .await
+                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
+
+            self.send(Msg::WalletBalanceChanged(balance));
+
+            // get and send transactions
+            let transactions: Arc<Transactions> = self
+                .transactions()
+                .await?
+                .await
+                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
+                .into();
+
+            self.send(Msg::ScanComplete(transactions));
+        }
+
+        Produces::ok(())
     }
 
     pub async fn start_wallet_scan(&mut self) -> ActorResult<()> {
@@ -178,6 +247,12 @@ impl WalletActor {
         debug!("done incremental scan in {}s", end - start);
 
         Produces::ok(())
+    }
+}
+
+impl WalletActor {
+    fn send(&self, msg: WalletViewModelReconcileMessage) {
+        self.reconciler.send(msg).unwrap();
     }
 }
 

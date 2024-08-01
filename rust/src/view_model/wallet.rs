@@ -2,7 +2,7 @@ mod actor;
 
 use std::sync::Arc;
 
-use act_zero::{call, Addr};
+use act_zero::{call, send, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
@@ -34,6 +34,9 @@ pub enum WalletViewModelReconcileMessage {
     NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
     WalletBalanceChanged(Balance),
+
+    WalletError(WalletViewModelError),
+    UnknownError(String),
 }
 
 #[uniffi::export(callback_interface)]
@@ -174,49 +177,7 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
         debug!("start_wallet_scan: {}", self.id);
-        use WalletViewModelReconcileMessage as Msg;
-
-        // notify the frontend that the wallet is starting to scan
-        self.send(Msg::StartedWalletScan);
-
-        // get the initial balance and transactions
-        {
-            let initial_balance = call!(self.actor.balance())
-                .await
-                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
-
-            self.send(Msg::WalletBalanceChanged(initial_balance));
-
-            let initial_transactions = call!(self.actor.transactions())
-                .await
-                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
-                .into();
-
-            self.send(Msg::AvailableTransactions(initial_transactions))
-        }
-
-        // start the wallet scan and send balnce and transactions after scan is complete
-        {
-            // start the wallet scan
-            call!(self.actor.start_wallet_scan())
-                .await
-                .map_err(|error| Error::WalletScanError(error.to_string()))?;
-
-            // get and send wallet balance
-            let balance = call!(self.actor.balance())
-                .await
-                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
-
-            self.send(Msg::WalletBalanceChanged(balance));
-
-            // get and send transactions
-            let transactions: Arc<Transactions> = call!(self.actor.transactions())
-                .await
-                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
-                .into();
-
-            self.send(Msg::ScanComplete(transactions));
-        }
+        send!(self.actor.wallet_scan_and_notify());
 
         Ok(())
     }
@@ -315,12 +276,6 @@ impl RustWalletViewModel {
         {
             error!("Unable to update wallet metadata: {error:?}")
         }
-    }
-}
-
-impl RustWalletViewModel {
-    fn send(&self, msg: WalletViewModelReconcileMessage) {
-        self.reconciler.send(msg).unwrap();
     }
 }
 
