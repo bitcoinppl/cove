@@ -12,6 +12,7 @@ struct WalletBalanceHeaderView: View {
     let balance: Amount
     let metadata: WalletMetadata
     let updater: (WalletViewModelAction) -> ()
+    let accentColor: Color
     
     var balanceString: String {
         if !metadata.sensitiveVisible {
@@ -92,7 +93,7 @@ struct WalletBalanceHeaderView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.blue)
+                    .background(accentColor)
                     .cornerRadius(8)
                 }
                 
@@ -104,14 +105,14 @@ struct WalletBalanceHeaderView: View {
                         
                         Text("Send")
                     }
-                    .foregroundColor(.blue)
+                    .foregroundColor(accentColor)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.white)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.blue, lineWidth: 1)
+                            .stroke(accentColor, lineWidth: 1)
                     )
                 }
             }
@@ -130,7 +131,8 @@ struct WalletBalanceHeaderView: View {
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () })
+            updater: { _ in () },
+            accentColor: .orange)
         .padding()
 }
 
@@ -143,7 +145,9 @@ struct WalletBalanceHeaderView: View {
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () })
+            updater: { _ in () },
+            accentColor: .blue)
+
         .padding()
 }
 
@@ -155,7 +159,8 @@ struct WalletBalanceHeaderView: View {
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () })
+            updater: { _ in () },
+            accentColor: .green)
         .padding()
 }
 
@@ -167,6 +172,8 @@ struct WalletBalanceHeaderView: View {
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 10_000_000_738),
             metadata: metadata,
-            updater: { _ in () })
+            updater: { _ in () },
+            accentColor: .purple)
+
         .padding()
 }
