@@ -50,7 +50,7 @@ impl WalletMetadata {
         Self {
             id: WalletId::new(),
             name: name.into(),
-            color: WalletColor::random(),
+            color: WalletColor::Blue,
             verified: false,
             network,
             performed_full_scan: false,
@@ -64,7 +64,7 @@ impl WalletMetadata {
         Self {
             id: WalletId::new(),
             name: name.into(),
-            color: WalletColor::random(),
+            color: WalletColor::Blue,
             verified: true,
             network,
             performed_full_scan: false,
@@ -78,7 +78,7 @@ impl WalletMetadata {
         Self {
             id: WalletId::preview_new(),
             name: "Test Wallet".to_string(),
-            color: WalletColor::random(),
+            color: WalletColor::Blue,
             verified: false,
             network: Network::Bitcoin,
             performed_full_scan: false,
