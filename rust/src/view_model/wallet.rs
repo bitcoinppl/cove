@@ -15,7 +15,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     router::Route,
     task,
-    transaction::{Transactions, Unit},
+    transaction::{Transaction, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -28,8 +28,8 @@ use crate::{
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
     StartedWalletScan,
-    AvailableTransactions(Arc<Transactions>),
-    ScanComplete(Arc<Transactions>),
+    AvailableTransactions(Vec<Transaction>),
+    ScanComplete(Vec<Transaction>),
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
@@ -66,8 +66,8 @@ pub enum WalletViewModelAction {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletLoadState {
     Loading,
-    Scanning(Arc<Transactions>),
-    Loaded(Arc<Transactions>),
+    Scanning(Vec<Transaction>),
+    Loaded(Vec<Transaction>),
 }
 
 pub type Error = WalletViewModelError;

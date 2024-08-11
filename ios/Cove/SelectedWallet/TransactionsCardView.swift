@@ -1,5 +1,5 @@
 //
-//  TransactionsList.swift
+//  TransactionsCardView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 7/31/24.
@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct TransactionsCardView: View {
-    let transactions: Transactions
+    let transactions: [Transaction]
+    let scanComplete: Bool
 
     var body: some View {
         VStack {
@@ -20,6 +21,14 @@ struct TransactionsCardView: View {
                         .fontWeight(.bold)
                     Spacer()
                 }
+
+                if transactions.isEmpty {
+                    ContentUnavailableView {
+                        Label("No transactions", systemImage: "bitcoinsign.square.fill")
+                    } description: {
+                        Text("Send some bitcoin to yourself")
+                    }
+                }
             }
             .padding()
         }
@@ -28,6 +37,6 @@ struct TransactionsCardView: View {
     }
 }
 
-#Preview {
-    TransactionsCardView(transactions: .empty())
+#Preview("Empty") {
+    TransactionsCardView(transactions: [], scanComplete: false)
 }

@@ -30,6 +30,7 @@ bdk_file_store = {git = "https://github.com/bitcoinppl/bdk", version =  "0.14.0"
 bdk_chain = {git = "https://github.com/bitcoinppl/bdk", version = "0.17.0"}
 
 bitcoin-units = "0.1"
+bitcoin_hashes = "0.14.0"
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }
@@ -67,11 +68,14 @@ redb = "2.1"
 nid = "3.0"
 
 # derive stuff
-derive_more = "0.99.18"
+derive_more = {version = "1.0", features = ["display", "from", "into", "as_ref", "from_str", "deref" ]}
 strum = {version = "0.26", features = ["derive"]}
 
 # helpers
 tap = "1.0.1"
+
+# time 
+jiff = "0.1.5"
 
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }

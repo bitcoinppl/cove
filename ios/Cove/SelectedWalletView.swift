@@ -73,6 +73,22 @@ struct SelectedWalletViewInner: View {
         Color(model.walletMetadata.color)
     }
 
+    @ViewBuilder
+    var Transactions: some View {
+        switch model.loadState {
+        case .loading:
+            Spacer()
+            ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
+                .frame(width: 50, height: 50)
+            Spacer()
+            Spacer()
+        case let .scanning(txns):
+            TransactionsCardView(transactions: txns, scanComplete: false)
+        case let .loaded(txns):
+            TransactionsCardView(transactions: txns, scanComplete: true)
+        }
+    }
+
     var body: some View {
         VStack {
             WalletBalanceHeaderView(balance: model.balance.confirmed,
@@ -80,20 +96,7 @@ struct SelectedWalletViewInner: View {
                                     updater: updater)
                 .padding()
 
-            Group {
-                switch model.loadState {
-                case .loading:
-                    Spacer()
-                    ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
-                        .frame(width: 50, height: 50)
-                    Spacer()
-                    Spacer()
-                case .scanning,
-                     .loaded:
-                    Text("")
-                    Spacer()
-                }
-            }
+            Transactions
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {

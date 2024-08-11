@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
 use crate::{
     database::Database,
     node::client::NodeClient,
-    transaction::{SentAndReceived, Transaction, TransactionRef, TransactionRefMap, Transactions},
+    transaction::Transaction,
     view_model::wallet::Error,
     wallet::{balance::Balance, Wallet},
 };
@@ -21,7 +19,6 @@ pub struct WalletActor {
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
     pub last_scan_finished: Option<Instant>,
-    pub transactions_ref_map: TransactionRefMap,
 }
 
 #[async_trait::async_trait]
@@ -53,7 +50,6 @@ impl WalletActor {
             wallet,
             node_client: None,
             last_scan_finished: None,
-            transactions_ref_map: TransactionRefMap::new(),
         }
     }
 
@@ -62,30 +58,15 @@ impl WalletActor {
         Produces::ok(balance)
     }
 
-    pub async fn sent_and_received(
-        &mut self,
-        tx_ref: TransactionRef,
-    ) -> ActorResult<SentAndReceived> {
-        let txn_id = self
-            .transactions_ref_map
-            .get(&tx_ref)
-            .ok_or(eyre::eyre!("txn not found"))?;
-
-        let txn = self
+    pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
+        let mut transactions = self
             .wallet
-            .get_tx(txn_id.0)
-            .ok_or(eyre::eyre!("txn not found"))?;
+            .transactions()
+            .map(|tx| Transaction::new(&self.wallet, tx))
+            .collect::<Vec<Transaction>>();
 
-        let sent_and_received = self.wallet.sent_and_received(&txn.tx_node.tx).into();
+        transactions.sort_unstable();
 
-        Produces::ok(sent_and_received)
-    }
-
-    pub async fn transactions(&mut self) -> ActorResult<Transactions> {
-        let transactions: Vec<Transaction> =
-            self.wallet.transactions().map(Transaction::from).collect();
-
-        let transactions = Transactions::from(transactions);
         Produces::ok(transactions)
     }
 
@@ -110,8 +91,7 @@ impl WalletActor {
                 .transactions()
                 .await?
                 .await
-                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
-                .into();
+                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?;
 
             self.send(Msg::AvailableTransactions(initial_transactions))
         }
@@ -134,12 +114,11 @@ impl WalletActor {
             self.send(Msg::WalletBalanceChanged(balance));
 
             // get and send transactions
-            let transactions: Arc<Transactions> = self
+            let transactions: Vec<Transaction> = self
                 .transactions()
                 .await?
                 .await
-                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
-                .into();
+                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?;
 
             self.send(Msg::ScanComplete(transactions));
         }

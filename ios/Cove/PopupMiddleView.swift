@@ -107,7 +107,7 @@ struct PopupMiddleView: View {
                 } label: {
                     Text(buttonText)
                         .font(.title3)
-                        .fontWeight(/*@START_MENU_TOKEN@*/ .bold/*@END_MENU_TOKEN@*/)
+                        .fontWeight(.bold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .foregroundColor(Color.white)
@@ -116,8 +116,12 @@ struct PopupMiddleView: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
-                    .frame(width: 80, height: 80)
+                ProgressView(label: {
+                    Text("Loading")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                ).progressViewStyle(.circular)
             }
         }
         .frame(minWidth: screenWidth * 0.75)
