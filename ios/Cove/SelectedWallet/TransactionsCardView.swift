@@ -31,12 +31,42 @@ struct TransactionsCardView: View {
                 }
             }
             .padding()
+            .padding(.top, 5)
         }
-        .background(.thickMaterial)
+        .background(
+            UnevenRoundedRectangle(
+                cornerRadii: .init(
+                    topLeading: 40,
+                    bottomLeading: 0,
+                    bottomTrailing: 0,
+                    topTrailing: 40
+                )
+            )
+            .fill(.thickMaterial)
+            .ignoresSafeArea()
+        )
         .frame(maxHeight: .infinity)
     }
 }
 
-#Preview("Empty") {
+#Preview("Full of Txns - Complete") {
+    TransactionsCardView(
+        transactions: transactionsPreviewNew(confirmed: UInt8(25), unconfirmed: UInt8(1)),
+        scanComplete: true
+    )
+}
+
+#Preview("Full of Txns - Scanning") {
+    TransactionsCardView(
+        transactions: transactionsPreviewNew(confirmed: UInt8(25), unconfirmed: UInt8(1)),
+        scanComplete: false
+    )
+}
+
+#Preview("Empty - Scanning") {
     TransactionsCardView(transactions: [], scanComplete: false)
+}
+
+#Preview("Empty") {
+    TransactionsCardView(transactions: [], scanComplete: true)
 }
