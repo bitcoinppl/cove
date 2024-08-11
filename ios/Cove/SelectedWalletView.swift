@@ -74,6 +74,23 @@ struct SelectedWalletViewInner: View {
     }
 
     @ViewBuilder
+    func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
+        TransactionsCardView(transactions: transactions, scanComplete: scanComplete)
+            .background(
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(
+                        topLeading: 40,
+                        bottomLeading: 0,
+                        bottomTrailing: 0,
+                        topTrailing: 40
+                    )
+                )
+                .fill(.thickMaterial)
+                .ignoresSafeArea()
+            )
+    }
+
+    @ViewBuilder
     var Transactions: some View {
         switch model.loadState {
         case .loading:
@@ -83,9 +100,9 @@ struct SelectedWalletViewInner: View {
             Spacer()
             Spacer()
         case let .scanning(txns):
-            TransactionsCardView(transactions: txns, scanComplete: false)
+            transactionsCard(transactions: txns, scanComplete: false)
         case let .loaded(txns):
-            TransactionsCardView(transactions: txns, scanComplete: true)
+            transactionsCard(transactions: txns, scanComplete: true)
         }
     }
 

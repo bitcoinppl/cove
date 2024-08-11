@@ -33,19 +33,6 @@ struct TransactionsCardView: View {
             .padding()
             .padding(.top, 5)
         }
-        .background(
-            UnevenRoundedRectangle(
-                cornerRadii: .init(
-                    topLeading: 40,
-                    bottomLeading: 0,
-                    bottomTrailing: 0,
-                    topTrailing: 40
-                )
-            )
-            .fill(.thickMaterial)
-            .ignoresSafeArea()
-        )
-        .frame(maxHeight: .infinity)
     }
 }
 
