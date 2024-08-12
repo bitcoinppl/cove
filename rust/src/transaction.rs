@@ -1,4 +1,5 @@
 mod amount;
+mod ffi;
 mod sent_and_received;
 mod unit;
 
@@ -34,12 +35,12 @@ pub enum ChainPosition {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum Transaction {
-    Confirmed(Arc<TransactionConfirmed>),
-    Unconfirmed(Arc<TransactionUnconfirmed>),
+    Confirmed(Arc<ConfirmedTransaction>),
+    Unconfirmed(Arc<UnconfirmedTransaction>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct TransactionConfirmed {
+pub struct ConfirmedTransaction {
     pub txid: TxId,
     pub block_height: u32,
     pub confirmed_at: u64,
@@ -47,13 +48,13 @@ pub struct TransactionConfirmed {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct TransactionUnconfirmed {
+pub struct UnconfirmedTransaction {
     pub txid: TxId,
     pub sent_and_received: SentAndReceived,
     pub last_seen: u64,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, uniffi::Object)]
 pub struct TxId(pub BdkTxid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -77,6 +78,13 @@ pub struct OutPoint {
 }
 
 impl Transaction {
+    pub fn id(&self) -> TxId {
+        match self {
+            Transaction::Confirmed(confirmed) => confirmed.id(),
+            Transaction::Unconfirmed(unconfirmed) => unconfirmed.id(),
+        }
+    }
+
     pub fn new(
         wallet: &Wallet,
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
@@ -85,7 +93,7 @@ impl Transaction {
 
         match tx.chain_position {
             BdkChainPosition::Unconfirmed(last_seen) => {
-                let unconfirmed = TransactionUnconfirmed {
+                let unconfirmed = UnconfirmedTransaction {
                     txid,
                     sent_and_received: wallet.sent_and_received(&tx.tx_node.tx).into(),
                     last_seen,
@@ -94,7 +102,7 @@ impl Transaction {
                 Self::Unconfirmed(Arc::new(unconfirmed))
             }
             BdkChainPosition::Confirmed(block_time) => {
-                let confirmed = TransactionConfirmed {
+                let confirmed = ConfirmedTransaction {
                     txid,
                     block_height: block_time.block_id.height,
                     confirmed_at: block_time.confirmation_time,
@@ -104,98 +112,6 @@ impl Transaction {
                 Self::Confirmed(Arc::new(confirmed))
             }
         }
-    }
-}
-
-mod ffi {
-    use jiff::ToSpan as _;
-    use rand::Rng as _;
-    use sha2::{Digest as _, Sha256};
-
-    use super::*;
-
-    #[uniffi::export]
-    fn transactions_preview_new(confirmed: u8, unconfirmed: u8) -> Vec<Transaction> {
-        let mut transactions = Vec::with_capacity((confirmed + unconfirmed) as usize);
-
-        for _ in 0..confirmed {
-            transactions.push(transaction_preview_confirmed_new());
-        }
-
-        for _ in 0..unconfirmed {
-            transactions.push(transaction_preview_unconfirmed_new());
-        }
-
-        transactions.sort();
-        transactions
-    }
-
-    #[uniffi::export]
-    fn transaction_preview_confirmed_new() -> Transaction {
-        Transaction::Confirmed(Arc::new(TransactionConfirmed {
-            txid: TxId::preview_new(),
-            block_height: random_block_height(),
-            confirmed_at: jiff::Timestamp::now().as_second().try_into().unwrap(),
-            sent_and_received: SentAndReceived::preview_new(),
-        }))
-    }
-
-    #[uniffi::export]
-    fn transaction_preview_unconfirmed_new() -> Transaction {
-        let rand_hours = rand::thread_rng().gen_range(0..4);
-        let rand_minutes = rand::thread_rng().gen_range(0..60);
-        let random_last_seen = rand_hours.hours().minutes(rand_minutes);
-
-        let last_seen = jiff::Timestamp::now()
-            .checked_sub(random_last_seen)
-            .unwrap()
-            .as_second()
-            .try_into()
-            .unwrap();
-
-        Transaction::Unconfirmed(Arc::new(TransactionUnconfirmed {
-            txid: TxId::preview_new(),
-            sent_and_received: SentAndReceived::preview_new(),
-            last_seen,
-        }))
-    }
-
-    impl TxId {
-        pub fn preview_new() -> Self {
-            let hash = Sha256::digest(b"testtesttest")
-                .as_slice()
-                .try_into()
-                .unwrap();
-
-            let hash = *bitcoin_hashes::sha256d::Hash::from_bytes_ref(&hash);
-            Self(BdkTxid::from_raw_hash(hash))
-        }
-    }
-
-    impl SentAndReceived {
-        pub fn preview_new() -> Self {
-            let rand = rand::thread_rng().gen_range(0..3);
-
-            let direction = if rand == 0 {
-                TransactionDirection::Outgoing
-            } else {
-                TransactionDirection::Incoming
-            };
-
-            Self {
-                direction,
-                sent: Amount::from_sat(random_amount()),
-                received: Amount::from_sat(random_amount()),
-            }
-        }
-    }
-
-    fn random_block_height() -> u32 {
-        rand::thread_rng().gen_range(0..850_000)
-    }
-
-    fn random_amount() -> u64 {
-        rand::thread_rng().gen_range(100_000..10_000_000_000)
     }
 }
 
@@ -245,25 +161,25 @@ impl From<BdkChainPosition<&ConfirmationBlockTime>> for ChainPosition {
     }
 }
 
-impl Ord for TransactionConfirmed {
+impl Ord for ConfirmedTransaction {
     fn cmp(&self, other: &Self) -> Ordering {
         self.block_height.cmp(&other.block_height)
     }
 }
 
-impl PartialOrd for TransactionConfirmed {
+impl PartialOrd for ConfirmedTransaction {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for TransactionUnconfirmed {
+impl Ord for UnconfirmedTransaction {
     fn cmp(&self, other: &Self) -> Ordering {
         self.last_seen.cmp(&other.last_seen)
     }
 }
 
-impl PartialOrd for TransactionUnconfirmed {
+impl PartialOrd for UnconfirmedTransaction {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -271,11 +187,17 @@ impl PartialOrd for TransactionUnconfirmed {
 
 impl Ord for Transaction {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
+        let sort = match (self, other) {
             (Self::Confirmed(confirmed), Self::Confirmed(other)) => confirmed.cmp(other),
             (Self::Unconfirmed(unconfirmed), Self::Unconfirmed(other)) => unconfirmed.cmp(other),
             (Self::Confirmed(_), Self::Unconfirmed(_)) => Ordering::Less,
             (Self::Unconfirmed(_), Self::Confirmed(_)) => Ordering::Greater,
+        };
+
+        if sort == Ordering::Equal {
+            self.id().cmp(&other.id())
+        } else {
+            sort
         }
     }
 }

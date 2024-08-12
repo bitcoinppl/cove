@@ -11,6 +11,16 @@ struct TransactionsCardView: View {
     let transactions: [Transaction]
     let scanComplete: Bool
 
+    @ViewBuilder
+    func TransactionRow(_ txn: Transaction) -> some View {
+        switch txn {
+        case let .confirmed(txn):
+            ConfirmedTransactionView(transaction: txn)
+        case let .unconfirmed(txn):
+            UnconfirmedTransactionView(transaction: txn)
+        }
+    }
+
     var body: some View {
         VStack {
             VStack {
@@ -22,6 +32,8 @@ struct TransactionsCardView: View {
                     Spacer()
                 }
 
+                ForEach(transactions, content: TransactionRow)
+
                 if transactions.isEmpty {
                     ContentUnavailableView {
                         Label("No transactions", systemImage: "bitcoinsign.square.fill")
@@ -32,6 +44,28 @@ struct TransactionsCardView: View {
             }
             .padding()
             .padding(.top, 5)
+        }
+    }
+}
+
+struct ConfirmedTransactionView: View {
+    let transaction: ConfirmedTransaction
+
+    var body: some View {
+        HStack {
+            Text("Confirmed")
+            Text(String(transaction.blockHeight()))
+            Text(String(transaction.confirmedAt()))
+        }
+    }
+}
+
+struct UnconfirmedTransactionView: View {
+    let transaction: UnconfirmedTransaction
+
+    var body: some View {
+        HStack {
+            Text("Unconfirmed")
         }
     }
 }

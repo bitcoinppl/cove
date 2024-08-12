@@ -407,6 +407,19 @@ private struct FfiConverterUInt16: FfiConverterPrimitive {
     }
 }
 
+private struct FfiConverterUInt32: FfiConverterPrimitive {
+    typealias FfiType = UInt32
+    typealias SwiftType = UInt32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
 private struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -1098,6 +1111,119 @@ public func FfiConverterTypeChainPosition_lift(_ pointer: UnsafeMutableRawPointe
 
 public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> UnsafeMutableRawPointer {
     return FfiConverterTypeChainPosition.lower(value)
+}
+
+public protocol ConfirmedTransactionProtocol: AnyObject {
+    func blockHeight() -> UInt32
+
+    func confirmedAt() -> UInt64
+
+    func id() -> TxId
+
+    func sentAndReceived() -> SentAndReceived
+}
+
+open class ConfirmedTransaction:
+    ConfirmedTransactionProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_confirmedtransaction(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_confirmedtransaction(pointer, $0) }
+    }
+
+    open func blockHeight() -> UInt32 {
+        return try! FfiConverterUInt32.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_block_height(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func confirmedAt() -> UInt64 {
+        return try! FfiConverterUInt64.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_confirmed_at(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func id() -> TxId {
+        return try! FfiConverterTypeTxId.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_id(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func sentAndReceived() -> SentAndReceived {
+        return try! FfiConverterTypeSentAndReceived.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_sent_and_received(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeConfirmedTransaction: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ConfirmedTransaction
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ConfirmedTransaction {
+        return ConfirmedTransaction(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ConfirmedTransaction) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmedTransaction {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ConfirmedTransaction, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeConfirmedTransaction_lift(_ pointer: UnsafeMutableRawPointer) throws -> ConfirmedTransaction {
+    return try FfiConverterTypeConfirmedTransaction.lift(pointer)
+}
+
+public func FfiConverterTypeConfirmedTransaction_lower(_ value: ConfirmedTransaction) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeConfirmedTransaction.lower(value)
 }
 
 public protocol DatabaseProtocol: AnyObject {
@@ -2924,169 +3050,11 @@ public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> U
     return FfiConverterTypeSentAndReceived.lower(value)
 }
 
-public protocol TransactionConfirmedProtocol: AnyObject {}
+public protocol TxIdProtocol: AnyObject {
+    func isEqual(other: TxId) -> Bool
 
-open class TransactionConfirmed:
-    TransactionConfirmedProtocol
-{
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    /// This constructor can be used to instantiate a fake object.
-    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    ///
-    /// - Warning:
-    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-    public init(noPointer _: NoPointer) {
-        pointer = nil
-    }
-
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_fn_clone_transactionconfirmed(self.pointer, $0) }
-    }
-
-    // No primary constructor declared for this class.
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_transactionconfirmed(pointer, $0) }
-    }
+    func toHashString() -> String
 }
-
-public struct FfiConverterTypeTransactionConfirmed: FfiConverter {
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = TransactionConfirmed
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> TransactionConfirmed {
-        return TransactionConfirmed(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: TransactionConfirmed) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionConfirmed {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if ptr == nil {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: TransactionConfirmed, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-public func FfiConverterTypeTransactionConfirmed_lift(_ pointer: UnsafeMutableRawPointer) throws -> TransactionConfirmed {
-    return try FfiConverterTypeTransactionConfirmed.lift(pointer)
-}
-
-public func FfiConverterTypeTransactionConfirmed_lower(_ value: TransactionConfirmed) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeTransactionConfirmed.lower(value)
-}
-
-public protocol TransactionUnconfirmedProtocol: AnyObject {}
-
-open class TransactionUnconfirmed:
-    TransactionUnconfirmedProtocol
-{
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    /// This constructor can be used to instantiate a fake object.
-    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    ///
-    /// - Warning:
-    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-    public init(noPointer _: NoPointer) {
-        pointer = nil
-    }
-
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_fn_clone_transactionunconfirmed(self.pointer, $0) }
-    }
-
-    // No primary constructor declared for this class.
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_transactionunconfirmed(pointer, $0) }
-    }
-}
-
-public struct FfiConverterTypeTransactionUnconfirmed: FfiConverter {
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = TransactionUnconfirmed
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> TransactionUnconfirmed {
-        return TransactionUnconfirmed(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: TransactionUnconfirmed) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionUnconfirmed {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if ptr == nil {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: TransactionUnconfirmed, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-public func FfiConverterTypeTransactionUnconfirmed_lift(_ pointer: UnsafeMutableRawPointer) throws -> TransactionUnconfirmed {
-    return try FfiConverterTypeTransactionUnconfirmed.lift(pointer)
-}
-
-public func FfiConverterTypeTransactionUnconfirmed_lower(_ value: TransactionUnconfirmed) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeTransactionUnconfirmed.lower(value)
-}
-
-public protocol TxIdProtocol: AnyObject {}
 
 open class TxId:
     TxIdProtocol
@@ -3126,6 +3094,19 @@ open class TxId:
         }
 
         try! rustCall { uniffi_cove_fn_free_txid(pointer, $0) }
+    }
+
+    open func isEqual(other: TxId) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_txid_is_equal(self.uniffiClonePointer(),
+                                                FfiConverterTypeTxId.lower(other), $0)
+        })
+    }
+
+    open func toHashString() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_txid_to_hash_string(self.uniffiClonePointer(), $0)
+        })
     }
 }
 
@@ -3327,6 +3308,111 @@ public func FfiConverterTypeTxOut_lift(_ pointer: UnsafeMutableRawPointer) throw
 
 public func FfiConverterTypeTxOut_lower(_ value: TxOut) -> UnsafeMutableRawPointer {
     return FfiConverterTypeTxOut.lower(value)
+}
+
+public protocol UnconfirmedTransactionProtocol: AnyObject {
+    func id() -> TxId
+
+    func lastSeen() -> UInt64
+
+    func sentAndReceived() -> SentAndReceived
+}
+
+open class UnconfirmedTransaction:
+    UnconfirmedTransactionProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_unconfirmedtransaction(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_unconfirmedtransaction(pointer, $0) }
+    }
+
+    open func id() -> TxId {
+        return try! FfiConverterTypeTxId.lift(try! rustCall {
+            uniffi_cove_fn_method_unconfirmedtransaction_id(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func lastSeen() -> UInt64 {
+        return try! FfiConverterUInt64.lift(try! rustCall {
+            uniffi_cove_fn_method_unconfirmedtransaction_last_seen(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func sentAndReceived() -> SentAndReceived {
+        return try! FfiConverterTypeSentAndReceived.lift(try! rustCall {
+            uniffi_cove_fn_method_unconfirmedtransaction_sent_and_received(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeUnconfirmedTransaction: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = UnconfirmedTransaction
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> UnconfirmedTransaction {
+        return UnconfirmedTransaction(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: UnconfirmedTransaction) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UnconfirmedTransaction {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: UnconfirmedTransaction, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeUnconfirmedTransaction_lift(_ pointer: UnsafeMutableRawPointer) throws -> UnconfirmedTransaction {
+    return try FfiConverterTypeUnconfirmedTransaction.lift(pointer)
+}
+
+public func FfiConverterTypeUnconfirmedTransaction_lower(_ value: UnconfirmedTransaction) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeUnconfirmedTransaction.lower(value)
 }
 
 public protocol WalletProtocol: AnyObject {
@@ -5486,9 +5572,9 @@ extension SerdeError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Transaction {
-    case confirmed(TransactionConfirmed
+    case confirmed(ConfirmedTransaction
     )
-    case unconfirmed(TransactionUnconfirmed
+    case unconfirmed(UnconfirmedTransaction
     )
 }
 
@@ -5498,10 +5584,10 @@ public struct FfiConverterTypeTransaction: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Transaction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .confirmed(FfiConverterTypeTransactionConfirmed.read(from: &buf)
+        case 1: return try .confirmed(FfiConverterTypeConfirmedTransaction.read(from: &buf)
             )
 
-        case 2: return try .unconfirmed(FfiConverterTypeTransactionUnconfirmed.read(from: &buf)
+        case 2: return try .unconfirmed(FfiConverterTypeUnconfirmedTransaction.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -5512,11 +5598,11 @@ public struct FfiConverterTypeTransaction: FfiConverterRustBuffer {
         switch value {
         case let .confirmed(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeTransactionConfirmed.write(v1, into: &buf)
+            FfiConverterTypeConfirmedTransaction.write(v1, into: &buf)
 
         case let .unconfirmed(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeTransactionUnconfirmed.write(v1, into: &buf)
+            FfiConverterTypeUnconfirmedTransaction.write(v1, into: &buf)
         }
     }
 }
@@ -7226,6 +7312,18 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 4400 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_confirmedtransaction_block_height() != 62845 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmedtransaction_confirmed_at() != 21481 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmedtransaction_id() != 63537 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmedtransaction_sent_and_received() != 3525 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_database_global_config() != 4476 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7404,6 +7502,21 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_sentandreceived_sent() != 29124 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_txid_is_equal() != 5460 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_txid_to_hash_string() != 24069 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_unconfirmedtransaction_id() != 59175 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_unconfirmedtransaction_last_seen() != 29089 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_unconfirmedtransaction_sent_and_received() != 24593 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wallet_id() != 39072 {
