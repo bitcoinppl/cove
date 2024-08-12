@@ -12,6 +12,8 @@ struct TransactionsCardView: View {
     let scanComplete: Bool
     let metadata: WalletMetadata
 
+    private let screenHeight = UIScreen.main.bounds.height
+
     @ViewBuilder
     func TransactionRow(_ txn: Transaction) -> some View {
         VStack(alignment: .leading) {
@@ -46,11 +48,18 @@ struct TransactionsCardView: View {
                 }
 
                 if transactions.isEmpty {
-                    ContentUnavailableView {
-                        Label("No transactions", systemImage: "bitcoinsign.square.fill")
-                    } description: {
-                        Text("Send some bitcoin to yourself")
+                    VStack {
+                        ContentUnavailableView {
+                            Label("No transactions", systemImage: "bitcoinsign.square.fill")
+                        } description: {
+                            Text("Send some bitcoin to yourself")
+                        }
+                        .padding(.top, 20)
+
+                        Spacer()
+                            .frame(minHeight: screenHeight * 0.2)
                     }
+                    .background(.thickMaterial)
                 }
             }
             .padding()
@@ -164,5 +173,25 @@ private struct TxnIcon: View {
 }
 
 #Preview("Empty") {
-    TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
+    VStack {
+        Text("Test")
+
+        Spacer()
+        ScrollView {
+            TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
+                .background(
+                    UnevenRoundedRectangle(
+                        cornerRadii: .init(
+                            topLeading: 40,
+                            bottomLeading: 0,
+                            bottomTrailing: 0,
+                            topTrailing: 40
+                        )
+                    )
+                    .fill(.thickMaterial)
+                    .ignoresSafeArea()
+                )
+        }
+        .ignoresSafeArea()
+    }
 }

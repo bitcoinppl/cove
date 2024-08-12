@@ -153,7 +153,7 @@ fn transactions_preview_new(confirmed: u8, unconfirmed: u8) -> Vec<Transaction> 
         }
     }
 
-    transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
+    transactions.sort_unstable();
     transactions
 }
 
