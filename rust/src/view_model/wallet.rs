@@ -306,7 +306,7 @@ impl RustWalletViewModel {
 
 impl Drop for RustWalletViewModel {
     fn drop(&mut self) {
-        debug!("[DROP] Wallet View Model");
+        debug!("[DROP] Wallet View Model: {}", self.id);
     }
 }
 

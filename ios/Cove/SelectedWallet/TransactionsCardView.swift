@@ -43,6 +43,12 @@ struct TransactionsCardView: View {
                 }
                 .padding(.bottom, 12)
 
+                if !scanComplete {
+                    ProgressView()
+                        .tint(.primary)
+                        .padding(.bottom, 10)
+                }
+
                 LazyVStack(alignment: .leading) {
                     ForEach(transactions, content: TransactionRow)
                 }
@@ -138,7 +144,7 @@ private struct TxnIcon: View {
         case .incoming:
             "arrow.down.left"
         case .outgoing:
-            "arrow.down.right"
+            "arrow.up.right"
         }
     }
 
@@ -154,18 +160,21 @@ private struct TxnIcon: View {
 
 #Preview("Full of Txns - Complete") {
     TransactionsCardView(
-        transactions: transactionsPreviewNew(confirmed: UInt8(25), unconfirmed: UInt8(0)),
+        transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(0)),
         scanComplete: true,
         metadata: walletMetadataPreview()
     )
 }
 
 #Preview("Full of Txns - Scanning") {
-    TransactionsCardView(
-        transactions: transactionsPreviewNew(confirmed: UInt8(25), unconfirmed: UInt8(1)),
-        scanComplete: false,
-        metadata: walletMetadataPreview()
-    )
+    ScrollView {
+        TransactionsCardView(
+            transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(1)),
+            scanComplete: false,
+            metadata: walletMetadataPreview()
+        )
+        .background(.thickMaterial)
+    }
 }
 
 #Preview("Empty - Scanning") {

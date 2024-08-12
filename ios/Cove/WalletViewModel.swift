@@ -27,9 +27,12 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
 
     func reconcile(message: WalletViewModelReconcileMessage) {
         Task { [weak self] in
-            guard let self = self else { return }
-            let rust = self.rust
+            guard let self = self else {
+                Log.error("WalletViewModel no longer available")
+                return
+            }
 
+            let rust = self.rust
             self.logger.debug("WalletViewModelReconcileMessage: \(message)")
 
             await MainActor.run {

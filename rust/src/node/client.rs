@@ -17,7 +17,7 @@ use crate::node::Node;
 use super::ApiType;
 
 const STOP_GAP: usize = 50;
-const BATCH_SIZE: usize = 5;
+const BATCH_SIZE: usize = 30;
 
 pub enum NodeClient {
     Esplora(esplora_client::r#async::AsyncClient),

@@ -65,7 +65,7 @@ impl WalletActor {
             .map(|tx| Transaction::new(&self.wallet, tx))
             .collect::<Vec<Transaction>>();
 
-        transactions.sort_unstable();
+        transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
 
         Produces::ok(transactions)
     }

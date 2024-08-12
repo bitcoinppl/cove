@@ -20,7 +20,7 @@ struct SelectedWalletView: View {
 
         do {
             Log.debug("Getting wallet \(id)")
-            model = try WalletViewModel(id: id)
+            model = try app.getWalletViewModel(id: id)
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -49,15 +49,13 @@ struct SelectedWalletView: View {
         .tint(.white)
         .enableInjection()
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 struct SelectedWalletViewInner: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
+
+    private let screenHeight = UIScreen.main.bounds.height
 
     // public
     let model: WalletViewModel
@@ -91,16 +89,26 @@ struct SelectedWalletViewInner: View {
     }
 
     @ViewBuilder
+    var Loading: some View {
+        Spacer()
+        ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
+            .frame(width: 30, height: 30)
+            .padding(.top, screenHeight / 6)
+        Spacer()
+        Spacer()
+    }
+
+    @ViewBuilder
     var Transactions: some View {
         switch model.loadState {
         case .loading:
-            Spacer()
-            ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
-                .frame(width: 50, height: 50)
-            Spacer()
-            Spacer()
+            Loading
         case let .scanning(txns):
-            transactionsCard(transactions: txns, scanComplete: false)
+            if !model.walletMetadata.performedFullScan && txns.isEmpty {
+                Loading
+            } else {
+                transactionsCard(transactions: txns, scanComplete: false)
+            }
         case let .loaded(txns):
             transactionsCard(transactions: txns, scanComplete: true)
         }
