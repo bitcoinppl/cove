@@ -2,7 +2,7 @@ mod actor;
 
 use std::sync::Arc;
 
-use act_zero::{call, Addr};
+use act_zero::{call, send, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
@@ -15,7 +15,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     router::Route,
     task,
-    transaction::Transactions,
+    transaction::{Transaction, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -25,15 +25,18 @@ use crate::{
     word_validator::WordValidator,
 };
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletViewModelReconcileMessage {
     StartedWalletScan,
-    AvailableTransactions(Arc<Transactions>),
-    ScanComplete(Arc<Transactions>),
+    AvailableTransactions(Vec<Transaction>),
+    ScanComplete(Vec<Transaction>),
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
     WalletBalanceChanged(Balance),
+
+    WalletError(WalletViewModelError),
+    UnknownError(String),
 }
 
 #[uniffi::export(callback_interface)]
@@ -55,13 +58,16 @@ pub struct RustWalletViewModel {
 pub enum WalletViewModelAction {
     UpdateName(String),
     UpdateColor(WalletColor),
+    UpdateUnit(Unit),
+    UpdateFiatCurrency(String),
+    ToggleSensitiveVisibility,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletLoadState {
     Loading,
-    Scanning(Arc<Transactions>),
-    Loaded(Arc<Transactions>),
+    Scanning(Vec<Transaction>),
+    Loaded(Vec<Transaction>),
 }
 
 pub type Error = WalletViewModelError;
@@ -171,49 +177,12 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
         debug!("start_wallet_scan: {}", self.id);
-        use WalletViewModelReconcileMessage as Msg;
 
-        // notify the frontend that the wallet is starting to scan
-        self.send(Msg::StartedWalletScan);
+        let actor = self.actor.clone();
 
-        // get the initial balance and transactions
-        {
-            let initial_balance = call!(self.actor.balance())
-                .await
-                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
-
-            self.send(Msg::WalletBalanceChanged(initial_balance));
-
-            let initial_transactions = call!(self.actor.transactions())
-                .await
-                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
-                .into();
-
-            self.send(Msg::AvailableTransactions(initial_transactions))
-        }
-
-        // start the wallet scan and send balnce and transactions after scan is complete
-        {
-            // start the wallet scan
-            call!(self.actor.start_wallet_scan())
-                .await
-                .map_err(|error| Error::WalletScanError(error.to_string()))?;
-
-            // get and send wallet balance
-            let balance = call!(self.actor.balance())
-                .await
-                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
-
-            self.send(Msg::WalletBalanceChanged(balance));
-
-            // get and send transactions
-            let transactions: Arc<Transactions> = call!(self.actor.transactions())
-                .await
-                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?
-                .into();
-
-            self.send(Msg::ScanComplete(transactions));
-        }
+        tokio::spawn(async move {
+            send!(actor.wallet_scan_and_notify());
+        });
 
         Ok(())
     }
@@ -275,24 +244,35 @@ impl RustWalletViewModel {
             WalletViewModelAction::UpdateName(name) => {
                 let mut metadata = self.metadata.write();
                 metadata.name = name;
-
-                self.reconciler
-                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
-                        metadata.clone(),
-                    ))
-                    .unwrap();
             }
             WalletViewModelAction::UpdateColor(color) => {
                 let mut metadata = self.metadata.write();
                 metadata.color = color;
+            }
 
-                self.reconciler
-                    .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
-                        metadata.clone(),
-                    ))
-                    .unwrap();
+            WalletViewModelAction::UpdateUnit(unit) => {
+                let mut metadata = self.metadata.write();
+                metadata.selected_unit = unit;
+            }
+
+            WalletViewModelAction::UpdateFiatCurrency(fiat_currency) => {
+                let mut metadata = self.metadata.write();
+                metadata.selected_fiat_currency = fiat_currency;
+            }
+
+            WalletViewModelAction::ToggleSensitiveVisibility => {
+                let mut metadata = self.metadata.write();
+                metadata.sensitive_visible = !metadata.sensitive_visible;
             }
         }
+
+        let metadata = self.metadata.read();
+
+        self.reconciler
+            .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                metadata.clone(),
+            ))
+            .unwrap();
 
         // update wallet_metadata in the database
         if let Err(error) = Database::global()
@@ -301,12 +281,6 @@ impl RustWalletViewModel {
         {
             error!("Unable to update wallet metadata: {error:?}")
         }
-    }
-}
-
-impl RustWalletViewModel {
-    fn send(&self, msg: WalletViewModelReconcileMessage) {
-        self.reconciler.send(msg).unwrap();
     }
 }
 
@@ -332,6 +306,15 @@ impl RustWalletViewModel {
 
 impl Drop for RustWalletViewModel {
     fn drop(&mut self) {
-        debug!("[DROP] Wallet View Model");
+        debug!("[DROP] Wallet View Model: {}", self.id);
+    }
+}
+
+mod ffi {
+    use super::*;
+
+    #[uniffi::export]
+    fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
+        lhs == rhs
     }
 }

@@ -1,8 +1,9 @@
 mod amount;
-mod ref_map;
+mod ffi;
 mod sent_and_received;
+mod unit;
 
-use std::sync::Arc;
+use std::{cmp::Ordering, sync::Arc};
 
 use bdk_chain::{
     bitcoin::{Sequence, Witness},
@@ -14,51 +15,16 @@ use bdk_wallet::bitcoin::{
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
 
-pub type TransactionRefMap = ref_map::TransactionRefMap;
+use crate::wallet::Wallet;
+
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct Transactions {
-    pub inner: Vec<Transaction>,
-    tx_ref: Vec<TransactionRef>,
-}
-
-uniffi::custom_newtype!(TransactionRef, u64);
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TransactionRef(u64);
+pub type Unit = unit::Unit;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionDirection {
     Incoming,
     Outgoing,
-}
-
-#[uniffi::export]
-impl Transactions {
-    #[uniffi::constructor]
-    pub fn empty() -> Self {
-        Self {
-            inner: vec![],
-            tx_ref: vec![],
-        }
-    }
-
-    #[uniffi::method]
-    pub fn id(&self, tx_ref: TransactionRef) -> TxId {
-        self.inner[tx_ref.0 as usize].txid
-    }
-
-    #[uniffi::method]
-    pub fn into_inner(&self) -> Vec<TransactionRef> {
-        self.tx_ref.clone()
-    }
-}
-
-impl Transactions {
-    pub fn get(&self, tx_ref: TransactionRef) -> Option<&Transaction> {
-        self.inner.get(tx_ref.0 as usize)
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -67,14 +33,28 @@ pub enum ChainPosition {
     Confirmed(ConfirmationBlockTime),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct Transaction {
-    pub txid: TxId,
-    pub chain_position: ChainPosition,
-    pub txn: Arc<BdkTransaction>,
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum Transaction {
+    Confirmed(Arc<ConfirmedTransaction>),
+    Unconfirmed(Arc<UnconfirmedTransaction>),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
+pub struct ConfirmedTransaction {
+    pub txid: TxId,
+    pub block_height: u32,
+    pub confirmed_at: jiff::Timestamp,
+    pub sent_and_received: SentAndReceived,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+pub struct UnconfirmedTransaction {
+    pub txid: TxId,
+    pub sent_and_received: SentAndReceived,
+    pub last_seen: u64,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, uniffi::Object)]
 pub struct TxId(pub BdkTxid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -97,12 +77,44 @@ pub struct OutPoint {
     pub vout: u32,
 }
 
-impl From<CanonicalTx<'_, Arc<BdkTransaction>, ConfirmationBlockTime>> for Transaction {
-    fn from(tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>) -> Self {
-        Self {
-            txid: tx.tx_node.txid.into(),
-            chain_position: tx.chain_position.into(),
-            txn: Arc::clone(&tx.tx_node.tx),
+impl Transaction {
+    pub fn id(&self) -> TxId {
+        match self {
+            Transaction::Confirmed(confirmed) => confirmed.id(),
+            Transaction::Unconfirmed(unconfirmed) => unconfirmed.id(),
+        }
+    }
+
+    pub fn new(
+        wallet: &Wallet,
+        tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
+    ) -> Self {
+        let txid = tx.tx_node.txid.into();
+
+        match tx.chain_position {
+            BdkChainPosition::Unconfirmed(last_seen) => {
+                let unconfirmed = UnconfirmedTransaction {
+                    txid,
+                    sent_and_received: wallet.sent_and_received(&tx.tx_node.tx).into(),
+                    last_seen,
+                };
+
+                Self::Unconfirmed(Arc::new(unconfirmed))
+            }
+            BdkChainPosition::Confirmed(block_time) => {
+                let confirmed_at =
+                    jiff::Timestamp::from_second(block_time.confirmation_time as i64)
+                        .expect("all blocktimes after unix epoch");
+
+                let confirmed = ConfirmedTransaction {
+                    txid,
+                    block_height: block_time.block_id.height,
+                    confirmed_at,
+                    sent_and_received: wallet.sent_and_received(&tx.tx_node.tx).into(),
+                };
+
+                Self::Confirmed(Arc::new(confirmed))
+            }
         }
     }
 }
@@ -153,14 +165,49 @@ impl From<BdkChainPosition<&ConfirmationBlockTime>> for ChainPosition {
     }
 }
 
-impl From<Vec<Transaction>> for Transactions {
-    fn from(inner: Vec<Transaction>) -> Self {
-        let tx_ref = inner
-            .iter()
-            .enumerate()
-            .map(|(index, _tx)| TransactionRef(index as u64))
-            .collect();
+impl Ord for ConfirmedTransaction {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.block_height.cmp(&other.block_height)
+    }
+}
 
-        Self { inner, tx_ref }
+impl PartialOrd for ConfirmedTransaction {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for UnconfirmedTransaction {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.last_seen.cmp(&other.last_seen)
+    }
+}
+
+impl PartialOrd for UnconfirmedTransaction {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Transaction {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let sort = match (self, other) {
+            (Self::Confirmed(confirmed), Self::Confirmed(other)) => confirmed.cmp(other),
+            (Self::Unconfirmed(unconfirmed), Self::Unconfirmed(other)) => unconfirmed.cmp(other),
+            (Self::Confirmed(_), Self::Unconfirmed(_)) => Ordering::Less,
+            (Self::Unconfirmed(_), Self::Confirmed(_)) => Ordering::Greater,
+        };
+
+        if sort == Ordering::Equal {
+            self.id().cmp(&other.id())
+        } else {
+            sort
+        }
+    }
+}
+
+impl PartialOrd for Transaction {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }

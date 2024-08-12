@@ -25,35 +25,50 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         self.walletMetadata.verified
     }
 
-    @MainActor
     func reconcile(message: WalletViewModelReconcileMessage) {
-        let rust = self.rust
-
-        self.logger.debug("Reconcile: \(message)")
-
-        switch message {
-        case .startedWalletScan:
-            self.loadState = .loading
-
-        case let .availableTransactions(txns):
-            self.loadState = .scanning(txns)
-
-        case let .scanComplete(txns):
-            self.loadState = .loaded(txns)
-
-        case .walletBalanceChanged:
-            Task {
-                let balance = await rust.balance()
-                await MainActor.run {
-                    self.balance = balance
-                }
+        Task { [weak self] in
+            guard let self = self else {
+                Log.error("WalletViewModel no longer available")
+                return
             }
 
-        case let .walletMetadataChanged(metadata):
-            self.walletMetadata = metadata
+            let rust = self.rust
+            self.logger.debug("WalletViewModelReconcileMessage: \(message)")
 
-        case let .nodeConnectionFailed(error):
-            self.logger.error(error)
+            await MainActor.run {
+                switch message {
+                case .startedWalletScan:
+                    self.loadState = .loading
+
+                case let .availableTransactions(txns):
+                    self.loadState = .scanning(txns)
+
+                case let .scanComplete(txns):
+                    self.loadState = .loaded(txns)
+
+                case .walletBalanceChanged:
+                    Task {
+                        let balance = await rust.balance()
+                        await MainActor.run {
+                            self.balance = balance
+                        }
+                    }
+
+                case let .walletMetadataChanged(metadata):
+                    self.walletMetadata = metadata
+
+                case let .nodeConnectionFailed(error):
+                    self.logger.error(error)
+
+                case let .walletError(error):
+                    // TODO: show to user
+                    self.logger.error("WalletError \(error)")
+
+                case let .unknownError(error):
+                    // TODO: show to user
+                    self.logger.error("Unknown error \(error)")
+                }
+            }
         }
     }
 
@@ -71,6 +86,12 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         self.rust = rust
         self.walletMetadata = rust.walletMetadata()
 
-        rust.listenForUpdates(reconciler: self)
+        rust.listenForUpdates(reconciler: WeakReconciler(self))
+    }
+}
+
+extension WalletLoadState: Equatable {
+    public static func == (lhs: WalletLoadState, rhs: WalletLoadState) -> Bool {
+        walletStateIsEqual(lhs: lhs, rhs: rhs)
     }
 }

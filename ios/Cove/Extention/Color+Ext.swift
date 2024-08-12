@@ -9,6 +9,10 @@ import Foundation
 import SwiftUI
 
 extension Color {
+    init(_ color: WalletColor) {
+        self = color.toColor()
+    }
+
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0

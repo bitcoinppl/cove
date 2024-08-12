@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 7/1/24.
 //
 
+import ActivityIndicatorView
 import SwiftUI
 
 struct SelectedWalletView: View {
@@ -19,7 +20,7 @@ struct SelectedWalletView: View {
 
         do {
             Log.debug("Getting wallet \(id)")
-            model = try WalletViewModel(id: id)
+            model = try app.getWalletViewModel(id: id)
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -34,61 +35,111 @@ struct SelectedWalletView: View {
                 Text("Loading...")
             }
         }
+        .task {
+            loadModel()
 
-        .onAppear(perform: loadModel)
+            if let model = self.model {
+                do {
+                    try await model.rust.startWalletScan()
+                } catch {
+                    Log.error("Wallet Scan Failed \(error.localizedDescription)")
+                }
+            }
+        }
         .tint(.white)
         .enableInjection()
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 struct SelectedWalletViewInner: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
-    @State var model: WalletViewModel
+    private let screenHeight = UIScreen.main.bounds.height
+
+    // public
+    let model: WalletViewModel
 
     // private
     @State private var showSettings = false
 
-    var body: some View {
-        VStack {
-            Spacer()
+    func updater(_ action: WalletViewModelAction) {
+        model.dispatch(action: action)
+    }
 
-            Text("\(model.walletMetadata.name)")
-                .foregroundColor(model.walletMetadata.color.toCardColors()[0].opacity(0.8))
-                .font(.title2)
+    var accentColor: Color {
+        Color(model.walletMetadata.color)
+    }
 
-            Text(model.rust.fingerprint())
+    @ViewBuilder
+    func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
+        TransactionsCardView(transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata)
+            .background(
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(
+                        topLeading: 40,
+                        bottomLeading: 0,
+                        bottomTrailing: 0,
+                        topTrailing: 40
+                    )
+                )
+                .fill(.thickMaterial)
+                .ignoresSafeArea()
+            )
+    }
 
-            Spacer()
-            VerifyReminder(walletId: model.id, isVerified: model.isVerified)
+    @ViewBuilder
+    var Loading: some View {
+        Spacer()
+        ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
+            .frame(width: 30, height: 30)
+            .padding(.top, screenHeight / 6)
+        Spacer()
+        Spacer()
+    }
+
+    @ViewBuilder
+    var Transactions: some View {
+        switch model.loadState {
+        case .loading:
+            Loading
+        case let .scanning(txns):
+            if !model.walletMetadata.performedFullScan && txns.isEmpty {
+                Loading
+            } else {
+                transactionsCard(transactions: txns, scanComplete: false)
+            }
+        case let .loaded(txns):
+            transactionsCard(transactions: txns, scanComplete: true)
         }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {
-                    showSettings = true
-                }) {
-                    Image(systemName: "gear")
-                        .foregroundColor(.primary.opacity(0.8))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack {
+                WalletBalanceHeaderView(balance: model.balance.confirmed,
+                                        metadata: model.walletMetadata,
+                                        updater: updater)
+                    .padding()
+
+                Transactions
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showSettings = true
+                    }) {
+                        Image(systemName: "gear")
+                            .foregroundColor(.primary.opacity(0.8))
+                    }
                 }
             }
-        }
-        .navigationTitle(model.walletMetadata.name)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .sheet(isPresented: $showSettings) {
-            WalletSettingsView(model: model)
-        }
-        .task {
-            do {
-                try await model.rust.startWalletScan()
-            } catch {
-                Log.error("Wallet Scan Failed \(error.localizedDescription)")
+            .navigationTitle(model.walletMetadata.name)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .sheet(isPresented: $showSettings) {
+                WalletSettingsView(model: model)
             }
         }
     }
@@ -128,6 +179,8 @@ struct VerifyReminder: View {
 }
 
 #Preview("Loaded Wallet") {
-    SelectedWalletViewInner(model: WalletViewModel(preview: "preview_only"))
-        .environment(MainViewModel())
+    AsyncPreview {
+        SelectedWalletViewInner(model: WalletViewModel(preview: "preview_only"))
+            .environment(MainViewModel())
+    }
 }

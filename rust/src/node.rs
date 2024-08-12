@@ -2,7 +2,7 @@ pub mod client;
 
 use crate::{
     network::Network,
-    node_connect::{NodeSelection, BITCOIN_ESPLORA},
+    node_connect::{NodeSelection, BITCOIN_ELECTRUM, TESTNET_ESPLORA},
 };
 
 use client::NodeClient;
@@ -42,20 +42,31 @@ pub enum Error {
     CheckUrlError(#[from] client::Error),
 }
 
-impl Default for Node {
-    fn default() -> Self {
-        let (name, url) = BITCOIN_ESPLORA;
+impl Node {
+    pub fn default(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => {
+                let (name, url) = BITCOIN_ELECTRUM[0];
 
-        Self {
-            name: name.to_string(),
-            network: Network::Bitcoin,
-            api_type: ApiType::Esplora,
-            url: url.to_string(),
+                Self {
+                    name: name.to_string(),
+                    network,
+                    api_type: ApiType::Electrum,
+                    url: url.to_string(),
+                }
+            }
+            Network::Testnet => {
+                let (name, url) = TESTNET_ESPLORA;
+                Self {
+                    name: name.to_string(),
+                    network,
+                    api_type: ApiType::Esplora,
+                    url: url.to_string(),
+                }
+            }
         }
     }
-}
 
-impl Node {
     pub fn new_electrum(name: String, url: String, network: Network) -> Self {
         Self {
             name,

@@ -102,3 +102,8 @@ fn get_or_create_database() -> redb::Database {
 fn database_location() -> PathBuf {
     ROOT_DATA_DIR.join("cove.db")
 }
+
+#[cfg(test)]
+pub fn delete_database() {
+    let _ = std::fs::remove_file(database_location());
+}

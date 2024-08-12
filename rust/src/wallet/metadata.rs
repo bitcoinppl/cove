@@ -1,3 +1,4 @@
+use crate::transaction::Unit;
 use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
@@ -24,8 +25,22 @@ pub struct WalletMetadata {
     pub color: WalletColor,
     pub verified: bool,
     pub network: Network,
-    #[serde(default)]
     pub performed_full_scan: bool,
+    #[serde(default)]
+    pub selected_unit: Unit,
+    #[serde(default = "default_fiat_currency")]
+    pub selected_fiat_currency: String,
+    #[serde(default = "default_true")]
+    pub sensitive_visible: bool,
+}
+
+mod ffi {
+    use super::*;
+
+    #[uniffi::export]
+    pub fn wallet_metadata_preview() -> WalletMetadata {
+        WalletMetadata::preview_new()
+    }
 }
 
 impl WalletMetadata {
@@ -35,10 +50,13 @@ impl WalletMetadata {
         Self {
             id: WalletId::new(),
             name: name.into(),
-            color: WalletColor::random(),
+            color: WalletColor::Blue,
             verified: false,
             network,
             performed_full_scan: false,
+            selected_unit: Unit::default(),
+            selected_fiat_currency: default_fiat_currency(),
+            sensitive_visible: true,
         }
     }
 
@@ -46,10 +64,13 @@ impl WalletMetadata {
         Self {
             id: WalletId::new(),
             name: name.into(),
-            color: WalletColor::random(),
+            color: WalletColor::Blue,
             verified: true,
             network,
             performed_full_scan: false,
+            selected_unit: Unit::default(),
+            selected_fiat_currency: default_fiat_currency(),
+            sensitive_visible: true,
         }
     }
 
@@ -57,10 +78,13 @@ impl WalletMetadata {
         Self {
             id: WalletId::preview_new(),
             name: "Test Wallet".to_string(),
-            color: WalletColor::random(),
+            color: WalletColor::Blue,
             verified: false,
             network: Network::Bitcoin,
             performed_full_scan: false,
+            selected_unit: Unit::default(),
+            selected_fiat_currency: default_fiat_currency(),
+            sensitive_visible: true,
         }
     }
 }
@@ -92,4 +116,12 @@ impl WalletColor {
         let random_index = rand::thread_rng().gen_range(0..options.len());
         options[random_index]
     }
+}
+
+fn default_fiat_currency() -> String {
+    "USD".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
