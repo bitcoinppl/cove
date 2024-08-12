@@ -109,7 +109,7 @@ impl GlobalConfigTable {
             .unwrap_or(None)
             .unwrap_or("".to_string());
 
-        serde_json::from_str(&node_json).unwrap_or_default()
+        serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
     }
 
     pub fn set_selected_node(&self, node: &Node) -> Result<(), Error> {

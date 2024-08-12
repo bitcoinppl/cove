@@ -4,8 +4,7 @@ use url::Url;
 use crate::{database::Database, impl_default_for, network::Network, node::Node};
 
 pub const BITCOIN_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/api/");
-
-const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
+pub const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
     (
         "electrum.blockstream.info",
         "ssl://electrum.blockstream.info:50002",
@@ -14,7 +13,8 @@ const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
     ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
 ];
 
-const TESTNET_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/testnet/api/");
+pub const TESTNET_ESPLORA: (&str, &str) =
+    ("blockstream.info", "https://blockstream.info/testnet/api/");
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct NodeSelector {
@@ -157,7 +157,7 @@ impl NodeSelector {
             Node::new_esplora(name, url_string, self.network)
         } else {
             error!("invalid node type: {node_type}");
-            Node::default()
+            Node::default(self.network)
         };
 
         Ok(node)
