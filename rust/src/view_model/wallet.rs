@@ -63,7 +63,7 @@ pub enum WalletViewModelAction {
     ToggleSensitiveVisibility,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletLoadState {
     Loading,
     Scanning(Vec<Transaction>),

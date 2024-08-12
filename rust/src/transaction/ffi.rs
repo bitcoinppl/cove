@@ -1,4 +1,5 @@
 use jiff::ToSpan as _;
+use numfmt::Formatter;
 use rand::Rng as _;
 
 use super::*;
@@ -29,8 +30,31 @@ impl ConfirmedTransaction {
     }
 
     #[uniffi::method]
+    pub fn label(&self) -> String {
+        self.sent_and_received.label()
+    }
+
+    #[uniffi::method]
+    pub fn block_height_fmt(&self) -> String {
+        let mut fmt = Formatter::new()
+            .separator(',')
+            .unwrap()
+            .precision(numfmt::Precision::Decimals(0));
+
+        fmt.fmt2(self.block_height).to_string()
+    }
+
+    #[uniffi::method]
     pub fn confirmed_at(&self) -> u64 {
         self.confirmed_at
+            .as_second()
+            .try_into()
+            .expect("all blocktimes after unix epoch")
+    }
+
+    #[uniffi::method]
+    pub fn confirmed_at_fmt(&self) -> String {
+        self.confirmed_at.strftime("%B %d, %Y").to_string()
     }
 
     #[uniffi::method]
@@ -55,10 +79,62 @@ impl UnconfirmedTransaction {
     pub fn sent_and_received(&self) -> SentAndReceived {
         self.sent_and_received
     }
+
+    #[uniffi::method]
+    pub fn label(&self) -> String {
+        self.sent_and_received.label()
+    }
+}
+
+#[uniffi::export]
+impl SentAndReceived {
+    #[uniffi::method]
+    pub fn sent(&self) -> Amount {
+        self.sent
+    }
+
+    #[uniffi::method]
+    pub fn received(&self) -> Amount {
+        self.received
+    }
+
+    #[uniffi::method]
+    pub fn direction(&self) -> TransactionDirection {
+        self.direction
+    }
+
+    #[uniffi::method]
+    pub fn amount(&self) -> Amount {
+        match &self.direction {
+            TransactionDirection::Incoming => self.received,
+            TransactionDirection::Outgoing => self.sent,
+        }
+    }
+
+    #[uniffi::method]
+    pub fn amount_fmt(&self, unit: Unit) -> String {
+        let prefix = match &self.direction {
+            TransactionDirection::Incoming => "",
+            TransactionDirection::Outgoing => "-",
+        };
+
+        match unit {
+            Unit::Btc => format!("{prefix}{}", self.amount().btc_string()),
+            Unit::Sat => format!("{prefix}{}", self.amount().sats_string()),
+        }
+    }
+
+    #[uniffi::method]
+    pub fn label(&self) -> String {
+        match &self.direction {
+            TransactionDirection::Incoming => "Received",
+            TransactionDirection::Outgoing => "Sent",
+        }
+        .to_string()
+    }
 }
 
 // PREVIEW ONLY
-
 #[uniffi::export]
 fn transactions_preview_new(confirmed: u8, unconfirmed: u8) -> Vec<Transaction> {
     let mut transactions = Vec::with_capacity((confirmed + unconfirmed) as usize);
@@ -88,7 +164,7 @@ fn transaction_preview_confirmed_new() -> Transaction {
     let txn = ConfirmedTransaction {
         txid: TxId::preview_new(),
         block_height,
-        confirmed_at: jiff::Timestamp::now().as_second().try_into().unwrap(),
+        confirmed_at: jiff::Timestamp::now(),
         sent_and_received: SentAndReceived::preview_new(),
     };
 
@@ -118,7 +194,7 @@ fn random_block_height() -> u32 {
 }
 
 fn random_amount() -> u64 {
-    rand::thread_rng().gen_range(100_000..10_000_000_000)
+    rand::thread_rng().gen_range(100_000..=200_000_000)
 }
 
 #[uniffi::export]

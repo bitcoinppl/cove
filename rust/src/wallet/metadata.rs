@@ -84,7 +84,7 @@ impl WalletMetadata {
             performed_full_scan: false,
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
-            sensitive_visible: false,
+            sensitive_visible: true,
         }
     }
 }

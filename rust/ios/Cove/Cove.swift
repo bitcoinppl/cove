@@ -1116,9 +1116,15 @@ public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> Unsaf
 public protocol ConfirmedTransactionProtocol: AnyObject {
     func blockHeight() -> UInt32
 
+    func blockHeightFmt() -> String
+
     func confirmedAt() -> UInt64
 
+    func confirmedAtFmt() -> String
+
     func id() -> TxId
+
+    func label() -> String
 
     func sentAndReceived() -> SentAndReceived
 }
@@ -1169,15 +1175,33 @@ open class ConfirmedTransaction:
         })
     }
 
+    open func blockHeightFmt() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_block_height_fmt(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func confirmedAt() -> UInt64 {
         return try! FfiConverterUInt64.lift(try! rustCall {
             uniffi_cove_fn_method_confirmedtransaction_confirmed_at(self.uniffiClonePointer(), $0)
         })
     }
 
+    open func confirmedAtFmt() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func id() -> TxId {
         return try! FfiConverterTypeTxId.lift(try! rustCall {
             uniffi_cove_fn_method_confirmedtransaction_id(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func label() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_label(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -2954,6 +2978,14 @@ public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewMod
 }
 
 public protocol SentAndReceivedProtocol: AnyObject {
+    func amount() -> Amount
+
+    func amountFmt(unit: Unit) -> String
+
+    func direction() -> TransactionDirection
+
+    func label() -> String
+
     func received() -> Amount
 
     func sent() -> Amount
@@ -2997,6 +3029,31 @@ open class SentAndReceived:
         }
 
         try! rustCall { uniffi_cove_fn_free_sentandreceived(pointer, $0) }
+    }
+
+    open func amount() -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_sentandreceived_amount(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func amountFmt(unit: Unit) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_sentandreceived_amount_fmt(self.uniffiClonePointer(),
+                                                             FfiConverterTypeUnit.lower(unit), $0)
+        })
+    }
+
+    open func direction() -> TransactionDirection {
+        return try! FfiConverterTypeTransactionDirection.lift(try! rustCall {
+            uniffi_cove_fn_method_sentandreceived_direction(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func label() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_sentandreceived_label(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func received() -> Amount {
@@ -3313,6 +3370,8 @@ public func FfiConverterTypeTxOut_lower(_ value: TxOut) -> UnsafeMutableRawPoint
 public protocol UnconfirmedTransactionProtocol: AnyObject {
     func id() -> TxId
 
+    func label() -> String
+
     func lastSeen() -> UInt64
 
     func sentAndReceived() -> SentAndReceived
@@ -3361,6 +3420,12 @@ open class UnconfirmedTransaction:
     open func id() -> TxId {
         return try! FfiConverterTypeTxId.lift(try! rustCall {
             uniffi_cove_fn_method_unconfirmedtransaction_id(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func label() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_unconfirmedtransaction_label(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -7315,10 +7380,19 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_confirmedtransaction_block_height() != 62845 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_confirmedtransaction_block_height_fmt() != 22839 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_confirmedtransaction_confirmed_at() != 21481 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt() != 28835 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_confirmedtransaction_id() != 63537 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmedtransaction_label() != 17010 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_confirmedtransaction_sent_and_received() != 3525 {
@@ -7498,6 +7572,18 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_sentandreceived_amount() != 29581 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_sentandreceived_amount_fmt() != 55767 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_sentandreceived_direction() != 63307 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_sentandreceived_label() != 28947 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_sentandreceived_received() != 12400 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7511,6 +7597,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_unconfirmedtransaction_id() != 59175 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_unconfirmedtransaction_label() != 12913 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_unconfirmedtransaction_last_seen() != 29089 {

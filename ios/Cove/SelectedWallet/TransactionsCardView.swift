@@ -10,14 +10,22 @@ import SwiftUI
 struct TransactionsCardView: View {
     let transactions: [Transaction]
     let scanComplete: Bool
+    let metadata: WalletMetadata
 
     @ViewBuilder
     func TransactionRow(_ txn: Transaction) -> some View {
-        switch txn {
-        case let .confirmed(txn):
-            ConfirmedTransactionView(transaction: txn)
-        case let .unconfirmed(txn):
-            UnconfirmedTransactionView(transaction: txn)
+        VStack(alignment: .leading) {
+            Group {
+                switch txn {
+                case let .confirmed(txn):
+                    ConfirmedTransactionView(txn: txn, metadata: metadata)
+                case let .unconfirmed(txn):
+                    UnconfirmedTransactionView(transaction: txn)
+                }
+            }
+            .padding(.vertical, 6)
+
+            Divider().opacity(0.7)
         }
     }
 
@@ -31,8 +39,11 @@ struct TransactionsCardView: View {
                         .fontWeight(.bold)
                     Spacer()
                 }
+                .padding(.bottom, 12)
 
-                ForEach(transactions, content: TransactionRow)
+                LazyVStack(alignment: .leading) {
+                    ForEach(transactions, content: TransactionRow)
+                }
 
                 if transactions.isEmpty {
                     ContentUnavailableView {
@@ -49,13 +60,47 @@ struct TransactionsCardView: View {
 }
 
 struct ConfirmedTransactionView: View {
-    let transaction: ConfirmedTransaction
+    let txn: ConfirmedTransaction
+    let metadata: WalletMetadata
+
+    func amount(_ sentAndReceived: SentAndReceived) -> String {
+        if !metadata.sensitiveVisible {
+            return "**************"
+        }
+
+        return sentAndReceived.amountFmt(unit: metadata.selectedUnit)
+    }
+
+    func amountColor(_ direction: TransactionDirection) -> Color {
+        switch direction {
+        case .incoming:
+            .green
+        case .outgoing:
+            .primary.opacity(0.8)
+        }
+    }
 
     var body: some View {
         HStack {
-            Text("Confirmed")
-            Text(String(transaction.blockHeight()))
-            Text(String(transaction.confirmedAt()))
+            TxnIcon(direction: txn.sentAndReceived().direction())
+            VStack(alignment: .leading, spacing: 5) {
+                Text(txn.label())
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary.opacity(0.65))
+
+                Text(txn.confirmedAtFmt())
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing) {
+                Text(amount(txn.sentAndReceived()))
+                    .foregroundStyle(amountColor(txn.sentAndReceived().direction()))
+                Text(txn.blockHeightFmt())
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }
@@ -65,29 +110,59 @@ struct UnconfirmedTransactionView: View {
 
     var body: some View {
         HStack {
-            Text("Unconfirmed")
+//            Text("Unconfirmed")
         }
+    }
+}
+
+private struct TxnIcon: View {
+    @Environment(\.colorScheme) var colorScheme
+
+    let direction: TransactionDirection
+
+    var iconColor: Color {
+        colorScheme == .dark ? .gray.opacity(0.35) : .primary.opacity(0.75)
+    }
+
+    var arrow: String {
+        switch direction {
+        case .incoming:
+            "arrow.down.left"
+        case .outgoing:
+            "arrow.down.right"
+        }
+    }
+
+    var body: some View {
+        Image(systemName: arrow)
+            .foregroundColor(.white)
+            .padding()
+            .background(iconColor)
+            .cornerRadius(6)
+            .padding(.trailing, 5)
     }
 }
 
 #Preview("Full of Txns - Complete") {
     TransactionsCardView(
-        transactions: transactionsPreviewNew(confirmed: UInt8(25), unconfirmed: UInt8(1)),
-        scanComplete: true
+        transactions: transactionsPreviewNew(confirmed: UInt8(25), unconfirmed: UInt8(0)),
+        scanComplete: true,
+        metadata: walletMetadataPreview()
     )
 }
 
 #Preview("Full of Txns - Scanning") {
     TransactionsCardView(
         transactions: transactionsPreviewNew(confirmed: UInt8(25), unconfirmed: UInt8(1)),
-        scanComplete: false
+        scanComplete: false,
+        metadata: walletMetadataPreview()
     )
 }
 
 #Preview("Empty - Scanning") {
-    TransactionsCardView(transactions: [], scanComplete: false)
+    TransactionsCardView(transactions: [], scanComplete: false, metadata: walletMetadataPreview())
 }
 
 #Preview("Empty") {
-    TransactionsCardView(transactions: [], scanComplete: true)
+    TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
 }

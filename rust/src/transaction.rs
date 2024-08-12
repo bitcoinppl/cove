@@ -33,17 +33,17 @@ pub enum ChainPosition {
     Confirmed(ConfirmationBlockTime),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Transaction {
     Confirmed(Arc<ConfirmedTransaction>),
     Unconfirmed(Arc<UnconfirmedTransaction>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
 pub struct ConfirmedTransaction {
     pub txid: TxId,
     pub block_height: u32,
-    pub confirmed_at: u64,
+    pub confirmed_at: jiff::Timestamp,
     pub sent_and_received: SentAndReceived,
 }
 
@@ -102,10 +102,14 @@ impl Transaction {
                 Self::Unconfirmed(Arc::new(unconfirmed))
             }
             BdkChainPosition::Confirmed(block_time) => {
+                let confirmed_at =
+                    jiff::Timestamp::from_second(block_time.confirmation_time as i64)
+                        .expect("all blocktimes after unix epoch");
+
                 let confirmed = ConfirmedTransaction {
                     txid,
                     block_height: block_time.block_id.height,
-                    confirmed_at: block_time.confirmation_time,
+                    confirmed_at,
                     sent_and_received: wallet.sent_and_received(&tx.tx_node.tx).into(),
                 };
 

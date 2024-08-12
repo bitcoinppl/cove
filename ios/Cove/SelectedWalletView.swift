@@ -75,7 +75,7 @@ struct SelectedWalletViewInner: View {
 
     @ViewBuilder
     func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
-        TransactionsCardView(transactions: transactions, scanComplete: scanComplete)
+        TransactionsCardView(transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata)
             .background(
                 UnevenRoundedRectangle(
                     cornerRadii: .init(
@@ -107,30 +107,32 @@ struct SelectedWalletViewInner: View {
     }
 
     var body: some View {
-        VStack {
-            WalletBalanceHeaderView(balance: model.balance.confirmed,
-                                    metadata: model.walletMetadata,
-                                    updater: updater)
-                .padding()
+        ScrollView {
+            VStack {
+                WalletBalanceHeaderView(balance: model.balance.confirmed,
+                                        metadata: model.walletMetadata,
+                                        updater: updater)
+                    .padding()
 
-            Transactions
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {
-                    showSettings = true
-                }) {
-                    Image(systemName: "gear")
-                        .foregroundColor(.primary.opacity(0.8))
+                Transactions
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showSettings = true
+                    }) {
+                        Image(systemName: "gear")
+                            .foregroundColor(.primary.opacity(0.8))
+                    }
                 }
             }
-        }
-        .navigationTitle(model.walletMetadata.name)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .sheet(isPresented: $showSettings) {
-            WalletSettingsView(model: model)
+            .navigationTitle(model.walletMetadata.name)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .sheet(isPresented: $showSettings) {
+                WalletSettingsView(model: model)
+            }
         }
     }
 }
