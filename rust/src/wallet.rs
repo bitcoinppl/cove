@@ -280,14 +280,17 @@ mod tests {
 
     #[test]
     fn test_fingerprint() {
+        crate::database::delete_database();
+
         let mnemonic = Mnemonic::parse_normalized(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
 
-        let id = WalletId::new();
-        let wallet = Wallet::try_new_persisted_from_mnemonic(id.clone(), mnemonic, None).unwrap();
+        let metadata = WalletMetadata::preview_new();
+        let wallet =
+            Wallet::try_new_persisted_from_mnemonic(metadata.clone(), mnemonic, None).unwrap();
         let fingerprint = wallet.master_fingerprint();
 
-        delete_data_path(&id).unwrap();
+        delete_data_path(&metadata.id).unwrap();
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }
