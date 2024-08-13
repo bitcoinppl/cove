@@ -54,8 +54,7 @@ impl_default_for!(App);
 impl App {
     /// Create a new instance of the app
     pub fn new() -> Self {
-        //TODO: set manually in code for now
-        std::env::set_var("RUST_LOG", "cove=debug");
+        set_env();
 
         // one time init
         crate::logging::init();
@@ -195,6 +194,17 @@ impl FfiApp {
         Some(selected_wallet)
     }
 
+    /// Check if there's any wallets
+    pub fn has_wallets(&self) -> bool {
+        self.num_wallets() > 0
+    }
+
+    /// Number of wallets
+    pub fn num_wallets(&self) -> u16 {
+        let network = Database::global().global_config.selected_network();
+        Database::global().wallets().len(network).unwrap_or(0)
+    }
+
     /// Change the default route, and reset the routes
     pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);
@@ -246,5 +256,22 @@ impl FfiApp {
     /// Fetch global instance of the app, or create one if it doesn't exist
     fn inner(&self) -> &App {
         App::global()
+    }
+}
+
+fn set_env() {
+    //TODO: set manually in code for now
+    #[cfg(debug_assertions)]
+    {
+        if std::env::var("RUST_LOG").is_err() {
+            std::env::set_var("RUST_LOG", "cove=debug")
+        }
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        if std::env::var("RUST_LOG").is_err() {
+            std::env::set_var("RUST_LOG", "cove=info")
+        }
     }
 }

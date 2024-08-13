@@ -19,14 +19,6 @@ struct SidebarView: View {
     @State private var sidebarOffset = -1 * UIScreen.main.bounds.width
     private let screenWidth = UIScreen.main.bounds.width
 
-    var walletsIsEmpty: Bool {
-        if let walletsIsEmpty = try? Database().wallets().isEmpty() {
-            return walletsIsEmpty
-        }
-
-        return true
-    }
-
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
             return
@@ -77,7 +69,7 @@ struct SidebarView: View {
                             .cornerRadius(10)
                     }
 
-                    if !walletsIsEmpty {
+                    if app.numberOfWallets > 1 {
                         Button(action: { goTo(Route.listWallets) }) {
                             Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
                                 .foregroundStyle(.white)
@@ -146,14 +138,10 @@ struct SidebarView: View {
         .enableInjection()
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
-
     func goTo(_ route: Route) {
         isShowing = false
 
-        if walletsIsEmpty && route == Route.newWallet(.select) {
+        if !app.hasWallets && route == Route.newWallet(.select) {
             return app.resetRoute(to: RouteFactory().newWalletSelect())
         } else {
             navigate(route)

@@ -47,9 +47,18 @@ struct ListWalletsScreen: View {
             }
         }
         .onAppear {
-            if wallets.isEmpty {
-                Log.debug("No wallets found, going to new wallet screen")
-                model.resetRoute(to: RouteFactory().newWalletSelect())
+            if model.numberOfWallets < 2 {
+                // wallet empty make a new one
+                if wallets.isEmpty {
+                    Log.debug("No wallets found, going to new wallet screen")
+                    model.resetRoute(to: RouteFactory().newWalletSelect())
+                    return
+                }
+
+                // only has one wallet, so go directly to it
+                if let wallet = wallets.first {
+                    model.resetRoute(to: Route.selectedWallet(wallet.id))
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
