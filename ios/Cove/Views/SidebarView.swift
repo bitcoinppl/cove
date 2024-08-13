@@ -68,7 +68,7 @@ struct SidebarView: View {
                 VStack(spacing: 40) {
                     Spacer()
 
-                    Button(action: { goTo(RouteFactory().NewWalletSelectScreen()) }) {
+                    Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
                         Label("New Wallet", systemImage: "wallet.pass.fill")
                             .foregroundStyle(.white)
                             .font(.headline)
@@ -154,7 +154,7 @@ struct SidebarView: View {
         isShowing = false
 
         if walletsIsEmpty && route == Route.newWallet(.select) {
-            return app.resetRoute(to: RouteFactory().NewWalletSelectScreen())
+            return app.resetRoute(to: RouteFactory().newWalletSelect())
         } else {
             navigate(route)
         }
