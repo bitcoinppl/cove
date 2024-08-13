@@ -1,5 +1,5 @@
 //
-//  HotWalletImportView.swift
+//  HotWalletImportScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/18/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct HotWalletImportView: View {
+struct HotWalletImportScreen: View {
     let autocomplete = Bip39AutoComplete()
     let numberOfWords: NumberOfBip39Words
 
@@ -420,5 +420,5 @@ private struct DuplicateWalletItem: Identifiable {
 }
 
 #Preview {
-    VerifyWordsView(id: WalletId())
+    VerifyWordsScreen(id: WalletId())
 }

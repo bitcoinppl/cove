@@ -8,7 +8,7 @@
 
 import SwiftUI
 
-struct SettingsView2: View {
+struct SettingsScreen2: View {
     var body: some View {
         NavigationView {
             List {
@@ -64,5 +64,5 @@ struct SettingsRow: View {
 }
 
 #Preview {
-    SettingsView2()
+    SettingsScreen2()
 }

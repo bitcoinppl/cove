@@ -38,12 +38,12 @@ struct RouteView: View {
 func routeToView(model: MainViewModel, route: Route) -> some View {
     switch route {
     case .settings:
-        SettingsView()
+        SettingsScreen()
     case .listWallets:
-        ListWalletsView(model: model)
+        ListWalletsScreen(model: model)
     case let .newWallet(route: route):
-        NewWalletView(route: route)
+        NewWalletContainer(route: route)
     case let .selectedWallet(walletId):
-        SelectedWalletView(id: walletId)
+        SelectedWalletScreen(id: walletId)
     }
 }

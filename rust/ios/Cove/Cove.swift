@@ -2379,7 +2379,7 @@ public protocol RouteFactoryProtocol: AnyObject {
 
     func newHotWallet() -> Route
 
-    func newWalletSelect() -> Route
+    func NewWalletSelectScreen() -> Route
 }
 
 open class RouteFactory:
@@ -2456,7 +2456,7 @@ open class RouteFactory:
         })
     }
 
-    open func newWalletSelect() -> Route {
+    open func NewWalletSelectScreen() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_new_wallet_select(self.uniffiClonePointer(), $0)
         })

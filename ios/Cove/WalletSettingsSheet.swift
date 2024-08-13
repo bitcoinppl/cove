@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct WalletSettingsView: View {
+struct WalletSettingsSheet: View {
     let model: WalletViewModel
     @Environment(\.navigate) private var navigate
     @Environment(\.presentationMode) var presentationMode
@@ -101,10 +101,5 @@ struct WalletSettingsView: View {
                 Text("This action cannot be undone.")
             }
         }
-        .enableInjection()
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }

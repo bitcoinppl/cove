@@ -1,5 +1,5 @@
 //
-//  NewColdWalletView.swift
+//  NewColdWalletContainer.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/17/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct NewColdWalletView: View {
+struct NewColdWalletContainer: View {
     var route: ColdWalletRoute
 
     var body: some View {
@@ -21,5 +21,5 @@ struct NewColdWalletView: View {
 }
 
 #Preview {
-    NewColdWalletView(route: ColdWalletRoute.create)
+    NewColdWalletContainer(route: ColdWalletRoute.create)
 }

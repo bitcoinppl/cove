@@ -1,5 +1,5 @@
 //
-//  ListWalletsView.swift
+//  ListWalletsScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/30/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct ListWalletsView: View {
+struct ListWalletsScreen: View {
     let model: MainViewModel
     @State var wallets: [WalletMetadata]
     @Environment(\.navigate) private var navigate
@@ -49,7 +49,7 @@ struct ListWalletsView: View {
         .onAppear {
             if wallets.isEmpty {
                 Log.debug("No wallets found, going to new wallet screen")
-                model.resetRoute(to: RouteFactory().newWalletSelect())
+                model.resetRoute(to: RouteFactory().NewWalletSelectScreen())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -65,5 +65,5 @@ struct ListWalletsView: View {
 }
 
 #Preview {
-    ListWalletsView(model: MainViewModel())
+    ListWalletsScreen(model: MainViewModel())
 }

@@ -1,5 +1,5 @@
 //
-//  VerifyWordsView.swift
+//  VerifyWordsScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/23/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct VerifyWordsView: View {
+struct VerifyWordsScreen: View {
     let id: WalletId
 
     @Environment(\.navigate) private var navigate
@@ -348,5 +348,5 @@ private struct AutocompleteField: View {
 }
 
 #Preview {
-    VerifyWordsView(id: WalletId())
+    VerifyWordsScreen(id: WalletId())
 }

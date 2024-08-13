@@ -3309,7 +3309,7 @@ public interface RouteFactoryInterface {
 
     fun `newHotWallet`(): Route
 
-    fun `newWalletSelect`(): Route
+    fun `NewWalletSelectScreen`(): Route
 
     companion object
 }
@@ -3455,7 +3455,7 @@ open class RouteFactory :
             },
         )
 
-    override fun `newWalletSelect`(): Route =
+    override fun `NewWalletSelectScreen`(): Route =
         FfiConverterTypeRoute.lift(
             callWithPointer {
                 uniffiRustCall { _status ->
