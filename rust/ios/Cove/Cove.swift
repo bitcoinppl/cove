@@ -1369,6 +1369,11 @@ public protocol FfiAppProtocol: AnyObject {
     func goToSelectedWallet() -> WalletId?
 
     /**
+     * Check if there's any wallets
+     */
+    func hasWallets() -> Bool
+
+    /**
      * call an async function on app load so it initializes the async runtime
      */
     func initAsyncRuntime() async
@@ -1376,6 +1381,11 @@ public protocol FfiAppProtocol: AnyObject {
     func listenForUpdates(updater: FfiReconcile)
 
     func network() -> Network
+
+    /**
+     * Number of wallets
+     */
+    func numWallets() -> UInt16
 
     /**
      * Change the default route, and reset the routes
@@ -1462,6 +1472,15 @@ open class FfiApp:
     }
 
     /**
+     * Check if there's any wallets
+     */
+    open func hasWallets() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_ffiapp_has_wallets(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    /**
      * call an async function on app load so it initializes the async runtime
      */
     open func initAsyncRuntime() async {
@@ -1489,6 +1508,15 @@ open class FfiApp:
     open func network() -> Network {
         return try! FfiConverterTypeNetwork.lift(try! rustCall {
             uniffi_cove_fn_method_ffiapp_network(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    /**
+     * Number of wallets
+     */
+    open func numWallets() -> UInt16 {
+        return try! FfiConverterUInt16.lift(try! rustCall {
+            uniffi_cove_fn_method_ffiapp_num_wallets(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -7410,6 +7438,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet() != 36820 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_ffiapp_has_wallets() != 3792 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_ffiapp_init_async_runtime() != 45507 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7417,6 +7448,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_network() != 26747 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffiapp_num_wallets() != 28903 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 40613 {

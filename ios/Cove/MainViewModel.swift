@@ -61,6 +61,14 @@ import SwiftUI
         router.routes.last ?? router.default
     }
 
+    var hasWallets: Bool {
+        rust.hasWallets()
+    }
+
+    var numberOfWallets: Int {
+        Int(rust.numWallets())
+    }
+
     func toggleSidebar() {
         isSidebarVisible.toggle()
     }
