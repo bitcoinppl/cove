@@ -1,5 +1,5 @@
 //
-//  ListWalletsView.swift
+//  ListWalletsScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/30/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct ListWalletsView: View {
+struct ListWalletsScreen: View {
     let model: MainViewModel
     @State var wallets: [WalletMetadata]
     @Environment(\.navigate) private var navigate
@@ -65,5 +65,5 @@ struct ListWalletsView: View {
 }
 
 #Preview {
-    ListWalletsView(model: MainViewModel())
+    ListWalletsScreen(model: MainViewModel())
 }

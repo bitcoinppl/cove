@@ -1,5 +1,5 @@
 //
-//  HotWalletCreateView.swift
+//  HotWalletCreateScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/18/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct HotWalletCreateView: View {
+struct HotWalletCreateScreen: View {
     @State private var model: PendingWalletViewModel
 
     init(numberOfWords: NumberOfBip39Words) {
@@ -167,9 +167,9 @@ struct StyledWordCard<Content: View>: View {
 }
 
 #Preview("12 Words") {
-    HotWalletCreateView(numberOfWords: .twelve)
+    HotWalletCreateScreen(numberOfWords: .twelve)
 }
 
 #Preview("24 Words") {
-    HotWalletCreateView(numberOfWords: .twentyFour)
+    HotWalletCreateScreen(numberOfWords: .twentyFour)
 }

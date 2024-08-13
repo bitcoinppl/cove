@@ -1,5 +1,5 @@
 //
-//  NewWalletView.swift
+//  NewWalletContainer.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/17/24.
@@ -7,22 +7,22 @@
 
 import SwiftUI
 
-struct NewWalletView: View {
+struct NewWalletContainer: View {
     var route: NewWalletRoute
     @Environment(MainViewModel.self) private var mainViewModel
 
     var body: some View {
         switch route {
         case .select:
-            NewWalletSelect()
+            NewWalletSelectScreen()
         case let .hotWallet(route):
-            NewHotWalletView(route: route)
+            NewHotWalletContainer(route: route)
         case let .coldWallet(route):
-            NewColdWalletView(route: route)
+            NewColdWalletContainer(route: route)
         }
     }
 }
 
 #Preview {
-    NewWalletView(route: NewWalletRoute.select).environment(MainViewModel())
+    NewWalletContainer(route: NewWalletRoute.select).environment(MainViewModel())
 }

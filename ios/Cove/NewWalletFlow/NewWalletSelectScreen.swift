@@ -1,5 +1,5 @@
 //
-//  NewWalletSelectView.swift
+//  NewWalletSelectScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/17/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct NewWalletSelect: View {
+struct NewWalletSelectScreen: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -66,5 +66,5 @@ struct NewWalletSelect: View {
 }
 
 #Preview {
-    NewWalletSelect()
+    NewWalletSelectScreen()
 }

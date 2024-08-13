@@ -12,7 +12,7 @@ enum NextScreenDialog {
     case create
 }
 
-struct HotWalletSelectView: View {
+struct HotWalletSelectScreen: View {
     @State private var isSheetShown = false
     @State private var nextScreen: NextScreenDialog = .create
 
@@ -80,5 +80,5 @@ struct HotWalletSelectView: View {
 }
 
 #Preview {
-    HotWalletSelectView()
+    HotWalletSelectScreen()
 }

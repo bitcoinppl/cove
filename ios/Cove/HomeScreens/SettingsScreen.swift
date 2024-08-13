@@ -1,7 +1,7 @@
 import PopupView
 import SwiftUI
 
-struct SettingsView: View {
+struct SettingsScreen: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.presentationMode) private var presentationMode
 
@@ -152,6 +152,6 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView()
+    SettingsScreen()
         .environment(MainViewModel())
 }

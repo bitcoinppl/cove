@@ -1,5 +1,5 @@
 //
-//  SelectedWalletView.swift
+//  SelectedWalletScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 7/1/24.
@@ -8,7 +8,7 @@
 import ActivityIndicatorView
 import SwiftUI
 
-struct SelectedWalletView: View {
+struct SelectedWalletScreen: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
@@ -30,7 +30,7 @@ struct SelectedWalletView: View {
     var body: some View {
         Group {
             if let model = model {
-                SelectedWalletViewInner(model: model)
+                SelectedWalletScreenInner(model: model)
             } else {
                 Text("Loading...")
             }
@@ -51,7 +51,7 @@ struct SelectedWalletView: View {
     }
 }
 
-struct SelectedWalletViewInner: View {
+struct SelectedWalletScreenInner: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
@@ -139,7 +139,7 @@ struct SelectedWalletViewInner: View {
             .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .sheet(isPresented: $showSettings) {
-                WalletSettingsView(model: model)
+                WalletSettingsSheet(model: model)
             }
         }
     }
@@ -174,13 +174,13 @@ struct VerifyReminder: View {
 }
 
 #Preview("Loading") {
-    SelectedWalletView(id: WalletId())
+    SelectedWalletScreen(id: WalletId())
         .environment(MainViewModel())
 }
 
 #Preview("Loaded Wallet") {
     AsyncPreview {
-        SelectedWalletViewInner(model: WalletViewModel(preview: "preview_only"))
+        SelectedWalletScreenInner(model: WalletViewModel(preview: "preview_only"))
             .environment(MainViewModel())
     }
 }
