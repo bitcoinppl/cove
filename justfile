@@ -1,3 +1,6 @@
+alias rx := reset-xcode
+alias cx := clean-xcode
+
 default:
     just --list
 
@@ -12,6 +15,19 @@ clean:
 
 fmt:
     cd rust && cargo fmt
+
+clean-xcode:
+    rm -rf ~/Library/Caches/org.swift.swiftpm
+    cd ios && xcodebuild clean
+
+reset-xcode:
+    killAll Xcode
+    rm -rf ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+    xcrun simctl --set previews delete all
+    rm -rf ~/Library/Caches/org.swift.swiftpm
+    rm -rf ~/Library/Developer/Xcode/DerivedData
+    cd ios && xcodebuild clean
+    open ios/Cove.xcodeproj
 
 build-android:
     bash scripts/build-android.sh
