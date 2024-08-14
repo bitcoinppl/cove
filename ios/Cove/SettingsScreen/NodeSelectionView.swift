@@ -5,13 +5,10 @@
 //  Created by Praveen Perera on 7/18/24.
 //
 
-import PopupView
+import MijickPopupView
 import SwiftUI
 
 struct NodeSelectionView: View {
-    // public
-    @Binding var popupState: PopupState
-
     // private
     private let nodeSelector = NodeSelector()
 
@@ -25,9 +22,7 @@ struct NodeSelectionView: View {
     @State private var showParseUrlAlert = false
     @State private var parseUrlMessage = ""
 
-    init(popupState: Binding<PopupState>) {
-        _popupState = popupState
-
+    init() {
         selectedNodeName = nodeSelector.selectedNode().name
         nodeList = nodeSelector.nodeList()
     }
@@ -38,12 +33,27 @@ struct NodeSelectionView: View {
 
     @MainActor
     private func startLoading() {
-        popupState = .loading
+        MiddlePopup(state: .loading)
+            .showAndStack()
     }
 
     @MainActor
     private func completeLoading(_ state: PopupState) {
-        popupState = state
+        PopupManager.dismiss()
+
+        let dismissAfter: Double = switch state {
+        case .failure:
+            7
+        case .success:
+            2
+        default: 0
+        }
+
+        Task {
+            MiddlePopup(state: state)
+                .showAndReplace()
+                .dismissAfter(dismissAfter)
+        }
     }
 
     @ViewBuilder
@@ -149,5 +159,5 @@ struct NodeSelectionView: View {
 }
 
 #Preview {
-    NodeSelectionView(popupState: Binding.constant(PopupState.initial))
+    NodeSelectionView()
 }

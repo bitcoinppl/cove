@@ -15,7 +15,7 @@ enum PopupState: Equatable {
     case success(String)
 }
 
-struct PopupMiddleView: View {
+struct MiddlePopupView: View {
     var state: PopupState
 
     var heading: String?
@@ -26,9 +26,12 @@ struct PopupMiddleView: View {
     var onClose: () -> Void = {}
 
     // private
-    @State private var isLoading = false
     private let screenWidth = UIScreen.main.bounds.width
     private let screenHeight = UIScreen.main.bounds.height
+
+    var isLoading: Bool {
+        state == .loading
+    }
 
     @ViewBuilder
     var HeadingIcon: some View {
@@ -90,7 +93,6 @@ struct PopupMiddleView: View {
             if !isLoading {
                 HStack {
                     HeadingIcon
-
                     Heading
                 }
 
@@ -100,7 +102,6 @@ struct PopupMiddleView: View {
                     .opacity(0.6)
                     .padding(.top, 10)
                     .padding(.bottom, 20)
-                    .fixedSize(horizontal: false, vertical: true)
 
                 Button {
                     onClose()
@@ -108,47 +109,41 @@ struct PopupMiddleView: View {
                     Text(buttonText)
                         .font(.title3)
                         .fontWeight(.bold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
                         .foregroundColor(Color.white)
-                        .background(.blue)
-                        .cornerRadius(6)
                 }
-                .buttonStyle(.plain)
+                .frame(minWidth: screenWidth * 0.6)
+                .padding(.vertical, 12)
+                .background(.black.opacity(0.7))
+                .cornerRadius(6)
+                .padding()
+
             } else {
                 ProgressView(label: {
                     Text("Loading")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                }
-                ).progressViewStyle(.circular)
+                })
+                .progressViewStyle(.circular)
+                .frame(minWidth: screenWidth * 0.65)
             }
         }
-        .frame(minWidth: screenWidth * 0.75)
-        .padding(EdgeInsets(top: 37, leading: 24, bottom: 40, trailing: 24))
-        .background(Material.thick)
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 0)
         .shadow(color: .black.opacity(0.16), radius: 24, x: 0, y: 0)
-        .padding(.horizontal, 40)
-        .onChange(of: state) { _, newState in
-            isLoading = newState == .loading
-        }
-        .onAppear {
-            isLoading = state == .loading
-        }
-        .padding(.bottom, 200)
+        .padding()
     }
 }
 
 #Preview("Loading") {
-    PopupMiddleView(state: .loading)
+    VStack {
+        MiddlePopupView(state: .loading)
+    }
 }
 
 #Preview("Success") {
-    PopupMiddleView(state: .success("Node loaded successfully"))
+    MiddlePopupView(state: .success("Node loaded successfully"))
 }
 
 #Preview("Failure") {
-    PopupMiddleView(state: .failure("Node did not load!"))
+    MiddlePopupView(state: .failure("Node did not load!"))
 }

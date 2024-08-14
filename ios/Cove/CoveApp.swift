@@ -5,6 +5,7 @@
 //  Created by Praveen Perera  on 6/17/24.
 //
 
+import MijickPopupView
 import SwiftUI
 
 struct NavigateKey: EnvironmentKey {
@@ -18,10 +19,38 @@ extension EnvironmentValues {
     }
 }
 
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let sceneConfig = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        sceneConfig.delegateClass = CustomPopupSceneDelegate.self
+        return sceneConfig
+    }
+}
+
+class CustomPopupSceneDelegate: PopupSceneDelegate {
+    override init() {
+        super.init()
+        config = { $0
+            .top { $0
+                .cornerRadius(24)
+                .dragGestureEnabled(true)
+            }
+            .centre { $0
+                .tapOutsideToDismiss(true)
+            }
+            .bottom { $0
+                .stackLimit(5)
+            }
+        }
+    }
+}
+
 @main
 struct CoveApp: App {
     @State var model: MainViewModel
     @State var id = UUID()
+
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     public init() {
         // initialize keychain
