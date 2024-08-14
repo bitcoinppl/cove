@@ -62,13 +62,11 @@ struct SelectedWalletScreenInner: View {
 
     // private
     @State private var showSettings = false
+    @State private var receiveSheetShowing = false
+    @State private var showingCopiedPopup = true
 
     func updater(_ action: WalletViewModelAction) {
         model.dispatch(action: action)
-    }
-
-    var accentColor: Color {
-        Color(model.walletMetadata.color)
     }
 
     @ViewBuilder
@@ -110,7 +108,10 @@ struct SelectedWalletScreenInner: View {
             VStack {
                 WalletBalanceHeaderView(balance: model.balance.confirmed,
                                         metadata: model.walletMetadata,
-                                        updater: updater)
+                                        updater: updater,
+                                        receiveSheetShowing: $receiveSheetShowing)
+                    .cornerRadius(16)
+                    .padding()
 
                 Transactions
             }
@@ -128,6 +129,9 @@ struct SelectedWalletScreenInner: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            .sheet(isPresented: $receiveSheetShowing) {
+                ReceiveView(model: model, showingCopiedPopup: $showingCopiedPopup)
+            }
             .sheet(isPresented: $showSettings) {
                 WalletSettingsSheet(model: model)
             }

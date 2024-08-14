@@ -45,6 +45,7 @@
 		ACC1CD5A2C6D415400C7AD89 /* FloaterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC1CD592C6D415400C7AD89 /* FloaterView.swift */; };
 		ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */ = {isa = PBXBuildFile; productRef = ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */; };
 		ACC1CD602C6D4F2C00C7AD89 /* MiddlePopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC1CD5F2C6D4F2C00C7AD89 /* MiddlePopup.swift */; };
+		ACC1CD622C6D5ABC00C7AD89 /* FloaterPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC1CD612C6D5ABC00C7AD89 /* FloaterPopup.swift */; };
 		ACC3016A2C20C9D4006790DF /* Routes+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301692C20C9D4006790DF /* Routes+Ext.swift */; };
 		ACC301742C211281006790DF /* HotWalletSelectScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301732C211281006790DF /* HotWalletSelectScreen.swift */; };
 		ACC3017A2C221450006790DF /* PendingWalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* PendingWalletViewModel.swift */; };
@@ -117,6 +118,7 @@
 		ACB17FBC2C5ABDD20079A96A /* WalletBalanceHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletBalanceHeaderView.swift; sourceTree = "<group>"; };
 		ACC1CD592C6D415400C7AD89 /* FloaterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloaterView.swift; sourceTree = "<group>"; };
 		ACC1CD5F2C6D4F2C00C7AD89 /* MiddlePopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopup.swift; sourceTree = "<group>"; };
+		ACC1CD612C6D5ABC00C7AD89 /* FloaterPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloaterPopup.swift; sourceTree = "<group>"; };
 		ACC301692C20C9D4006790DF /* Routes+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Routes+Ext.swift"; sourceTree = "<group>"; };
 		ACC301732C211281006790DF /* HotWalletSelectScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletSelectScreen.swift; sourceTree = "<group>"; };
 		ACC301792C221450006790DF /* PendingWalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingWalletViewModel.swift; sourceTree = "<group>"; };
@@ -218,6 +220,7 @@
 			isa = PBXGroup;
 			children = (
 				ACC1CD5F2C6D4F2C00C7AD89 /* MiddlePopup.swift */,
+				ACC1CD612C6D5ABC00C7AD89 /* FloaterPopup.swift */,
 			);
 			path = Popups;
 			sourceTree = "<group>";
@@ -432,6 +435,7 @@
 				AC07617D2C31A527007B4540 /* GlassCard.swift in Sources */,
 				AC9FBEBD2C3F5C78005CB37A /* SettingsScreen2.swift in Sources */,
 				ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */,
+				ACC1CD622C6D5ABC00C7AD89 /* FloaterPopup.swift in Sources */,
 				ACC3016A2C20C9D4006790DF /* Routes+Ext.swift in Sources */,
 				ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */,
 				ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */,

@@ -1,5 +1,5 @@
 //
-//  BalanceHeaderView.swift
+//  WalletBalanceHeaderView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 7/31/24.
@@ -11,43 +11,45 @@ struct WalletBalanceHeaderView: View {
     // confirmed balance
     let balance: Amount
     let metadata: WalletMetadata
-    let updater: (WalletViewModelAction) -> ()
-    
+    let updater: (WalletViewModelAction) -> Void
+
+    @Binding var receiveSheetShowing: Bool
+
     var accentColor: Color {
-        Color(metadata.color)
+        metadata.swiftColor
     }
-    
+
     var balanceString: String {
         if !metadata.sensitiveVisible {
             return "************"
         }
-        
+
         return switch metadata.selectedUnit {
         case .btc: balance.btcString()
         case .sat: balance.satsString()
         }
     }
-    
+
     var eyeIcon: String {
         metadata.sensitiveVisible ? "eye" : "eye.slash"
     }
-    
+
     var fontSize: CGFloat {
         let btc = balance.asBtc()
-        
+
         // Base font size
         let baseFontSize: CGFloat = 34
-            
+
         // Calculate the number of digits
         let digits = btc > 0 ? Int(log10(btc)) + 1 : 1
-            
+
         // Reduce font size by 2 for each additional digit beyond 1
         let fontSizeReduction = CGFloat(max(0, (digits - 1) * 2))
-            
+
         // Ensure minimum font size of 20
         return max(baseFontSize - fontSizeReduction, 20)
     }
-    
+
     var body: some View {
         VStack {
             HStack {
@@ -60,37 +62,36 @@ struct WalletBalanceHeaderView: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .frame(width: 120)
-                
+
                 Spacer()
-                
+
                 Image(systemName: eyeIcon)
                     .foregroundColor(.gray)
                     .onTapGesture {
                         updater(.toggleSensitiveVisibility)
                     }
             }
-            
+
             HStack {
                 Text("Your Balance")
                     .foregroundColor(.gray)
                     .font(.subheadline)
                     .padding(.leading, 2)
-                
+
                 Spacer()
             }
-            
+
             Text(balanceString)
                 .font(.system(size: fontSize, weight: .bold))
                 .padding(.top, 16)
                 .padding(.bottom, 32)
-            
+
             HStack(spacing: 16) {
                 Button(action: {
-                    // Receive action
+                    receiveSheetShowing = true
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.down.left")
-                        
                         Text("Receive")
                     }
                     .foregroundColor(.white)
@@ -99,13 +100,13 @@ struct WalletBalanceHeaderView: View {
                     .background(accentColor)
                     .cornerRadius(8)
                 }
-                
+
                 Button(action: {
                     // Send action
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.up.right")
-                        
+
                         Text("Send")
                     }
                     .foregroundColor(accentColor)
@@ -128,12 +129,13 @@ struct WalletBalanceHeaderView: View {
 #Preview("btc") {
     var metadata = walletMetadataPreview()
     metadata.sensitiveVisible = true
-    
+
     return
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () })
+            updater: { _ in () },
+            receiveSheetShowing: Binding.constant(true))
         .padding()
 }
 
@@ -147,8 +149,8 @@ struct WalletBalanceHeaderView: View {
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () })
-
+            updater: { _ in () },
+            receiveSheetShowing: Binding.constant(false))
         .padding()
 }
 
@@ -156,12 +158,13 @@ struct WalletBalanceHeaderView: View {
     var metadata = walletMetadataPreview()
     metadata.sensitiveVisible = false
     metadata.color = .green
-    
+
     return
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
-            updater: { _ in () })
+            updater: { _ in () },
+            receiveSheetShowing: Binding.constant(false))
         .padding()
 }
 
@@ -174,7 +177,7 @@ struct WalletBalanceHeaderView: View {
         WalletBalanceHeaderView(balance:
             Amount.fromSat(sats: 10_000_000_738),
             metadata: metadata,
-            updater: { _ in () })
-
+            updater: { _ in () },
+            receiveSheetShowing: Binding.constant(false))
         .padding()
 }

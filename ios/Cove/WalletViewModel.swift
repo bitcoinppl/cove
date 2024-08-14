@@ -16,13 +16,17 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         let rust = try RustWalletViewModel(id: id)
 
         self.rust = rust
-        self.walletMetadata = rust.walletMetadata()
+        walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
     var isVerified: Bool {
-        self.walletMetadata.verified
+        walletMetadata.verified
+    }
+
+    var accentColor: Color {
+        walletMetadata.swiftColor
     }
 
     func reconcile(message: WalletViewModelReconcileMessage) {
@@ -73,18 +77,18 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     }
 
     public func dispatch(action: WalletViewModelAction) {
-        self.rust.dispatch(action: action)
+        rust.dispatch(action: action)
     }
 
     // PREVIEW only
     public init(preview: String) {
         assert(preview == "preview_only")
 
-        self.id = WalletId()
+        id = WalletId()
         let rust = RustWalletViewModel.previewNewWallet()
 
         self.rust = rust
-        self.walletMetadata = rust.walletMetadata()
+        walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
