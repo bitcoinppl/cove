@@ -122,7 +122,6 @@ struct WalletBalanceHeaderView: View {
         }
         .padding()
         .background(Color(UIColor.systemGray6))
-        .cornerRadius(16)
     }
 }
 

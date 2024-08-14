@@ -74,18 +74,9 @@ struct SelectedWalletScreenInner: View {
     @ViewBuilder
     func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
         TransactionsCardView(transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata)
-            .background(
-                UnevenRoundedRectangle(
-                    cornerRadii: .init(
-                        topLeading: 40,
-                        bottomLeading: 0,
-                        bottomTrailing: 0,
-                        topTrailing: 40
-                    )
-                )
-                .fill(.thickMaterial)
-                .ignoresSafeArea()
-            )
+            .background(.thickMaterial)
+            .ignoresSafeArea()
+            .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -120,7 +111,6 @@ struct SelectedWalletScreenInner: View {
                 WalletBalanceHeaderView(balance: model.balance.confirmed,
                                         metadata: model.walletMetadata,
                                         updater: updater)
-                    .padding()
 
                 Transactions
             }
