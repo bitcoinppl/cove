@@ -3,7 +3,7 @@ use crate::{
     node::client::NodeClient,
     transaction::Transaction,
     view_model::wallet::Error,
-    wallet::{balance::Balance, Wallet},
+    wallet::{balance::Balance, AddressInfo, Wallet},
 };
 use act_zero::*;
 use crossbeam::channel::Sender;
@@ -56,6 +56,11 @@ impl WalletActor {
     pub async fn balance(&mut self) -> ActorResult<Balance> {
         let balance = self.wallet.balance();
         Produces::ok(balance)
+    }
+
+    pub async fn next_address(&mut self) -> ActorResult<AddressInfo> {
+        let address = self.wallet.get_next_address()?;
+        Produces::ok(address)
     }
 
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {

@@ -20,7 +20,7 @@ use crate::{
         balance::Balance,
         fingerprint::Fingerprint,
         metadata::{WalletColor, WalletId, WalletMetadata},
-        Wallet, WalletError,
+        AddressInfo, Wallet, WalletError,
     },
     word_validator::WordValidator,
 };
@@ -99,6 +99,9 @@ pub enum WalletViewModelError {
 
     #[error("unable to get wallet balance: {0}")]
     WalletBalanceError(String),
+
+    #[error("unable to get next address: {0}")]
+    NextAddressError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -131,6 +134,12 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn balance(&self) -> Balance {
         call!(self.actor.balance()).await.unwrap_or_default()
+    }
+
+    #[uniffi::method]
+    pub fn next_address(&self) -> Result<AddressInfo, Error> {
+        task::block_on(call!(self.actor.next_address()))
+            .map_err(|error| Error::NextAddressError(error.to_string()))
     }
 
     #[uniffi::method]
