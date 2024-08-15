@@ -63,7 +63,6 @@ pub struct Wallet {
     pub bdk: bdk_wallet::PersistedWallet,
     pub metadata: WalletMetadata,
 
-    last_seen_address_index: Option<usize>,
     db: Store<bdk_wallet::ChangeSet>,
 }
 
@@ -154,7 +153,6 @@ impl Wallet {
             network,
             metadata,
             bdk: wallet,
-            last_seen_address_index: None,
             db,
         })
     }
@@ -185,7 +183,6 @@ impl Wallet {
             metadata,
             network,
             bdk: wallet,
-            last_seen_address_index: None,
             db,
         })
     }
@@ -250,14 +247,22 @@ impl Wallet {
         // the gap limit and not be able to see it their wallet
         //
         // note: index to use is the index of the address in the list of addresses, not the derivation index
-        let index_to_use = if let Some(last_index) = self.last_seen_address_index {
+        let index_to_use = if let Some(last_index) =
+            self.metadata.internal().last_seen_address_index(&addresses)
+        {
             (last_index + 1) % MAX_ADDRESSES
         } else {
             0
         };
 
         let address_info = addresses[index_to_use].clone();
-        self.last_seen_address_index = Some(index_to_use);
+        self.metadata
+            .internal()
+            .set_last_seen_address_index(&addresses, index_to_use);
+
+        Database::global()
+            .wallets
+            .update_wallet_metadata(self.metadata.clone())?;
 
         Ok(address_info)
     }

@@ -1,3 +1,6 @@
+use std::hash::Hash;
+use std::hash::Hasher;
+
 use bdk_chain::bitcoin::Address as BdkAddress;
 use bdk_wallet::AddressInfo as BdkAddressInfo;
 
@@ -32,6 +35,14 @@ impl Clone for AddressInfo {
             index: self.0.index,
             keychain: self.0.keychain,
         })
+    }
+}
+
+impl Hash for AddressInfo {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.address.hash(state);
+        self.0.index.hash(state);
+        self.0.keychain.hash(state);
     }
 }
 

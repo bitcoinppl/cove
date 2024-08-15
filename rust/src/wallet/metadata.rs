@@ -1,9 +1,13 @@
+use std::hash::Hash;
+
 use crate::transaction::Unit;
 use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, impl_default_for, network::Network, new_type};
+
+use super::AddressInfo;
 
 new_type!(WalletId, String);
 impl_default_for!(WalletId);
@@ -32,6 +36,22 @@ pub struct WalletMetadata {
     pub selected_fiat_currency: String,
     #[serde(default = "default_true")]
     pub sensitive_visible: bool,
+
+    // internal only metadata, don't use in the UI
+    // note: maybe better to use a separate table for this
+    #[serde(default)]
+    pub internal: InternalOnlyMetadata,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct InternalOnlyMetadata {
+    pub address_index: Option<AddressIndex>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct AddressIndex {
+    pub last_seen_index: u8,
+    pub address_list_hash: u64,
 }
 
 mod ffi {
@@ -57,6 +77,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
+            internal: InternalOnlyMetadata::default(),
         }
     }
 
@@ -71,6 +92,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
+            internal: InternalOnlyMetadata::default(),
         }
     }
 
@@ -85,7 +107,35 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
+            internal: InternalOnlyMetadata::default(),
         }
+    }
+
+    pub fn internal(&mut self) -> &mut InternalOnlyMetadata {
+        &mut self.internal
+    }
+}
+
+impl InternalOnlyMetadata {
+    pub fn last_seen_address_index(&self, addreses: &[AddressInfo]) -> Option<usize> {
+        let address_index = self.address_index.as_ref()?;
+        let address_list_hash = crate::util::calculate_hash(addreses);
+
+        // different address list, return none
+        if address_index.address_list_hash != address_list_hash {
+            return None;
+        }
+
+        Some(address_index.last_seen_index as usize)
+    }
+
+    pub fn set_last_seen_address_index(&mut self, addreses: &[AddressInfo], index: usize) {
+        let address_list_hash = crate::util::calculate_hash(addreses);
+
+        self.address_index = Some(AddressIndex {
+            last_seen_index: index as u8,
+            address_list_hash,
+        });
     }
 }
 

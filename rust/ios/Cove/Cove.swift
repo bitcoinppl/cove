@@ -4126,6 +4126,58 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> Unsaf
     return FfiConverterTypeWordValidator.lower(value)
 }
 
+public struct AddressIndex {
+    public var lastSeenIndex: UInt8
+    public var addressListHash: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(lastSeenIndex: UInt8, addressListHash: UInt64) {
+        self.lastSeenIndex = lastSeenIndex
+        self.addressListHash = addressListHash
+    }
+}
+
+extension AddressIndex: Equatable, Hashable {
+    public static func == (lhs: AddressIndex, rhs: AddressIndex) -> Bool {
+        if lhs.lastSeenIndex != rhs.lastSeenIndex {
+            return false
+        }
+        if lhs.addressListHash != rhs.addressListHash {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(lastSeenIndex)
+        hasher.combine(addressListHash)
+    }
+}
+
+public struct FfiConverterTypeAddressIndex: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressIndex {
+        return
+            try AddressIndex(
+                lastSeenIndex: FfiConverterUInt8.read(from: &buf),
+                addressListHash: FfiConverterUInt64.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: AddressIndex, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.lastSeenIndex, into: &buf)
+        FfiConverterUInt64.write(value.addressListHash, into: &buf)
+    }
+}
+
+public func FfiConverterTypeAddressIndex_lift(_ buf: RustBuffer) throws -> AddressIndex {
+    return try FfiConverterTypeAddressIndex.lift(buf)
+}
+
+public func FfiConverterTypeAddressIndex_lower(_ value: AddressIndex) -> RustBuffer {
+    return FfiConverterTypeAddressIndex.lower(value)
+}
+
 public struct AppState {
     public var router: Router
 
@@ -4283,6 +4335,50 @@ public func FfiConverterTypeImportWalletViewModelState_lower(_ value: ImportWall
     return FfiConverterTypeImportWalletViewModelState.lower(value)
 }
 
+public struct InternalOnlyMetadata {
+    public var addressIndex: AddressIndex?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(addressIndex: AddressIndex?) {
+        self.addressIndex = addressIndex
+    }
+}
+
+extension InternalOnlyMetadata: Equatable, Hashable {
+    public static func == (lhs: InternalOnlyMetadata, rhs: InternalOnlyMetadata) -> Bool {
+        if lhs.addressIndex != rhs.addressIndex {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(addressIndex)
+    }
+}
+
+public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InternalOnlyMetadata {
+        return
+            try InternalOnlyMetadata(
+                addressIndex: FfiConverterOptionTypeAddressIndex.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: InternalOnlyMetadata, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeAddressIndex.write(value.addressIndex, into: &buf)
+    }
+}
+
+public func FfiConverterTypeInternalOnlyMetadata_lift(_ buf: RustBuffer) throws -> InternalOnlyMetadata {
+    return try FfiConverterTypeInternalOnlyMetadata.lift(buf)
+}
+
+public func FfiConverterTypeInternalOnlyMetadata_lower(_ value: InternalOnlyMetadata) -> RustBuffer {
+    return FfiConverterTypeInternalOnlyMetadata.lower(value)
+}
+
 public struct Node {
     public var name: String
     public var network: Network
@@ -4435,10 +4531,11 @@ public struct WalletMetadata {
     public var selectedUnit: Unit
     public var selectedFiatCurrency: String
     public var sensitiveVisible: Bool
+    public var `internal`: InternalOnlyMetadata
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -4448,6 +4545,7 @@ public struct WalletMetadata {
         self.selectedUnit = selectedUnit
         self.selectedFiatCurrency = selectedFiatCurrency
         self.sensitiveVisible = sensitiveVisible
+        self.internal = `internal`
     }
 }
 
@@ -4480,6 +4578,9 @@ extension WalletMetadata: Equatable, Hashable {
         if lhs.sensitiveVisible != rhs.sensitiveVisible {
             return false
         }
+        if lhs.internal != rhs.internal {
+            return false
+        }
         return true
     }
 
@@ -4493,6 +4594,7 @@ extension WalletMetadata: Equatable, Hashable {
         hasher.combine(selectedUnit)
         hasher.combine(selectedFiatCurrency)
         hasher.combine(sensitiveVisible)
+        hasher.combine(`internal`)
     }
 }
 
@@ -4508,7 +4610,8 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 performedFullScan: FfiConverterBool.read(from: &buf),
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf),
                 selectedFiatCurrency: FfiConverterString.read(from: &buf),
-                sensitiveVisible: FfiConverterBool.read(from: &buf)
+                sensitiveVisible: FfiConverterBool.read(from: &buf),
+                internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
             )
     }
 
@@ -4522,6 +4625,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
         FfiConverterString.write(value.selectedFiatCurrency, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
+        FfiConverterTypeInternalOnlyMetadata.write(value.internal, into: &buf)
     }
 }
 
@@ -7069,6 +7173,27 @@ private struct FfiConverterOptionString: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+private struct FfiConverterOptionTypeAddressIndex: FfiConverterRustBuffer {
+    typealias SwiftType = AddressIndex?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAddressIndex.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAddressIndex.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

@@ -21,6 +21,7 @@ pub mod redb;
 pub mod task;
 pub mod transaction;
 pub mod unblock;
+pub mod util;
 pub mod view_model;
 pub mod wallet;
 pub mod word_validator;
