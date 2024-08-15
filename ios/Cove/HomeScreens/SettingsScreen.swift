@@ -1,4 +1,3 @@
-import PopupView
 import SwiftUI
 
 struct SettingsScreen: View {
@@ -9,23 +8,7 @@ struct SettingsScreen: View {
     @State private var networkChanged = false
     @State private var showConfirmationAlert = false
 
-    @State private var showPopup = false
-    @State private var popUpState = PopupState.initial
-
     let themes = allColorSchemes()
-
-    var popupAutoHide: Double? {
-        switch popUpState {
-        case .initial:
-            0
-        case .loading:
-            nil
-        case .failure:
-            nil
-        case .success:
-            5
-        }
-    }
 
     var body: some View {
         Form {
@@ -60,7 +43,7 @@ struct SettingsScreen: View {
                 .pickerStyle(SegmentedPickerStyle())
             }
 
-            NodeSelectionView(popupState: $popUpState)
+            NodeSelectionView()
 
             Section(header: Text("About")) {
                 HStack {
@@ -71,24 +54,6 @@ struct SettingsScreen: View {
                 }
             }
             .navigationTitle("Settings")
-        }
-        .popup(isPresented: $showPopup) {
-            PopupMiddleView(state: popUpState)
-        } customize: {
-            $0.autohideIn(popupAutoHide)
-                .type(.default)
-                .position(.center)
-                .animation(.spring())
-                .closeOnTapOutside(popUpState != .loading)
-                .isOpaque(true)
-                .backgroundColor(.black.opacity(0.8))
-        }
-        .onChange(of: popUpState) { _, _ in
-            if popUpState == .initial {
-                showPopup = false
-            } else {
-                showPopup = true
-            }
         }
         .navigationBarBackButtonHidden(networkChanged)
         .toolbar {

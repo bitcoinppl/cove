@@ -16,7 +16,7 @@ use crate::node::Node;
 
 use super::ApiType;
 
-const STOP_GAP: usize = 50;
+const STOP_GAP: usize = 30;
 const BATCH_SIZE: usize = 20;
 
 pub enum NodeClient {

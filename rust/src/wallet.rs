@@ -1,3 +1,4 @@
+pub mod address;
 pub mod balance;
 pub mod fingerprint;
 pub mod metadata;
@@ -24,6 +25,9 @@ use bdk_wallet::{
 use bip39::Mnemonic;
 use metadata::{WalletId, WalletMetadata};
 use tracing::{error, warn};
+
+pub type Address = address::Address;
+pub type AddressInfo = address::AddressInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum WalletError {
@@ -58,6 +62,7 @@ pub struct Wallet {
     pub network: Network,
     pub bdk: bdk_wallet::PersistedWallet,
     pub metadata: WalletMetadata,
+
     db: Store<bdk_wallet::ChangeSet>,
 }
 
@@ -216,6 +221,41 @@ impl Wallet {
         };
 
         Ok(key)
+    }
+
+    pub fn get_next_address(
+        &mut self,
+        last_seen_address_index: Option<usize>,
+    ) -> Result<(AddressInfo, usize), WalletError> {
+        const MAX_ADDRESSES: usize = 25;
+
+        let addresses: Vec<AddressInfo> = self
+            .bdk
+            .list_unused_addresses(KeychainKind::External)
+            .take(MAX_ADDRESSES)
+            .map(Into::into)
+            .collect();
+
+        // get up to 25 revealed but unused addresses
+        if addresses.len() < MAX_ADDRESSES {
+            let address_info = self.bdk.reveal_next_address(KeychainKind::External).into();
+            self.persist()?;
+
+            return Ok((address_info, 0));
+        }
+
+        // if we have already revealed 25 addresses, we cycle back to the first one
+        // and present those addresses, until a next unused address is available, if we don't
+        // do this we could hit the gap limit and users might use a an adddress with an index past
+        // the gap limit and not be able to see it their wallet
+        let index_to_use = if let Some(last_index) = last_seen_address_index {
+            (last_index + 1) % MAX_ADDRESSES
+        } else {
+            0
+        };
+
+        let address_info = addresses[index_to_use].clone();
+        Ok((address_info, index_to_use))
     }
 
     pub fn master_fingerprint(&self) -> Result<Fingerprint, WalletError> {

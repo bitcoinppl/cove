@@ -62,30 +62,19 @@ struct SelectedWalletScreenInner: View {
 
     // private
     @State private var showSettings = false
+    @State private var receiveSheetShowing = false
+    @State private var showingCopiedPopup = true
 
     func updater(_ action: WalletViewModelAction) {
         model.dispatch(action: action)
     }
 
-    var accentColor: Color {
-        Color(model.walletMetadata.color)
-    }
-
     @ViewBuilder
     func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
         TransactionsCardView(transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata)
-            .background(
-                UnevenRoundedRectangle(
-                    cornerRadii: .init(
-                        topLeading: 40,
-                        bottomLeading: 0,
-                        bottomTrailing: 0,
-                        topTrailing: 40
-                    )
-                )
-                .fill(.thickMaterial)
-                .ignoresSafeArea()
-            )
+            .background(.thickMaterial)
+            .ignoresSafeArea()
+            .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -119,7 +108,9 @@ struct SelectedWalletScreenInner: View {
             VStack {
                 WalletBalanceHeaderView(balance: model.balance.confirmed,
                                         metadata: model.walletMetadata,
-                                        updater: updater)
+                                        updater: updater,
+                                        receiveSheetShowing: $receiveSheetShowing)
+                    .cornerRadius(16)
                     .padding()
 
                 Transactions
@@ -138,6 +129,9 @@ struct SelectedWalletScreenInner: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            .sheet(isPresented: $receiveSheetShowing) {
+                ReceiveView(model: model)
+            }
             .sheet(isPresented: $showSettings) {
                 WalletSettingsSheet(model: model)
             }
