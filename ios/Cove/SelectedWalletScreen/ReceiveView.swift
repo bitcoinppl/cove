@@ -36,6 +36,15 @@ struct ReceiveView: View {
         }
     }
 
+    func nextAddress() {
+        do {
+            addressInfo = try model.rust.nextAddress()
+        } catch {
+            Log.error("Unable to get next address: \(error)")
+            // TODO: error getting address handle?
+        }
+    }
+
     var body: some View {
         VStack {
             HStack {
@@ -64,9 +73,7 @@ struct ReceiveView: View {
                     .cornerRadius(8)
                 }
 
-                Button(action: {
-                    addressInfo = try? model.rust.nextAddress()
-                }) {
+                Button(action: nextAddress) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("New Address")
@@ -84,13 +91,7 @@ struct ReceiveView: View {
             }
             .padding(.horizontal)
         }
-        .onAppear {
-            do {
-                addressInfo = try model.rust.nextAddress()
-            } catch {
-                // TODO: error getting address handle?
-            }
-        }
+        .onAppear(perform: nextAddress)
     }
 }
 
@@ -143,7 +144,6 @@ private struct AddressView: View {
                         .foregroundColor(.secondary)
                 })
                 .progressViewStyle(.circular)
-//                .frame(minWidth: screenWidth * 0.65)
             }
         }
     }

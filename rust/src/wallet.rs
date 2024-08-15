@@ -63,7 +63,6 @@ pub struct Wallet {
     pub bdk: bdk_wallet::PersistedWallet,
     pub metadata: WalletMetadata,
 
-    last_address_index: Option<usize>,
     db: Store<bdk_wallet::ChangeSet>,
 }
 
@@ -154,7 +153,6 @@ impl Wallet {
             network,
             metadata,
             bdk: wallet,
-            last_address_index: None,
             db,
         })
     }
@@ -185,7 +183,6 @@ impl Wallet {
             metadata,
             network,
             bdk: wallet,
-            last_address_index: None,
             db,
         })
     }
@@ -226,7 +223,10 @@ impl Wallet {
         Ok(key)
     }
 
-    pub fn get_next_address(&mut self) -> Result<AddressInfo, WalletError> {
+    pub fn get_next_address(
+        &mut self,
+        last_seen_address_index: Option<usize>,
+    ) -> Result<(AddressInfo, usize), WalletError> {
         const MAX_ADDRESSES: usize = 25;
 
         let addresses: Vec<AddressInfo> = self
@@ -238,26 +238,24 @@ impl Wallet {
 
         // get up to 25 revealed but unused addresses
         if addresses.len() < MAX_ADDRESSES {
-            let address_info = self.bdk.reveal_next_address(KeychainKind::External);
+            let address_info = self.bdk.reveal_next_address(KeychainKind::External).into();
             self.persist()?;
 
-            return Ok(address_info.into());
+            return Ok((address_info, 0));
         }
 
         // if we have already revealed 25 addresses, we cycle back to the first one
         // and present those addresses, until a next unused address is available, if we don't
         // do this we could hit the gap limit and users might use a an adddress with an index past
         // the gap limit and not be able to see it their wallet
-        let index_to_use = if let Some(last_index) = self.last_address_index {
+        let index_to_use = if let Some(last_index) = last_seen_address_index {
             (last_index + 1) % MAX_ADDRESSES
         } else {
             0
         };
 
         let address_info = addresses[index_to_use].clone();
-        self.last_address_index = Some(address_info.index as usize);
-
-        Ok(address_info)
+        Ok((address_info, index_to_use))
     }
 
     pub fn master_fingerprint(&self) -> Result<Fingerprint, WalletError> {
