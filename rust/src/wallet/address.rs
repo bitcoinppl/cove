@@ -47,6 +47,10 @@ mod ffi {
 
     #[uniffi::export]
     impl AddressInfo {
+        fn adress_string(&self) -> String {
+            self.address.to_string()
+        }
+
         fn address(&self) -> Address {
             self.address.clone().into()
         }

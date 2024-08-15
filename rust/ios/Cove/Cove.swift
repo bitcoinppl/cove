@@ -596,6 +596,10 @@ public func FfiConverterTypeAddress_lower(_ value: Address) -> UnsafeMutableRawP
 
 public protocol AddressInfoProtocol: AnyObject {
     func address() -> Address
+
+    func adressString() -> String
+
+    func index() -> UInt32
 }
 
 open class AddressInfo:
@@ -641,6 +645,18 @@ open class AddressInfo:
     open func address() -> Address {
         return try! FfiConverterTypeAddress.lift(try! rustCall {
             uniffi_cove_fn_method_addressinfo_address(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func adressString() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_addressinfo_adress_string(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func index() -> UInt32 {
+        return try! FfiConverterUInt32.lift(try! rustCall {
+            uniffi_cove_fn_method_addressinfo_index(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -7574,6 +7590,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_addressinfo_address() != 59376 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_addressinfo_adress_string() != 41627 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_addressinfo_index() != 45529 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_amount_as_btc() != 7531 {

@@ -52,6 +52,8 @@ pub struct RustWalletViewModel {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+
+    read_only_wallet: Arc<RwLock<Wallet>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -122,9 +124,13 @@ impl RustWalletViewModel {
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
+        // load the wallet again to get the read only wallet
+        let read_only_wallet = Arc::new(RwLock::new(Wallet::try_load_persisted(id.clone())?));
+
         Ok(Self {
             id,
             actor,
+            read_only_wallet,
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
@@ -138,8 +144,8 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub fn next_address(&self) -> Result<AddressInfo, Error> {
-        task::block_on(call!(self.actor.next_address()))
-            .map_err(|error| Error::NextAddressError(error.to_string()))
+        let address = self.read_only_wallet.write().get_next_address()?;
+        Ok(address)
     }
 
     #[uniffi::method]
@@ -303,10 +309,13 @@ impl RustWalletViewModel {
         let metadata = WalletMetadata::preview_new();
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
+        let read_only_wallet = Arc::new(RwLock::new(Wallet::preview_new_wallet()));
+
         Self {
             id: metadata.id.clone(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
+            read_only_wallet,
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }

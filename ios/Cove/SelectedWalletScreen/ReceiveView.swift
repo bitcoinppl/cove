@@ -15,7 +15,12 @@ struct ReceiveView: View {
     @Binding var showingCopiedPopup: Bool
 
     private let pasteboard = UIPasteboard.general
-    private let address = "bc1qmtxtcueces2runrampaakp8vtpmn7q9lmpuwgr"
+
+    @State private var addressInfo: AddressInfo?
+
+    var addressLoaded: Bool {
+        addressInfo != nil
+    }
 
     var accentColor: Color {
         model.accentColor
@@ -23,8 +28,11 @@ struct ReceiveView: View {
 
     func copyText() {
         dismiss()
-        pasteboard.string = address
-        showingCopiedPopup = true
+
+        if let addressInfo = addressInfo {
+            pasteboard.string = addressInfo.adressString()
+            showingCopiedPopup = true
+        }
     }
 
     var body: some View {
@@ -39,7 +47,7 @@ struct ReceiveView: View {
                 Spacer()
             }
 
-            AddressView(address: address)
+            AddressView(addressInfo: addressInfo)
                 .padding(.bottom, 50)
 
             VStack {
@@ -55,7 +63,9 @@ struct ReceiveView: View {
                     .cornerRadius(8)
                 }
 
-                Button(action: {}) {
+                Button(action: {
+                    addressInfo = try? model.rust.nextAddress()
+                }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("New Address")
@@ -73,11 +83,18 @@ struct ReceiveView: View {
             }
             .padding(.horizontal)
         }
+        .onAppear {
+            do {
+                addressInfo = try model.rust.nextAddress()
+            } catch {
+                // TODO: error getting address handle?
+            }
+        }
     }
 }
 
 private struct AddressView: View {
-    let address: String
+    let addressInfo: AddressInfo?
 
     func generateQRCode(from string: String) -> UIImage {
         let context = CIContext()
@@ -96,26 +113,38 @@ private struct AddressView: View {
     }
 
     var body: some View {
-        GroupBox {
-            VStack {
-                Image(uiImage: generateQRCode(from: address))
-                    .interpolation(.none)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 250, height: 250)
-                    .padding()
+        Group {
+            if let addressInfo = addressInfo {
+                GroupBox {
+                    VStack {
+                        Image(uiImage: generateQRCode(from: addressInfo.adressString()))
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 250, height: 250)
+                            .padding()
 
-                Text(address as String)
-                    .font(.custom("Menlo", size: 18))
-                    .multilineTextAlignment(.leading)
-                    .minimumScaleFactor(0.01)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .padding(.top, 10)
-                    .padding([.bottom, .horizontal])
+                        Text(addressInfo.adressString())
+                            .font(.custom("Menlo", size: 18))
+                            .multilineTextAlignment(.leading)
+                            .minimumScaleFactor(0.01)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                            .padding(.top, 10)
+                            .padding([.bottom, .horizontal])
+                    }
+                }
+                .padding()
+            } else {
+                ProgressView(label: {
+                    Text("Loading")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                })
+                .progressViewStyle(.circular)
+//                .frame(minWidth: screenWidth * 0.65)
             }
         }
-        .padding()
     }
 }
 
