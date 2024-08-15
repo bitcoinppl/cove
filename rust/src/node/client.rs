@@ -19,8 +19,9 @@ use super::ApiType;
 const STOP_GAP: usize = 30;
 const BATCH_SIZE: usize = 20;
 
+#[derive(Clone)]
 pub enum NodeClient {
-    Esplora(esplora_client::r#async::AsyncClient),
+    Esplora(Arc<esplora_client::r#async::AsyncClient>),
     Electrum(Arc<bdk_electrum::BdkElectrumClient<electrum_client::Client>>),
 }
 
@@ -60,7 +61,8 @@ impl NodeClient {
             ApiType::Esplora => {
                 let client = esplora_client::Builder::new(&node.url)
                     .build_async()
-                    .map_err(Error::CreateEsploraClientError)?;
+                    .map_err(Error::CreateEsploraClientError)?
+                    .into();
 
                 Ok(Self::Esplora(client))
             }

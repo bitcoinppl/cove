@@ -3026,7 +3026,7 @@ public protocol RustWalletViewModelProtocol: AnyObject {
     /**
      * Get the next address for the wallet
      */
-    func nextAddress() throws -> AddressInfo
+    func nextAddress() async throws -> AddressInfo
 
     func startWalletScan() async throws
 
@@ -3140,10 +3140,20 @@ open class RustWalletViewModel:
     /**
      * Get the next address for the wallet
      */
-    open func nextAddress() throws -> AddressInfo {
-        return try FfiConverterTypeAddressInfo.lift(rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
-            uniffi_cove_fn_method_rustwalletviewmodel_next_address(self.uniffiClonePointer(), $0)
-        })
+    open func nextAddress() async throws -> AddressInfo {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_next_address(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeAddressInfo.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
     }
 
     open func startWalletScan() async throws {
@@ -7826,7 +7836,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_mark_wallet_as_verified() != 64306 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_next_address() != 21920 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_next_address() != 23410 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_start_wallet_scan() != 46525 {

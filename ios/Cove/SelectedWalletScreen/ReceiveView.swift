@@ -36,9 +36,12 @@ struct ReceiveView: View {
         }
     }
 
-    func nextAddress() {
+    func nextAddress() async {
         do {
-            addressInfo = try model.rust.nextAddress()
+            let addressInfo = try await model.rust.nextAddress()
+            await MainActor.run {
+                self.addressInfo = addressInfo
+            }
         } catch {
             Log.error("Unable to get next address: \(error)")
             // TODO: error getting address handle?
@@ -73,7 +76,11 @@ struct ReceiveView: View {
                     .cornerRadius(8)
                 }
 
-                Button(action: nextAddress) {
+                Button(action: {
+                    Task {
+                        await nextAddress()
+                    }
+                }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("New Address")
@@ -91,7 +98,9 @@ struct ReceiveView: View {
             }
             .padding(.horizontal)
         }
-        .onAppear(perform: nextAddress)
+        .task {
+            await nextAddress()
+        }
     }
 }
 

@@ -52,8 +52,6 @@ pub struct RustWalletViewModel {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
-
-    last_seen_address_index: Arc<RwLock<Option<usize>>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -130,7 +128,6 @@ impl RustWalletViewModel {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
-            last_seen_address_index: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -141,12 +138,10 @@ impl RustWalletViewModel {
 
     /// Get the next address for the wallet
     #[uniffi::method]
-    pub fn next_address(&self) -> Result<AddressInfo, Error> {
-        // Load the wallet again from the persisted data, and get the next address
-        // Need to double check that this isn't a problem that the actor might be updating at the same time
-        let mut wallet = Wallet::try_load_persisted(self.id.clone())?;
-        let (address, index) = wallet.get_next_address(*self.last_seen_address_index.read())?;
-        *self.last_seen_address_index.write() = Some(index);
+    pub async fn next_address(&self) -> Result<AddressInfo, Error> {
+        let address = call!(self.actor.next_address())
+            .await
+            .map_err(|error| Error::NextAddressError(error.to_string()))?;
 
         Ok(address)
     }
@@ -318,7 +313,6 @@ impl RustWalletViewModel {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
-            last_seen_address_index: Arc::new(RwLock::new(None)),
         }
     }
 }
