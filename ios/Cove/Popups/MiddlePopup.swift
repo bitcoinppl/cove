@@ -18,10 +18,21 @@ struct MiddlePopup: CentrePopup {
     var message: String?
     var buttonText: String = "OK"
     var onClose: () -> Void = {}
+    @State var swipeToDismiss = true
 
     func createContent() -> some View {
         MiddlePopupView(state: state, heading: heading, message: message, buttonText: buttonText, onClose: onClose)
             .padding(24)
+            .gesture(
+                DragGesture()
+                    .onEnded { gesture in
+                        if abs(gesture.translation.width) > 40 || abs(gesture.translation.height) > 40 {
+                            if swipeToDismiss {
+                                dismiss()
+                            }
+                        }
+                    }
+            )
     }
 
     func configurePopup(popup: CentrePopupConfig) -> CentrePopupConfig {
