@@ -52,8 +52,6 @@ pub struct RustWalletViewModel {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
-
-    read_only_wallet: Arc<RwLock<Wallet>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -124,13 +122,9 @@ impl RustWalletViewModel {
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
-        // load the wallet again to get the read only wallet
-        let read_only_wallet = Arc::new(RwLock::new(Wallet::try_load_persisted(id.clone())?));
-
         Ok(Self {
             id,
             actor,
-            read_only_wallet,
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
@@ -142,9 +136,14 @@ impl RustWalletViewModel {
         call!(self.actor.balance()).await.unwrap_or_default()
     }
 
+    /// Get the next address for the wallet
     #[uniffi::method]
     pub fn next_address(&self) -> Result<AddressInfo, Error> {
-        let address = self.read_only_wallet.write().get_next_address()?;
+        // Load the wallet again from the persisted data, and get the next address
+        // Need to double check that this isn't a problem that the actor might be updating at the same time
+        let mut wallet = Wallet::try_load_persisted(self.id.clone())?;
+        let address = wallet.get_next_address()?;
+
         Ok(address)
     }
 
@@ -309,13 +308,10 @@ impl RustWalletViewModel {
         let metadata = WalletMetadata::preview_new();
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
-        let read_only_wallet = Arc::new(RwLock::new(Wallet::preview_new_wallet()));
-
         Self {
             id: metadata.id.clone(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            read_only_wallet,
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
