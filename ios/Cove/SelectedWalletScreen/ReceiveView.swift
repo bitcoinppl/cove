@@ -12,7 +12,6 @@ struct ReceiveView: View {
     @Environment(\.dismiss) private var dismiss
 
     let model: WalletViewModel
-    @Binding var showingCopiedPopup: Bool
 
     private let pasteboard = UIPasteboard.general
 
@@ -31,7 +30,9 @@ struct ReceiveView: View {
 
         if let addressInfo = addressInfo {
             pasteboard.string = addressInfo.adressString()
-            showingCopiedPopup = true
+            FloaterPopup(text: "Address Copied")
+                .showAndStack()
+                .dismissAfter(2)
         }
     }
 
@@ -150,7 +151,7 @@ private struct AddressView: View {
 
 #Preview {
     AsyncPreview {
-        ReceiveView(model: WalletViewModel(preview: "preview_only"), showingCopiedPopup: Binding.constant(false))
+        ReceiveView(model: WalletViewModel(preview: "preview_only"))
             .environment(MainViewModel())
     }
 }

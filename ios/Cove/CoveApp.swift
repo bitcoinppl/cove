@@ -32,8 +32,9 @@ class CustomPopupSceneDelegate: PopupSceneDelegate {
         super.init()
         config = { $0
             .top { $0
-                .cornerRadius(24)
                 .dragGestureEnabled(true)
+                .tapOutsideToDismiss(true)
+                .backgroundColour(.clear)
             }
             .centre { $0
                 .tapOutsideToDismiss(true)

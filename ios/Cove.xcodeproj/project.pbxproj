@@ -42,7 +42,7 @@
 		ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA4CBEB2C2328BE0008F63E /* Security.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
 		ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACB17FBC2C5ABDD20079A96A /* WalletBalanceHeaderView.swift */; };
-		ACC1CD5A2C6D415400C7AD89 /* FloaterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC1CD592C6D415400C7AD89 /* FloaterView.swift */; };
+		ACC1CD5A2C6D415400C7AD89 /* FloaterPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC1CD592C6D415400C7AD89 /* FloaterPopupView.swift */; };
 		ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */ = {isa = PBXBuildFile; productRef = ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */; };
 		ACC1CD602C6D4F2C00C7AD89 /* MiddlePopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC1CD5F2C6D4F2C00C7AD89 /* MiddlePopup.swift */; };
 		ACC1CD622C6D5ABC00C7AD89 /* FloaterPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC1CD612C6D5ABC00C7AD89 /* FloaterPopup.swift */; };
@@ -116,7 +116,7 @@
 		AC9FBEBC2C3F5C78005CB37A /* SettingsScreen2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen2.swift; sourceTree = "<group>"; };
 		ACA4CBEB2C2328BE0008F63E /* Security.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Security.swift; sourceTree = "<group>"; };
 		ACB17FBC2C5ABDD20079A96A /* WalletBalanceHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletBalanceHeaderView.swift; sourceTree = "<group>"; };
-		ACC1CD592C6D415400C7AD89 /* FloaterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloaterView.swift; sourceTree = "<group>"; };
+		ACC1CD592C6D415400C7AD89 /* FloaterPopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloaterPopupView.swift; sourceTree = "<group>"; };
 		ACC1CD5F2C6D4F2C00C7AD89 /* MiddlePopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopup.swift; sourceTree = "<group>"; };
 		ACC1CD612C6D5ABC00C7AD89 /* FloaterPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloaterPopup.swift; sourceTree = "<group>"; };
 		ACC301692C20C9D4006790DF /* Routes+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Routes+Ext.swift"; sourceTree = "<group>"; };
@@ -193,7 +193,7 @@
 				AC0761802C32E3BA007B4540 /* SidebarView.swift */,
 				AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */,
 				AC9FBEBC2C3F5C78005CB37A /* SettingsScreen2.swift */,
-				ACC1CD592C6D415400C7AD89 /* FloaterView.swift */,
+				ACC1CD592C6D415400C7AD89 /* FloaterPopupView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -455,7 +455,7 @@
 				6B2189B893A545A2F4E3107E /* WalletColor+Ext.swift in Sources */,
 				AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */,
 				0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */,
-				ACC1CD5A2C6D415400C7AD89 /* FloaterView.swift in Sources */,
+				ACC1CD5A2C6D415400C7AD89 /* FloaterPopupView.swift in Sources */,
 				52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */,
 				AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */,
 				AC2D59252C5B213500B67277 /* TransactionsCardView.swift in Sources */,

@@ -130,7 +130,7 @@ struct SelectedWalletScreenInner: View {
             .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .sheet(isPresented: $receiveSheetShowing) {
-                ReceiveView(model: model, showingCopiedPopup: $showingCopiedPopup)
+                ReceiveView(model: model)
             }
             .sheet(isPresented: $showSettings) {
                 WalletSettingsSheet(model: model)
