@@ -6,10 +6,12 @@ cd rust
 
 BUILD_TYPE=$1
 DEVICE=$2
+SIGN=$3
 
 if [ "$BUILD_TYPE" == "release" ] || [ "$BUILD_TYPE" == "--release" ]; then
     BUILD_FLAG="--release"
     BUILD_TYPE="release"
+    export RUST_LOG="cove=info"
 elif [ "$BUILD_TYPE" == "debug" ] || [ "$BUILD_TYPE" == "--debug" ] ; then
     BUILD_FLAG=""
     BUILD_TYPE="debug"
@@ -45,7 +47,7 @@ fi
 LIBRARY_FLAGS=""
 echo "Build for targets: ${TARGETS[@]}"
 for TARGET in ${TARGETS[@]}; do
-    echo "Building for target: ${TARGET}"
+    echo "Building for target: ${TARGET} with build type: ${BUILD_TYPE}"
     LIBRARY_FLAGS="$LIBRARY_FLAGS -library ./target/$TARGET/$BUILD_TYPE/libcove.a -headers ./bindings"
 
     rustup target add $TARGET
@@ -68,7 +70,8 @@ xcodebuild -create-xcframework \
 # Cleanup
 rm -rf bindings
 
-if [ ! -z $SIGN ] && [ ! -z $SIGNING_IDENTITY ]; then
-    echo "Signing for distribution: identity: $SIGNING_IDENTITY"
-    codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"
-fi
+
+# if [ ! -z $SIGN ] && [ ! -z $SIGNING_IDENTITY ] || [ $SIGN == "--sign" ]; then
+#     echo "Signing for distribution: identity: $SIGNING_IDENTITY"
+#     codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"
+# fi

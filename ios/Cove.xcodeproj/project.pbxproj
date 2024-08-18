@@ -50,7 +50,6 @@
 		ACC301742C211281006790DF /* HotWalletSelectScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301732C211281006790DF /* HotWalletSelectScreen.swift */; };
 		ACC3017A2C221450006790DF /* PendingWalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* PendingWalletViewModel.swift */; };
 		ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
-		ACC4D39B2C2CA6AD008E32A0 /* Cove.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */; };
 		ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */; };
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
@@ -72,11 +71,10 @@
 /* Begin PBXCopyFilesBuildPhase section */
 		ACC4D39C2C2CA6AD008E32A0 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
+			buildActionMask = 12;
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				ACC4D39B2C2CA6AD008E32A0 /* Cove.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -518,6 +516,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -581,6 +580,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -607,32 +607,37 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1.1;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
 				NEW_SETTING = "";
-				OTHER_LDFLAGS = (
-					"-Xlinker",
-					"-interposable",
-				);
+				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -644,29 +649,32 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1.1;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
-				DEVELOPMENT_TEAM = 4PZ3NJBYLZ;
+				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.0.1;
 				NEW_SETTING = "";
-				OTHER_LDFLAGS = (
-					"-Xlinker",
-					"-interposable",
-				);
+				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -680,7 +688,7 @@
 				D0245F592C0F7B500042B447 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		D0245F5A2C0F7B500042B447 /* Build configuration list for PBXNativeTarget "Cove" */ = {
 			isa = XCConfigurationList;
@@ -689,7 +697,7 @@
 				D0245F5C2C0F7B500042B447 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 
