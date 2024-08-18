@@ -1316,6 +1316,8 @@ public protocol ConfirmedTransactionProtocol: AnyObject {
 
     func confirmedAtFmt() -> String
 
+    func confirmedAtFmtWithTime() -> String
+
     func id() -> TxId
 
     func label() -> String
@@ -1384,6 +1386,12 @@ open class ConfirmedTransaction:
     open func confirmedAtFmt() -> String {
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func confirmedAtFmtWithTime() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt_with_time(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -3465,6 +3473,136 @@ public func FfiConverterTypeSentAndReceived_lift(_ pointer: UnsafeMutableRawPoin
 
 public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> UnsafeMutableRawPointer {
     return FfiConverterTypeSentAndReceived.lower(value)
+}
+
+public protocol TransactionDetailsProtocol: AnyObject {
+    func address() -> Address
+
+    func amount() -> Amount
+
+    func amountFmt(unit: Unit) -> String
+
+    func fee() -> Amount
+
+    func isReceived() -> Bool
+
+    func isSent() -> Bool
+}
+
+open class TransactionDetails:
+    TransactionDetailsProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_transactiondetails(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_transactiondetails(pointer, $0) }
+    }
+
+    open func address() -> Address {
+        return try! FfiConverterTypeAddress.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_address(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func amount() -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_amount(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func amountFmt(unit: Unit) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_amount_fmt(self.uniffiClonePointer(),
+                                                                FfiConverterTypeUnit.lower(unit), $0)
+        })
+    }
+
+    open func fee() -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_fee(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isReceived() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_is_received(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isSent() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_is_sent(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeTransactionDetails: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = TransactionDetails
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> TransactionDetails {
+        return TransactionDetails(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: TransactionDetails) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionDetails {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: TransactionDetails, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeTransactionDetails_lift(_ pointer: UnsafeMutableRawPointer) throws -> TransactionDetails {
+    return try FfiConverterTypeTransactionDetails.lift(pointer)
+}
+
+public func FfiConverterTypeTransactionDetails_lower(_ value: TransactionDetails) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeTransactionDetails.lower(value)
 }
 
 public protocol TxIdProtocol: AnyObject {
@@ -7990,6 +8128,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt() != 28835 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt_with_time() != 36703 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_confirmedtransaction_id() != 63537 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8204,6 +8345,24 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_sentandreceived_sent() != 29124 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_address() != 31151 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_amount() != 16978 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 3569 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_fee() != 26324 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_is_received() != 54839 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_is_sent() != 7556 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_txid_is_equal() != 5460 {

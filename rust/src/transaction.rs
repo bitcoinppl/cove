@@ -1,6 +1,7 @@
 mod amount;
 mod ffi;
 mod sent_and_received;
+pub mod transaction_details;
 mod unit;
 
 use std::{cmp::Ordering, sync::Arc};
@@ -20,6 +21,7 @@ use crate::wallet::Wallet;
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
 pub type Unit = unit::Unit;
+pub type TransactionDetails = transaction_details::TransactionDetails;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionDirection {

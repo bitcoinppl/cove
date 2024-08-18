@@ -58,6 +58,13 @@ impl ConfirmedTransaction {
     }
 
     #[uniffi::method]
+    pub fn confirmed_at_fmt_with_time(&self) -> String {
+        self.confirmed_at
+            .strftime("%B %e, %Y at %-I:%M %p")
+            .to_string()
+    }
+
+    #[uniffi::method]
     pub fn sent_and_received(&self) -> SentAndReceived {
         self.sent_and_received
     }
@@ -83,54 +90,6 @@ impl UnconfirmedTransaction {
     #[uniffi::method]
     pub fn label(&self) -> String {
         self.sent_and_received.label()
-    }
-}
-
-#[uniffi::export]
-impl SentAndReceived {
-    #[uniffi::method]
-    pub fn sent(&self) -> Amount {
-        self.sent
-    }
-
-    #[uniffi::method]
-    pub fn received(&self) -> Amount {
-        self.received
-    }
-
-    #[uniffi::method]
-    pub fn direction(&self) -> TransactionDirection {
-        self.direction
-    }
-
-    #[uniffi::method]
-    pub fn amount(&self) -> Amount {
-        match &self.direction {
-            TransactionDirection::Incoming => self.received,
-            TransactionDirection::Outgoing => self.sent,
-        }
-    }
-
-    #[uniffi::method]
-    pub fn amount_fmt(&self, unit: Unit) -> String {
-        let prefix = match &self.direction {
-            TransactionDirection::Incoming => "",
-            TransactionDirection::Outgoing => "-",
-        };
-
-        match unit {
-            Unit::Btc => format!("{prefix}{}", self.amount().btc_string()),
-            Unit::Sat => format!("{prefix}{}", self.amount().sats_string()),
-        }
-    }
-
-    #[uniffi::method]
-    pub fn label(&self) -> String {
-        match &self.direction {
-            TransactionDirection::Incoming => "Received",
-            TransactionDirection::Outgoing => "Sent",
-        }
-        .to_string()
     }
 }
 
