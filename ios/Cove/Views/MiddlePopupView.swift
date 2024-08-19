@@ -17,6 +17,7 @@ enum PopupState: Equatable {
 
 struct MiddlePopupView: View {
     var state: PopupState
+    var dismiss: () -> Void = {}
 
     var heading: String?
     var message: String?
@@ -104,6 +105,7 @@ struct MiddlePopupView: View {
                     .padding(.bottom, 20)
 
                 Button {
+                    dismiss()
                     onClose()
                 } label: {
                     Text(buttonText)

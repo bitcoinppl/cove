@@ -22,6 +22,8 @@ struct NodeSelectionView: View {
     @State private var showParseUrlAlert = false
     @State private var parseUrlMessage = ""
 
+    @State private var checkUrlTask: Task<Void, Never>?
+
     init() {
         selectedNodeName = nodeSelector.selectedNode().name
         nodeList = nodeSelector.nodeList()
@@ -31,14 +33,23 @@ struct NodeSelectionView: View {
         selectedNodeName.hasPrefix("Custom")
     }
 
+    func cancelCheckUrlTask() {
+        if let checkUrlTask = checkUrlTask {
+            checkUrlTask.cancel()
+        }
+    }
+
     @MainActor
-    private func startLoading() {
-        MiddlePopup(state: .loading)
+    private func showLoadingPopup() {
+        cancelCheckUrlTask()
+
+        MiddlePopup(state: .loading, onClose: cancelCheckUrlTask)
             .showAndStack()
     }
 
     @MainActor
     private func completeLoading(_ state: PopupState) {
+        checkUrlTask = nil
         PopupManager.dismiss()
 
         let dismissAfter: Double = switch state {
@@ -83,7 +94,7 @@ struct NodeSelectionView: View {
 
             if let node = node {
                 Task {
-                    await startLoading()
+                    await showLoadingPopup()
                     let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
 
                     switch result {
@@ -135,8 +146,8 @@ struct NodeSelectionView: View {
 
             guard let node = try? nodeSelector.selectPresetNode(name: newSelectedNodeName) else { return }
 
-            startLoading()
-            Task {
+            showLoadingPopup()
+            let task = Task {
                 do {
                     try await nodeSelector.checkSelectedNode(node: node)
                     completeLoading(.success("Succesfully connected to \(node.url)"))
@@ -144,6 +155,7 @@ struct NodeSelectionView: View {
                     completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
                 }
             }
+            self.checkUrlTask = task
         }
         .alert(isPresented: $showParseUrlAlert) {
             Alert(
@@ -152,6 +164,7 @@ struct NodeSelectionView: View {
                 dismissButton: .default(Text("OK")) {
                     showParseUrlAlert = false
                     parseUrlMessage = ""
+                    PopupManager.dismiss()
                 }
             )
         }

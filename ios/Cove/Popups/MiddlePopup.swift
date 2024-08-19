@@ -11,9 +11,9 @@ import SwiftUI
 struct MiddlePopup: CentrePopup {
     // required
     var state: PopupState
-    var configure: ((CentrePopupConfig) -> CentrePopupConfig)?
 
     // optional
+    var configure: ((CentrePopupConfig) -> CentrePopupConfig)?
     var heading: String?
     var message: String?
     var buttonText: String = "OK"
@@ -21,7 +21,7 @@ struct MiddlePopup: CentrePopup {
     @State var swipeToDismiss = true
 
     func createContent() -> some View {
-        MiddlePopupView(state: state, heading: heading, message: message, buttonText: buttonText, onClose: onClose)
+        MiddlePopupView(state: state, dismiss: dismiss, heading: heading, message: message, buttonText: buttonText, onClose: onClose)
             .padding(24)
             .gesture(
                 DragGesture()
