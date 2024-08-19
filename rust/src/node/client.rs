@@ -18,7 +18,7 @@ use super::ApiType;
 
 const STOP_GAP: usize = 30;
 const ELECTRUM_BATCH_SIZE: usize = 20;
-const ESPLORA_BATCH_SIZE: usize = 5;
+const ESPLORA_BATCH_SIZE: usize = 2;
 
 #[derive(Clone)]
 pub enum NodeClient {
@@ -157,20 +157,22 @@ impl NodeClient {
 
         let scan_result = match self {
             NodeClient::Esplora(client) => {
-                debug!("starting esplora sync");
+                debug!("starting esplora sync, batch size: {ESPLORA_BATCH_SIZE}");
                 client
-                    .sync(scan_request, BATCH_SIZE)
+                    .sync(scan_request, ESPLORA_BATCH_SIZE)
                     .await
                     .map_err(Error::EsploraScanError)?
             }
 
             NodeClient::Electrum(client) => {
-                debug!("starting electrum sync");
+                debug!("starting electrum sync, batch size: {ELECTRUM_BATCH_SIZE}");
                 let client = client.clone();
 
-                crate::unblock::run_blocking(move || client.sync(scan_request, BATCH_SIZE, false))
-                    .await
-                    .map_err(Error::ElectrumScanError)?
+                crate::unblock::run_blocking(move || {
+                    client.sync(scan_request, ELECTRUM_BATCH_SIZE, false)
+                })
+                .await
+                .map_err(Error::ElectrumScanError)?
             }
         };
 

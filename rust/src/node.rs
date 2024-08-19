@@ -56,11 +56,11 @@ impl Node {
                 }
             }
             Network::Testnet => {
-                let (name, url) = TESTNET_ESPLORA;
+                let (name, url) = TESTNET_ESPLORA[0];
                 Self {
                     name: name.to_string(),
                     network,
-                    api_type: ApiType::Esplora,
+                    api_type: ApiType::Electrum,
                     url: url.to_string(),
                 }
             }

@@ -3,18 +3,27 @@ use url::Url;
 
 use crate::{database::Database, impl_default_for, network::Network, node::Node};
 
-pub const BITCOIN_ESPLORA: (&str, &str) = ("blockstream.info", "https://blockstream.info/api/");
+pub const BITCOIN_ESPLORA: [(&str, &str); 2] = [
+    ("blockstream.info", "https://blockstream.info/api/"),
+    ("mempool.space", "https://mempool.space/api/"),
+];
+
 pub const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
     (
         "electrum.blockstream.info",
         "ssl://electrum.blockstream.info:50002",
     ),
-    ("mempool.space", "ssl://mempool.space:50002"),
+    ("mempool.space electrum", "ssl://mempool.space:50002"),
     ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
 ];
 
-pub const TESTNET_ESPLORA: (&str, &str) =
-    ("blockstream.info", "https://blockstream.info/testnet/api/");
+pub const TESTNET_ESPLORA: [(&str, &str); 2] = [
+    ("mempool.space", "https://mempool.space/testnet/api/"),
+    ("blockstream.info", "https://blockstream.info/testnet/api/"),
+];
+
+pub const TESTNET_ELECTRUM: [(&str, &str); 1] =
+    [("testnet.hsmiths.com", "ssl://testnet.hsmiths.com:53012")];
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct NodeSelector {
@@ -188,23 +197,28 @@ fn node_list(network: Network) -> Vec<Node> {
                 .map(|(name, url)| Node::new_electrum(name.to_string(), url.to_string(), network))
                 .collect::<Vec<Node>>();
 
-            let (name, url) = BITCOIN_ESPLORA;
-            nodes.push(Node::new_esplora(
-                name.to_string(),
-                url.to_string(),
-                network,
-            ));
+            nodes.extend(
+                BITCOIN_ESPLORA.iter().map(|(name, url)| {
+                    Node::new_esplora(name.to_string(), url.to_string(), network)
+                }),
+            );
 
             nodes
         }
 
         Network::Testnet => {
-            let (name, url) = TESTNET_ESPLORA;
-            vec![Node::new_esplora(
-                name.to_string(),
-                url.to_string(),
-                network,
-            )]
+            let mut nodes = TESTNET_ELECTRUM
+                .iter()
+                .map(|(name, url)| Node::new_electrum(name.to_string(), url.to_string(), network))
+                .collect::<Vec<Node>>();
+
+            nodes.extend(
+                TESTNET_ESPLORA.iter().map(|(name, url)| {
+                    Node::new_esplora(name.to_string(), url.to_string(), network)
+                }),
+            );
+
+            nodes
         }
     }
 }
@@ -256,8 +270,8 @@ pub fn default_node_selection() -> NodeSelection {
     let network = Database::global().global_config.selected_network();
 
     let (name, url) = match network {
-        Network::Bitcoin => BITCOIN_ESPLORA,
-        Network::Testnet => TESTNET_ESPLORA,
+        Network::Bitcoin => BITCOIN_ESPLORA[0],
+        Network::Testnet => TESTNET_ESPLORA[0],
     };
 
     NodeSelection::Preset(Node::new_esplora(
