@@ -151,16 +151,15 @@ struct VerifyReminder: View {
     var body: some View {
         Group {
             if !isVerified {
-                Button(action: {
-                    navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
-                }) {
-                    Text("verify wallet")
-                        .font(.caption)
-                        .foregroundColor(.primary.opacity(0.6))
-                        .padding(.vertical, 10)
-                }
-                .frame(maxWidth: .infinity)
-                .background(Color.yellow.gradient.opacity(0.75))
+                Text("verify wallet")
+                    .font(.caption)
+                    .foregroundColor(.primary.opacity(0.6))
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.yellow.gradient.opacity(0.75))
+                    .onTapGesture {
+                        navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
+                    }
             }
         }
     }
