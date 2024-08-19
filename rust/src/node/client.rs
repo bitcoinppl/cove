@@ -17,7 +17,8 @@ use crate::node::Node;
 use super::ApiType;
 
 const STOP_GAP: usize = 30;
-const BATCH_SIZE: usize = 20;
+const ELECTRUM_BATCH_SIZE: usize = 20;
+const ESPLORA_BATCH_SIZE: usize = 5;
 
 #[derive(Clone)]
 pub enum NodeClient {
@@ -122,7 +123,7 @@ impl NodeClient {
             NodeClient::Esplora(client) => {
                 debug!("starting esplora full scan");
                 client
-                    .full_scan(full_scan_request, STOP_GAP, BATCH_SIZE)
+                    .full_scan(full_scan_request, STOP_GAP, ESPLORA_BATCH_SIZE)
                     .await
                     .map_err(Error::EsploraScanError)?
             }
@@ -131,7 +132,7 @@ impl NodeClient {
                 debug!("starting electrum full scan");
                 let client = client.clone();
                 crate::unblock::run_blocking(move || {
-                    client.full_scan(full_scan_request, STOP_GAP, BATCH_SIZE, false)
+                    client.full_scan(full_scan_request, STOP_GAP, ELECTRUM_BATCH_SIZE, false)
                 })
                 .await
                 .map_err(Error::ElectrumScanError)?
