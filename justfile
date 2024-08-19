@@ -16,6 +16,10 @@ clean:
 fmt:
     cd rust && cargo fmt
 
+clippy:
+    cd rust && cargo clippy
+
+
 clean-xcode:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     cd ios && xcodebuild clean
@@ -43,3 +47,7 @@ run-ios: build-ios
 
 watch profile="debug" device="false":
     watchexec --exts rs just build-ios {{profile}} {{device}}
+
+ci:
+    cd rust && cargo fmt --check
+    cd rust && cargo clippy --all-targets --all-features -- -D warnings
