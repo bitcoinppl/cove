@@ -104,36 +104,40 @@ struct SelectedWalletScreenInner: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack {
-                WalletBalanceHeaderView(balance: model.balance.confirmed,
-                                        metadata: model.walletMetadata,
-                                        updater: updater,
-                                        receiveSheetShowing: $receiveSheetShowing)
-                    .cornerRadius(16)
-                    .padding()
+        VStack {
+            VerifyReminder(walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified)
 
-                Transactions
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showSettings = true
-                    }) {
-                        Image(systemName: "gear")
-                            .foregroundColor(.primary.opacity(0.8))
+            ScrollView {
+                VStack {
+                    WalletBalanceHeaderView(balance: model.balance.confirmed,
+                                            metadata: model.walletMetadata,
+                                            updater: updater,
+                                            receiveSheetShowing: $receiveSheetShowing)
+                        .cornerRadius(16)
+                        .padding()
+
+                    Transactions
+                }
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            showSettings = true
+                        }) {
+                            Image(systemName: "gear")
+                                .foregroundColor(.primary.opacity(0.8))
+                        }
                     }
                 }
-            }
-            .navigationTitle(model.walletMetadata.name)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .sheet(isPresented: $receiveSheetShowing) {
-                ReceiveView(model: model)
-            }
-            .sheet(isPresented: $showSettings) {
-                WalletSettingsSheet(model: model)
+                .navigationTitle(model.walletMetadata.name)
+                .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .sheet(isPresented: $receiveSheetShowing) {
+                    ReceiveView(model: model)
+                }
+                .sheet(isPresented: $showSettings) {
+                    WalletSettingsSheet(model: model)
+                }
             }
         }
     }
@@ -152,19 +156,14 @@ struct VerifyReminder: View {
                 }) {
                     Text("verify wallet")
                         .font(.caption)
-                        .foregroundColor(.primary.opacity(0.8))
-                        .padding(.top, 20)
+                        .foregroundColor(.primary.opacity(0.6))
+                        .padding(.vertical, 10)
                 }
                 .frame(maxWidth: .infinity)
-                .background(Color.yellow.gradient)
+                .background(Color.yellow.gradient.opacity(0.75))
             }
         }
-        .enableInjection()
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 #Preview("Loading") {
