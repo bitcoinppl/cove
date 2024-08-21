@@ -29,6 +29,7 @@ struct MiddlePopupView: View {
     // private
     private let screenWidth = UIScreen.main.bounds.width
     private let screenHeight = UIScreen.main.bounds.height
+    @Environment(\.colorScheme) private var colorScheme
 
     var isLoading: Bool {
         state == .loading
@@ -100,8 +101,8 @@ struct MiddlePopupView: View {
                 Text(popupMessage)
                     .font(.subheadline)
                     .foregroundColor(.primary)
-                    .opacity(0.6)
-                    .padding(.top, 10)
+                    .opacity(colorScheme == .light ? 0.6 : 1)
+                    .padding(.top, 20)
                     .padding(.bottom, 20)
 
                 Button {
@@ -123,7 +124,7 @@ struct MiddlePopupView: View {
                 ProgressView(label: {
                     Text("Loading")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(colorScheme == .light ? .secondary : .white.opacity(0.7))
                 })
                 .progressViewStyle(.circular)
                 .frame(minWidth: screenWidth * 0.65)
@@ -133,6 +134,8 @@ struct MiddlePopupView: View {
         .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 0)
         .shadow(color: .black.opacity(0.16), radius: 24, x: 0, y: 0)
         .padding()
+        .background(.regularMaterial)
+        .cornerRadius(12)
     }
 }
 

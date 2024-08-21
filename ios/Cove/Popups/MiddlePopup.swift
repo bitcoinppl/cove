@@ -42,5 +42,6 @@ struct MiddlePopup: CentrePopup {
 
         return popup.tapOutsideToDismiss(true)
             .horizontalPadding(30)
+            .backgroundColour(.clear)
     }
 }
