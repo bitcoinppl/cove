@@ -222,9 +222,6 @@ private struct CardTab: View {
                                   filteredSuggestions: $filteredSuggestions,
                                   focusField: self.$focusField)
             }
-
-        }.onAppear {
-            print(self.wordGroup)
         }
         .enableInjection()
     }
