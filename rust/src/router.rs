@@ -7,12 +7,13 @@ use crate::{
 
 use derive_more::From;
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
     Settings,
+    SecretWords(WalletId),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -116,6 +117,10 @@ mod ffi {
 
         pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
             Route::NewWallet(NewWalletRoute::HotWallet(route))
+        }
+
+        pub fn secret_words(&self, wallet_id: WalletId) -> Route {
+            Route::SecretWords(wallet_id)
         }
     }
 }

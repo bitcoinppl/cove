@@ -139,7 +139,7 @@ mod ffi {
     use super::*;
     use crate::{
         keychain::{Keychain, KeychainError},
-        wallet::metadata::{WalletId, WalletMetadata},
+        wallet::metadata::WalletId,
     };
 
     type Error = MnemonicError;
@@ -174,11 +174,11 @@ mod ffi {
         }
 
         #[uniffi::constructor(name = "new")]
-        pub fn try_from_metadata(metadata: WalletMetadata) -> Result<Self, Error> {
+        pub fn try_from_id(id: WalletId) -> Result<Self, Error> {
             let keychain = Keychain::global();
             let mnemonic = keychain
-                .get_wallet_key(&metadata.id)?
-                .ok_or(Error::NotAvailable(metadata.id))?;
+                .get_wallet_key(&id)?
+                .ok_or(Error::NotAvailable(id))?;
 
             Ok(Self(mnemonic))
         }

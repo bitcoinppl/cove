@@ -2290,11 +2290,11 @@ open class Mnemonic:
         return try! rustCall { uniffi_cove_fn_clone_mnemonic(self.pointer, $0) }
     }
 
-    public convenience init(metadata: WalletMetadata) throws {
+    public convenience init(id: WalletId) throws {
         let pointer =
             try rustCallWithError(FfiConverterTypeMnemonicError.lift) {
                 uniffi_cove_fn_constructor_mnemonic_new(
-                    FfiConverterTypeWalletMetadata.lower(metadata), $0
+                    FfiConverterTypeWalletId.lower(id), $0
                 )
             }
         self.init(unsafeFromRawPointer: pointer)
@@ -2707,6 +2707,8 @@ public protocol RouteFactoryProtocol: AnyObject {
     func newHotWallet() -> Route
 
     func newWalletSelect() -> Route
+
+    func secretWords(walletId: WalletId) -> Route
 }
 
 open class RouteFactory:
@@ -2786,6 +2788,13 @@ open class RouteFactory:
     open func newWalletSelect() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_new_wallet_select(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func secretWords(walletId: WalletId) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_secret_words(self.uniffiClonePointer(),
+                                                            FfiConverterTypeWalletId.lower(walletId), $0)
         })
     }
 }
@@ -6037,6 +6046,8 @@ public enum Route {
     case newWallet(NewWalletRoute
     )
     case settings
+    case secretWords(WalletId
+    )
 }
 
 public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
@@ -6054,6 +6065,9 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             )
 
         case 4: return .settings
+
+        case 5: return try .secretWords(FfiConverterTypeWalletId.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6074,6 +6088,10 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
 
         case .settings:
             writeInt(&buf, Int32(4))
+
+        case let .secretWords(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
         }
     }
 }
@@ -8064,6 +8082,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_routefactory_secret_words() != 64915 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustimportwalletviewmodel_dispatch() != 54003 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8214,7 +8235,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_keychain_new() != 34449 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_mnemonic_new() != 32887 {
+    if uniffi_cove_checksum_constructor_mnemonic_new() != 56597 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_mnemonic_preview() != 3882 {

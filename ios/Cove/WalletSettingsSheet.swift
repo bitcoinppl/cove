@@ -6,6 +6,7 @@ struct WalletSettingsSheet: View {
     @Environment(\.presentationMode) var presentationMode
 
     @State private var showingDeleteConfirmation = false
+    @State private var showingSecretWordsConfirmation = false
 
     let colors: [WalletColor] = WalletColor.red.all()
 
@@ -65,6 +66,18 @@ struct WalletSettingsSheet: View {
 
                 Section(header: Text("Danger Zone")) {
                     Button {
+                        showingSecretWordsConfirmation = true
+                    } label: {
+                        Label {
+                            Text("View Secret Words")
+                                .foregroundColor(.orange)
+                        } icon: {
+                            Image(systemName: "lock.trianglebadge.exclamationmark")
+                                .foregroundColor(.orange)
+                        }
+                    }
+
+                    Button {
                         showingDeleteConfirmation = true
                     } label: {
                         Label("Delete Wallet", systemImage: "trash")
@@ -100,6 +113,25 @@ struct WalletSettingsSheet: View {
             } message: {
                 Text("This action cannot be undone.")
             }
+            .confirmationDialog("Are you sure?", isPresented: $showingSecretWordsConfirmation) {
+                Button("Show Me") {
+                    presentationMode.wrappedValue.dismiss()
+                    navigate(Route.secretWords(model.walletMetadata.id))
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone.")
+            }
         }
+    }
+}
+
+#Preview {
+    AsyncPreview {
+        WalletSettingsSheet(model: WalletViewModel(preview: "preview_only"))
+            .environment(MainViewModel())
+            .environment(\.navigate) { _ in
+                ()
+            }
     }
 }

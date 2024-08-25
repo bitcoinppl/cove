@@ -45,5 +45,7 @@ func routeToView(model: MainViewModel, route: Route) -> some View {
         NewWalletContainer(route: route)
     case let .selectedWallet(walletId):
         SelectedWalletScreen(id: walletId)
+    case let .secretWords(id: walletId):
+        SecretWordsScreen(id: walletId)
     }
 }
