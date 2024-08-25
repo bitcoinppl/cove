@@ -71,7 +71,7 @@ struct VerifyWordsScreen: View {
         groupedWords.count - 1
     }
 
-    private func AlertView(_ alertType: AlertType) -> Alert {
+    private func DisplayAlert(for alertType: AlertType) -> Alert {
         switch alertType {
         case .error:
             Alert(
@@ -217,7 +217,7 @@ struct VerifyWordsScreen: View {
                 }
             }
             .alert(item: $activeAlert) { alertType in
-                AlertView(alertType)
+                DisplayAlert(for: alertType)
             }
             .onChange(of: focusField) { _, _ in
                 filteredSuggestions = []
