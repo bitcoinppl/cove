@@ -2256,6 +2256,111 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
     return FfiConverterTypeKeychain.lower(value)
 }
 
+public protocol MnemonicProtocol: AnyObject {
+    func allWords() -> [GroupedWord]
+}
+
+open class Mnemonic:
+    MnemonicProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_mnemonic(self.pointer, $0) }
+    }
+
+    public convenience init(metadata: WalletMetadata) throws {
+        let pointer =
+            try rustCallWithError(FfiConverterTypeMnemonicError.lift) {
+                uniffi_cove_fn_constructor_mnemonic_new(
+                    FfiConverterTypeWalletMetadata.lower(metadata), $0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_mnemonic(pointer, $0) }
+    }
+
+    public static func preview(numberOfBip39Words: NumberOfBip39Words) -> Mnemonic {
+        return try! FfiConverterTypeMnemonic.lift(try! rustCall {
+            uniffi_cove_fn_constructor_mnemonic_preview(
+                FfiConverterTypeNumberOfBip39Words.lower(numberOfBip39Words), $0
+            )
+        })
+    }
+
+    open func allWords() -> [GroupedWord] {
+        return try! FfiConverterSequenceTypeGroupedWord.lift(try! rustCall {
+            uniffi_cove_fn_method_mnemonic_all_words(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeMnemonic: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Mnemonic
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Mnemonic {
+        return Mnemonic(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Mnemonic) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Mnemonic {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Mnemonic, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeMnemonic_lift(_ pointer: UnsafeMutableRawPointer) throws -> Mnemonic {
+    return try FfiConverterTypeMnemonic.lift(pointer)
+}
+
+public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeMnemonic.lower(value)
+}
+
 public protocol NodeSelectorProtocol: AnyObject {
     /**
      * Check the node url and set it as selected node if it is valid
@@ -5498,6 +5603,52 @@ extension KeychainError: Foundation.LocalizedError {
     }
 }
 
+public enum MnemonicError {
+    case GetWalletKeychain(KeychainError
+    )
+    case NotAvailable(WalletId
+    )
+}
+
+public struct FfiConverterTypeMnemonicError: FfiConverterRustBuffer {
+    typealias SwiftType = MnemonicError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MnemonicError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .GetWalletKeychain(
+                FfiConverterTypeKeychainError.read(from: &buf)
+            )
+
+        case 2: return try .NotAvailable(
+                FfiConverterTypeWalletId.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MnemonicError, into buf: inout [UInt8]) {
+        switch value {
+        case let .GetWalletKeychain(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeKeychainError.write(v1, into: &buf)
+
+        case let .NotAvailable(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+        }
+    }
+}
+
+extension MnemonicError: Equatable, Hashable {}
+
+extension MnemonicError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -7877,6 +8028,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_mnemonic_all_words() != 45039 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 48519 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8058,6 +8212,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_keychain_new() != 34449 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_mnemonic_new() != 32887 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_mnemonic_preview() != 3882 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_nodeselector_new() != 61659 {
