@@ -12,23 +12,25 @@ struct VerifyWordsScreen: View {
 
     @Environment(\.navigate) private var navigate
     @Environment(MainViewModel.self) private var appModel
+    @State var model: WalletViewModel? = nil
 
+    // private
     @State private var tabIndex: Int = 0
 
     @State private var showErrorAlert = false
     @State private var invalidWords: String = ""
     @State private var focusField: Int?
+
     @State private var showSkipAlert = false
+    @State private var showWordsAlert = false
+
+    @State private var validator: WordValidator? = nil
+    @State private var groupedWords: [[GroupedWord]] = [[]]
+    @State private var enteredWords: [[String]] = [[]]
+    @State private var textFields: [String] = []
+    @State private var filteredSuggestions: [String] = []
 
     @StateObject private var keyboardObserver = KeyboardObserver()
-
-    @State var model: WalletViewModel? = nil
-    @State private var validator: WordValidator? = nil
-
-    @State var groupedWords: [[GroupedWord]] = [[]]
-    @State var enteredWords: [[String]] = [[]]
-    @State var textFields: [String] = []
-    @State var filteredSuggestions: [String] = []
 
     func initOnAppear() {
         do {
@@ -50,7 +52,7 @@ struct VerifyWordsScreen: View {
     }
 
     var cardHeight: CGFloat {
-        keyboardIsShowing ? 350 : 450
+        keyboardIsShowing ? 325 : 425
     }
 
     var buttonIsDisabled: Bool {
@@ -158,6 +160,16 @@ struct VerifyWordsScreen: View {
                     }
 
                     Button(action: {
+                        showWordsAlert = true
+                    }) {
+                        Text("View Words")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.opacity(0.8))
+                    }
+                    .padding(.top, 10)
+
+                    Button(action: {
                         showSkipAlert = true
                     }) {
                         Text("SKIP")
@@ -182,6 +194,16 @@ struct VerifyWordsScreen: View {
                     primaryButton: .destructive(Text("Yes, Verify Later")) {
                         Log.debug("Skipping verification, going to wallet id: \(id)")
                         appModel.resetRoute(to: Route.selectedWallet(id))
+                    },
+                    secondaryButton: .cancel(Text("Cancel"))
+                )
+            }
+            .alert(isPresented: $showWordsAlert) {
+                Alert(
+                    title: Text("See Secret Words?"),
+                    message: Text("Whoever has your secret words has access to your bitcoin. Please keep these safe and don't show them to anyone else."),
+                    primaryButton: .destructive(Text("Yes, Show Me")) {
+                        appModel.pushRoute(Route.secretWords(id))
                     },
                     secondaryButton: .cancel(Text("Cancel"))
                 )
@@ -346,4 +368,5 @@ private struct AutocompleteField: View {
 
 #Preview {
     VerifyWordsScreen(id: WalletId())
+        .environment(MainViewModel())
 }
