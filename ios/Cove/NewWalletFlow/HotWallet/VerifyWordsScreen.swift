@@ -12,23 +12,29 @@ struct VerifyWordsScreen: View {
 
     @Environment(\.navigate) private var navigate
     @Environment(MainViewModel.self) private var appModel
+    @State var model: WalletViewModel? = nil
 
+    // private
     @State private var tabIndex: Int = 0
 
-    @State private var showErrorAlert = false
     @State private var invalidWords: String = ""
     @State private var focusField: Int?
-    @State private var showSkipAlert = false
+
+    @State private var validator: WordValidator? = nil
+    @State private var groupedWords: [[GroupedWord]] = [[]]
+    @State private var enteredWords: [[String]] = [[]]
+    @State private var textFields: [String] = []
+    @State private var filteredSuggestions: [String] = []
 
     @StateObject private var keyboardObserver = KeyboardObserver()
 
-    @State var model: WalletViewModel? = nil
-    @State private var validator: WordValidator? = nil
+    // alerts
+    private enum AlertType: Identifiable {
+        case error, words, skip
+        var id: Self { self }
+    }
 
-    @State var groupedWords: [[GroupedWord]] = [[]]
-    @State var enteredWords: [[String]] = [[]]
-    @State var textFields: [String] = []
-    @State var filteredSuggestions: [String] = []
+    @State private var activeAlert: AlertType?
 
     func initOnAppear() {
         do {
@@ -50,7 +56,7 @@ struct VerifyWordsScreen: View {
     }
 
     var cardHeight: CGFloat {
-        keyboardIsShowing ? 350 : 450
+        keyboardIsShowing ? 325 : 425
     }
 
     var buttonIsDisabled: Bool {
@@ -65,9 +71,39 @@ struct VerifyWordsScreen: View {
         groupedWords.count - 1
     }
 
+    private func DisplayAlert(for alertType: AlertType) -> Alert {
+        switch alertType {
+        case .error:
+            Alert(
+                title: Text("Words not valid"),
+                message: Text("The following words are not valid: \(invalidWords)"),
+                dismissButton: .cancel(Text("OK"))
+            )
+        case .words:
+            Alert(
+                title: Text("See Secret Words?"),
+                message: Text("Whoever has your secret words has access to your bitcoin. Please keep these safe and don't show them to anyone else."),
+                primaryButton: .destructive(Text("Yes, Show Me")) {
+                    appModel.pushRoute(Route.secretWords(id))
+                },
+                secondaryButton: .cancel(Text("Cancel"))
+            )
+        case .skip:
+            Alert(
+                title: Text("Skip verifying words?"),
+                message: Text("Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"),
+                primaryButton: .destructive(Text("Yes, Verify Later")) {
+                    Log.debug("Skipping verification, going to wallet id: \(id)")
+                    appModel.resetRoute(to: Route.selectedWallet(id))
+                },
+                secondaryButton: .cancel(Text("Cancel"))
+            )
+        }
+    }
+
     func confirm(_ model: WalletViewModel, _ validator: WordValidator) {
         guard isAllWordsValid else {
-            showErrorAlert = true
+            activeAlert = .error
             invalidWords = validator.invalidWordsString(enteredWords: enteredWords)
             return
         }
@@ -158,7 +194,17 @@ struct VerifyWordsScreen: View {
                     }
 
                     Button(action: {
-                        showSkipAlert = true
+                        activeAlert = .words
+                    }) {
+                        Text("View Words")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.opacity(0.8))
+                    }
+                    .padding(.top, 10)
+
+                    Button(action: {
+                        activeAlert = .skip
                     }) {
                         Text("SKIP")
                             .font(.subheadline)
@@ -170,26 +216,12 @@ struct VerifyWordsScreen: View {
                     Spacer()
                 }
             }
-            .alert("Words not valid", isPresented: $showErrorAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("The following words are not valid: \(invalidWords)")
-            }
-            .alert(isPresented: $showSkipAlert) {
-                Alert(
-                    title: Text("Skip verifying words?"),
-                    message: Text("Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"),
-                    primaryButton: .destructive(Text("Yes, Verify Later")) {
-                        Log.debug("Skipping verification, going to wallet id: \(id)")
-                        appModel.resetRoute(to: Route.selectedWallet(id))
-                    },
-                    secondaryButton: .cancel(Text("Cancel"))
-                )
+            .alert(item: $activeAlert) { alertType in
+                DisplayAlert(for: alertType)
             }
             .onChange(of: focusField) { _, _ in
                 filteredSuggestions = []
             }
-            .enableInjection()
         } else {
             Text("Loading....")
                 .onAppear(perform: initOnAppear)
@@ -222,16 +254,8 @@ private struct CardTab: View {
                                   filteredSuggestions: $filteredSuggestions,
                                   focusField: self.$focusField)
             }
-
-        }.onAppear {
-            print(self.wordGroup)
         }
-        .enableInjection()
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 private struct AutocompleteField: View {
@@ -291,12 +315,7 @@ private struct AutocompleteField: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
-        .enableInjection()
     }
-
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 
     func submitFocusField() {
         filteredSuggestions = []
@@ -349,4 +368,5 @@ private struct AutocompleteField: View {
 
 #Preview {
     VerifyWordsScreen(id: WalletId())
+        .environment(MainViewModel())
 }
