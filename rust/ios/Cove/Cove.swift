@@ -6522,6 +6522,46 @@ extension WalletError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum WalletErrorAlert {
+    case nodeConnectionFailed(String
+    )
+}
+
+public struct FfiConverterTypeWalletErrorAlert: FfiConverterRustBuffer {
+    typealias SwiftType = WalletErrorAlert
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletErrorAlert {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .nodeConnectionFailed(FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletErrorAlert, into buf: inout [UInt8]) {
+        switch value {
+        case let .nodeConnectionFailed(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeWalletErrorAlert_lift(_ buf: RustBuffer) throws -> WalletErrorAlert {
+    return try FfiConverterTypeWalletErrorAlert.lift(buf)
+}
+
+public func FfiConverterTypeWalletErrorAlert_lower(_ value: WalletErrorAlert) -> RustBuffer {
+    return FfiConverterTypeWalletErrorAlert.lower(value)
+}
+
+extension WalletErrorAlert: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum WalletLoadState {
     case loading
     case scanning([Transaction]

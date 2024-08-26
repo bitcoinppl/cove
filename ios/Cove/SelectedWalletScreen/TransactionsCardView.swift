@@ -58,7 +58,7 @@ struct TransactionsCardView: View {
                         ContentUnavailableView {
                             Label("No transactions", systemImage: "bitcoinsign.square.fill")
                         } description: {
-                            Text("Send some bitcoin to yourself")
+                            Text("Go buy some bitcoin!")
                         }
                         .padding(.top, 20)
 
