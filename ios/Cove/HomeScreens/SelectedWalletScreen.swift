@@ -58,7 +58,7 @@ struct SelectedWalletScreenInner: View {
     private let screenHeight = UIScreen.main.bounds.height
 
     // public
-    let model: WalletViewModel
+    var model: WalletViewModel
 
     // private
     @State private var showSettings = false
@@ -85,6 +85,18 @@ struct SelectedWalletScreenInner: View {
             .padding(.top, screenHeight / 6)
         Spacer()
         Spacer()
+    }
+
+    func DisplayErrorAlert(_ alert: WalletErrorAlert) -> Alert {
+        switch alert {
+        case .nodeConnectionFailed:
+            Alert(
+                title: Text("Node Connection Failed"),
+                message: Text("Would you like to select a different node?"),
+                primaryButton: .default(Text("Yes, Change Node"), action: { navigate(.settings) }),
+                secondaryButton: .cancel()
+            )
+        }
     }
 
     @ViewBuilder
@@ -140,6 +152,7 @@ struct SelectedWalletScreenInner: View {
                 }
             }
         }
+        .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
     }
 }
 

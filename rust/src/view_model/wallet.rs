@@ -70,6 +70,11 @@ pub enum WalletLoadState {
     Loaded(Vec<Transaction>),
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletErrorAlert {
+    NodeConnectionFailed(String),
+}
+
 pub type Error = WalletViewModelError;
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum WalletViewModelError {

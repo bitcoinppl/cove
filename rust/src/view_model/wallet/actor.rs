@@ -44,10 +44,22 @@ impl Actor for WalletActor {
         error!("WalletActor Error: {error:?}");
         let error_string = error.to_string();
 
-        if let Some(error) = error.downcast::<Error>().ok().map(|e| *e) {
-            self.send(WalletViewModelReconcileMessage::WalletError(error));
-        } else {
+        // an error occurred, that wasn't a wallet error, send unknown error
+        let Some(error) = error.downcast::<Error>().ok().map(|e| *e) else {
             self.send(WalletViewModelReconcileMessage::UnknownError(error_string));
+            return false;
+        };
+
+        match error {
+            Error::NodeConnectionFailed(error_string) => {
+                self.send(WalletViewModelReconcileMessage::NodeConnectionFailed(
+                    error_string,
+                ));
+            }
+
+            _ => {
+                self.send(WalletViewModelReconcileMessage::WalletError(error));
+            }
         };
 
         false
@@ -86,6 +98,25 @@ impl WalletActor {
     pub async fn next_address(&mut self) -> ActorResult<AddressInfo> {
         let address = self.wallet.get_next_address()?;
         Produces::ok(address)
+    }
+
+    pub async fn check_node_connection(&mut self) -> ActorResult<()> {
+        let node_client = match &self.node_client {
+            Some(node_client) => node_client,
+            None => {
+                let node = Database::global().global_config.selected_node();
+                let node_client = NodeClient::new_from_node(&node).await?;
+                self.node_client = Some(node_client);
+                &self.node_client.as_ref().expect("just checked")
+            }
+        };
+
+        node_client
+            .check_url()
+            .await
+            .map_err(|error| Error::NodeConnectionFailed(error.to_string()))?;
+
+        Produces::ok(())
     }
 
     pub async fn wallet_scan_and_notify(&mut self) -> ActorResult<()> {
@@ -154,6 +185,9 @@ impl WalletActor {
         }
 
         assert!(self.node_client.is_some());
+
+        // check the node connection, and send frontend the error if it fails
+        send!(self.addr.check_node_connection());
 
         // perform that scanning in a background task
         let addr = self.addr.clone();

@@ -10,6 +10,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
     var balance: Balance = .init()
+    var errorAlert: WalletErrorAlert? = nil
 
     public init(id: WalletId) throws {
         self.id = id
@@ -62,10 +63,11 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
                     self.walletMetadata = metadata
 
                 case let .nodeConnectionFailed(error):
+                    self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)
                     self.logger.error(error)
+                    self.logger.error("set errorAlert")
 
                 case let .walletError(error):
-                    // TODO: show to user
                     self.logger.error("WalletError \(error)")
 
                 case let .unknownError(error):
