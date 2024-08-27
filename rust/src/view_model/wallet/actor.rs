@@ -107,7 +107,8 @@ impl WalletActor {
                 let node = Database::global().global_config.selected_node();
                 let node_client = NodeClient::new_from_node(&node).await?;
                 self.node_client = Some(node_client);
-                &self.node_client.as_ref().expect("just checked")
+
+                self.node_client.as_ref().expect("just checked")
             }
         };
 
