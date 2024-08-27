@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     app::FfiApp, database::Database, impl_default_for, mnemonic::NumberOfBip39Words,
-    wallet::metadata::WalletId,
+    transaction::TransactionDetails, wallet::metadata::WalletId,
 };
 
 use derive_more::From;
@@ -14,6 +14,7 @@ pub enum Route {
     NewWallet(NewWalletRoute),
     Settings,
     SecretWords(WalletId),
+    TransactionDetails(Arc<TransactionDetails>),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
