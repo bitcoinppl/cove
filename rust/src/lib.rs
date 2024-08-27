@@ -17,6 +17,7 @@ pub mod network;
 pub mod node;
 pub mod node_connect;
 pub mod pending_wallet;
+pub mod prices_client;
 pub mod redb;
 pub mod task;
 pub mod transaction;

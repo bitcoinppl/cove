@@ -75,7 +75,7 @@ strum = {version = "0.26", features = ["derive"]}
 tap = "1.0.1"
 
 # time 
-jiff = "0.1.5"
+jiff = { version ="0.1", features = [] }
 
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
@@ -105,6 +105,9 @@ ahash = "0.8.11"
 
 # fmt currency
 numfmt = "1.1.1"
+
+# http client
+reqwest = { version = "0.12", features = ["json"] }
 
 [build-dependencies]
 uniffi = { version = "=0.28", features = ["build"] }
