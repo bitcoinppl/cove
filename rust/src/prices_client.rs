@@ -9,6 +9,7 @@ const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct PricesClient {
+    url: String,
     client: reqwest::Client,
     last_prices: Arc<RwLock<Option<PriceResponse>>>,
 }
@@ -43,6 +44,15 @@ impl_default_for!(PricesClient);
 impl PricesClient {
     pub fn new() -> Self {
         Self {
+            url: CURRENCY_URL.to_string(),
+            client: reqwest::Client::new(),
+            last_prices: RwLock::new(None).into(),
+        }
+    }
+
+    pub fn new_with_url(url: String) -> Self {
+        Self {
+            url,
             client: reqwest::Client::new(),
             last_prices: RwLock::new(None).into(),
         }
@@ -88,12 +98,56 @@ impl PricesClient {
             }
         }
 
-        let response = self.client.get(CURRENCY_URL).send().await?;
+        let response = self.client.get(&self.url).send().await?;
         let prices: PriceResponse = response.json().await?;
 
         let mut prices_guard = self.last_prices.write().await;
         *prices_guard = Some(prices);
 
         Ok(prices)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transaction::Amount;
+
+    #[tokio::test]
+    async fn test_get_prices() {
+        let prices_client = PricesClient::new();
+        let prices = prices_client.get_prices().await.unwrap();
+        assert!(prices.usd > 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_price_for() {
+        let prices_client = PricesClient::new();
+        let price = prices_client.get_price_for(Currency::Usd).await.unwrap();
+        assert!(price > 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_value_in_usd() {
+        let prices_client = PricesClient::new();
+
+        let prices = prices_client.get_prices().await.unwrap();
+        let value_in_usd = prices_client.value_in_usd(Amount::one_btc()).await.unwrap();
+
+        let value_in_usd = value_in_usd as f64;
+        assert_eq!(value_in_usd, prices.usd as f64);
+    }
+
+    #[tokio::test]
+    async fn test_get_value_in_usd_with_currency() {
+        let prices_client = PricesClient::new();
+
+        let prices = prices_client.get_prices().await.unwrap();
+
+        let half_a_btc = Amount::from_sat(50_000_000);
+        let value_in_usd = prices_client.value_in_usd(half_a_btc).await.unwrap();
+
+        let value_in_usd = value_in_usd as f64;
+        assert_eq!(value_in_usd, (prices.usd as f64) / 2.0);
     }
 }

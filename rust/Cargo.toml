@@ -113,6 +113,7 @@ reqwest = { version = "0.12", features = ["json"] }
 uniffi = { version = "=0.28", features = ["build"] }
 
 [dev-dependencies]
+tokio = { version = "1.38", features = ["rt", "test-util", "macros"] }
 uniffi = { version = "=0.28", features = ["bindgen-tests"] }
 
 [profile.release]
