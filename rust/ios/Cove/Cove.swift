@@ -1556,6 +1556,87 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRa
     return FfiConverterTypeDatabase.lower(value)
 }
 
+public protocol FeeRateProtocol: AnyObject {}
+
+open class FeeRate:
+    FeeRateProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_feerate(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_feerate(pointer, $0) }
+    }
+}
+
+public struct FfiConverterTypeFeeRate: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = FeeRate
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FeeRate {
+        return FeeRate(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: FeeRate) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeRate {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: FeeRate, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeFeeRate_lift(_ pointer: UnsafeMutableRawPointer) throws -> FeeRate {
+    return try FfiConverterTypeFeeRate.lift(pointer)
+}
+
+public func FfiConverterTypeFeeRate_lower(_ value: FeeRate) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFeeRate.lower(value)
+}
+
 /**
  * Representation of our app over FFI. Essentially a wrapper of [`App`].
  */
@@ -3484,9 +3565,13 @@ public protocol TransactionDetailsProtocol: AnyObject {
 
     func fee() -> Amount
 
+    func isConfirmed() -> Bool
+
     func isReceived() -> Bool
 
     func isSent() -> Bool
+
+    func numberOfConfirmations() -> UInt32
 }
 
 open class TransactionDetails:
@@ -3554,6 +3639,12 @@ open class TransactionDetails:
         })
     }
 
+    open func isConfirmed() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_is_confirmed(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func isReceived() -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_is_received(self.uniffiClonePointer(), $0)
@@ -3563,6 +3654,12 @@ open class TransactionDetails:
     open func isSent() -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_is_sent(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func numberOfConfirmations() -> UInt32 {
+        return try! FfiConverterUInt32.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_number_of_confirmations(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -4504,6 +4601,50 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> RustBuffer {
     return FfiConverterTypeBalance.lower(value)
 }
 
+public struct ConfirmedDetails {
+    public var blockNumber: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(blockNumber: UInt32) {
+        self.blockNumber = blockNumber
+    }
+}
+
+extension ConfirmedDetails: Equatable, Hashable {
+    public static func == (lhs: ConfirmedDetails, rhs: ConfirmedDetails) -> Bool {
+        if lhs.blockNumber != rhs.blockNumber {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(blockNumber)
+    }
+}
+
+public struct FfiConverterTypeConfirmedDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmedDetails {
+        return
+            try ConfirmedDetails(
+                blockNumber: FfiConverterUInt32.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: ConfirmedDetails, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.blockNumber, into: &buf)
+    }
+}
+
+public func FfiConverterTypeConfirmedDetails_lift(_ buf: RustBuffer) throws -> ConfirmedDetails {
+    return try FfiConverterTypeConfirmedDetails.lift(buf)
+}
+
+public func FfiConverterTypeConfirmedDetails_lower(_ value: ConfirmedDetails) -> RustBuffer {
+    return FfiConverterTypeConfirmedDetails.lower(value)
+}
+
 public struct GroupedWord {
     public var number: UInt8
     public var word: String
@@ -4699,6 +4840,50 @@ public func FfiConverterTypeNode_lower(_ value: Node) -> RustBuffer {
     return FfiConverterTypeNode.lower(value)
 }
 
+public struct PendingDetails {
+    public var lastSeen: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(lastSeen: UInt64) {
+        self.lastSeen = lastSeen
+    }
+}
+
+extension PendingDetails: Equatable, Hashable {
+    public static func == (lhs: PendingDetails, rhs: PendingDetails) -> Bool {
+        if lhs.lastSeen != rhs.lastSeen {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(lastSeen)
+    }
+}
+
+public struct FfiConverterTypePendingDetails: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PendingDetails {
+        return
+            try PendingDetails(
+                lastSeen: FfiConverterUInt64.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: PendingDetails, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.lastSeen, into: &buf)
+    }
+}
+
+public func FfiConverterTypePendingDetails_lift(_ buf: RustBuffer) throws -> PendingDetails {
+    return try FfiConverterTypePendingDetails.lift(buf)
+}
+
+public func FfiConverterTypePendingDetails_lower(_ value: PendingDetails) -> RustBuffer {
+    return FfiConverterTypePendingDetails.lower(value)
+}
+
 public struct PendingWalletViewModelState {
     public var numberOfWords: NumberOfBip39Words
     public var wallet: PendingWallet
@@ -4887,6 +5072,48 @@ public func FfiConverterTypeWalletMetadata_lift(_ buf: RustBuffer) throws -> Wal
 
 public func FfiConverterTypeWalletMetadata_lower(_ value: WalletMetadata) -> RustBuffer {
     return FfiConverterTypeWalletMetadata.lower(value)
+}
+
+public enum AddressError {
+    case NoOutputs
+    case ScriptError(String
+    )
+}
+
+public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
+    typealias SwiftType = AddressError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .NoOutputs
+
+        case 2: return try .ScriptError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AddressError, into buf: inout [UInt8]) {
+        switch value {
+        case .NoOutputs:
+            writeInt(&buf, Int32(1))
+
+        case let .ScriptError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension AddressError: Equatable, Hashable {}
+
+extension AddressError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -6051,6 +6278,55 @@ extension NumberOfBip39Words: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum PendingOrConfirmed {
+    case pending(PendingDetails
+    )
+    case confirmed(ConfirmedDetails
+    )
+}
+
+public struct FfiConverterTypePendingOrConfirmed: FfiConverterRustBuffer {
+    typealias SwiftType = PendingOrConfirmed
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PendingOrConfirmed {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .pending(FfiConverterTypePendingDetails.read(from: &buf)
+            )
+
+        case 2: return try .confirmed(FfiConverterTypeConfirmedDetails.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PendingOrConfirmed, into buf: inout [UInt8]) {
+        switch value {
+        case let .pending(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypePendingDetails.write(v1, into: &buf)
+
+        case let .confirmed(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeConfirmedDetails.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypePendingOrConfirmed_lift(_ buf: RustBuffer) throws -> PendingOrConfirmed {
+    return try FfiConverterTypePendingOrConfirmed.lift(buf)
+}
+
+public func FfiConverterTypePendingOrConfirmed_lower(_ value: PendingOrConfirmed) -> RustBuffer {
+    return FfiConverterTypePendingOrConfirmed.lower(value)
+}
+
+extension PendingOrConfirmed: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum PendingWalletViewModelAction {
     case updateWords(NumberOfBip39Words
     )
@@ -6335,6 +6611,59 @@ public func FfiConverterTypeTransaction_lift(_ buf: RustBuffer) throws -> Transa
 
 public func FfiConverterTypeTransaction_lower(_ value: Transaction) -> RustBuffer {
     return FfiConverterTypeTransaction.lower(value)
+}
+
+public enum TransactionDetailError {
+    case FeeError(String
+    )
+    case FeeRateError(String
+    )
+    case AddressError(AddressError
+    )
+}
+
+public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
+    typealias SwiftType = TransactionDetailError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionDetailError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .FeeError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 2: return try .FeeRateError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 3: return try .AddressError(
+                FfiConverterTypeAddressError.read(from: &buf)
+            )
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransactionDetailError, into buf: inout [UInt8]) {
+        switch value {
+        case let .FeeError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .FeeRateError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .AddressError(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeAddressError.write(v1, into: &buf)
+        }
+    }
+}
+
+extension TransactionDetailError: Equatable, Hashable {}
+
+extension TransactionDetailError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -8359,10 +8688,16 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_transactiondetails_fee() != 26324 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_transactiondetails_is_confirmed() != 54031 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_transactiondetails_is_received() != 54839 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_is_sent() != 7556 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_number_of_confirmations() != 466 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_txid_is_equal() != 5460 {

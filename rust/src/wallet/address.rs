@@ -1,8 +1,11 @@
 use std::hash::Hash;
 use std::hash::Hasher;
 
+use bdk_chain::bitcoin::params::Params;
 use bdk_chain::bitcoin::Address as BdkAddress;
-use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bdk_wallet::{bitcoin::Transaction as BdkTransaction, AddressInfo as BdkAddressInfo};
+
+use crate::network::Network;
 
 #[derive(
     Debug,
@@ -28,6 +31,17 @@ pub struct Address(BdkAddress);
 )]
 pub struct AddressInfo(BdkAddressInfo);
 
+type Error = AddressError;
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+pub enum AddressError {
+    #[error("no ouputs")]
+    NoOutputs,
+
+    #[error("unable to create address from script: {0}")]
+    ScriptError(String),
+}
+
 impl Clone for AddressInfo {
     fn clone(&self) -> Self {
         Self(BdkAddressInfo {
@@ -43,6 +57,22 @@ impl Hash for AddressInfo {
         self.0.address.hash(state);
         self.0.index.hash(state);
         self.0.keychain.hash(state);
+    }
+}
+
+impl Address {
+    pub fn new(address: BdkAddress) -> Self {
+        Self(address)
+    }
+
+    pub fn try_new(tx: &BdkTransaction, network: Network) -> Result<Self, Error> {
+        let output = tx.output.first().ok_or(AddressError::NoOutputs)?;
+        let script = output.script_pubkey.clone().into_boxed_script();
+
+        let address = BdkAddress::from_script(&script, Params::from(network))
+            .map_err(|e| Error::ScriptError(e.to_string()))?;
+
+        Ok(Self::new(address))
     }
 }
 

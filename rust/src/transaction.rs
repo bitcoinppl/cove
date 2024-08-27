@@ -1,4 +1,5 @@
 mod amount;
+pub mod fee_rate;
 mod ffi;
 mod sent_and_received;
 pub mod transaction_details;
@@ -22,6 +23,7 @@ pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
 pub type Unit = unit::Unit;
 pub type TransactionDetails = transaction_details::TransactionDetails;
+pub type FeeRate = fee_rate::FeeRate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionDirection {
