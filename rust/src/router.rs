@@ -79,6 +79,8 @@ impl Router {
 }
 
 mod ffi {
+    use std::hash::{Hash as _, Hasher as _};
+
     use super::*;
 
     #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
@@ -123,5 +125,17 @@ mod ffi {
         pub fn secret_words(&self, wallet_id: WalletId) -> Route {
             Route::SecretWords(wallet_id)
         }
+    }
+
+    #[uniffi::export]
+    fn is_route_equal(route: Route, route_to_check: Route) -> bool {
+        route == route_to_check
+    }
+
+    #[uniffi::export]
+    fn hash_route(route: Route) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        route.hash(&mut hasher);
+        hasher.finish()
     }
 }

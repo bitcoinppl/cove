@@ -175,12 +175,3 @@ fn transaction_preview_unconfirmed_new() -> Transaction {
         last_seen,
     }))
 }
-
-impl TxId {
-    pub fn preview_new() -> Self {
-        let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
-        let hash = *bitcoin_hashes::sha256d::Hash::from_bytes_ref(&random_bytes);
-
-        Self(BdkTxid::from_raw_hash(hash))
-    }
-}

@@ -88,8 +88,10 @@ mod ffi {
     impl Address {
         #[uniffi::constructor(name = "preview_new")]
         pub fn preview_new() -> Self {
-            let address =
-                BdkAddress::from_str("bcrt1q2nfxmhd4n3c8834pj72xagvyr9gl57n5r94fsl").unwrap();
+            let address = BdkAddress::from_str(
+                "bc1p0000304alk4tg3vxcu7l9m4xf4cvauzml5608cssvz5f60jwg68q83lyn9",
+            )
+            .unwrap();
 
             let address: BdkAddress<NetworkChecked> =
                 address.require_network(Network::Bitcoin.into()).unwrap();

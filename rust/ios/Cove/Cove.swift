@@ -8437,6 +8437,23 @@ public func defaultNodeSelection() -> NodeSelection {
     })
 }
 
+public func hashRoute(route: Route) -> UInt64 {
+    return try! FfiConverterUInt64.lift(try! rustCall {
+        uniffi_cove_fn_func_hash_route(
+            FfiConverterTypeRoute.lower(route), $0
+        )
+    })
+}
+
+public func isRouteEqual(route: Route, routeToCheck: Route) -> Bool {
+    return try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_fn_func_is_route_equal(
+            FfiConverterTypeRoute.lower(route),
+            FfiConverterTypeRoute.lower(routeToCheck), $0
+        )
+    })
+}
+
 public func networkToString(network: Network) -> String {
     return try! FfiConverterString.lift(try! rustCall {
         uniffi_cove_fn_func_network_to_string(
@@ -8549,6 +8566,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_default_node_selection() != 14665 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_hash_route() != 32817 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_is_route_equal() != 25732 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_network_to_string() != 60660 {

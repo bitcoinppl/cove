@@ -8,11 +8,20 @@
 import SwiftUI
 
 struct TransactionsDetailScreen: View {
+    // public
+    let transactionsDetails: TransactionDetails
+
+    // private
+
     var body: some View {
         Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
     }
 }
 
-#Preview {
-    TransactionsDetailScreen()
+#Preview("confirmed") {
+    TransactionsDetailScreen(transactionsDetails: TransactionDetails.previewNew())
+}
+
+#Preview("pending") {
+    TransactionsDetailScreen(transactionsDetails: TransactionDetails.previewNewPending())
 }
