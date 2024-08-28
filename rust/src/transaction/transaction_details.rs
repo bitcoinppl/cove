@@ -21,7 +21,7 @@ pub enum TransactionDetailError {
 }
 
 type Error = TransactionDetailError;
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct TransactionDetails {
     pub tx_id: TxId,
     pub address: Address,
@@ -31,7 +31,7 @@ pub struct TransactionDetails {
     pub pending_or_confirmed: PendingOrConfirmed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum PendingOrConfirmed {
     Pending(PendingDetails),
     Confirmed(ConfirmedDetails),
@@ -73,12 +73,12 @@ impl TransactionDetails {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct PendingDetails {
     last_seen: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct ConfirmedDetails {
     block_number: u32,
 }
@@ -109,6 +109,34 @@ mod ffi {
 
     #[uniffi::export]
     impl TransactionDetails {
+        #[uniffi::constructor(name = "preview_new")]
+        pub fn preview_new() -> Self {
+            Self {
+                tx_id: TxId::preview_new(),
+                address: Address::preview_new(),
+                sent_and_received: SentAndReceived::preview_new(),
+                fee: Amount::from_sat(880303),
+                fee_rate: FeeRate::preview_new(),
+                pending_or_confirmed: PendingOrConfirmed::Confirmed(ConfirmedDetails {
+                    block_number: 840_000,
+                }),
+            }
+        }
+
+        #[uniffi::constructor(name = "preview_new_pending")]
+        pub fn preview_new_pending() -> Self {
+            Self {
+                tx_id: TxId::preview_new(),
+                address: Address::preview_new(),
+                sent_and_received: SentAndReceived::preview_new(),
+                fee: Amount::from_sat(880303),
+                fee_rate: FeeRate::preview_new(),
+                pending_or_confirmed: PendingOrConfirmed::Pending(PendingDetails {
+                    last_seen: 1677721600,
+                }),
+            }
+        }
+
         #[uniffi::method]
         pub fn address(&self) -> Address {
             self.address.clone()

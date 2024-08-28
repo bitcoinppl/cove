@@ -12,6 +12,7 @@ use crate::network::Network;
     Clone,
     PartialEq,
     Eq,
+    Hash,
     derive_more::Display,
     derive_more::From,
     derive_more::Into,
@@ -77,10 +78,25 @@ impl Address {
 }
 
 mod ffi {
+    use std::str::FromStr as _;
+
+    use bdk_chain::bitcoin::address::NetworkChecked;
+
     use super::*;
 
     #[uniffi::export]
     impl Address {
+        #[uniffi::constructor(name = "preview_new")]
+        pub fn preview_new() -> Self {
+            let address =
+                BdkAddress::from_str("bcrt1q2nfxmhd4n3c8834pj72xagvyr9gl57n5r94fsl").unwrap();
+
+            let address: BdkAddress<NetworkChecked> =
+                address.require_network(Network::Bitcoin.into()).unwrap();
+
+            Self::new(address)
+        }
+
         fn string(&self) -> String {
             self.to_string()
         }
