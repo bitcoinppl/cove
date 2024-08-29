@@ -3308,6 +3308,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
      */
     func dispatch(action: WalletViewModelAction)
 
+    func displayAmount(amount: Amount) -> String
+
     func fingerprint() -> String
 
     func listenForUpdates(reconciler: WalletViewModelReconciler)
@@ -3409,6 +3411,13 @@ open class RustWalletViewModel:
         uniffi_cove_fn_method_rustwalletviewmodel_dispatch(self.uniffiClonePointer(),
                                                            FfiConverterTypeWalletViewModelAction.lower(action), $0)
     }
+    }
+
+    open func displayAmount(amount: Amount) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_display_amount(self.uniffiClonePointer(),
+                                                                     FfiConverterTypeAmount.lower(amount), $0)
+        })
     }
 
     open func fingerprint() -> String {
@@ -3702,16 +3711,37 @@ open class TransactionDetails:
         try! rustCall { uniffi_cove_fn_free_transactiondetails(pointer, $0) }
     }
 
-    public static func previewNew() -> TransactionDetails {
+    public static func previewConfirmedReceived() -> TransactionDetails {
         return try! FfiConverterTypeTransactionDetails.lift(try! rustCall {
-            uniffi_cove_fn_constructor_transactiondetails_preview_new($0
+            uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_received($0
             )
         })
     }
 
-    public static func previewNewPending() -> TransactionDetails {
+    public static func previewConfirmedSent() -> TransactionDetails {
         return try! FfiConverterTypeTransactionDetails.lift(try! rustCall {
-            uniffi_cove_fn_constructor_transactiondetails_preview_new_pending($0
+            uniffi_cove_fn_constructor_transactiondetails_preview_confirmed_sent($0
+            )
+        })
+    }
+
+    public static func previewNewConfirmed() -> TransactionDetails {
+        return try! FfiConverterTypeTransactionDetails.lift(try! rustCall {
+            uniffi_cove_fn_constructor_transactiondetails_preview_new_confirmed($0
+            )
+        })
+    }
+
+    public static func previewPendingReceived() -> TransactionDetails {
+        return try! FfiConverterTypeTransactionDetails.lift(try! rustCall {
+            uniffi_cove_fn_constructor_transactiondetails_preview_pending_received($0
+            )
+        })
+    }
+
+    public static func previewPendingSent() -> TransactionDetails {
+        return try! FfiConverterTypeTransactionDetails.lift(try! rustCall {
+            uniffi_cove_fn_constructor_transactiondetails_preview_pending_sent($0
             )
         })
     }
@@ -6633,8 +6663,7 @@ public enum Route {
     case settings
     case secretWords(WalletId
     )
-    case transactionDetails(TransactionDetails
-    )
+    case transactionDetails(id: WalletId, details: TransactionDetails)
 }
 
 public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
@@ -6656,8 +6685,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 5: return try .secretWords(FfiConverterTypeWalletId.read(from: &buf)
             )
 
-        case 6: return try .transactionDetails(FfiConverterTypeTransactionDetails.read(from: &buf)
-            )
+        case 6: return try .transactionDetails(id: FfiConverterTypeWalletId.read(from: &buf), details: FfiConverterTypeTransactionDetails.read(from: &buf))
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6683,9 +6711,10 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
-        case let .transactionDetails(v1):
+        case let .transactionDetails(id, details):
             writeInt(&buf, Int32(6))
-            FfiConverterTypeTransactionDetails.write(v1, into: &buf)
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            FfiConverterTypeTransactionDetails.write(details, into: &buf)
         }
     }
 }
@@ -8838,6 +8867,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_display_amount() != 59974 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -8997,10 +9029,19 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_rustwalletviewmodel_preview_new_wallet() != 37026 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_transactiondetails_preview_new() != 37726 {
+    if uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_received() != 6979 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_transactiondetails_preview_new_pending() != 4657 {
+    if uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_sent() != 20500 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_transactiondetails_preview_new_confirmed() != 2385 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received() != 1731 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_transactiondetails_preview_pending_sent() != 378 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_wallet_previewnewwallet() != 56877 {

@@ -14,7 +14,10 @@ pub enum Route {
     NewWallet(NewWalletRoute),
     Settings,
     SecretWords(WalletId),
-    TransactionDetails(Arc<TransactionDetails>),
+    TransactionDetails {
+        id: WalletId,
+        details: Arc<TransactionDetails>,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]

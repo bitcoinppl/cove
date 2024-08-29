@@ -47,7 +47,7 @@ func routeToView(model: MainViewModel, route: Route) -> some View {
         SelectedWalletScreen(id: walletId)
     case let .secretWords(id: walletId):
         SecretWordsScreen(id: walletId)
-    case let .transactionDetails(details):
-        TransactionsDetailScreen(transactionsDetails: details)
+    case let .transactionDetails(id: id, details: details):
+        TransactionsDetailScreen(id: id, transactionsDetails: details)
     }
 }

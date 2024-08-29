@@ -146,6 +146,22 @@ impl SentAndReceived {
             received: Amount::from_sat(random_amount()),
         }
     }
+
+    pub fn preview_outgoing() -> Self {
+        Self {
+            direction: TransactionDirection::Outgoing,
+            sent: Amount::from_sat(random_amount()),
+            received: Amount::from_sat(0),
+        }
+    }
+
+    pub fn preview_incoming() -> Self {
+        Self {
+            direction: TransactionDirection::Incoming,
+            sent: Amount::from_sat(0),
+            received: Amount::from_sat(random_amount()),
+        }
+    }
 }
 
 fn random_block_height() -> u32 {

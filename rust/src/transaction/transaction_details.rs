@@ -109,8 +109,8 @@ mod ffi {
 
     #[uniffi::export]
     impl TransactionDetails {
-        #[uniffi::constructor(name = "preview_new")]
-        pub fn preview_new() -> Self {
+        #[uniffi::constructor(name = "preview_new_confirmed")]
+        pub fn preview_new_confirmed() -> Self {
             Self {
                 tx_id: TxId::preview_new(),
                 address: Address::preview_new(),
@@ -122,19 +122,40 @@ mod ffi {
                 }),
             }
         }
+        #[uniffi::constructor(name = "preview_confirmed_received")]
+        pub fn preview_confirmed_received() -> Self {
+            let mut me = Self::preview_new_confirmed();
+            me.sent_and_received = SentAndReceived::preview_incoming();
+            me
+        }
 
-        #[uniffi::constructor(name = "preview_new_pending")]
-        pub fn preview_new_pending() -> Self {
-            Self {
-                tx_id: TxId::preview_new(),
-                address: Address::preview_new(),
-                sent_and_received: SentAndReceived::preview_new(),
-                fee: Amount::from_sat(880303),
-                fee_rate: FeeRate::preview_new(),
-                pending_or_confirmed: PendingOrConfirmed::Pending(PendingDetails {
-                    last_seen: 1677721600,
-                }),
-            }
+        #[uniffi::constructor(name = "preview_confirmed_sent")]
+        pub fn preview_confirmed_sent() -> Self {
+            let mut me = Self::preview_new_confirmed();
+            me.sent_and_received = SentAndReceived::preview_outgoing();
+            me
+        }
+
+        #[uniffi::constructor(name = "preview_pending_received")]
+        pub fn preview_pending_received() -> Self {
+            let mut me = Self::preview_new_confirmed();
+            me.sent_and_received = SentAndReceived::preview_incoming();
+            me.pending_or_confirmed = PendingOrConfirmed::Pending(PendingDetails {
+                last_seen: 1677721600,
+            });
+
+            me
+        }
+
+        #[uniffi::constructor(name = "preview_pending_sent")]
+        pub fn preview_pending_sent() -> Self {
+            let mut me = Self::preview_new_confirmed();
+            me.sent_and_received = SentAndReceived::preview_outgoing();
+            me.pending_or_confirmed = PendingOrConfirmed::Pending(PendingDetails {
+                last_seen: 1677721600,
+            });
+
+            me
         }
 
         #[uniffi::method]

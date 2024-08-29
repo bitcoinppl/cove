@@ -15,7 +15,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     router::Route,
     task,
-    transaction::{Transaction, Unit},
+    transaction::{Amount, Transaction, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -139,6 +139,14 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn balance(&self) -> Balance {
         call!(self.actor.balance()).await.unwrap_or_default()
+    }
+
+    #[uniffi::method]
+    pub fn display_amount(&self, amount: Arc<Amount>) -> String {
+        match self.metadata.read().selected_unit {
+            Unit::Btc => format!("{} BTC", amount.to_btc().to_string()),
+            Unit::Sat => format!("{} SATS", amount.to_sat().to_string()),
+        }
     }
 
     /// Get the next address for the wallet
