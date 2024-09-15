@@ -56,7 +56,9 @@ struct TransactionDetailsView: View {
     var headerIcon: HeaderIcon {
         // pending
         if !transactionsDetails.isConfirmed() {
-            return HeaderIcon(icon: "clock.arrow.2.circlepath", backgroundColor: .gray, checkmarkColor: .white)
+            return HeaderIcon(icon: "clock.arrow.2.circlepath",
+                              backgroundColor: Color.coolGray,
+                              checkmarkColor: .black.opacity(0.6))
         }
 
         // confirmed received
@@ -83,64 +85,114 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     var ReceivedDetails: some View {
-        Text("Transaction Received")
+        Text(transactionsDetails.isConfirmed() ? "Transaction Received" : "Transaction Pending")
             .font(.title)
             .fontWeight(.semibold)
             .padding(.top, 8)
 
-        VStack(alignment: .center, spacing: 4) {
-            Text("Your transaction was successfully received on")
-                .foregroundColor(.gray)
+        // confirmed
+        if transactionsDetails.isConfirmed() {
+            VStack(alignment: .center, spacing: 4) {
+                Text("Your transaction was successfully received on")
+                    .foregroundColor(.gray)
 
-            Text(transactionsDetails.confirmationDateTime() ?? "Unknown")
-                .fontWeight(.semibold)
-                .foregroundColor(.gray)
+                Text(transactionsDetails.confirmationDateTime() ?? "Unknown")
+                    .fontWeight(.semibold)
+                    .foregroundColor(.gray)
+            }
+            .multilineTextAlignment(.center)
+            .padding()
         }
-        .multilineTextAlignment(.center)
-        .padding()
+
+        // pending
+        if !transactionsDetails.isConfirmed() {
+            VStack(alignment: .center, spacing: 4) {
+                Text("Your transaction is pending. ")
+                    .foregroundColor(.gray)
+
+                Text("Please check back soon for an update.")
+                    .foregroundColor(.gray)
+            }
+            .multilineTextAlignment(.center)
+        }
 
         Text(model.rust.displayAmount(amount: transactionsDetails.amount()))
             .font(.largeTitle)
             .fontWeight(.bold)
-            .padding(.top, 6)
+            .padding(.top, 12)
 
         AsyncView(operation: transactionsDetails.amountFiatFmt) { amount in
             Text("≈ $\(amount) USD").foregroundStyle(.primary.opacity(0.8))
         }
 
-        TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .green)
-            .padding(.top, 12)
+        Group {
+            if transactionsDetails.isConfirmed() {
+                TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .green)
+            } else {
+                TransactionCapsule(
+                    text: "Receiving", icon: "arrow.down.left",
+                    color: .coolGray, textColor: .black.opacity(0.8)
+                )
+            }
+        }
+        .padding(.top, 12)
     }
 
     @ViewBuilder
     var SentDetails: some View {
-        Text("Transaction Sent")
+        Text(transactionsDetails.isConfirmed() ? "Transaction Sent" : "Transaction Pending")
             .font(.title)
             .fontWeight(.semibold)
-            .padding(.top, 8)
+            .padding(.top, 6)
 
-        VStack(alignment: .center, spacing: 4) {
-            Text("Your transaction was sent on")
-                .foregroundColor(.gray)
+        // confirmed
+        if transactionsDetails.isConfirmed() {
+            VStack(alignment: .center, spacing: 4) {
+                Text("Your transaction was sent on")
+                    .foregroundColor(.gray)
 
-            Text(transactionsDetails.confirmationDateTime() ?? "Unknown")
-                .fontWeight(.semibold)
-                .foregroundColor(.gray)
+                Text(transactionsDetails.confirmationDateTime() ?? "Unknown")
+                    .foregroundColor(.gray)
+            }
+            .multilineTextAlignment(.center)
         }
-        .multilineTextAlignment(.center)
-        .padding()
+
+        // pending
+        if !transactionsDetails.isConfirmed() {
+            VStack(alignment: .center, spacing: 4) {
+                Text("Your transaction is pending. ")
+                    .foregroundColor(.gray)
+
+                Text("Please check back soon for an update.")
+                    .fontWeight(.semibold)
+                    .foregroundColor(.gray)
+            }
+            .multilineTextAlignment(.center)
+        }
 
         Text(model.rust.displayAmount(amount: transactionsDetails.amount()))
             .font(.largeTitle)
             .fontWeight(.bold)
-            .padding(.top, 6)
+            .padding(.top, 12)
 
         AsyncView(operation: transactionsDetails.amountFiatFmt) { amount in
             Text("≈ $\(amount) USD").foregroundStyle(.primary.opacity(0.8))
         }
 
-        TransactionCapsule(text: "Sent", icon: "arrow.up.right", color: .black, textColor: .white)
-            .padding(.top, 12)
+        Group {
+            if transactionsDetails.isConfirmed() {
+                TransactionCapsule(
+                    text: "Sent", icon: "arrow.up.right",
+                    color: .black, textColor: .white
+                )
+            } else {
+                TransactionCapsule(
+                    text: "Sending", icon: "arrow.up.right",
+                    color: .coolGray, textColor: .black.opacity(0.8)
+                )
+            }
+        }
+        .padding(.top, 12)
     }
 
     var body: some View {
@@ -226,7 +278,7 @@ struct HeaderIcon: View {
 
             Image(systemName: icon)
                 .foregroundColor(checkmarkColor)
-                .font(.system(size: 50))
+                .font(.system(size: 62))
         }
     }
 }
