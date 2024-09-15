@@ -1875,6 +1875,87 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
     return FfiConverterTypeFfiApp.lower(value)
 }
 
+public protocol FiatClientProtocol: AnyObject {}
+
+open class FiatClient:
+    FiatClientProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_fiatclient(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_fiatclient(pointer, $0) }
+    }
+}
+
+public struct FfiConverterTypeFiatClient: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = FiatClient
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FiatClient {
+        return FiatClient(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: FiatClient) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatClient {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: FiatClient, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeFiatClient_lift(_ pointer: UnsafeMutableRawPointer) throws -> FiatClient {
+    return try FfiConverterTypeFiatClient.lift(pointer)
+}
+
+public func FfiConverterTypeFiatClient_lower(_ value: FiatClient) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFiatClient.lower(value)
+}
+
 public protocol FingerprintProtocol: AnyObject {
     func toLowercase() -> String
 
@@ -2795,87 +2876,6 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
     return FfiConverterTypePendingWallet.lower(value)
 }
 
-public protocol PricesClientProtocol: AnyObject {}
-
-open class PricesClient:
-    PricesClientProtocol
-{
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    /// This constructor can be used to instantiate a fake object.
-    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    ///
-    /// - Warning:
-    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-    public init(noPointer _: NoPointer) {
-        pointer = nil
-    }
-
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_fn_clone_pricesclient(self.pointer, $0) }
-    }
-
-    // No primary constructor declared for this class.
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_pricesclient(pointer, $0) }
-    }
-}
-
-public struct FfiConverterTypePricesClient: FfiConverter {
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = PricesClient
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PricesClient {
-        return PricesClient(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: PricesClient) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PricesClient {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if ptr == nil {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: PricesClient, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-public func FfiConverterTypePricesClient_lift(_ pointer: UnsafeMutableRawPointer) throws -> PricesClient {
-    return try FfiConverterTypePricesClient.lift(pointer)
-}
-
-public func FfiConverterTypePricesClient_lower(_ value: PricesClient) -> UnsafeMutableRawPointer {
-    return FfiConverterTypePricesClient.lower(value)
-}
-
 public protocol RouteFactoryProtocol: AnyObject {
     func hotWallet(route: HotWalletRoute) -> Route
 
@@ -3677,6 +3677,8 @@ public protocol TransactionDetailsProtocol: AnyObject {
     func isSent() -> Bool
 
     func numberOfConfirmations() -> UInt32
+
+    func transactionUrl() -> String
 }
 
 open class TransactionDetails:
@@ -3838,6 +3840,12 @@ open class TransactionDetails:
     open func numberOfConfirmations() -> UInt32 {
         return try! FfiConverterUInt32.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_number_of_confirmations(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func transactionUrl() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_transaction_url(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -5154,11 +5162,12 @@ public struct WalletMetadata {
     public var selectedUnit: Unit
     public var selectedFiatCurrency: String
     public var sensitiveVisible: Bool
+    public var detailsExpanded: Bool
     public var `internal`: InternalOnlyMetadata
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -5168,6 +5177,7 @@ public struct WalletMetadata {
         self.selectedUnit = selectedUnit
         self.selectedFiatCurrency = selectedFiatCurrency
         self.sensitiveVisible = sensitiveVisible
+        self.detailsExpanded = detailsExpanded
         self.internal = `internal`
     }
 }
@@ -5201,6 +5211,9 @@ extension WalletMetadata: Equatable, Hashable {
         if lhs.sensitiveVisible != rhs.sensitiveVisible {
             return false
         }
+        if lhs.detailsExpanded != rhs.detailsExpanded {
+            return false
+        }
         if lhs.internal != rhs.internal {
             return false
         }
@@ -5217,6 +5230,7 @@ extension WalletMetadata: Equatable, Hashable {
         hasher.combine(selectedUnit)
         hasher.combine(selectedFiatCurrency)
         hasher.combine(sensitiveVisible)
+        hasher.combine(detailsExpanded)
         hasher.combine(`internal`)
     }
 }
@@ -5234,6 +5248,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf),
                 selectedFiatCurrency: FfiConverterString.read(from: &buf),
                 sensitiveVisible: FfiConverterBool.read(from: &buf),
+                detailsExpanded: FfiConverterBool.read(from: &buf),
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
             )
     }
@@ -5248,6 +5263,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
         FfiConverterString.write(value.selectedFiatCurrency, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
+        FfiConverterBool.write(value.detailsExpanded, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.internal, into: &buf)
     }
 }
@@ -5579,79 +5595,6 @@ public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelec
 
 extension ColorSchemeSelection: Equatable, Hashable {}
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum Currency {
-    case usd
-    case eur
-    case gbp
-    case cad
-    case chf
-    case aud
-    case jpy
-}
-
-public struct FfiConverterTypeCurrency: FfiConverterRustBuffer {
-    typealias SwiftType = Currency
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Currency {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        case 1: return .usd
-
-        case 2: return .eur
-
-        case 3: return .gbp
-
-        case 4: return .cad
-
-        case 5: return .chf
-
-        case 6: return .aud
-
-        case 7: return .jpy
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: Currency, into buf: inout [UInt8]) {
-        switch value {
-        case .usd:
-            writeInt(&buf, Int32(1))
-
-        case .eur:
-            writeInt(&buf, Int32(2))
-
-        case .gbp:
-            writeInt(&buf, Int32(3))
-
-        case .cad:
-            writeInt(&buf, Int32(4))
-
-        case .chf:
-            writeInt(&buf, Int32(5))
-
-        case .aud:
-            writeInt(&buf, Int32(6))
-
-        case .jpy:
-            writeInt(&buf, Int32(7))
-        }
-    }
-}
-
-public func FfiConverterTypeCurrency_lift(_ buf: RustBuffer) throws -> Currency {
-    return try FfiConverterTypeCurrency.lift(buf)
-}
-
-public func FfiConverterTypeCurrency_lower(_ value: Currency) -> RustBuffer {
-    return FfiConverterTypeCurrency.lower(value)
-}
-
-extension Currency: Equatable, Hashable {}
-
 public enum DatabaseError {
     case DatabaseAccessError(String
     )
@@ -5731,6 +5674,79 @@ extension DatabaseError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FiatCurrency {
+    case usd
+    case eur
+    case gbp
+    case cad
+    case chf
+    case aud
+    case jpy
+}
+
+public struct FfiConverterTypeFiatCurrency: FfiConverterRustBuffer {
+    typealias SwiftType = FiatCurrency
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatCurrency {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .usd
+
+        case 2: return .eur
+
+        case 3: return .gbp
+
+        case 4: return .cad
+
+        case 5: return .chf
+
+        case 6: return .aud
+
+        case 7: return .jpy
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FiatCurrency, into buf: inout [UInt8]) {
+        switch value {
+        case .usd:
+            writeInt(&buf, Int32(1))
+
+        case .eur:
+            writeInt(&buf, Int32(2))
+
+        case .gbp:
+            writeInt(&buf, Int32(3))
+
+        case .cad:
+            writeInt(&buf, Int32(4))
+
+        case .chf:
+            writeInt(&buf, Int32(5))
+
+        case .aud:
+            writeInt(&buf, Int32(6))
+
+        case .jpy:
+            writeInt(&buf, Int32(7))
+        }
+    }
+}
+
+public func FfiConverterTypeFiatCurrency_lift(_ buf: RustBuffer) throws -> FiatCurrency {
+    return try FfiConverterTypeFiatCurrency.lift(buf)
+}
+
+public func FfiConverterTypeFiatCurrency_lower(_ value: FiatCurrency) -> RustBuffer {
+    return FfiConverterTypeFiatCurrency.lower(value)
+}
+
+extension FiatCurrency: Equatable, Hashable {}
 
 public enum FingerprintError {
     case WalletNotFound
@@ -7408,6 +7424,7 @@ public enum WalletViewModelAction {
     case updateFiatCurrency(String
     )
     case toggleSensitiveVisibility
+    case toggleDetailsExpanded
 }
 
 public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
@@ -7429,6 +7446,8 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
             )
 
         case 5: return .toggleSensitiveVisibility
+
+        case 6: return .toggleDetailsExpanded
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -7454,6 +7473,9 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
 
         case .toggleSensitiveVisibility:
             writeInt(&buf, Int32(5))
+
+        case .toggleDetailsExpanded:
+            writeInt(&buf, Int32(6))
         }
     }
 }
@@ -9003,6 +9025,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_number_of_confirmations() != 466 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_transaction_url() != 12235 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_txid_is_equal() != 5460 {

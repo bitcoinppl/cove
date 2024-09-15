@@ -36,6 +36,8 @@ pub struct WalletMetadata {
     pub selected_fiat_currency: String,
     #[serde(default = "default_true")]
     pub sensitive_visible: bool,
+    #[serde(default = "default_false")]
+    pub details_expanded: bool,
 
     // internal only metadata, don't use in the UI
     // note: maybe better to use a separate table for this
@@ -77,6 +79,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
+            details_expanded: true,
             internal: InternalOnlyMetadata::default(),
         }
     }
@@ -92,6 +95,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
+            details_expanded: true,
             internal: InternalOnlyMetadata::default(),
         }
     }
@@ -107,6 +111,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
+            details_expanded: true,
             internal: InternalOnlyMetadata::default(),
         }
     }
@@ -173,5 +178,9 @@ fn default_fiat_currency() -> String {
 }
 
 fn default_true() -> bool {
+    true
+}
+
+fn default_false() -> bool {
     true
 }

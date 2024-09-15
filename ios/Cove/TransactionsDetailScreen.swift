@@ -46,6 +46,7 @@ struct TransactionsDetailScreen: View {
 
 struct TransactionDetailsView: View {
     @Environment(MainViewModel.self) private var app
+    @Environment(\.openURL) private var openURL
 
     // public
     let id: WalletId
@@ -58,6 +59,14 @@ struct TransactionDetailsView: View {
         } else {
             return HeaderIcon(icon: "clock.arrow.2.circlepath", backgroundColor: .gray, checkmarkColor: .white)
         }
+    }
+
+    var metadata: WalletMetadata {
+        model.walletMetadata
+    }
+
+    var detailsExpanded: Bool {
+        metadata.detailsExpanded
     }
 
     @ViewBuilder
@@ -103,7 +112,9 @@ struct TransactionDetailsView: View {
             Spacer()
 
             Button(action: {
-                // Action to perform when button is tapped
+                if let url = URL(string: transactionsDetails.transactionUrl()) {
+                    openURL(url)
+                }
             }) {
                 Text("View in Explorer")
                     .frame(maxWidth: .infinity)
@@ -116,9 +127,9 @@ struct TransactionDetailsView: View {
             .padding(.horizontal)
 
             Button(action: {
-                // Action to perform when button is tapped
+                model.dispatch(action: .toggleDetailsExpanded)
             }) {
-                Text("More Details")
+                Text(detailsExpanded ? "Hide Details" : "Show Details")
                     .font(.footnote)
                     .fontWeight(.bold)
                     .foregroundStyle(.gray.opacity(0.8))

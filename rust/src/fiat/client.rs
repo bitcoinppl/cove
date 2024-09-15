@@ -4,7 +4,7 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::{impl_default_for, transaction::Amount};
+use crate::{fiat::FiatCurrency, impl_default_for, transaction::Amount};
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 
 // Global client for getting prices
@@ -31,17 +31,6 @@ pub struct PriceResponse {
     pub jpy: u64,
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, uniffi::Enum)]
-pub enum Currency {
-    Usd,
-    Eur,
-    Gbp,
-    Cad,
-    Chf,
-    Aud,
-    Jpy,
-}
-
 impl_default_for!(FiatClient);
 
 impl FiatClient {
@@ -62,13 +51,13 @@ impl FiatClient {
     }
 
     pub async fn value_in_usd(&self, amount: Amount) -> Result<f64, reqwest::Error> {
-        self.value_in_currency(amount, Currency::Usd).await
+        self.value_in_currency(amount, FiatCurrency::Usd).await
     }
 
     pub async fn value_in_currency(
         &self,
         amount: Amount,
-        currency: Currency,
+        currency: FiatCurrency,
     ) -> Result<f64, reqwest::Error> {
         let btc = amount.as_btc();
         let price = self.get_price_for(currency).await?;
@@ -77,17 +66,17 @@ impl FiatClient {
         Ok(value_in_currency)
     }
 
-    async fn get_price_for(&self, currency: Currency) -> Result<u64, reqwest::Error> {
+    async fn get_price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
         let prices = self.get_prices().await?;
 
         let price = match currency {
-            Currency::Usd => prices.usd,
-            Currency::Eur => prices.eur,
-            Currency::Gbp => prices.gbp,
-            Currency::Cad => prices.cad,
-            Currency::Chf => prices.chf,
-            Currency::Aud => prices.aud,
-            Currency::Jpy => prices.jpy,
+            FiatCurrency::Usd => prices.usd,
+            FiatCurrency::Eur => prices.eur,
+            FiatCurrency::Gbp => prices.gbp,
+            FiatCurrency::Cad => prices.cad,
+            FiatCurrency::Chf => prices.chf,
+            FiatCurrency::Aud => prices.aud,
+            FiatCurrency::Jpy => prices.jpy,
         };
 
         Ok(price)
@@ -126,7 +115,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_price_for() {
         let fiat_client = FiatClient::new();
-        let fiat = fiat_client.get_price_for(Currency::Usd).await.unwrap();
+        let fiat = fiat_client.get_price_for(FiatCurrency::Usd).await.unwrap();
         assert!(fiat > 0);
     }
 

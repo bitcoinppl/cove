@@ -112,7 +112,7 @@ mod ffi {
     use numfmt::{Formatter, Precision};
 
     use crate::{
-        fiat_client::FIAT_CLIENT,
+        fiat::client::FIAT_CLIENT,
         task,
         transaction::{TransactionDirection, Unit},
     };
@@ -202,6 +202,11 @@ mod ffi {
 
             // Format the timestamp
             jiff::fmt::strtime::format("%B %e, %Y at %-I:%M %p", &local).ok()
+        }
+
+        #[uniffi::method]
+        pub fn transaction_url(&self) -> String {
+            format!("https://mempool.space/tx/{}", self.tx_id.0)
         }
     }
 }

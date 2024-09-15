@@ -61,6 +61,7 @@ pub enum WalletViewModelAction {
     UpdateUnit(Unit),
     UpdateFiatCurrency(String),
     ToggleSensitiveVisibility,
+    ToggleDetailsExpanded,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -289,6 +290,11 @@ impl RustWalletViewModel {
             WalletViewModelAction::ToggleSensitiveVisibility => {
                 let mut metadata = self.metadata.write();
                 metadata.sensitive_visible = !metadata.sensitive_visible;
+            }
+
+            WalletViewModelAction::ToggleDetailsExpanded => {
+                let mut metadata = self.metadata.write();
+                metadata.details_expanded = !metadata.details_expanded;
             }
         }
 
