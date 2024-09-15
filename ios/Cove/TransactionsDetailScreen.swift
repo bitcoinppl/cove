@@ -47,6 +47,8 @@ struct TransactionsDetailScreen: View {
 struct TransactionDetailsView: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.openURL) private var openURL
+    private let screenWidth = UIScreen.main.bounds.width
+    private let screenHeight = UIScreen.main.bounds.height
 
     // public
     let id: WalletId
@@ -81,6 +83,19 @@ struct TransactionDetailsView: View {
 
     var detailsExpanded: Bool {
         metadata.detailsExpanded
+    }
+
+    @ViewBuilder
+    func expandedDetailsRow(header: String, content: String) -> some View {
+        Text(header)
+            .font(.caption)
+            .foregroundColor(.gray)
+            .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+
+        Text(content)
+            .fontWeight(.semibold)
+            .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+            .padding(.bottom, 14)
     }
 
     @ViewBuilder
@@ -136,6 +151,19 @@ struct TransactionDetailsView: View {
             }
         }
         .padding(.top, 12)
+
+        if metadata.detailsExpanded {
+            VStack(alignment: .leading) {
+                Divider()
+                    .padding(.vertical, 18)
+
+                expandedDetailsRow(header: "Confirmations", content: "10")
+
+                expandedDetailsRow(header: "Block Number", content: "840,000")
+
+                expandedDetailsRow(header: "Received At", content: "...")
+            }
+        }
     }
 
     @ViewBuilder
@@ -195,45 +223,60 @@ struct TransactionDetailsView: View {
         .padding(.top, 12)
     }
 
+    @ViewBuilder
+    func ScrollOrContent(content: () -> some View) -> some View {
+        if detailsExpanded {
+            ScrollView(.vertical) {
+                content()
+            }
+            .scrollIndicators(.never)
+        } else {
+            content()
+        }
+    }
+
     var body: some View {
-        VStack(spacing: 12) {
-            Spacer()
-            headerIcon
+        ScrollOrContent {
+            VStack(spacing: 12) {
+                headerIcon
 
-            if transactionsDetails.isReceived() {
-                ReceivedDetails
-            } else {
-                SentDetails
-            }
-
-            Spacer()
-            Spacer()
-
-            Button(action: {
-                if let url = URL(string: transactionsDetails.transactionUrl()) {
-                    openURL(url)
+                Group {
+                    if transactionsDetails.isReceived() {
+                        ReceivedDetails
+                    } else {
+                        SentDetails
+                    }
                 }
-            }) {
-                Text("View in Explorer")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                    .padding(.horizontal, 16)
-            }
-            .padding(.horizontal)
+                .padding(.horizontal, 28)
 
-            Button(action: {
-                model.dispatch(action: .toggleDetailsExpanded)
-            }) {
-                Text(detailsExpanded ? "Hide Details" : "Show Details")
-                    .font(.footnote)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.gray.opacity(0.8))
-                    .padding(.vertical, 6)
+                Spacer()
+                Spacer()
+
+                Button(action: {
+                    if let url = URL(string: transactionsDetails.transactionUrl()) {
+                        openURL(url)
+                    }
+                }) {
+                    Text("View in Explorer")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .padding(.horizontal, 12)
+                }
+
+                Button(action: {
+                    model.dispatch(action: .toggleDetailsExpanded)
+                }) {
+                    Text(detailsExpanded ? "Hide Details" : "Show Details")
+                        .font(.footnote)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.gray.opacity(0.8))
+                        .padding(.vertical, 6)
+                }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 24)
         }
     }
 }
