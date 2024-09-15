@@ -18,6 +18,9 @@ pub enum TransactionDetailError {
 
     #[error("Unable to determine address: {0}")]
     AddressError(#[from] address::AddressError),
+
+    #[error("Unable to get fiat amount: {0}")]
+    FiatAmountError(String),
 }
 
 type Error = TransactionDetailError;
@@ -106,8 +109,13 @@ impl PendingOrConfirmed {
 
 mod ffi {
     use jiff::{tz::TimeZone, Timestamp, Zoned};
+    use numfmt::{Formatter, Precision};
 
-    use crate::transaction::{TransactionDirection, Unit};
+    use crate::{
+        prices_client::PRICES_CLIENT,
+        task,
+        transaction::{TransactionDirection, Unit},
+    };
 
     use super::*;
 
@@ -121,6 +129,32 @@ mod ffi {
         #[uniffi::method]
         pub fn amount(&self) -> Amount {
             self.sent_and_received.amount()
+        }
+
+        #[uniffi::method]
+        pub async fn amount_fiat(&self) -> Result<f64, Error> {
+            let amount = self.amount();
+            task::spawn(async move {
+                PRICES_CLIENT
+                    .value_in_usd(amount)
+                    .await
+                    .map_err(|e| Error::FiatAmountError(e.to_string()))
+            })
+            .await
+            .unwrap()
+        }
+
+        #[uniffi::method]
+        pub async fn amount_fiat_fmt(&self) -> Result<String, Error> {
+            let mut f = Formatter::new()
+                .separator(',')
+                .unwrap()
+                .precision(Precision::Decimals(2));
+
+            let amount = self.amount_fiat().await?;
+            let fmt = f.fmt2(amount);
+
+            Ok(fmt.to_string())
         }
 
         #[uniffi::method]

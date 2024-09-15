@@ -85,7 +85,7 @@ serde_json = "1.0"
 itertools = "0.13"
 
 # bindings
-uniffi = { version = "=0.28", features = ["tokio"] }
+uniffi = { version = "=0.28.1", features = ["tokio"] }
 
 # hashing
 sha2 = "0.10.8"
@@ -110,11 +110,11 @@ numfmt = "1.1.1"
 reqwest = { version = "0.12", features = ["json"] }
 
 [build-dependencies]
-uniffi = { version = "=0.28", features = ["build"] }
+uniffi = { version = "=0.28.1", features = ["build"] }
 
 [dev-dependencies]
 tokio = { version = "1.38", features = ["rt", "test-util", "macros"] }
-uniffi = { version = "=0.28", features = ["bindgen-tests"] }
+uniffi = { version = "=0.28.1", features = ["bindgen-tests"] }
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

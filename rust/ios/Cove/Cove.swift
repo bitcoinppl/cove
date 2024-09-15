@@ -3660,6 +3660,10 @@ public protocol TransactionDetailsProtocol: AnyObject {
 
     func amount() -> Amount
 
+    func amountFiat() async throws -> Double
+
+    func amountFiatFmt() async throws -> String
+
     func amountFmt(unit: Unit) -> String
 
     func confirmationDateTime() -> String?
@@ -3760,6 +3764,38 @@ open class TransactionDetails:
         return try! FfiConverterTypeAmount.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_amount(self.uniffiClonePointer(), $0)
         })
+    }
+
+    open func amountFiat() async throws -> Double {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_transactiondetails_amount_fiat(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_f64,
+                completeFunc: ffi_cove_rust_future_complete_f64,
+                freeFunc: ffi_cove_rust_future_free_f64,
+                liftFunc: FfiConverterDouble.lift,
+                errorHandler: FfiConverterTypeTransactionDetailError.lift
+            )
+    }
+
+    open func amountFiatFmt() async throws -> String {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+                completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+                freeFunc: ffi_cove_rust_future_free_rust_buffer,
+                liftFunc: FfiConverterString.lift,
+                errorHandler: FfiConverterTypeTransactionDetailError.lift
+            )
     }
 
     open func amountFmt(unit: Unit) -> String {
@@ -6845,6 +6881,8 @@ public enum TransactionDetailError {
     )
     case AddressError(AddressError
     )
+    case FiatAmountError(String
+    )
 }
 
 public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
@@ -6861,6 +6899,9 @@ public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
             )
         case 3: return try .AddressError(
                 FfiConverterTypeAddressError.read(from: &buf)
+            )
+        case 4: return try .FiatAmountError(
+                FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -6879,6 +6920,10 @@ public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
         case let .AddressError(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeAddressError.write(v1, into: &buf)
+
+        case let .FiatAmountError(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
         }
     }
 }
@@ -8931,6 +8976,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_amount() != 16978 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_amount_fiat() != 34436 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt() != 60211 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 3569 {

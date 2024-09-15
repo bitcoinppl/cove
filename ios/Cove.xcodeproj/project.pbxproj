@@ -55,6 +55,7 @@
 		ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */; };
 		ACCB02CC2C9747AA00FB2EDF /* TransactionCapsule.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCB02CB2C9747AA00FB2EDF /* TransactionCapsule.swift */; };
+		ACCB02CE2C97572100FB2EDF /* AsyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCB02CD2C97572100FB2EDF /* AsyncView.swift */; };
 		ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */; };
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
@@ -129,6 +130,7 @@
 		ACC301792C221450006790DF /* PendingWalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingWalletViewModel.swift; sourceTree = "<group>"; };
 		ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Trait+Ext.swift"; sourceTree = "<group>"; };
 		ACCB02CB2C9747AA00FB2EDF /* TransactionCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionCapsule.swift; sourceTree = "<group>"; };
+		ACCB02CD2C97572100FB2EDF /* AsyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncView.swift; sourceTree = "<group>"; };
 		ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncPreview.swift; sourceTree = "<group>"; };
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
@@ -201,6 +203,7 @@
 				AC9FBEBC2C3F5C78005CB37A /* SettingsScreen2.swift */,
 				ACC1CD592C6D415400C7AD89 /* FloaterPopupView.swift */,
 				ACCB02CB2C9747AA00FB2EDF /* TransactionCapsule.swift */,
+				ACCB02CD2C97572100FB2EDF /* AsyncView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -454,6 +457,7 @@
 				AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */,
 				AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */,
 				AC49121B2C77B8A100ED8ED7 /* SecretWordsScreen.swift in Sources */,
+				ACCB02CE2C97572100FB2EDF /* AsyncView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
 				ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */,
 				ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */,

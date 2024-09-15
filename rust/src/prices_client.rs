@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -6,6 +6,9 @@ use tokio::sync::RwLock;
 
 use crate::{impl_default_for, transaction::Amount};
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
+
+// Global client for getting prices
+pub static PRICES_CLIENT: LazyLock<PricesClient> = LazyLock::new(PricesClient::new);
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct PricesClient {

@@ -82,7 +82,9 @@ struct TransactionDetailsView: View {
             .fontWeight(.bold)
             .padding(.top, 6)
 
-        Text("≈ $100 USD").foregroundStyle(.primary.opacity(0.8))
+        AsyncView(operation: transactionsDetails.amountFiatFmt) { amount in
+            Text("≈ $\(amount) USD").foregroundStyle(.primary.opacity(0.8))
+        }
 
         TransactionCapsule(text: "Received", icon: "arrow.up.right", color: .green)
             .padding(.top, 12)

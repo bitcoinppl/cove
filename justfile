@@ -19,6 +19,8 @@ fmt:
 clippy:
     cd rust && cargo clippy
 
+update:
+    cd rust && cargo update
 
 clean-xcode:
     rm -rf ~/Library/Caches/org.swift.swiftpm
@@ -51,3 +53,4 @@ watch profile="debug" device="false":
 ci:
     cd rust && cargo fmt --check
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
+
