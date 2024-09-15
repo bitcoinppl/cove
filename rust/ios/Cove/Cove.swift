@@ -50,9 +50,11 @@ private extension ForeignBytes {
 
 private extension Data {
     init(rustBuffer: RustBuffer) {
-        // TODO: This copies the buffer. Can we read directly from a
-        // Rust buffer?
-        self.init(bytes: rustBuffer.data!, count: Int(rustBuffer.len))
+        self.init(
+            bytesNoCopy: rustBuffer.data!,
+            count: Int(rustBuffer.len),
+            deallocator: .none
+        )
     }
 }
 
@@ -3660,6 +3662,8 @@ public protocol TransactionDetailsProtocol: AnyObject {
 
     func amountFmt(unit: Unit) -> String
 
+    func confirmationDateTime() -> String?
+
     func fee() -> Amount
 
     func isConfirmed() -> Bool
@@ -3762,6 +3766,12 @@ open class TransactionDetails:
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_amount_fmt(self.uniffiClonePointer(),
                                                                 FfiConverterTypeUnit.lower(unit), $0)
+        })
+    }
+
+    open func confirmationDateTime() -> String? {
+        return try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_confirmation_date_time(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -4735,11 +4745,13 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> RustBuffer {
 
 public struct ConfirmedDetails {
     public var blockNumber: UInt32
+    public var confirmationTime: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(blockNumber: UInt32) {
+    public init(blockNumber: UInt32, confirmationTime: UInt64) {
         self.blockNumber = blockNumber
+        self.confirmationTime = confirmationTime
     }
 }
 
@@ -4748,11 +4760,15 @@ extension ConfirmedDetails: Equatable, Hashable {
         if lhs.blockNumber != rhs.blockNumber {
             return false
         }
+        if lhs.confirmationTime != rhs.confirmationTime {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(blockNumber)
+        hasher.combine(confirmationTime)
     }
 }
 
@@ -4760,12 +4776,14 @@ public struct FfiConverterTypeConfirmedDetails: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmedDetails {
         return
             try ConfirmedDetails(
-                blockNumber: FfiConverterUInt32.read(from: &buf)
+                blockNumber: FfiConverterUInt32.read(from: &buf),
+                confirmationTime: FfiConverterUInt64.read(from: &buf)
             )
     }
 
     public static func write(_ value: ConfirmedDetails, into buf: inout [UInt8]) {
         FfiConverterUInt32.write(value.blockNumber, into: &buf)
+        FfiConverterUInt64.write(value.confirmationTime, into: &buf)
     }
 }
 
@@ -8916,6 +8934,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 3569 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 54859 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_fee() != 26324 {

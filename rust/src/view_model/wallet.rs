@@ -144,8 +144,8 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn display_amount(&self, amount: Arc<Amount>) -> String {
         match self.metadata.read().selected_unit {
-            Unit::Btc => format!("{} BTC", amount.to_btc().to_string()),
-            Unit::Sat => format!("{} SATS", amount.to_sat().to_string()),
+            Unit::Btc => format!("{} BTC", amount.to_btc()),
+            Unit::Sat => format!("{} SATS", amount.to_sat()),
         }
     }
 

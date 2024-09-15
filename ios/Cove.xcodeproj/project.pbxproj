@@ -54,6 +54,7 @@
 		ACC3017A2C221450006790DF /* PendingWalletViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC301792C221450006790DF /* PendingWalletViewModel.swift */; };
 		ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */; };
 		ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */; };
+		ACCB02CC2C9747AA00FB2EDF /* TransactionCapsule.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCB02CB2C9747AA00FB2EDF /* TransactionCapsule.swift */; };
 		ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */; };
 		ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D0C2C26131A008C5034 /* Color+Ext.swift */; };
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
@@ -127,6 +128,7 @@
 		ACC301732C211281006790DF /* HotWalletSelectScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletSelectScreen.swift; sourceTree = "<group>"; };
 		ACC301792C221450006790DF /* PendingWalletViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingWalletViewModel.swift; sourceTree = "<group>"; };
 		ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Trait+Ext.swift"; sourceTree = "<group>"; };
+		ACCB02CB2C9747AA00FB2EDF /* TransactionCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionCapsule.swift; sourceTree = "<group>"; };
 		ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsyncPreview.swift; sourceTree = "<group>"; };
 		ACF44D0C2C26131A008C5034 /* Color+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Ext.swift"; sourceTree = "<group>"; };
 		ACF44D112C2642DD008C5034 /* SunsetWave.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SunsetWave.swift; sourceTree = "<group>"; };
@@ -198,6 +200,7 @@
 				AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */,
 				AC9FBEBC2C3F5C78005CB37A /* SettingsScreen2.swift */,
 				ACC1CD592C6D415400C7AD89 /* FloaterPopupView.swift */,
+				ACCB02CB2C9747AA00FB2EDF /* TransactionCapsule.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -461,6 +464,7 @@
 				AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */,
 				AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */,
 				382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */,
+				ACCB02CC2C9747AA00FB2EDF /* TransactionCapsule.swift in Sources */,
 				6B2189B893A545A2F4E3107E /* WalletColor+Ext.swift in Sources */,
 				AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */,
 				0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */,

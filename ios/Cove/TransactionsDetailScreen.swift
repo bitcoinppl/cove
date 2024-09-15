@@ -63,13 +63,29 @@ struct TransactionDetailsView: View {
     @ViewBuilder
     var ReceivedDetails: some View {
         Text("Transfer Received")
+            .font(.title)
+            .fontWeight(.semibold)
 
-        Text("Your transaction was successfully received on ... at ...")
-            .multilineTextAlignment(.center)
+        VStack(alignment: .center, spacing: 4) {
+            Text("Your transaction was successfully received on")
+                .foregroundColor(.gray)
+
+            Text(transactionsDetails.confirmationDateTime() ?? "Unknown")
+                .fontWeight(.semibold)
+                .foregroundColor(.gray)
+        }
+        .multilineTextAlignment(.center)
+        .padding()
 
         Text(model.rust.displayAmount(amount: transactionsDetails.amount()))
+            .font(.largeTitle)
+            .fontWeight(.bold)
+            .padding(.top, 6)
 
-        Text("")
+        Text("≈ $100 USD").foregroundStyle(.primary.opacity(0.8))
+
+        TransactionCapsule(text: "Received", icon: "arrow.up.right", color: .green)
+            .padding(.top, 12)
     }
 
     var body: some View {
@@ -84,8 +100,29 @@ struct TransactionDetailsView: View {
             Spacer()
             Spacer()
 
-            Button("View in Explorer") {}
-            Button("More Details") {}
+            Button(action: {
+                // Action to perform when button is tapped
+            }) {
+                Text("View in Explorer")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    .padding(.horizontal, 16)
+            }
+            .padding(.horizontal)
+
+            Button(action: {
+                // Action to perform when button is tapped
+            }) {
+                Text("More Details")
+                    .font(.footnote)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.gray.opacity(0.8))
+                    .padding(.vertical, 6)
+            }
+            .padding(.horizontal)
         }
     }
 }
