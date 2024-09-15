@@ -112,7 +112,7 @@ mod ffi {
     use numfmt::{Formatter, Precision};
 
     use crate::{
-        prices_client::PRICES_CLIENT,
+        fiat_client::FIAT_CLIENT,
         task,
         transaction::{TransactionDirection, Unit},
     };
@@ -135,7 +135,7 @@ mod ffi {
         pub async fn amount_fiat(&self) -> Result<f64, Error> {
             let amount = self.amount();
             task::spawn(async move {
-                PRICES_CLIENT
+                FIAT_CLIENT
                     .value_in_usd(amount)
                     .await
                     .map_err(|e| Error::FiatAmountError(e.to_string()))

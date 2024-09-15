@@ -8,10 +8,10 @@ use crate::{impl_default_for, transaction::Amount};
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 
 // Global client for getting prices
-pub static PRICES_CLIENT: LazyLock<PricesClient> = LazyLock::new(PricesClient::new);
+pub static FIAT_CLIENT: LazyLock<FiatClient> = LazyLock::new(FiatClient::new);
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct PricesClient {
+pub struct FiatClient {
     url: String,
     client: reqwest::Client,
     last_prices: Arc<RwLock<Option<PriceResponse>>>,
@@ -42,9 +42,9 @@ pub enum Currency {
     Jpy,
 }
 
-impl_default_for!(PricesClient);
+impl_default_for!(FiatClient);
 
-impl PricesClient {
+impl FiatClient {
     pub fn new() -> Self {
         Self {
             url: CURRENCY_URL.to_string(),
@@ -118,39 +118,39 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_prices() {
-        let prices_client = PricesClient::new();
-        let prices = prices_client.get_prices().await.unwrap();
-        assert!(prices.usd > 0);
+        let fiat_client = FiatClient::new();
+        let fiat = fiat_client.get_prices().await.unwrap();
+        assert!(fiat.usd > 0);
     }
 
     #[tokio::test]
     async fn test_get_price_for() {
-        let prices_client = PricesClient::new();
-        let price = prices_client.get_price_for(Currency::Usd).await.unwrap();
-        assert!(price > 0);
+        let fiat_client = FiatClient::new();
+        let fiat = fiat_client.get_price_for(Currency::Usd).await.unwrap();
+        assert!(fiat > 0);
     }
 
     #[tokio::test]
     async fn test_get_value_in_usd() {
-        let prices_client = PricesClient::new();
+        let fiat_client = FiatClient::new();
 
-        let prices = prices_client.get_prices().await.unwrap();
-        let value_in_usd = prices_client.value_in_usd(Amount::one_btc()).await.unwrap();
+        let fiat = fiat_client.get_prices().await.unwrap();
+        let value_in_usd = fiat_client.value_in_usd(Amount::one_btc()).await.unwrap();
 
         let value_in_usd = value_in_usd as f64;
-        assert_eq!(value_in_usd, prices.usd as f64);
+        assert_eq!(value_in_usd, fiat.usd as f64);
     }
 
     #[tokio::test]
     async fn test_get_value_in_usd_with_currency() {
-        let prices_client = PricesClient::new();
+        let fiat_client = FiatClient::new();
 
-        let prices = prices_client.get_prices().await.unwrap();
+        let fiat = fiat_client.get_prices().await.unwrap();
 
         let half_a_btc = Amount::from_sat(50_000_000);
-        let value_in_usd = prices_client.value_in_usd(half_a_btc).await.unwrap();
+        let value_in_usd = fiat_client.value_in_usd(half_a_btc).await.unwrap();
 
         let value_in_usd = value_in_usd as f64;
-        assert_eq!(value_in_usd, (prices.usd as f64) / 2.0);
+        assert_eq!(value_in_usd, (fiat.usd as f64) / 2.0);
     }
 }
