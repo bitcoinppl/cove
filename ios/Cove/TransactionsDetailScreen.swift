@@ -54,11 +54,23 @@ struct TransactionDetailsView: View {
     var model: WalletViewModel
 
     var headerIcon: HeaderIcon {
-        if transactionsDetails.isConfirmed() {
-            return HeaderIcon(icon: "checkmark", backgroundColor: .green, checkmarkColor: .white)
-        } else {
+        // pending
+        if !transactionsDetails.isConfirmed() {
             return HeaderIcon(icon: "clock.arrow.2.circlepath", backgroundColor: .gray, checkmarkColor: .white)
         }
+
+        // confirmed received
+        if transactionsDetails.isReceived() {
+            return HeaderIcon(icon: "checkmark", backgroundColor: .green, checkmarkColor: .white)
+        }
+
+        // confirmed sent
+        if transactionsDetails.isSent() {
+            return HeaderIcon(icon: "checkmark", backgroundColor: .black, checkmarkColor: .white)
+        }
+
+        // default
+        return HeaderIcon(icon: "clock.arrow.2.circlepath", backgroundColor: .gray, checkmarkColor: .white)
     }
 
     var metadata: WalletMetadata {
@@ -71,9 +83,10 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     var ReceivedDetails: some View {
-        Text("Transfer Received")
+        Text("Transaction Received")
             .font(.title)
             .fontWeight(.semibold)
+            .padding(.top, 8)
 
         VStack(alignment: .center, spacing: 4) {
             Text("Your transaction was successfully received on")
@@ -95,7 +108,38 @@ struct TransactionDetailsView: View {
             Text("≈ $\(amount) USD").foregroundStyle(.primary.opacity(0.8))
         }
 
-        TransactionCapsule(text: "Received", icon: "arrow.up.right", color: .green)
+        TransactionCapsule(text: "Received", icon: "arrow.down.left", color: .green)
+            .padding(.top, 12)
+    }
+
+    @ViewBuilder
+    var SentDetails: some View {
+        Text("Transaction Sent")
+            .font(.title)
+            .fontWeight(.semibold)
+            .padding(.top, 8)
+
+        VStack(alignment: .center, spacing: 4) {
+            Text("Your transaction was sent on")
+                .foregroundColor(.gray)
+
+            Text(transactionsDetails.confirmationDateTime() ?? "Unknown")
+                .fontWeight(.semibold)
+                .foregroundColor(.gray)
+        }
+        .multilineTextAlignment(.center)
+        .padding()
+
+        Text(model.rust.displayAmount(amount: transactionsDetails.amount()))
+            .font(.largeTitle)
+            .fontWeight(.bold)
+            .padding(.top, 6)
+
+        AsyncView(operation: transactionsDetails.amountFiatFmt) { amount in
+            Text("≈ $\(amount) USD").foregroundStyle(.primary.opacity(0.8))
+        }
+
+        TransactionCapsule(text: "Sent", icon: "arrow.up.right", color: .black, textColor: .white)
             .padding(.top, 12)
     }
 
@@ -106,6 +150,8 @@ struct TransactionDetailsView: View {
 
             if transactionsDetails.isReceived() {
                 ReceivedDetails
+            } else {
+                SentDetails
             }
 
             Spacer()

@@ -10,20 +10,34 @@ import SwiftUI
 struct TransactionCapsule: View {
     var text: String
     var icon: String
+
     var color: Color
+    var textColor: Color?
+
+    var _textColor: Color {
+        textColor ?? color
+    }
+
+    var capsuleColor: Color {
+        if textColor != nil {
+            color
+        } else {
+            color.opacity(0.2)
+        }
+    }
 
     var body: some View {
         Capsule()
-            .fill(color.opacity(0.2))
+            .fill(capsuleColor)
             .frame(width: 130, height: 30)
             .overlay(
                 HStack {
                     Image(systemName: icon)
                         .font(.system(size: 12))
-                        .foregroundColor(color)
+                        .foregroundColor(_textColor)
                     Text(text)
                         .font(.system(size: 14))
-                        .foregroundColor(color)
+                        .foregroundColor(_textColor)
                 }
             )
     }
