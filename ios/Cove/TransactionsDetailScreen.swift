@@ -163,8 +163,10 @@ struct TransactionDetailsView: View {
                 Divider()
                     .padding(.vertical, 18)
 
-                expandedDetailsRow(header: "Confirmations", content: "10")
-                expandedDetailsRow(header: "Block Number", content: String(transactionsDetails.blockNumberFmt() ?? ""))
+                if transactionsDetails.isConfirmed() {
+                    expandedDetailsRow(header: "Confirmations", content: "10")
+                    expandedDetailsRow(header: "Block Number", content: String(transactionsDetails.blockNumberFmt() ?? ""))
+                }
 
                 Text("Received At")
                     .font(.caption)

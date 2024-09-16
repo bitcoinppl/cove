@@ -20,7 +20,9 @@ pub struct WalletActor {
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
+
     pub last_scan_finished: Option<Instant>,
+    pub last_height_fetched: Option<(Instant, usize)>,
 
     pub state: ActorState,
 }
@@ -74,6 +76,7 @@ impl WalletActor {
             wallet,
             node_client: None,
             last_scan_finished: None,
+            last_height_fetched: None,
             state: ActorState::Initial,
         }
     }
@@ -199,6 +202,28 @@ impl WalletActor {
         }
 
         Produces::ok(())
+    }
+
+    pub async fn get_height(&mut self) -> ActorResult<usize> {
+        if let Some((last_height_fetched, block_height)) = self.last_height_fetched {
+            if last_height_fetched.elapsed().as_secs() < 30 {
+                return Produces::ok(block_height);
+            }
+        }
+
+        let node_client = self
+            .node_client
+            .as_ref()
+            .ok_or(eyre::eyre!("node client not set"))?;
+
+        let block_height = node_client
+            .get_height()
+            .await
+            .map_err(|_| Error::GetHeightError)?;
+
+        self.last_height_fetched = Some((Instant::now(), block_height));
+
+        Produces::ok(block_height)
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {

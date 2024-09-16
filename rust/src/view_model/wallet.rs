@@ -108,6 +108,9 @@ pub enum WalletViewModelError {
 
     #[error("unable to get next address: {0}")]
     NextAddressError(String),
+
+    #[error("unable to get height")]
+    GetHeightError,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -148,6 +151,15 @@ impl RustWalletViewModel {
             Unit::Btc => format!("{} BTC", amount.to_btc()),
             Unit::Sat => format!("{} SATS", amount.to_sat()),
         }
+    }
+
+    #[uniffi::method]
+    pub async fn current_block_height(&self) -> Result<u64, Error> {
+        let height = call!(self.actor.get_height())
+            .await
+            .map_err(|_| Error::GetHeightError)?;
+
+        Ok(height as u64)
     }
 
     /// Get the next address for the wallet
