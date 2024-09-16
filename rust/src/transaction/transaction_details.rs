@@ -74,6 +74,19 @@ impl TransactionDetails {
 
         Ok(me)
     }
+
+    pub fn sent_sans_fee(&self) -> Option<Amount> {
+        if self.is_received() {
+            return None;
+        }
+
+        let fee: Amount = self.fee;
+        let sent: Amount = self.amount();
+
+        let sans_fee = sent.checked_sub(fee.0)?;
+
+        Some(sans_fee.into())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
@@ -163,6 +176,11 @@ mod ffi {
         }
 
         #[uniffi::method]
+        pub fn fee_fmt(&self, unit: Unit) -> String {
+            self.fee.fmt_string(unit)
+        }
+
+        #[uniffi::method]
         pub fn amount_fmt(&self, unit: Unit) -> String {
             self.sent_and_received.amount_fmt(unit)
         }
@@ -178,8 +196,25 @@ mod ffi {
         }
 
         #[uniffi::method]
+        pub fn sent_sans_fee_fmt(&self, unit: Unit) -> Option<String> {
+            let amount = self.sent_sans_fee()?;
+            Some(amount.fmt_string(unit))
+        }
+
+        #[uniffi::method]
         pub fn number_of_confirmations(&self) -> u32 {
-            todo!()
+            // TODO: Implement this
+            3950
+        }
+
+        #[uniffi::method]
+        pub fn number_of_confirmations_fmt(&self) -> String {
+            let mut f = Formatter::new()
+                .separator(',')
+                .unwrap()
+                .precision(Precision::Decimals(0));
+
+            f.fmt2(self.number_of_confirmations()).to_string()
         }
 
         #[uniffi::method]

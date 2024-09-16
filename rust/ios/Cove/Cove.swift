@@ -715,6 +715,8 @@ public protocol AmountProtocol: AnyObject {
 
     func btcString() -> String
 
+    func fmtString(unit: Unit) -> String
+
     func satsString() -> String
 }
 
@@ -795,6 +797,13 @@ open class Amount:
     open func btcString() -> String {
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_amount_btc_string(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func fmtString(unit: Unit) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_amount_fmt_string(self.uniffiClonePointer(),
+                                                    FfiConverterTypeUnit.lower(unit), $0)
         })
     }
 
@@ -3676,6 +3685,8 @@ public protocol TransactionDetailsProtocol: AnyObject {
 
     func fee() -> Amount
 
+    func feeFmt(unit: Unit) -> String
+
     func isConfirmed() -> Bool
 
     func isReceived() -> Bool
@@ -3683,6 +3694,10 @@ public protocol TransactionDetailsProtocol: AnyObject {
     func isSent() -> Bool
 
     func numberOfConfirmations() -> UInt32
+
+    func numberOfConfirmationsFmt() -> String
+
+    func sentSansFeeFmt(unit: Unit) -> String?
 
     func transactionUrl() -> String
 }
@@ -3843,6 +3858,13 @@ open class TransactionDetails:
         })
     }
 
+    open func feeFmt(unit: Unit) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_fee_fmt(self.uniffiClonePointer(),
+                                                             FfiConverterTypeUnit.lower(unit), $0)
+        })
+    }
+
     open func isConfirmed() -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_is_confirmed(self.uniffiClonePointer(), $0)
@@ -3864,6 +3886,19 @@ open class TransactionDetails:
     open func numberOfConfirmations() -> UInt32 {
         return try! FfiConverterUInt32.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_number_of_confirmations(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func numberOfConfirmationsFmt() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_number_of_confirmations_fmt(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func sentSansFeeFmt(unit: Unit) -> String? {
+        return try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(self.uniffiClonePointer(),
+                                                                       FfiConverterTypeUnit.lower(unit), $0)
         })
     }
 
@@ -8784,6 +8819,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_amount_btc_string() != 21387 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_amount_fmt_string() != 15357 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_amount_sats_string() != 36019 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9069,6 +9107,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_transactiondetails_fee() != 26324 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 31278 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_transactiondetails_is_confirmed() != 54031 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9079,6 +9120,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_number_of_confirmations() != 466 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_number_of_confirmations_fmt() != 57757 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 54855 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_transaction_url() != 12235 {

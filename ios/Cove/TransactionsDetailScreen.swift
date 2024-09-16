@@ -271,6 +271,81 @@ struct TransactionDetailsView: View {
             }
         }
         .padding(.top, 12)
+
+        // MARK: Details Expanded
+
+        if metadata.detailsExpanded {
+            VStack(alignment: .leading, spacing: 12) {
+                Divider().padding(.vertical, 18)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sent to")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+
+                    Text(transactionsDetails.addressSpacedOut())
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+
+                    HStack(spacing: 0) {
+                        Group {
+                            Text(transactionsDetails.blockNumberFmt() ?? "")
+                            Text("|")
+                            Text(transactionsDetails.numberOfConfirmationsFmt())
+                        }
+                        .padding(.horizontal, 2)
+
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10))
+                            .fontWeight(.bold)
+                            .foregroundStyle(.green)
+                            .padding(.leading, 3)
+                    }
+                    .font(.caption).foregroundStyle(.tertiary)
+                }
+
+                Divider().padding(.vertical, 18)
+
+                HStack {
+                    Text("Network Fee")
+                    Image(systemName: "info.circle")
+                        .font(.footnote)
+                        .fontWeight(/*@START_MENU_TOKEN@*/ .bold/*@END_MENU_TOKEN@*/)
+                        .foregroundStyle(.tertiary.opacity(0.8))
+                    Spacer()
+                    Text(transactionsDetails.feeFmt(unit: metadata.selectedUnit))
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+                HStack {
+                    Text("Receipient Receives")
+                    Spacer()
+                    Text(transactionsDetails.sentSansFeeFmt(unit: metadata.selectedUnit) ?? "")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+                Divider().padding(.vertical, 18)
+
+                HStack(alignment: .top) {
+                    Text("Total Spent")
+
+                    Spacer()
+                    VStack(alignment: .trailing) {
+                        Text(transactionsDetails.amountFmt(unit: metadata.selectedUnit))
+                        AsyncView(operation: transactionsDetails.amountFiatFmt) { amount in
+                            Text("≈ $\(amount) USD").foregroundStyle(.secondary)
+                                .font(.caption)
+                                .padding(.top, 2)
+                        }
+                    }
+                }
+                .font(.subheadline)
+            }
+            .padding(.horizontal, detailsExpandedPadding)
+        }
     }
 
     @ViewBuilder
