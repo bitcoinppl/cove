@@ -287,22 +287,25 @@ struct TransactionDetailsView: View {
                     Text(transactionsDetails.addressSpacedOut())
                         .fontWeight(.semibold)
                         .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                        .textSelection(.enabled)
 
-                    HStack(spacing: 0) {
-                        Group {
-                            Text(transactionsDetails.blockNumberFmt() ?? "")
-                            Text("|")
-                            Text(transactionsDetails.numberOfConfirmationsFmt())
+                    if transactionsDetails.isConfirmed() {
+                        HStack(spacing: 0) {
+                            Group {
+                                Text(transactionsDetails.blockNumberFmt() ?? "")
+                                Text("|")
+                                Text(transactionsDetails.numberOfConfirmationsFmt())
+                            }
+                            .padding(.horizontal, 2)
+
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .fontWeight(.bold)
+                                .foregroundStyle(.green)
+                                .padding(.leading, 3)
                         }
-                        .padding(.horizontal, 2)
-
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10))
-                            .fontWeight(.bold)
-                            .foregroundStyle(.green)
-                            .padding(.leading, 3)
+                        .font(.caption).foregroundStyle(.tertiary)
                     }
-                    .font(.caption).foregroundStyle(.tertiary)
                 }
 
                 Divider().padding(.vertical, 18)
