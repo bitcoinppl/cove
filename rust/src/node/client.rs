@@ -10,6 +10,7 @@ use bdk_wallet::{
     },
     KeychainKind,
 };
+use tap::TapFallible as _;
 use tracing::debug;
 
 use crate::node::Node;
@@ -112,6 +113,7 @@ impl NodeClient {
                 let height = client
                     .get_height()
                     .await
+                    .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
                     .map_err(Error::EsploraConnectError)?;
 
                 Ok(height as usize)
@@ -119,10 +121,14 @@ impl NodeClient {
 
             NodeClient::Electrum(client) => {
                 let client = client.clone();
-                let header =
-                    crate::unblock::run_blocking(move || client.inner.block_headers_subscribe())
-                        .await
-                        .map_err(Error::ElectrumConnectError)?;
+                let header = crate::unblock::run_blocking(move || {
+                    client
+                        .inner
+                        .block_headers_subscribe()
+                        .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
+                })
+                .await
+                .map_err(Error::ElectrumConnectError)?;
 
                 Ok(header.height)
             }

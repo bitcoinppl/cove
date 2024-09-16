@@ -296,15 +296,24 @@ struct TransactionDetailsView: View {
                             Group {
                                 Text(transactionsDetails.blockNumberFmt() ?? "")
                                 Text("|")
-                                Text(transactionsDetails.numberOfConfirmationsFmt())
-                            }
-                            .padding(.horizontal, 2)
 
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 10))
-                                .fontWeight(.bold)
-                                .foregroundStyle(.green)
-                                .padding(.leading, 3)
+                                AsyncView(operation: {
+                                    let blockNumber = UInt64(transactionsDetails.blockNumber() ?? 0)
+                                    return try await model.rust.numberOfConfirmationsFmt(blockHeight: blockNumber)
+                                }) { (confirmations: String) in
+                                    Group {
+                                        Text(confirmations)
+
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 10))
+                                            .fontWeight(.bold)
+                                            .foregroundStyle(.green)
+                                            .padding(.leading, 3)
+                                    }
+                                }
+                            }
+
+                            .padding(.horizontal, 2)
                         }
                         .font(.caption).foregroundStyle(.tertiary)
                     }

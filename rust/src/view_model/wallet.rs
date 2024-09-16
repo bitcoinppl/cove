@@ -5,6 +5,7 @@ use std::sync::Arc;
 use act_zero::{call, send, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
+use numfmt::{Formatter, Precision};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
@@ -166,6 +167,19 @@ impl RustWalletViewModel {
     pub async fn number_of_confirmations(&self, block_height: u64) -> Result<u64, Error> {
         let current_height = self.current_block_height().await?;
         Ok(current_height - block_height + 1)
+    }
+
+    #[uniffi::method]
+    pub async fn number_of_confirmations_fmt(&self, block_height: u64) -> Result<String, Error> {
+        let mut f = Formatter::new()
+            .separator(',')
+            .unwrap()
+            .precision(Precision::Decimals(0));
+
+        let number_of_confirmations = self.number_of_confirmations(block_height).await?;
+
+        let fmt = f.fmt2(number_of_confirmations).to_string();
+        Ok(fmt)
     }
 
     /// Get the next address for the wallet

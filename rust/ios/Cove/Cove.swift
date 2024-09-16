@@ -3312,6 +3312,8 @@ public func FfiConverterTypeRustPendingWalletViewModel_lower(_ value: RustPendin
 public protocol RustWalletViewModelProtocol: AnyObject {
     func balance() async -> Balance
 
+    func currentBlockHeight() async throws -> UInt64
+
     func deleteWallet() throws
 
     /**
@@ -3331,6 +3333,10 @@ public protocol RustWalletViewModelProtocol: AnyObject {
      * Get the next address for the wallet
      */
     func nextAddress() async throws -> AddressInfo
+
+    func numberOfConfirmations(blockHeight: UInt64) async throws -> UInt64
+
+    func numberOfConfirmationsFmt(blockHeight: UInt64) async throws -> String
 
     func startWalletScan() async throws
 
@@ -3410,6 +3416,22 @@ open class RustWalletViewModel:
             )
     }
 
+    open func currentBlockHeight() async throws -> UInt64 {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_current_block_height(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_u64,
+                completeFunc: ffi_cove_rust_future_complete_u64,
+                freeFunc: ffi_cove_rust_future_free_u64,
+                liftFunc: FfiConverterUInt64.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
     open func deleteWallet() throws { try rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
         uniffi_cove_fn_method_rustwalletviewmodel_delete_wallet(self.uniffiClonePointer(), $0)
     }
@@ -3463,6 +3485,40 @@ open class RustWalletViewModel:
                 completeFunc: ffi_cove_rust_future_complete_pointer,
                 freeFunc: ffi_cove_rust_future_free_pointer,
                 liftFunc: FfiConverterTypeAddressInfo.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func numberOfConfirmations(blockHeight: UInt64) async throws -> UInt64 {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_number_of_confirmations(
+                        self.uniffiClonePointer(),
+                        FfiConverterUInt64.lower(blockHeight)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_u64,
+                completeFunc: ffi_cove_rust_future_complete_u64,
+                freeFunc: ffi_cove_rust_future_free_u64,
+                liftFunc: FfiConverterUInt64.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func numberOfConfirmationsFmt(blockHeight: UInt64) async throws -> String {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_number_of_confirmations_fmt(
+                        self.uniffiClonePointer(),
+                        FfiConverterUInt64.lower(blockHeight)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+                completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+                freeFunc: ffi_cove_rust_future_free_rust_buffer,
+                liftFunc: FfiConverterString.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
@@ -3693,10 +3749,6 @@ public protocol TransactionDetailsProtocol: AnyObject {
 
     func isSent() -> Bool
 
-    func numberOfConfirmations() -> UInt32
-
-    func numberOfConfirmationsFmt() -> String
-
     func sentSansFeeFmt(unit: Unit) -> String?
 
     func transactionUrl() -> String
@@ -3880,18 +3932,6 @@ open class TransactionDetails:
     open func isSent() -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_is_sent(self.uniffiClonePointer(), $0)
-        })
-    }
-
-    open func numberOfConfirmations() -> UInt32 {
-        return try! FfiConverterUInt32.lift(try! rustCall {
-            uniffi_cove_fn_method_transactiondetails_number_of_confirmations(self.uniffiClonePointer(), $0)
-        })
-    }
-
-    open func numberOfConfirmationsFmt() -> String {
-        return try! FfiConverterString.lift(try! rustCall {
-            uniffi_cove_fn_method_transactiondetails_number_of_confirmations_fmt(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -7569,6 +7609,7 @@ public enum WalletViewModelError {
     )
     case NextAddressError(String
     )
+    case GetHeightError
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -7605,6 +7646,7 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
         case 10: return try .NextAddressError(
                 FfiConverterString.read(from: &buf)
             )
+        case 11: return .GetHeightError
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -7649,6 +7691,9 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
         case let .NextAddressError(v1):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
+
+        case .GetHeightError:
+            writeInt(&buf, Int32(11))
         }
     }
 }
@@ -9029,6 +9074,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_balance() != 10059 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_current_block_height() != 24090 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_delete_wallet() != 30016 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9048,6 +9096,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_next_address() != 23410 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations() != 17579 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations_fmt() != 21371 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_start_wallet_scan() != 46525 {
@@ -9117,12 +9171,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_is_sent() != 7556 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_transactiondetails_number_of_confirmations() != 466 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_transactiondetails_number_of_confirmations_fmt() != 57757 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 54855 {

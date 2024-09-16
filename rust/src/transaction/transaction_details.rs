@@ -202,22 +202,6 @@ mod ffi {
         }
 
         #[uniffi::method]
-        pub fn number_of_confirmations(&self) -> u32 {
-            // TODO: Implement this
-            3950
-        }
-
-        #[uniffi::method]
-        pub fn number_of_confirmations_fmt(&self) -> String {
-            let mut f = Formatter::new()
-                .separator(',')
-                .unwrap()
-                .precision(Precision::Decimals(0));
-
-            f.fmt2(self.number_of_confirmations()).to_string()
-        }
-
-        #[uniffi::method]
         pub fn is_confirmed(&self) -> bool {
             self.pending_or_confirmed.is_confirmed()
         }
