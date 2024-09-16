@@ -208,6 +208,41 @@ mod ffi {
         pub fn transaction_url(&self) -> String {
             format!("https://mempool.space/tx/{}", self.tx_id.0)
         }
+
+        #[uniffi::method]
+        pub fn block_number(&self) -> Option<u32> {
+            match &self.pending_or_confirmed {
+                PendingOrConfirmed::Pending(_) => None,
+                PendingOrConfirmed::Confirmed(confirmed) => Some(confirmed.block_number),
+            }
+        }
+
+        #[uniffi::method]
+        pub fn block_number_fmt(&self) -> Option<String> {
+            let block_number = self.block_number()?;
+
+            let mut f = Formatter::new()
+                .separator(',')
+                .unwrap()
+                .precision(Precision::Decimals(0));
+
+            Some(f.fmt2(block_number).to_string())
+        }
+        #[uniffi::method]
+        pub fn address_spaced_out(&self) -> String {
+            self.address
+                .to_string()
+                .chars()
+                .enumerate()
+                .flat_map(|(i, c)| {
+                    if i > 0 && i % 4 == 0 {
+                        vec![' ', c]
+                    } else {
+                        vec![c]
+                    }
+                })
+                .collect()
+        }
     }
 }
 

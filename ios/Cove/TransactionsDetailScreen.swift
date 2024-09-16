@@ -50,6 +50,11 @@ struct TransactionDetailsView: View {
     private let screenWidth = UIScreen.main.bounds.width
     private let screenHeight = UIScreen.main.bounds.height
 
+    private let detailsExpandedPadding: CGFloat = 28
+
+    // state
+    @State private var isCopied = false
+
     // public
     let id: WalletId
     let transactionsDetails: TransactionDetails
@@ -108,7 +113,7 @@ struct TransactionDetailsView: View {
         // confirmed
         if transactionsDetails.isConfirmed() {
             VStack(alignment: .center, spacing: 4) {
-                Text("Your transaction was successfully received on")
+                Text("Your transaction was successfully received")
                     .foregroundColor(.gray)
 
                 Text(transactionsDetails.confirmationDateTime() ?? "Unknown")
@@ -116,7 +121,6 @@ struct TransactionDetailsView: View {
                     .foregroundColor(.gray)
             }
             .multilineTextAlignment(.center)
-            .padding()
         }
 
         // pending
@@ -152,17 +156,63 @@ struct TransactionDetailsView: View {
         }
         .padding(.top, 12)
 
+        // MARK: Received Details Expanded
+
         if metadata.detailsExpanded {
             VStack(alignment: .leading) {
                 Divider()
                     .padding(.vertical, 18)
 
                 expandedDetailsRow(header: "Confirmations", content: "10")
+                expandedDetailsRow(header: "Block Number", content: String(transactionsDetails.blockNumberFmt() ?? ""))
 
-                expandedDetailsRow(header: "Block Number", content: "840,000")
+                Text("Received At")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
 
-                expandedDetailsRow(header: "Received At", content: "...")
+                HStack {
+                    Text(transactionsDetails.addressSpacedOut())
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                        .padding(.bottom, 14)
+
+                    Spacer()
+                    Spacer()
+
+                    Button(action: {
+                        UIPasteboard.general.string = transactionsDetails.address().string()
+                        withAnimation {
+                            isCopied = true
+                        }
+
+                        // Reset the button text after a delay
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                            withAnimation {
+                                isCopied = false
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.caption)
+
+                            Text(isCopied ? "Copied" : "Copy")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.white)
+                        .foregroundColor(.black)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
             }
+            .padding(.horizontal, detailsExpandedPadding)
         }
     }
 
@@ -225,14 +275,19 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     func ScrollOrContent(content: () -> some View) -> some View {
-        if detailsExpanded {
-            ScrollView(.vertical) {
+        Group {
+            if detailsExpanded {
+                ScrollView(.vertical) {
+                    content()
+                }
+                .scrollIndicators(.never)
+                .transition(.opacity)
+            } else {
                 content()
+                    .transition(.opacity)
             }
-            .scrollIndicators(.never)
-        } else {
-            content()
         }
+        .animation(.easeInOut(duration: 0.3), value: detailsExpanded)
     }
 
     var body: some View {
@@ -247,7 +302,6 @@ struct TransactionDetailsView: View {
                         SentDetails
                     }
                 }
-                .padding(.horizontal, 28)
 
                 Spacer()
                 Spacer()
@@ -263,7 +317,7 @@ struct TransactionDetailsView: View {
                         .background(Color.blue)
                         .foregroundColor(.white)
                         .cornerRadius(8)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, detailsExpandedPadding)
                 }
 
                 Button(action: {
@@ -276,7 +330,6 @@ struct TransactionDetailsView: View {
                         .padding(.vertical, 6)
                 }
             }
-            .padding(.horizontal, 24)
         }
     }
 }

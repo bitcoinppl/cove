@@ -3658,6 +3658,8 @@ public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> U
 public protocol TransactionDetailsProtocol: AnyObject {
     func address() -> Address
 
+    func addressSpacedOut() -> String
+
     func amount() -> Amount
 
     func amountFiat() async throws -> Double
@@ -3665,6 +3667,10 @@ public protocol TransactionDetailsProtocol: AnyObject {
     func amountFiatFmt() async throws -> String
 
     func amountFmt(unit: Unit) -> String
+
+    func blockNumber() -> UInt32?
+
+    func blockNumberFmt() -> String?
 
     func confirmationDateTime() -> String?
 
@@ -3762,6 +3768,12 @@ open class TransactionDetails:
         })
     }
 
+    open func addressSpacedOut() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_address_spaced_out(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func amount() -> Amount {
         return try! FfiConverterTypeAmount.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_amount(self.uniffiClonePointer(), $0)
@@ -3804,6 +3816,18 @@ open class TransactionDetails:
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_amount_fmt(self.uniffiClonePointer(),
                                                                 FfiConverterTypeUnit.lower(unit), $0)
+        })
+    }
+
+    open func blockNumber() -> UInt32? {
+        return try! FfiConverterOptionUInt32.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_block_number(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func blockNumberFmt() -> String? {
+        return try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_fn_method_transactiondetails_block_number_fmt(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -8125,6 +8149,27 @@ extension FfiConverterCallbackInterfaceWalletViewModelReconciler: FfiConverter {
     }
 }
 
+private struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -8997,6 +9042,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_transactiondetails_address() != 31151 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_transactiondetails_address_spaced_out() != 61966 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_transactiondetails_amount() != 16978 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9007,6 +9055,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 3569 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_block_number() != 61262 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_block_number_fmt() != 52006 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 54859 {
