@@ -129,6 +129,7 @@ struct SelectedWalletScreenInner: View {
                         .padding()
 
                     Transactions
+                        .environment(model)
                 }
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {

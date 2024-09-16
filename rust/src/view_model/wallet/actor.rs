@@ -1,7 +1,7 @@
 use crate::{
     database::Database,
     node::client::NodeClient,
-    transaction::Transaction,
+    transaction::{Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
     wallet::{balance::Balance, AddressInfo, Wallet},
 };
@@ -224,6 +224,20 @@ impl WalletActor {
         self.last_height_fetched = Some((Instant::now(), block_height));
 
         Produces::ok(block_height)
+    }
+
+    pub async fn transaction_details(&mut self, tx_id: TxId) -> ActorResult<TransactionDetails> {
+        let tx = self
+            .wallet
+            .get_tx(tx_id.0)
+            .ok_or(Error::TransactionDetailsError(
+                "transaction not found".to_string(),
+            ))?;
+
+        let details = TransactionDetails::try_new(&self.wallet, tx)
+            .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
+
+        Produces::ok(details)
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {

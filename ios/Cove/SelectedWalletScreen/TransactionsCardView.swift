@@ -75,8 +75,14 @@ struct TransactionsCardView: View {
 }
 
 struct ConfirmedTransactionView: View {
+    @Environment(\.navigate) private var navigate
+    @Environment(WalletViewModel.self) var model
+
     let txn: ConfirmedTransaction
     let metadata: WalletMetadata
+
+    // private
+    @State var transactionDetails: TransactionDetails? = nil
 
     func amount(_ sentAndReceived: SentAndReceived) -> String {
         if !metadata.sensitiveVisible {
@@ -115,6 +121,16 @@ struct ConfirmedTransactionView: View {
                 Text(txn.blockHeightFmt())
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+        }.onTapGesture {
+            if let details = self.transactionDetails {
+                navigate(Route.transactionDetails(id: metadata.id, details: details))
+            }
+        }
+        .task {
+            do {
+                let transactionDetails = try? await model.rust.transactionDetails(txId: txn.id())
+                self.transactionDetails = transactionDetails
             }
         }
     }
@@ -159,48 +175,60 @@ private struct TxnIcon: View {
 }
 
 #Preview("Full of Txns - Complete") {
-    TransactionsCardView(
-        transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(0)),
-        scanComplete: true,
-        metadata: walletMetadataPreview()
-    )
+    AsyncPreview {
+        TransactionsCardView(
+            transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(0)),
+            scanComplete: true,
+            metadata: walletMetadataPreview()
+        )
+        .environment(WalletViewModel(preview: "preview_only"))
+    }
 }
 
 #Preview("Full of Txns - Scanning") {
-    ScrollView {
-        TransactionsCardView(
-            transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(1)),
-            scanComplete: false,
-            metadata: walletMetadataPreview()
-        )
-        .background(.thickMaterial)
+    AsyncPreview {
+        ScrollView {
+            TransactionsCardView(
+                transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(1)),
+                scanComplete: false,
+                metadata: walletMetadataPreview()
+            )
+            .background(.thickMaterial)
+            .environment(WalletViewModel(preview: "preview_only"))
+        }
     }
 }
 
 #Preview("Empty - Scanning") {
-    TransactionsCardView(transactions: [], scanComplete: false, metadata: walletMetadataPreview())
+    AsyncPreview {
+        TransactionsCardView(transactions: [], scanComplete: false, metadata: walletMetadataPreview())
+            .environment(WalletViewModel(preview: "preview_only"))
+    }
 }
 
 #Preview("Empty") {
-    VStack {
-        Text("Test")
+    AsyncPreview {
+        VStack {
+            Text("Test")
 
-        Spacer()
-        ScrollView {
-            TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
-                .background(
-                    UnevenRoundedRectangle(
-                        cornerRadii: .init(
-                            topLeading: 40,
-                            bottomLeading: 0,
-                            bottomTrailing: 0,
-                            topTrailing: 40
+            Spacer()
+            ScrollView {
+                TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
+                    .background(
+                        UnevenRoundedRectangle(
+                            cornerRadii: .init(
+                                topLeading: 40,
+                                bottomLeading: 0,
+                                bottomTrailing: 0,
+                                topTrailing: 40
+                            )
                         )
+                        .fill(.thickMaterial)
+                        .ignoresSafeArea()
                     )
-                    .fill(.thickMaterial)
-                    .ignoresSafeArea()
-                )
+            }
+            .ignoresSafeArea()
         }
-        .ignoresSafeArea()
+        .environment(WalletViewModel(preview: "preview_only"))
     }
 }

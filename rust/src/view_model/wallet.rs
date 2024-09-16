@@ -16,7 +16,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     router::Route,
     task,
-    transaction::{Amount, Transaction, Unit},
+    transaction::{Amount, Transaction, TransactionDetails, TxId, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -112,6 +112,9 @@ pub enum WalletViewModelError {
 
     #[error("unable to get height")]
     GetHeightError,
+
+    #[error("unable to get transaction details: {0}")]
+    TransactionDetailsError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -161,6 +164,16 @@ impl RustWalletViewModel {
             .map_err(|_| Error::GetHeightError)?;
 
         Ok(height as u64)
+    }
+
+    #[uniffi::method]
+    pub async fn transaction_details(&self, tx_id: Arc<TxId>) -> Result<TransactionDetails, Error> {
+        let tx_id = Arc::unwrap_or_clone(tx_id);
+        let details = call!(self.actor.transaction_details(tx_id))
+            .await
+            .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
+
+        Ok(details)
     }
 
     #[uniffi::method]

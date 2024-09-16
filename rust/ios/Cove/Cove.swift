@@ -3340,6 +3340,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func startWalletScan() async throws
 
+    func transactionDetails(txId: TxId) async throws -> TransactionDetails
+
     func walletMetadata() -> WalletMetadata
 
     func wordValidator() throws -> WordValidator
@@ -3535,6 +3537,23 @@ open class RustWalletViewModel:
                 completeFunc: ffi_cove_rust_future_complete_void,
                 freeFunc: ffi_cove_rust_future_free_void,
                 liftFunc: { $0 },
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func transactionDetails(txId: TxId) async throws -> TransactionDetails {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_transaction_details(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeTxId.lower(txId)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeTransactionDetails.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
@@ -7610,6 +7629,8 @@ public enum WalletViewModelError {
     case NextAddressError(String
     )
     case GetHeightError
+    case TransactionDetailsError(String
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -7647,6 +7668,9 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
                 FfiConverterString.read(from: &buf)
             )
         case 11: return .GetHeightError
+        case 12: return try .TransactionDetailsError(
+                FfiConverterString.read(from: &buf)
+            )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -7694,6 +7718,10 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
 
         case .GetHeightError:
             writeInt(&buf, Int32(11))
+
+        case let .TransactionDetailsError(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
         }
     }
 }
@@ -9105,6 +9133,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_start_wallet_scan() != 46525 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_transaction_details() != 62006 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_wallet_metadata() != 44518 {
