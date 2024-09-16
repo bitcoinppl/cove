@@ -54,6 +54,7 @@ struct TransactionDetailsView: View {
 
     // state
     @State private var isCopied = false
+    @State private var numberOfConfirmations: String? = nil
 
     // public
     let id: WalletId
@@ -164,7 +165,20 @@ struct TransactionDetailsView: View {
                     .padding(.vertical, 18)
 
                 if transactionsDetails.isConfirmed() {
-                    expandedDetailsRow(header: "Confirmations", content: "10")
+                    Text("Confirmations")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+
+                    if let numberOfConfirmations = self.numberOfConfirmations {
+                        Text(numberOfConfirmations)
+                            .fontWeight(.semibold)
+                            .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                            .padding(.bottom, 14)
+                    } else {
+                        ProgressView()
+                    }
+
                     expandedDetailsRow(header: "Block Number", content: String(transactionsDetails.blockNumberFmt() ?? ""))
                 }
 
@@ -215,6 +229,13 @@ struct TransactionDetailsView: View {
                 }
             }
             .padding(.horizontal, detailsExpandedPadding)
+            .task {
+                do {
+                    if let blockNumber = transactionsDetails.blockNumber() {
+                        numberOfConfirmations = try? await model.rust.numberOfConfirmationsFmt(blockHeight: blockNumber)
+                    }
+                }
+            }
         }
     }
 
@@ -298,7 +319,7 @@ struct TransactionDetailsView: View {
                                 Text("|")
 
                                 AsyncView(operation: {
-                                    let blockNumber = UInt64(transactionsDetails.blockNumber() ?? 0)
+                                    let blockNumber = transactionsDetails.blockNumber() ?? 0
                                     return try await model.rust.numberOfConfirmationsFmt(blockHeight: blockNumber)
                                 }) { (confirmations: String) in
                                     Group {
@@ -328,7 +349,7 @@ struct TransactionDetailsView: View {
                         .fontWeight(/*@START_MENU_TOKEN@*/ .bold/*@END_MENU_TOKEN@*/)
                         .foregroundStyle(.tertiary.opacity(0.8))
                     Spacer()
-                    Text(transactionsDetails.feeFmt(unit: metadata.selectedUnit))
+                    Text(transactionsDetails.feeFmt(unit: metadata.selectedUnit) ?? "")
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

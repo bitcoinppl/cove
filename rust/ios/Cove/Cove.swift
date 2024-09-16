@@ -3312,7 +3312,7 @@ public func FfiConverterTypeRustPendingWalletViewModel_lower(_ value: RustPendin
 public protocol RustWalletViewModelProtocol: AnyObject {
     func balance() async -> Balance
 
-    func currentBlockHeight() async throws -> UInt64
+    func currentBlockHeight() async throws -> UInt32
 
     func deleteWallet() throws
 
@@ -3334,9 +3334,9 @@ public protocol RustWalletViewModelProtocol: AnyObject {
      */
     func nextAddress() async throws -> AddressInfo
 
-    func numberOfConfirmations(blockHeight: UInt64) async throws -> UInt64
+    func numberOfConfirmations(blockHeight: UInt32) async throws -> UInt32
 
-    func numberOfConfirmationsFmt(blockHeight: UInt64) async throws -> String
+    func numberOfConfirmationsFmt(blockHeight: UInt32) async throws -> String
 
     func startWalletScan() async throws
 
@@ -3418,7 +3418,7 @@ open class RustWalletViewModel:
             )
     }
 
-    open func currentBlockHeight() async throws -> UInt64 {
+    open func currentBlockHeight() async throws -> UInt32 {
         return
             try await uniffiRustCallAsync(
                 rustFutureFunc: {
@@ -3426,10 +3426,10 @@ open class RustWalletViewModel:
                         self.uniffiClonePointer()
                     )
                 },
-                pollFunc: ffi_cove_rust_future_poll_u64,
-                completeFunc: ffi_cove_rust_future_complete_u64,
-                freeFunc: ffi_cove_rust_future_free_u64,
-                liftFunc: FfiConverterUInt64.lift,
+                pollFunc: ffi_cove_rust_future_poll_u32,
+                completeFunc: ffi_cove_rust_future_complete_u32,
+                freeFunc: ffi_cove_rust_future_free_u32,
+                liftFunc: FfiConverterUInt32.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
@@ -3491,30 +3491,30 @@ open class RustWalletViewModel:
             )
     }
 
-    open func numberOfConfirmations(blockHeight: UInt64) async throws -> UInt64 {
+    open func numberOfConfirmations(blockHeight: UInt32) async throws -> UInt32 {
         return
             try await uniffiRustCallAsync(
                 rustFutureFunc: {
                     uniffi_cove_fn_method_rustwalletviewmodel_number_of_confirmations(
                         self.uniffiClonePointer(),
-                        FfiConverterUInt64.lower(blockHeight)
+                        FfiConverterUInt32.lower(blockHeight)
                     )
                 },
-                pollFunc: ffi_cove_rust_future_poll_u64,
-                completeFunc: ffi_cove_rust_future_complete_u64,
-                freeFunc: ffi_cove_rust_future_free_u64,
-                liftFunc: FfiConverterUInt64.lift,
+                pollFunc: ffi_cove_rust_future_poll_u32,
+                completeFunc: ffi_cove_rust_future_complete_u32,
+                freeFunc: ffi_cove_rust_future_free_u32,
+                liftFunc: FfiConverterUInt32.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
 
-    open func numberOfConfirmationsFmt(blockHeight: UInt64) async throws -> String {
+    open func numberOfConfirmationsFmt(blockHeight: UInt32) async throws -> String {
         return
             try await uniffiRustCallAsync(
                 rustFutureFunc: {
                     uniffi_cove_fn_method_rustwalletviewmodel_number_of_confirmations_fmt(
                         self.uniffiClonePointer(),
-                        FfiConverterUInt64.lower(blockHeight)
+                        FfiConverterUInt32.lower(blockHeight)
                     )
                 },
                 pollFunc: ffi_cove_rust_future_poll_rust_buffer,
@@ -3758,9 +3758,7 @@ public protocol TransactionDetailsProtocol: AnyObject {
 
     func confirmationDateTime() -> String?
 
-    func fee() -> Amount
-
-    func feeFmt(unit: Unit) -> String
+    func feeFmt(unit: Unit) -> String?
 
     func isConfirmed() -> Bool
 
@@ -3923,14 +3921,8 @@ open class TransactionDetails:
         })
     }
 
-    open func fee() -> Amount {
-        return try! FfiConverterTypeAmount.lift(try! rustCall {
-            uniffi_cove_fn_method_transactiondetails_fee(self.uniffiClonePointer(), $0)
-        })
-    }
-
-    open func feeFmt(unit: Unit) -> String {
-        return try! FfiConverterString.lift(try! rustCall {
+    open func feeFmt(unit: Unit) -> String? {
+        return try! FfiConverterOptionString.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_fee_fmt(self.uniffiClonePointer(),
                                                              FfiConverterTypeUnit.lower(unit), $0)
         })
@@ -9102,7 +9094,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_balance() != 10059 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_current_block_height() != 24090 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_current_block_height() != 59265 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_delete_wallet() != 30016 {
@@ -9126,10 +9118,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_next_address() != 23410 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations() != 17579 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations() != 21053 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations_fmt() != 21371 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations_fmt() != 20695 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_start_wallet_scan() != 46525 {
@@ -9189,10 +9181,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 54859 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_transactiondetails_fee() != 26324 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 31278 {
+    if uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 46565 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_is_confirmed() != 54031 {

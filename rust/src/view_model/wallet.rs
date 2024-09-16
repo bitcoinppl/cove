@@ -158,12 +158,12 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub async fn current_block_height(&self) -> Result<u64, Error> {
+    pub async fn current_block_height(&self) -> Result<u32, Error> {
         let height = call!(self.actor.get_height())
             .await
             .map_err(|_| Error::GetHeightError)?;
 
-        Ok(height as u64)
+        Ok(height as u32)
     }
 
     #[uniffi::method]
@@ -177,13 +177,13 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub async fn number_of_confirmations(&self, block_height: u64) -> Result<u64, Error> {
+    pub async fn number_of_confirmations(&self, block_height: u32) -> Result<u32, Error> {
         let current_height = self.current_block_height().await?;
         Ok(current_height - block_height + 1)
     }
 
     #[uniffi::method]
-    pub async fn number_of_confirmations_fmt(&self, block_height: u64) -> Result<String, Error> {
+    pub async fn number_of_confirmations_fmt(&self, block_height: u32) -> Result<String, Error> {
         let mut f = Formatter::new()
             .separator(',')
             .unwrap()

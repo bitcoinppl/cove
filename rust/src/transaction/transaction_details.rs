@@ -29,8 +29,8 @@ pub struct TransactionDetails {
     pub tx_id: TxId,
     pub address: Address,
     pub sent_and_received: SentAndReceived,
-    pub fee: Amount,
-    pub fee_rate: FeeRate,
+    pub fee: Option<Amount>,
+    pub fee_rate: Option<FeeRate>,
     pub pending_or_confirmed: PendingOrConfirmed,
 }
 
@@ -50,15 +50,8 @@ impl TransactionDetails {
         let chain_postition = &tx.chain_position;
         let tx_details = wallet.get_tx(txid).expect("transaction").tx_node.tx;
 
-        let fee = wallet
-            .calculate_fee(&tx_details)
-            .map_err(|e| Error::FeeError(e.to_string()))?
-            .into();
-
-        let fee_rate = wallet
-            .calculate_fee_rate(&tx_details)
-            .map_err(|e| Error::FeeRateError(e.to_string()))?
-            .into();
+        let fee = wallet.calculate_fee(&tx_details).ok().map(Into::into);
+        let fee_rate = wallet.calculate_fee_rate(&tx_details).ok().map(Into::into);
 
         let address = Address::try_new(&tx_details, wallet.network().into())?;
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
@@ -80,7 +73,7 @@ impl TransactionDetails {
             return None;
         }
 
-        let fee: Amount = self.fee;
+        let fee: Amount = self.fee?;
         let sent: Amount = self.amount();
 
         let sans_fee = sent.checked_sub(fee.0)?;
@@ -171,13 +164,9 @@ mod ffi {
         }
 
         #[uniffi::method]
-        pub fn fee(&self) -> Amount {
-            self.fee
-        }
-
-        #[uniffi::method]
-        pub fn fee_fmt(&self, unit: Unit) -> String {
-            self.fee.fmt_string(unit)
+        pub fn fee_fmt(&self, unit: Unit) -> Option<String> {
+            let fee = self.fee?;
+            Some(fee.fmt_string(unit))
         }
 
         #[uniffi::method]
@@ -276,8 +265,8 @@ mod ffi_preview {
                 tx_id: TxId::preview_new(),
                 address: Address::preview_new(),
                 sent_and_received: SentAndReceived::preview_new(),
-                fee: Amount::from_sat(880303),
-                fee_rate: FeeRate::preview_new(),
+                fee: Some(Amount::from_sat(880303)),
+                fee_rate: Some(FeeRate::preview_new()),
                 pending_or_confirmed: PendingOrConfirmed::Confirmed(ConfirmedDetails {
                     block_number: 840_000,
                     confirmation_time: 1677721600,
