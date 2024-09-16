@@ -162,6 +162,12 @@ impl RustWalletViewModel {
         Ok(height as u64)
     }
 
+    #[uniffi::method]
+    pub async fn number_of_confirmations(&self, block_height: u64) -> Result<u64, Error> {
+        let current_height = self.current_block_height().await?;
+        Ok(current_height - block_height + 1)
+    }
+
     /// Get the next address for the wallet
     #[uniffi::method]
     pub async fn next_address(&self) -> Result<AddressInfo, Error> {
