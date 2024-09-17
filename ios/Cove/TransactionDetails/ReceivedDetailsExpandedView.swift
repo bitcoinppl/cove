@@ -86,8 +86,7 @@ struct ReceivedDetailsExpandedView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.white)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
