@@ -33,6 +33,10 @@
 		AC45C4A52C991F3C002C5AEB /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC45C4A42C991F3C002C5AEB /* Format.swift */; };
 		AC49121B2C77B8A100ED8ED7 /* SecretWordsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */; };
 		AC59770A2C6987BA004A0C44 /* Transaction+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5977092C6987BA004A0C44 /* Transaction+Ext.swift */; };
+		AC5F3CDB2C99E96000469EBA /* SentDetailsExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CDA2C99E96000469EBA /* SentDetailsExpandedView.swift */; };
+		AC5F3CDD2C99E99800469EBA /* HeaderIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CDC2C99E99800469EBA /* HeaderIcon.swift */; };
+		AC5F3CDF2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CDE2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift */; };
+		AC5F3CE12C99EBD600469EBA /* TransactionDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
@@ -114,6 +118,10 @@
 		AC45C4A42C991F3C002C5AEB /* Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Format.swift; sourceTree = "<group>"; };
 		AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretWordsScreen.swift; sourceTree = "<group>"; };
 		AC5977092C6987BA004A0C44 /* Transaction+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Transaction+Ext.swift"; sourceTree = "<group>"; };
+		AC5F3CDA2C99E96000469EBA /* SentDetailsExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentDetailsExpandedView.swift; sourceTree = "<group>"; };
+		AC5F3CDC2C99E99800469EBA /* HeaderIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeaderIcon.swift; sourceTree = "<group>"; };
+		AC5F3CDE2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedDetailsExpandedView.swift; sourceTree = "<group>"; };
+		AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailsView.swift; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
@@ -216,6 +224,10 @@
 			isa = PBXGroup;
 			children = (
 				AC45C4A22C991C1F002C5AEB /* ConfirmationIndicatorView.swift */,
+				AC5F3CDA2C99E96000469EBA /* SentDetailsExpandedView.swift */,
+				AC5F3CDC2C99E99800469EBA /* HeaderIcon.swift */,
+				AC5F3CDE2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift */,
+				AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */,
 			);
 			path = TransactionDetails;
 			sourceTree = "<group>";
@@ -472,6 +484,8 @@
 				AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */,
 				AC49121B2C77B8A100ED8ED7 /* SecretWordsScreen.swift in Sources */,
 				ACCB02CE2C97572100FB2EDF /* AsyncView.swift in Sources */,
+				AC5F3CDB2C99E96000469EBA /* SentDetailsExpandedView.swift in Sources */,
+				AC5F3CE12C99EBD600469EBA /* TransactionDetailsView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
 				ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */,
 				AC45C4A52C991F3C002C5AEB /* Format.swift in Sources */,
@@ -495,10 +509,12 @@
 				AC2D59252C5B213500B67277 /* TransactionsCardView.swift in Sources */,
 				4B7D31B349728B3C573472DD /* Network+Ext.swift in Sources */,
 				2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */,
+				AC5F3CDD2C99E99800469EBA /* HeaderIcon.swift in Sources */,
 				4998F4A296FA2217EC2BD80F /* WalletSettingsSheet.swift in Sources */,
 				1BE5607DDD79FE6FA8A6B6F0 /* ImportWalletViewModel.swift in Sources */,
 				AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */,
 				ACF479F82C59D785008A9362 /* WeakReconciler.swift in Sources */,
+				AC5F3CDF2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift in Sources */,
 				09890D7BB033D5000D5EFA66 /* Balance+Ext.swift in Sources */,
 				AD998F28BCDE0FFFCEF64986 /* SettingsScreen.swift in Sources */,
 				1333E89ACE42F5331C4B7AEB /* SelectedWalletScreen.swift in Sources */,

@@ -48,6 +48,6 @@ func routeToView(model: MainViewModel, route: Route) -> some View {
     case let .secretWords(id: walletId):
         SecretWordsScreen(id: walletId)
     case let .transactionDetails(id: id, details: details):
-        TransactionsDetailScreen(id: id, transactionsDetails: details)
+        TransactionsDetailScreen(id: id, transactionDetails: details)
     }
 }
