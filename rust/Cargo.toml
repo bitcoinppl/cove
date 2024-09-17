@@ -16,18 +16,17 @@ default = ["uniffi/cli"]
 
 [dependencies]
 # bdk / bitcoin
-# bdk_wallet = { version = "1.0.0-beta1", features = ["keys-bip39", "file_store"] }
-bdk_wallet = { git = "https://github.com/bitcoinppl/bdk", features = ["keys-bip39", "file_store"] }
+bdk_wallet = { version = "1.0.0-beta.4", features = ["keys-bip39", "file_store"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
-bdk_esplora = { git = "https://github.com/bitcoinppl/bdk", version = "0.16", features = ["async-https"] }
-bdk_electrum = { git = "https://github.com/bitcoinppl/bdk", version = "0.16.0", features = ["use-rustls-ring"], default-features = false }
+bdk_esplora = {  version = "0.18", features = ["async-https"] }
+bdk_electrum = { version = "0.18", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # store bdk wallet data
-bdk_file_store = {git = "https://github.com/bitcoinppl/bdk", version =  "0.14.0"}
-bdk_chain = {git = "https://github.com/bitcoinppl/bdk", version = "0.17.0"}
+bdk_file_store = { version =  "0.16.0"}
+bdk_chain = { version = "0.19.0"}
 
 bitcoin-units = "0.1"
 bitcoin_hashes = "0.14.0"

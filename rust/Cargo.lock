@@ -41,6 +41,12 @@ dependencies = [
 
 [[package]]
 name = "ahash"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0453232ace82dee0dd0b4c87a59bd90f7b53b314f3e0f61fe2ee7c8a16482289"
+
+[[package]]
+name = "ahash"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
@@ -253,30 +259,45 @@ dependencies = [
 
 [[package]]
 name = "bdk_chain"
-version = "0.17.0"
-source = "git+https://github.com/bitcoinppl/bdk#a1335417e1208ea0c1465934cc896ee8d379d342"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e553c45ffed860aa7e0c6998c3a827fcdc039a2df76307563208ecfcae2f750"
 dependencies = [
+ "bdk_core",
  "bitcoin",
  "miniscript",
  "serde",
 ]
 
 [[package]]
-name = "bdk_electrum"
-version = "0.16.0"
-source = "git+https://github.com/bitcoinppl/bdk#a1335417e1208ea0c1465934cc896ee8d379d342"
+name = "bdk_core"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c0b45300422611971b0bbe84b04d18e38e81a056a66860c9dd3434f6d0f5396"
 dependencies = [
- "bdk_chain",
+ "bitcoin",
+ "hashbrown 0.9.1",
+ "serde",
+]
+
+[[package]]
+name = "bdk_electrum"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d371f3684d55ab4fd741ac95840a9ba6e53a2654ad9edfbdb3c22f29fd48546f"
+dependencies = [
+ "bdk_core",
  "electrum-client",
 ]
 
 [[package]]
 name = "bdk_esplora"
-version = "0.16.0"
-source = "git+https://github.com/bitcoinppl/bdk#a1335417e1208ea0c1465934cc896ee8d379d342"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3cc9b320b2042e9729739eed66c6fc47b208554c8c6e393785cd56d257045e9f"
 dependencies = [
  "async-trait",
- "bdk_chain",
+ "bdk_core",
  "esplora-client",
  "futures",
  "miniscript",
@@ -284,8 +305,9 @@ dependencies = [
 
 [[package]]
 name = "bdk_file_store"
-version = "0.14.0"
-source = "git+https://github.com/bitcoinppl/bdk#a1335417e1208ea0c1465934cc896ee8d379d342"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68915bda6ad3e1dcd0ffcdf14efc455d6c64486159bbd8395e2b78aa8fb68455"
 dependencies = [
  "bdk_chain",
  "bincode",
@@ -294,8 +316,9 @@ dependencies = [
 
 [[package]]
 name = "bdk_wallet"
-version = "1.0.0-beta.1"
-source = "git+https://github.com/bitcoinppl/bdk#a1335417e1208ea0c1465934cc896ee8d379d342"
+version = "1.0.0-beta.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aeb48cd8e0a15d0bf7351fc8c30e44c474be01f4f98eb29f20ab59b645bd29c"
 dependencies = [
  "bdk_chain",
  "bdk_file_store",
@@ -491,9 +514,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.19"
+version = "1.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d74707dde2ba56f86ae90effb3b43ddd369504387e718014de010cec7959800"
+checksum = "45bcde016d64c21da4be18b655631e5ab6d3107607e71a73a9f53eb48aae23fb"
 dependencies = [
  "shlex",
 ]
@@ -606,7 +629,7 @@ name = "cove"
 version = "0.1.0"
 dependencies = [
  "act-zero",
- "ahash",
+ "ahash 0.8.11",
  "async-trait",
  "bdk_chain",
  "bdk_electrum",
@@ -832,8 +855,9 @@ checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 
 [[package]]
 name = "electrum-client"
-version = "0.20.0"
-source = "git+https://github.com/bitcoinppl/rust-electrum-client/#e3314aa5720653f110b579fe80085cc52e611189"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a0bd443023f9f5c4b7153053721939accc7113cbdf810a024434eed454b3db1"
 dependencies = [
  "bitcoin",
  "byteorder",
@@ -873,9 +897,9 @@ dependencies = [
 
 [[package]]
 name = "esplora-client"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69c6d27ef4ff21019edd98aa92199757e10a88065bbfcef6bb750ca6ec5e4a45"
+checksum = "9b546e91283ebfc56337de34e0cf814e3ad98083afde593b8e58495ee5355d0e"
 dependencies = [
  "bitcoin",
  "hex-conservative",
@@ -1119,6 +1143,16 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
+dependencies = [
+ "ahash 0.4.8",
+ "serde",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
@@ -1357,7 +1391,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68b900aa2f7301e21c36462b170ee99994de34dff39a4a6a528e80e7376d07e5"
 dependencies = [
  "equivalent",
- "hashbrown",
+ "hashbrown 0.14.5",
 ]
 
 [[package]]
@@ -1655,9 +1689,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.20.0"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ea5043e58958ee56f3e15a90aee535795cd7dfd319846288d93c5b57d85cbe"
+checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "opaque-debug"
