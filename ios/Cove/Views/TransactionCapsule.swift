@@ -31,6 +31,12 @@ struct TransactionCapsule: View {
             .fill(capsuleColor)
             .frame(width: 130, height: 30)
             .overlay(
+                Group {
+                    if capsuleColor == .black {
+                        Capsule().stroke(Color.white, lineWidth: 1)
+                    }
+                }
+            ).overlay(
                 HStack {
                     Image(systemName: icon)
                         .font(.system(size: 12))
