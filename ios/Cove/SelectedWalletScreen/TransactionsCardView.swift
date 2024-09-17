@@ -123,14 +123,15 @@ struct ConfirmedTransactionView: View {
                     .foregroundColor(.secondary)
             }
         }.onTapGesture {
-            if let details = self.transactionDetails {
-                navigate(Route.transactionDetails(id: metadata.id, details: details))
-            }
-        }
-        .task {
-            do {
-                let transactionDetails = try? await model.rust.transactionDetails(txId: txn.id())
-                self.transactionDetails = transactionDetails
+            Task {
+                do {
+                    let details = try await model.rust.transactionDetails(txId: txn.id())
+                    await MainActor.run {
+                        navigate(Route.transactionDetails(id: metadata.id, details: details))
+                    }
+                } catch {
+                    Log.error("Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())")
+                }
             }
         }
     }

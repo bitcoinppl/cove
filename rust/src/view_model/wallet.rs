@@ -169,9 +169,15 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn transaction_details(&self, tx_id: Arc<TxId>) -> Result<TransactionDetails, Error> {
         let tx_id = Arc::unwrap_or_clone(tx_id);
-        let details = call!(self.actor.transaction_details(tx_id))
-            .await
-            .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
+
+        let actor = self.actor.clone();
+        let details = task::spawn(async move {
+            call!(actor.transaction_details(tx_id))
+                .await
+                .map_err(|error| Error::TransactionDetailsError(error.to_string()))
+        })
+        .await
+        .unwrap()?;
 
         Ok(details)
     }
