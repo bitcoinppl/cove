@@ -360,25 +360,42 @@ struct TransactionDetailsView: View {
 
                 Divider().padding(.vertical, 18)
 
-                HStack {
+                HStack(alignment: .top) {
                     Text("Network Fee")
                     Image(systemName: "info.circle")
                         .font(.footnote)
                         .fontWeight(/*@START_MENU_TOKEN@*/ .bold/*@END_MENU_TOKEN@*/)
                         .foregroundStyle(.tertiary.opacity(0.8))
                     Spacer()
-                    Text(transactionsDetails.feeFmt(unit: metadata.selectedUnit) ?? "")
+
+                    VStack(alignment: .trailing) {
+                        Text(transactionsDetails.feeFmt(unit: metadata.selectedUnit) ?? "")
+                        AsyncView(operation: transactionsDetails.feeFiatFmt) { amount in
+                            Text("≈ $\(amount) USD").foregroundStyle(.secondary)
+                                .font(.caption)
+                                .padding(.top, 2)
+                        }
+                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-                HStack {
+                HStack(alignment: .top) {
                     Text("Receipient Receives")
                     Spacer()
-                    Text(transactionsDetails.sentSansFeeFmt(unit: metadata.selectedUnit) ?? "")
+
+                    VStack(alignment: .trailing) {
+                        Text(transactionsDetails.sentSansFeeFmt(unit: metadata.selectedUnit) ?? "")
+                        AsyncView(operation: transactionsDetails.sentSansFeeFiatFmt) { amount in
+                            Text("≈ $\(amount) USD").foregroundStyle(.secondary)
+                                .font(.caption)
+                                .padding(.top, 2)
+                        }
+                    }
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .padding(.top, 12)
 
                 Divider().padding(.vertical, 18)
 

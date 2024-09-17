@@ -119,6 +119,7 @@ mod ffi {
 
     use crate::{
         fiat::client::FIAT_CLIENT,
+        format::NumberFormatter as _,
         task,
         transaction::{TransactionDirection, Unit},
     };
@@ -152,13 +153,8 @@ mod ffi {
 
         #[uniffi::method]
         pub async fn amount_fiat_fmt(&self) -> Result<String, Error> {
-            let mut f = Formatter::new()
-                .separator(',')
-                .unwrap()
-                .precision(Precision::Decimals(2));
-
             let amount = self.amount_fiat().await?;
-            let fmt = f.fmt2(amount);
+            let fmt = amount.thousands_fiat();
 
             Ok(fmt.to_string())
         }
@@ -167,6 +163,21 @@ mod ffi {
         pub fn fee_fmt(&self, unit: Unit) -> Option<String> {
             let fee = self.fee?;
             Some(fee.fmt_string(unit))
+        }
+
+        #[uniffi::method]
+        pub async fn fee_fiat_fmt(&self) -> Result<String, Error> {
+            let fee = self.fee.ok_or(Error::FeeError("No fee".to_string()))?;
+            let fiat = task::spawn(async move {
+                FIAT_CLIENT
+                    .value_in_usd(fee)
+                    .await
+                    .map_err(|e| Error::FiatAmountError(e.to_string()))
+            })
+            .await
+            .unwrap()?;
+
+            Ok(fiat.thousands_fiat())
         }
 
         #[uniffi::method]
@@ -188,6 +199,24 @@ mod ffi {
         pub fn sent_sans_fee_fmt(&self, unit: Unit) -> Option<String> {
             let amount = self.sent_sans_fee()?;
             Some(amount.fmt_string(unit))
+        }
+
+        #[uniffi::method]
+        pub async fn sent_sans_fee_fiat_fmt(&self) -> Result<String, Error> {
+            let amount = self
+                .sent_sans_fee()
+                .ok_or(Error::FeeError("No fee".to_string()))?;
+
+            let fiat = task::spawn(async move {
+                FIAT_CLIENT
+                    .value_in_usd(amount)
+                    .await
+                    .map_err(|e| Error::FiatAmountError(e.to_string()))
+            })
+            .await
+            .unwrap()?;
+
+            Ok(fiat.thousands_fiat())
         }
 
         #[uniffi::method]

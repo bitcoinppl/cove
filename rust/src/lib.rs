@@ -11,6 +11,7 @@ pub mod color_scheme;
 pub mod consts;
 pub mod encryption;
 pub mod fiat;
+pub mod format;
 pub mod keychain;
 pub mod keys;
 pub mod mnemonic;

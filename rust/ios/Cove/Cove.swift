@@ -422,19 +422,6 @@ private struct FfiConverterUInt32: FfiConverterPrimitive {
     }
 }
 
-private struct FfiConverterInt32: FfiConverterPrimitive {
-    typealias FfiType = Int32
-    typealias SwiftType = Int32
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int32 {
-        return try lift(readInt(&buf))
-    }
-
-    public static func write(_ value: Int32, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
 private struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -3771,6 +3758,8 @@ public protocol TransactionDetailsProtocol: AnyObject {
 
     func confirmationDateTime() -> String?
 
+    func feeFiatFmt() async throws -> String
+
     func feeFmt(unit: Unit) -> String?
 
     func isConfirmed() -> Bool
@@ -3778,6 +3767,8 @@ public protocol TransactionDetailsProtocol: AnyObject {
     func isReceived() -> Bool
 
     func isSent() -> Bool
+
+    func sentSansFeeFiatFmt() async throws -> String
 
     func sentSansFeeFmt(unit: Unit) -> String?
 
@@ -3934,6 +3925,22 @@ open class TransactionDetails:
         })
     }
 
+    open func feeFiatFmt() async throws -> String {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+                completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+                freeFunc: ffi_cove_rust_future_free_rust_buffer,
+                liftFunc: FfiConverterString.lift,
+                errorHandler: FfiConverterTypeTransactionDetailError.lift
+            )
+    }
+
     open func feeFmt(unit: Unit) -> String? {
         return try! FfiConverterOptionString.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_fee_fmt(self.uniffiClonePointer(),
@@ -3957,6 +3964,22 @@ open class TransactionDetails:
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_transactiondetails_is_sent(self.uniffiClonePointer(), $0)
         })
+    }
+
+    open func sentSansFeeFiatFmt() async throws -> String {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+                completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+                freeFunc: ffi_cove_rust_future_free_rust_buffer,
+                liftFunc: FfiConverterString.lift,
+                errorHandler: FfiConverterTypeTransactionDetailError.lift
+            )
     }
 
     open func sentSansFeeFmt(unit: Unit) -> String? {
@@ -8759,38 +8782,6 @@ public func numberOfWordsToWordCount(me: NumberOfBip39Words) -> UInt8 {
     })
 }
 
-public func thousandsIntFmtIntLarge(number: Int32) -> String {
-    return try! FfiConverterString.lift(try! rustCall {
-        uniffi_cove_fn_func_thousands_int_fmt_int_large(
-            FfiConverterInt32.lower(number), $0
-        )
-    })
-}
-
-public func thousandsIntFmtIntSmall(number: Int32) -> String {
-    return try! FfiConverterString.lift(try! rustCall {
-        uniffi_cove_fn_func_thousands_int_fmt_int_small(
-            FfiConverterInt32.lower(number), $0
-        )
-    })
-}
-
-public func thousandsIntFmtLarge(number: UInt64) -> String {
-    return try! FfiConverterString.lift(try! rustCall {
-        uniffi_cove_fn_func_thousands_int_fmt_large(
-            FfiConverterUInt64.lower(number), $0
-        )
-    })
-}
-
-public func thousandsIntFmtSmall(number: UInt32) -> String {
-    return try! FfiConverterString.lift(try! rustCall {
-        uniffi_cove_fn_func_thousands_int_fmt_small(
-            FfiConverterUInt32.lower(number), $0
-        )
-    })
-}
-
 public func transactionPreviewConfirmedNew() -> Transaction {
     return try! FfiConverterTypeTransaction.lift(try! rustCall {
         uniffi_cove_fn_func_transaction_preview_confirmed_new($0
@@ -8888,18 +8879,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_number_of_words_to_word_count() != 24846 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_func_thousands_int_fmt_int_large() != 34625 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_func_thousands_int_fmt_int_small() != 28601 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_func_thousands_int_fmt_large() != 18668 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_func_thousands_int_fmt_small() != 56816 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 43706 {
@@ -9238,6 +9217,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 54859 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 62198 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 46565 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9248,6 +9230,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_is_sent() != 7556 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt() != 62275 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 54855 {
