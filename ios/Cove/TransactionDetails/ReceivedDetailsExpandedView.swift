@@ -20,11 +20,11 @@ struct ReceivedDetailsExpandedView: View {
         Text(header)
             .font(.caption)
             .foregroundColor(.gray)
-            .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+            .multilineTextAlignment(.leading)
 
         Text(content)
             .fontWeight(.semibold)
-            .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+            .multilineTextAlignment(.leading)
             .padding(.bottom, 14)
     }
 
@@ -36,13 +36,13 @@ struct ReceivedDetailsExpandedView: View {
                 Text("Confirmations")
                     .font(.caption)
                     .foregroundColor(.gray)
-                    .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                    .multilineTextAlignment(.leading)
 
                 Group {
                     if let numberOfConfirmations = self.numberOfConfirmations {
                         Text(ThousandsFormatter(numberOfConfirmations).fmt())
                             .fontWeight(.semibold)
-                            .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                            .multilineTextAlignment(.leading)
                     } else {
                         ProgressView()
                     }
@@ -55,12 +55,12 @@ struct ReceivedDetailsExpandedView: View {
             Text("Received At")
                 .font(.caption)
                 .foregroundColor(.gray)
-                .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                .multilineTextAlignment(.leading)
 
             HStack {
                 Text(transactionDetails.addressSpacedOut())
                     .fontWeight(.semibold)
-                    .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                    .multilineTextAlignment(.leading)
                     .padding(.bottom, 14)
 
                 Spacer()

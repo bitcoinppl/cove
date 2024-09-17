@@ -23,11 +23,11 @@ struct SentDetailsExpandedView: View {
                 Text("Sent to")
                     .font(.footnote)
                     .foregroundColor(.secondary)
-                    .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                    .multilineTextAlignment(.leading)
 
                 Text(transactionDetails.addressSpacedOut())
                     .fontWeight(.semibold)
-                    .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                    .multilineTextAlignment(.leading)
                     .textSelection(.enabled)
 
                 if transactionDetails.isConfirmed() {
@@ -64,7 +64,7 @@ struct SentDetailsExpandedView: View {
                 Text("Network Fee")
                 Image(systemName: "info.circle")
                     .font(.footnote)
-                    .fontWeight(/*@START_MENU_TOKEN@*/ .bold/*@END_MENU_TOKEN@*/)
+                    .fontWeight(.bold)
                     .foregroundStyle(.tertiary.opacity(0.8))
                 Spacer()
 
