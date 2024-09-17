@@ -57,6 +57,37 @@ extension WalletColor {
     }
 }
 
+extension FfiColor {
+    func toColor() -> Color {
+        switch self {
+        case .red:
+            return .red
+        case .blue:
+            return .blue
+        case .green:
+            return .green
+        case .yellow:
+            return .yellow
+        case .orange:
+            return .orange
+        case .purple:
+            return .purple
+        case .pink:
+            return .pink
+        case .white:
+            return .white
+        case .black:
+            return .black
+        case .gray:
+            return .gray
+        case .coolGray:
+            return .coolGray
+        case let .custom(r, g, b):
+            return customToColor(r: r, g: g, b: b)
+        }
+    }
+}
+
 extension Color {
     func toWalletColor() -> WalletColor {
         switch self {

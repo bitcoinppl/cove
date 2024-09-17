@@ -1,6 +1,12 @@
 use std::fmt::Display;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, strum::EnumIter)]
+pub enum FfiColorScheme {
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, strum::EnumIter)]
 pub enum ColorSchemeSelection {
     Light,
     Dark,

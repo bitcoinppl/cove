@@ -17,6 +17,10 @@ extension Color {
         self = color.toColor()
     }
 
+    init(_ color: FfiColor) {
+        self = color.toColor()
+    }
+
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0

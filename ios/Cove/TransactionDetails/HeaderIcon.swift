@@ -7,16 +7,6 @@
 
 import SwiftUI
 
-enum TxnState {
-    case pending
-    case confirmed
-}
-
-enum TxnDirection {
-    case sent
-    case received
-}
-
 struct HeaderIcon: View {
     @Environment(\.colorScheme) var _colorScheme
 
@@ -26,8 +16,9 @@ struct HeaderIcon: View {
     var numberOfConfirmations: Int? = nil
 
     // private
+    private let presenter = HeaderIconPresenter()
     private let screenWidth = UIScreen.main.bounds.width
-    private var txnState: TxnState {
+    private var txnState: TransactionState {
         if isConfirmed {
             .confirmed
         } else {
@@ -35,9 +26,9 @@ struct HeaderIcon: View {
         }
     }
 
-    private var confirmationCount: Int {
+    private var confirmationCount: Int32 {
         if let numberOfConfirmations = numberOfConfirmations {
-            return numberOfConfirmations
+            return Int32(numberOfConfirmations)
         }
 
         if isConfirmed {
@@ -47,15 +38,15 @@ struct HeaderIcon: View {
         }
     }
 
-    private var direction: TxnDirection {
+    private var direction: TransactionDirection {
         if isSent {
-            .sent
+            .outgoing
         } else {
-            .received
+            .incoming
         }
     }
 
-    private var colorScheme: FrozenColorScheme {
+    private var colorScheme: FfiColorScheme {
         .init(_colorScheme)
     }
 
@@ -82,17 +73,17 @@ struct HeaderIcon: View {
             return .black
         case (.pending, _, .light, _):
             return .coolGray
-        case (.confirmed, .received, .light, 1):
+        case (.confirmed, .incoming, .light, 1):
             return .green.opacity(0.33)
-        case (.confirmed, .received, .light, 2):
+        case (.confirmed, .incoming, .light, 2):
             return .green.opacity(0.55)
-        case (.confirmed, .received, .light, _):
+        case (.confirmed, .incoming, .light, _):
             return .green
-        case (.confirmed, .sent, .light, 1):
+        case (.confirmed, .outgoing, .light, 1):
             return .black.opacity(0.33)
-        case (.confirmed, .sent, .light, 2):
+        case (.confirmed, .outgoing, .light, 2):
             return .black.opacity(0.55)
-        case (.confirmed, .sent, .light, _):
+        case (.confirmed, .outgoing, .light, _):
             return .black
         case (.confirmed, _, .dark, _):
             return .black
@@ -101,19 +92,19 @@ struct HeaderIcon: View {
 
     private var iconColor: Color {
         switch (txnState, direction, colorScheme, confirmationCount) {
-        case (.confirmed, .received, .dark, 1):
+        case (.confirmed, .incoming, .dark, 1):
             return .green.opacity(0.5)
-        case (.confirmed, .received, .dark, 2):
+        case (.confirmed, .incoming, .dark, 2):
             return .green.opacity(0.8)
-        case (.confirmed, .received, .dark, _):
+        case (.confirmed, .incoming, .dark, _):
             return .green
-        case (.confirmed, .received, .light, _):
+        case (.confirmed, .incoming, .light, _):
             return .white
-        case (.confirmed, .sent, _, 1):
+        case (.confirmed, .outgoing, _, 1):
             return .white.opacity(0.5)
-        case (.confirmed, .sent, _, 2):
+        case (.confirmed, .outgoing, _, 2):
             return .white.opacity(0.8)
-        case (.confirmed, .sent, _, _):
+        case (.confirmed, .outgoing, _, _):
             return .white
         case (.pending, _, .light, _):
             return .black.opacity(0.5)
@@ -122,33 +113,13 @@ struct HeaderIcon: View {
         }
     }
 
-    private func ringColor(_ number: Int) -> Color {
-        switch (txnState, direction, colorScheme, confirmationCount, number) {
-        case (.pending, _, .dark, _, _):
-            return .white
-        case (.pending, _, .light, _, _):
-            return .coolGray
-        case (.confirmed, .sent, .dark, _, _):
-            return .white
-        case (.confirmed, .sent, .light, _, _):
-            return .black
-        case (.confirmed, .received, .dark, _, 3):
-            return .green
-        case let (.confirmed, .received, .dark, confirmations, 3):
-            return confirmations > 0 ? .green : .white
-        case let (.confirmed, .received, .dark, confirmations, 2):
-            return confirmations > 1 ? .green : .white
-        case let (.confirmed, .received, .dark, confirmations, 1):
-            return confirmations > 2 ? .green : .white
-        case let (.confirmed, .received, .light, confirmations, 3):
-            return confirmations > 0 ? .green : .gray
-        case let (.confirmed, .received, .light, confirmations, 2):
-            return confirmations > 1 ? .green : .gray
-        case let (.confirmed, .received, .light, confirmations, 1):
-            return confirmations > 2 ? .green : .gray
-        case (.confirmed, .received, _, _, _):
-            return .green
-        }
+    private func ringColor(_ ringNumber: Int) -> Color {
+        presenter.ringColor(state: txnState,
+                            colorScheme: colorScheme,
+                            direction: direction,
+                            confirmations: confirmationCount,
+                            ringNumber: Int32(ringNumber))
+            .toColor()
     }
 
     var body: some View {
@@ -187,7 +158,7 @@ struct HeaderIcon: View {
     }
 }
 
-#Preview("received_confirmed") {
+#Preview("incoming_confirmed") {
     VStack(spacing: 30) {
         HeaderIcon(isSent: false, isConfirmed: true, numberOfConfirmations: 1)
         HeaderIcon(isSent: false, isConfirmed: true, numberOfConfirmations: 2)

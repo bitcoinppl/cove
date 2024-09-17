@@ -422,6 +422,19 @@ private struct FfiConverterUInt32: FfiConverterPrimitive {
     }
 }
 
+private struct FfiConverterInt32: FfiConverterPrimitive {
+    typealias FfiType = Int32
+    typealias SwiftType = Int32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int32, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
 private struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -2353,6 +2366,107 @@ public func FfiConverterTypeGlobalFlagTable_lift(_ pointer: UnsafeMutableRawPoin
 
 public func FfiConverterTypeGlobalFlagTable_lower(_ value: GlobalFlagTable) -> UnsafeMutableRawPointer {
     return FfiConverterTypeGlobalFlagTable.lower(value)
+}
+
+public protocol HeaderIconPresenterProtocol: AnyObject {
+    func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int32, ringNumber: Int32) -> FfiColor
+}
+
+open class HeaderIconPresenter:
+    HeaderIconPresenterProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_headericonpresenter(self.pointer, $0) }
+    }
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_headericonpresenter_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_headericonpresenter(pointer, $0) }
+    }
+
+    open func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int32, ringNumber: Int32) -> FfiColor {
+        return try! FfiConverterTypeFfiColor.lift(try! rustCall {
+            uniffi_cove_fn_method_headericonpresenter_ring_color(self.uniffiClonePointer(),
+                                                                 FfiConverterTypeTransactionState.lower(state),
+                                                                 FfiConverterTypeFfiColorScheme.lower(colorScheme),
+                                                                 FfiConverterTypeTransactionDirection.lower(direction),
+                                                                 FfiConverterInt32.lower(confirmations),
+                                                                 FfiConverterInt32.lower(ringNumber), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeHeaderIconPresenter: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = HeaderIconPresenter
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> HeaderIconPresenter {
+        return HeaderIconPresenter(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: HeaderIconPresenter) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HeaderIconPresenter {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: HeaderIconPresenter, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeHeaderIconPresenter_lift(_ pointer: UnsafeMutableRawPointer) throws -> HeaderIconPresenter {
+    return try FfiConverterTypeHeaderIconPresenter.lift(pointer)
+}
+
+public func FfiConverterTypeHeaderIconPresenter_lower(_ value: HeaderIconPresenter) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeHeaderIconPresenter.lower(value)
 }
 
 public protocol KeychainProtocol: AnyObject {}
@@ -5824,6 +5938,155 @@ extension DatabaseError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum FfiColor {
+    case red
+    case blue
+    case green
+    case yellow
+    case orange
+    case purple
+    case pink
+    case white
+    case black
+    case gray
+    case coolGray
+    case custom(UInt8, UInt8, UInt8)
+}
+
+public struct FfiConverterTypeFfiColor: FfiConverterRustBuffer {
+    typealias SwiftType = FfiColor
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiColor {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .red
+
+        case 2: return .blue
+
+        case 3: return .green
+
+        case 4: return .yellow
+
+        case 5: return .orange
+
+        case 6: return .purple
+
+        case 7: return .pink
+
+        case 8: return .white
+
+        case 9: return .black
+
+        case 10: return .gray
+
+        case 11: return .coolGray
+
+        case 12: return try .custom(FfiConverterUInt8.read(from: &buf), FfiConverterUInt8.read(from: &buf), FfiConverterUInt8.read(from: &buf))
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiColor, into buf: inout [UInt8]) {
+        switch value {
+        case .red:
+            writeInt(&buf, Int32(1))
+
+        case .blue:
+            writeInt(&buf, Int32(2))
+
+        case .green:
+            writeInt(&buf, Int32(3))
+
+        case .yellow:
+            writeInt(&buf, Int32(4))
+
+        case .orange:
+            writeInt(&buf, Int32(5))
+
+        case .purple:
+            writeInt(&buf, Int32(6))
+
+        case .pink:
+            writeInt(&buf, Int32(7))
+
+        case .white:
+            writeInt(&buf, Int32(8))
+
+        case .black:
+            writeInt(&buf, Int32(9))
+
+        case .gray:
+            writeInt(&buf, Int32(10))
+
+        case .coolGray:
+            writeInt(&buf, Int32(11))
+
+        case let .custom(v1, v2, v3):
+            writeInt(&buf, Int32(12))
+            FfiConverterUInt8.write(v1, into: &buf)
+            FfiConverterUInt8.write(v2, into: &buf)
+            FfiConverterUInt8.write(v3, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeFfiColor_lift(_ buf: RustBuffer) throws -> FfiColor {
+    return try FfiConverterTypeFfiColor.lift(buf)
+}
+
+public func FfiConverterTypeFfiColor_lower(_ value: FfiColor) -> RustBuffer {
+    return FfiConverterTypeFfiColor.lower(value)
+}
+
+extension FfiColor: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FfiColorScheme {
+    case light
+    case dark
+}
+
+public struct FfiConverterTypeFfiColorScheme: FfiConverterRustBuffer {
+    typealias SwiftType = FfiColorScheme
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiColorScheme {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .light
+
+        case 2: return .dark
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiColorScheme, into buf: inout [UInt8]) {
+        switch value {
+        case .light:
+            writeInt(&buf, Int32(1))
+
+        case .dark:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeFfiColorScheme_lift(_ buf: RustBuffer) throws -> FfiColorScheme {
+    return try FfiConverterTypeFfiColorScheme.lift(buf)
+}
+
+public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> RustBuffer {
+    return FfiConverterTypeFfiColorScheme.lower(value)
+}
+
+extension FfiColorScheme: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum FiatCurrency {
     case usd
     case eur
@@ -7140,6 +7403,49 @@ public func FfiConverterTypeTransactionDirection_lower(_ value: TransactionDirec
 }
 
 extension TransactionDirection: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TransactionState {
+    case pending
+    case confirmed
+}
+
+public struct FfiConverterTypeTransactionState: FfiConverterRustBuffer {
+    typealias SwiftType = TransactionState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .pending
+
+        case 2: return .confirmed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransactionState, into buf: inout [UInt8]) {
+        switch value {
+        case .pending:
+            writeInt(&buf, Int32(1))
+
+        case .confirmed:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeTransactionState_lift(_ buf: RustBuffer) throws -> TransactionState {
+    return try FfiConverterTypeTransactionState.lift(buf)
+}
+
+public func FfiConverterTypeTransactionState_lower(_ value: TransactionState) -> RustBuffer {
+    return FfiConverterTypeTransactionState.lower(value)
+}
+
+extension TransactionState: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -9055,6 +9361,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_headericonpresenter_ring_color() != 23010 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_mnemonic_all_words() != 45039 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9308,6 +9617,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_fingerprint_new() != 20831 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_headericonpresenter_new() != 10425 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_keychain_new() != 34449 {

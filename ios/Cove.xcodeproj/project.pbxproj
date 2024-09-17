@@ -38,6 +38,7 @@
 		AC5F3CDF2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CDE2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift */; };
 		AC5F3CE12C99EBD600469EBA /* TransactionDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */; };
 		AC5F3CE32C99F5A300469EBA /* FrozenColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE22C99F5A300469EBA /* FrozenColorScheme.swift */; };
+		AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
@@ -124,6 +125,7 @@
 		AC5F3CDE2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedDetailsExpandedView.swift; sourceTree = "<group>"; };
 		AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailsView.swift; sourceTree = "<group>"; };
 		AC5F3CE22C99F5A300469EBA /* FrozenColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrozenColorScheme.swift; sourceTree = "<group>"; };
+		AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiColorScheme.swift; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
@@ -319,6 +321,7 @@
 			children = (
 				ACF479F72C59D785008A9362 /* WeakReconciler.swift */,
 				AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */,
+				AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */,
 			);
 			path = FFI;
 			sourceTree = "<group>";
@@ -502,6 +505,7 @@
 				382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */,
 				ACCB02CC2C9747AA00FB2EDF /* TransactionCapsule.swift in Sources */,
 				AC45C4A32C991C1F002C5AEB /* ConfirmationIndicatorView.swift in Sources */,
+				AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */,
 				6B2189B893A545A2F4E3107E /* WalletColor+Ext.swift in Sources */,
 				AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */,
 				0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */,

@@ -32,6 +32,12 @@ pub enum TransactionDirection {
     Outgoing,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum TransactionState {
+    Pending,
+    Confirmed,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub enum ChainPosition {
     Unconfirmed(u64),
