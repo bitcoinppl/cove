@@ -10,6 +10,7 @@ import SwiftUI
 struct AsyncView<Success, Content: View>: View {
     let operation: () async throws -> Success
     let content: (Success) -> Content
+    let errorView: some View = Text("")
 
     @State private var result: Result<Success, Error>?
 
@@ -21,7 +22,7 @@ struct AsyncView<Success, Content: View>: View {
             case .success(let value):
                 content(value)
             case .failure(let error):
-                Text("Error: \(error.localizedDescription)")
+                errorView
             }
         }
         .task {
@@ -29,6 +30,7 @@ struct AsyncView<Success, Content: View>: View {
                 let value = try await operation()
                 result = .success(value)
             } catch {
+                Log.error("Error loading async view :\(error)")
                 result = .failure(error)
             }
         }
