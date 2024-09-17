@@ -27,18 +27,20 @@ struct ConfirmationIndicatorView: View {
                 }
             }
         }
-        .padding()
     }
 }
 
 #Preview("0") {
     ConfirmationIndicatorView(current: 0)
+        .padding()
 }
 
 #Preview("1") {
     ConfirmationIndicatorView(current: 1)
+        .padding()
 }
 
 #Preview("2") {
     ConfirmationIndicatorView(current: 2)
+        .padding()
 }

@@ -30,6 +30,7 @@
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
 		AC2D59252C5B213500B67277 /* TransactionsCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2D59242C5B213500B67277 /* TransactionsCardView.swift */; };
 		AC45C4A32C991C1F002C5AEB /* ConfirmationIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC45C4A22C991C1F002C5AEB /* ConfirmationIndicatorView.swift */; };
+		AC45C4A52C991F3C002C5AEB /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC45C4A42C991F3C002C5AEB /* Format.swift */; };
 		AC49121B2C77B8A100ED8ED7 /* SecretWordsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */; };
 		AC59770A2C6987BA004A0C44 /* Transaction+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5977092C6987BA004A0C44 /* Transaction+Ext.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
@@ -110,6 +111,7 @@
 		AC2D59242C5B213500B67277 /* TransactionsCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsCardView.swift; sourceTree = "<group>"; };
 		AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
 		AC45C4A22C991C1F002C5AEB /* ConfirmationIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmationIndicatorView.swift; sourceTree = "<group>"; };
+		AC45C4A42C991F3C002C5AEB /* Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Format.swift; sourceTree = "<group>"; };
 		AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretWordsScreen.swift; sourceTree = "<group>"; };
 		AC5977092C6987BA004A0C44 /* Transaction+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Transaction+Ext.swift"; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
@@ -352,6 +354,7 @@
 				80049549984BDDA80E72D91C /* WalletSettingsSheet.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
 				D0245F552C0F7B500042B447 /* Preview Content */,
+				AC45C4A42C991F3C002C5AEB /* Format.swift */,
 			);
 			indentWidth = 4;
 			path = Cove;
@@ -471,6 +474,7 @@
 				ACCB02CE2C97572100FB2EDF /* AsyncView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
 				ACF44D0D2C26131A008C5034 /* Color+Ext.swift in Sources */,
+				AC45C4A52C991F3C002C5AEB /* Format.swift in Sources */,
 				ACCAAAAD2C29CABC00FA642E /* Trait+Ext.swift in Sources */,
 				ACC1CD602C6D4F2C00C7AD89 /* MiddlePopup.swift in Sources */,
 				AC59770A2C6987BA004A0C44 /* Transaction+Ext.swift in Sources */,

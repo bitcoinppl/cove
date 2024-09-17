@@ -54,7 +54,7 @@ struct TransactionDetailsView: View {
 
     // state
     @State private var isCopied = false
-    @State private var numberOfConfirmations: String? = nil
+    @State private var numberOfConfirmations: Int? = nil
 
     // public
     let id: WalletId
@@ -157,12 +157,20 @@ struct TransactionDetailsView: View {
         }
         .padding(.top, 12)
 
+        // confirmations pills
+        if let confirmations = numberOfConfirmations, confirmations < 3 {
+            VStack {
+                Divider().padding(.vertical, 18)
+                ConfirmationIndicatorView(current: confirmations)
+            }
+            .padding(.horizontal, detailsExpandedPadding)
+        }
+
         // MARK: Received Details Expanded
 
         if metadata.detailsExpanded {
             VStack(alignment: .leading) {
-                Divider()
-                    .padding(.vertical, 18)
+                Divider().padding(.vertical, 18)
 
                 if transactionsDetails.isConfirmed() {
                     Text("Confirmations")
@@ -171,7 +179,7 @@ struct TransactionDetailsView: View {
                         .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
 
                     if let numberOfConfirmations = self.numberOfConfirmations {
-                        Text(numberOfConfirmations)
+                        Text(ThousandsFormatter(numberOfConfirmations).fmt())
                             .fontWeight(.semibold)
                             .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
                             .padding(.bottom, 14)
@@ -232,7 +240,9 @@ struct TransactionDetailsView: View {
             .task {
                 do {
                     if let blockNumber = transactionsDetails.blockNumber() {
-                        numberOfConfirmations = try? await model.rust.numberOfConfirmationsFmt(blockHeight: blockNumber)
+                        let numberOfConfirmations = try? await model.rust.numberOfConfirmations(blockHeight: blockNumber)
+                        guard numberOfConfirmations != nil else { return }
+                        self.numberOfConfirmations = Int(numberOfConfirmations!)
                     }
                 }
             }
@@ -294,6 +304,14 @@ struct TransactionDetailsView: View {
             }
         }
         .padding(.top, 12)
+
+        if let confirmations = numberOfConfirmations, confirmations < 3 {
+            VStack {
+                Divider().padding(.vertical, 18)
+                ConfirmationIndicatorView(current: confirmations)
+            }
+            .padding(.horizontal, detailsExpandedPadding)
+        }
 
         // MARK: Details Expanded
 
