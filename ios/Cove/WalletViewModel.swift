@@ -60,7 +60,9 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
                     }
 
                 case let .walletMetadataChanged(metadata):
-                    self.walletMetadata = metadata
+                    withAnimation {
+                        self.walletMetadata = metadata
+                    }
 
                 case let .nodeConnectionFailed(error):
                     self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)

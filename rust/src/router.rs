@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     app::FfiApp, database::Database, impl_default_for, mnemonic::NumberOfBip39Words,
-    wallet::metadata::WalletId,
+    transaction::TransactionDetails, wallet::metadata::WalletId,
 };
 
 use derive_more::From;
@@ -14,6 +14,10 @@ pub enum Route {
     NewWallet(NewWalletRoute),
     Settings,
     SecretWords(WalletId),
+    TransactionDetails {
+        id: WalletId,
+        details: Arc<TransactionDetails>,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -78,6 +82,8 @@ impl Router {
 }
 
 mod ffi {
+    use std::hash::{Hash as _, Hasher as _};
+
     use super::*;
 
     #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
@@ -122,5 +128,17 @@ mod ffi {
         pub fn secret_words(&self, wallet_id: WalletId) -> Route {
             Route::SecretWords(wallet_id)
         }
+    }
+
+    #[uniffi::export]
+    fn is_route_equal(route: Route, route_to_check: Route) -> bool {
+        route == route_to_check
+    }
+
+    #[uniffi::export]
+    fn hash_route(route: Route) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        route.hash(&mut hasher);
+        hasher.finish()
     }
 }

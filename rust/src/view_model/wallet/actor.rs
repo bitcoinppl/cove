@@ -1,7 +1,7 @@
 use crate::{
     database::Database,
     node::client::NodeClient,
-    transaction::Transaction,
+    transaction::{Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
     wallet::{balance::Balance, AddressInfo, Wallet},
 };
@@ -20,7 +20,9 @@ pub struct WalletActor {
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
+
     pub last_scan_finished: Option<Instant>,
+    pub last_height_fetched: Option<(Instant, usize)>,
 
     pub state: ActorState,
 }
@@ -74,6 +76,7 @@ impl WalletActor {
             wallet,
             node_client: None,
             last_scan_finished: None,
+            last_height_fetched: None,
             state: ActorState::Initial,
         }
     }
@@ -199,6 +202,52 @@ impl WalletActor {
         }
 
         Produces::ok(())
+    }
+
+    pub async fn get_height(&mut self) -> ActorResult<usize> {
+        if let Some((last_height_fetched, block_height)) = self.last_height_fetched {
+            let elapsed = last_height_fetched.elapsed().as_secs();
+            if elapsed < 60 * 5 {
+                if elapsed < 60 {
+                    return Produces::ok(block_height);
+                }
+
+                send!(self.addr.update_height());
+                return Produces::ok(block_height);
+            }
+        }
+
+        let block_height = self.update_height().await?.await?;
+        Produces::ok(block_height)
+    }
+
+    async fn update_height(&mut self) -> ActorResult<usize> {
+        let node_client = self
+            .node_client
+            .as_ref()
+            .ok_or(eyre::eyre!("node client not set"))?;
+
+        let block_height = node_client
+            .get_height()
+            .await
+            .map_err(|_| Error::GetHeightError)?;
+
+        self.last_height_fetched = Some((Instant::now(), block_height));
+        Produces::ok(block_height)
+    }
+
+    pub async fn transaction_details(&mut self, tx_id: TxId) -> ActorResult<TransactionDetails> {
+        let tx = self
+            .wallet
+            .get_tx(tx_id.0)
+            .ok_or(Error::TransactionDetailsError(
+                "transaction not found".to_string(),
+            ))?;
+
+        let details = TransactionDetails::try_new(&self.wallet, tx)
+            .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
+
+        Produces::ok(details)
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {

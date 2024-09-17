@@ -1,6 +1,8 @@
 mod amount;
+pub mod fee_rate;
 mod ffi;
 mod sent_and_received;
+pub mod transaction_details;
 mod unit;
 
 use std::{cmp::Ordering, sync::Arc};
@@ -14,17 +16,26 @@ use bdk_wallet::bitcoin::{
     OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
+use rand::Rng as _;
 
 use crate::wallet::Wallet;
 
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
 pub type Unit = unit::Unit;
+pub type TransactionDetails = transaction_details::TransactionDetails;
+pub type FeeRate = fee_rate::FeeRate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionDirection {
     Incoming,
     Outgoing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum TransactionState {
+    Pending,
+    Confirmed,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -75,6 +86,15 @@ pub struct TxIn {
 pub struct OutPoint {
     pub txid: TxId,
     pub vout: u32,
+}
+
+impl TxId {
+    pub fn preview_new() -> Self {
+        let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
+        let hash = *bitcoin_hashes::sha256d::Hash::from_bytes_ref(&random_bytes);
+
+        Self(BdkTxid::from_raw_hash(hash))
+    }
 }
 
 impl Transaction {

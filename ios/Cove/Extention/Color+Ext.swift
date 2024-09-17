@@ -9,7 +9,15 @@ import Foundation
 import SwiftUI
 
 extension Color {
+    static var coolGray: Color {
+        Color(hue: 0.61, saturation: 0.04, brightness: 0.83, opacity: 1.00)
+    }
+
     init(_ color: WalletColor) {
+        self = color.toColor()
+    }
+
+    init(_ color: FfiColor) {
         self = color.toColor()
     }
 

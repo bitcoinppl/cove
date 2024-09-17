@@ -75,7 +75,7 @@ strum = {version = "0.26", features = ["derive"]}
 tap = "1.0.1"
 
 # time 
-jiff = { version ="0.1", features = [] }
+jiff = { version ="0.1", features = ["tz-system"] }
 
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
@@ -85,7 +85,7 @@ serde_json = "1.0"
 itertools = "0.13"
 
 # bindings
-uniffi = { version = "=0.28", features = ["tokio"] }
+uniffi = { version = "=0.28.1", features = ["tokio"] }
 
 # hashing
 sha2 = "0.10.8"
@@ -109,12 +109,15 @@ numfmt = "1.1.1"
 # http client
 reqwest = { version = "0.12", features = ["json"] }
 
+# builders
+bon = "2.3"
+
 [build-dependencies]
-uniffi = { version = "=0.28", features = ["build"] }
+uniffi = { version = "=0.28.1", features = ["build"] }
 
 [dev-dependencies]
 tokio = { version = "1.38", features = ["rt", "test-util", "macros"] }
-uniffi = { version = "=0.28", features = ["bindgen-tests"] }
+uniffi = { version = "=0.28.1", features = ["bindgen-tests"] }
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 7/31/24.
 //
 
+import MijickPopupView
 import SwiftUI
 
 struct TransactionsCardView: View {
@@ -65,7 +66,6 @@ struct TransactionsCardView: View {
                         Spacer()
                             .frame(minHeight: screenHeight * 0.2)
                     }
-                    .background(.thickMaterial)
                 }
             }
             .padding()
@@ -75,8 +75,15 @@ struct TransactionsCardView: View {
 }
 
 struct ConfirmedTransactionView: View {
+    @Environment(\.navigate) private var navigate
+    @Environment(WalletViewModel.self) var model
+
     let txn: ConfirmedTransaction
     let metadata: WalletMetadata
+
+    // private
+    @State var transactionDetails: TransactionDetails? = nil
+    @State var loading: Bool = false
 
     func amount(_ sentAndReceived: SentAndReceived) -> String {
         if !metadata.sensitiveVisible {
@@ -116,6 +123,22 @@ struct ConfirmedTransactionView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+        }.onTapGesture {
+            MiddlePopup(state: .loading).showAndStack()
+            Task {
+                do {
+                    let details = try await model.rust.transactionDetails(txId: txn.id())
+                    await MainActor.run {
+                        PopupManager.dismiss()
+                        navigate(Route.transactionDetails(id: metadata.id, details: details))
+                    }
+                } catch {
+                    Log.error("Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())")
+                }
+            }
+        }
+        .onDisappear {
+            PopupManager.dismiss()
         }
     }
 }
@@ -159,48 +182,60 @@ private struct TxnIcon: View {
 }
 
 #Preview("Full of Txns - Complete") {
-    TransactionsCardView(
-        transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(0)),
-        scanComplete: true,
-        metadata: walletMetadataPreview()
-    )
+    AsyncPreview {
+        TransactionsCardView(
+            transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(0)),
+            scanComplete: true,
+            metadata: walletMetadataPreview()
+        )
+        .environment(WalletViewModel(preview: "preview_only"))
+    }
 }
 
 #Preview("Full of Txns - Scanning") {
-    ScrollView {
-        TransactionsCardView(
-            transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(1)),
-            scanComplete: false,
-            metadata: walletMetadataPreview()
-        )
-        .background(.thickMaterial)
+    AsyncPreview {
+        ScrollView {
+            TransactionsCardView(
+                transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(1)),
+                scanComplete: false,
+                metadata: walletMetadataPreview()
+            )
+            .background(.thickMaterial)
+            .environment(WalletViewModel(preview: "preview_only"))
+        }
     }
 }
 
 #Preview("Empty - Scanning") {
-    TransactionsCardView(transactions: [], scanComplete: false, metadata: walletMetadataPreview())
+    AsyncPreview {
+        TransactionsCardView(transactions: [], scanComplete: false, metadata: walletMetadataPreview())
+            .environment(WalletViewModel(preview: "preview_only"))
+    }
 }
 
 #Preview("Empty") {
-    VStack {
-        Text("Test")
+    AsyncPreview {
+        VStack {
+            Text("Test")
 
-        Spacer()
-        ScrollView {
-            TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
-                .background(
-                    UnevenRoundedRectangle(
-                        cornerRadii: .init(
-                            topLeading: 40,
-                            bottomLeading: 0,
-                            bottomTrailing: 0,
-                            topTrailing: 40
+            Spacer()
+            ScrollView {
+                TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
+                    .background(
+                        UnevenRoundedRectangle(
+                            cornerRadii: .init(
+                                topLeading: 40,
+                                bottomLeading: 0,
+                                bottomTrailing: 0,
+                                topTrailing: 40
+                            )
                         )
+                        .fill(.thickMaterial)
+                        .ignoresSafeArea()
                     )
-                    .fill(.thickMaterial)
-                    .ignoresSafeArea()
-                )
+            }
+            .ignoresSafeArea()
         }
-        .ignoresSafeArea()
+        .environment(WalletViewModel(preview: "preview_only"))
     }
 }

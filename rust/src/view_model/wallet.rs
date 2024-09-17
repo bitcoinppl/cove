@@ -5,6 +5,7 @@ use std::sync::Arc;
 use act_zero::{call, send, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
+use numfmt::{Formatter, Precision};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
@@ -15,7 +16,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     router::Route,
     task,
-    transaction::{Transaction, Unit},
+    transaction::{Amount, Transaction, TransactionDetails, TxId, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -61,6 +62,7 @@ pub enum WalletViewModelAction {
     UpdateUnit(Unit),
     UpdateFiatCurrency(String),
     ToggleSensitiveVisibility,
+    ToggleDetailsExpanded,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -107,6 +109,12 @@ pub enum WalletViewModelError {
 
     #[error("unable to get next address: {0}")]
     NextAddressError(String),
+
+    #[error("unable to get height")]
+    GetHeightError,
+
+    #[error("unable to get transaction details: {0}")]
+    TransactionDetailsError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -139,6 +147,58 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn balance(&self) -> Balance {
         call!(self.actor.balance()).await.unwrap_or_default()
+    }
+
+    #[uniffi::method]
+    pub fn display_amount(&self, amount: Arc<Amount>) -> String {
+        match self.metadata.read().selected_unit {
+            Unit::Btc => amount.btc_string(),
+            Unit::Sat => amount.sats_string(),
+        }
+    }
+
+    #[uniffi::method]
+    pub async fn current_block_height(&self) -> Result<u32, Error> {
+        let height = call!(self.actor.get_height())
+            .await
+            .map_err(|_| Error::GetHeightError)?;
+
+        Ok(height as u32)
+    }
+
+    #[uniffi::method]
+    pub async fn transaction_details(&self, tx_id: Arc<TxId>) -> Result<TransactionDetails, Error> {
+        let tx_id = Arc::unwrap_or_clone(tx_id);
+
+        let actor = self.actor.clone();
+        let details = task::spawn(async move {
+            call!(actor.transaction_details(tx_id))
+                .await
+                .map_err(|error| Error::TransactionDetailsError(error.to_string()))
+        })
+        .await
+        .unwrap()?;
+
+        Ok(details)
+    }
+
+    #[uniffi::method]
+    pub async fn number_of_confirmations(&self, block_height: u32) -> Result<u32, Error> {
+        let current_height = self.current_block_height().await?;
+        Ok(current_height - block_height + 1)
+    }
+
+    #[uniffi::method]
+    pub async fn number_of_confirmations_fmt(&self, block_height: u32) -> Result<String, Error> {
+        let mut f = Formatter::new()
+            .separator(',')
+            .unwrap()
+            .precision(Precision::Decimals(0));
+
+        let number_of_confirmations = self.number_of_confirmations(block_height).await?;
+
+        let fmt = f.fmt2(number_of_confirmations).to_string();
+        Ok(fmt)
     }
 
     /// Get the next address for the wallet
@@ -281,6 +341,11 @@ impl RustWalletViewModel {
             WalletViewModelAction::ToggleSensitiveVisibility => {
                 let mut metadata = self.metadata.write();
                 metadata.sensitive_visible = !metadata.sensitive_visible;
+            }
+
+            WalletViewModelAction::ToggleDetailsExpanded => {
+                let mut metadata = self.metadata.write();
+                metadata.details_expanded = !metadata.details_expanded;
             }
         }
 

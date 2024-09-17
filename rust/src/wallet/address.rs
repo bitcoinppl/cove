@@ -1,14 +1,18 @@
 use std::hash::Hash;
 use std::hash::Hasher;
 
+use bdk_chain::bitcoin::params::Params;
 use bdk_chain::bitcoin::Address as BdkAddress;
-use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bdk_wallet::{bitcoin::Transaction as BdkTransaction, AddressInfo as BdkAddressInfo};
+
+use crate::network::Network;
 
 #[derive(
     Debug,
     Clone,
     PartialEq,
     Eq,
+    Hash,
     derive_more::Display,
     derive_more::From,
     derive_more::Into,
@@ -28,6 +32,17 @@ pub struct Address(BdkAddress);
 )]
 pub struct AddressInfo(BdkAddressInfo);
 
+type Error = AddressError;
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+pub enum AddressError {
+    #[error("no ouputs")]
+    NoOutputs,
+
+    #[error("unable to create address from script: {0}")]
+    ScriptError(String),
+}
+
 impl Clone for AddressInfo {
     fn clone(&self) -> Self {
         Self(BdkAddressInfo {
@@ -46,11 +61,44 @@ impl Hash for AddressInfo {
     }
 }
 
+impl Address {
+    pub fn new(address: BdkAddress) -> Self {
+        Self(address)
+    }
+
+    pub fn try_new(tx: &BdkTransaction, network: Network) -> Result<Self, Error> {
+        let output = tx.output.first().ok_or(AddressError::NoOutputs)?;
+        let script = output.script_pubkey.clone().into_boxed_script();
+
+        let address = BdkAddress::from_script(&script, Params::from(network))
+            .map_err(|e| Error::ScriptError(e.to_string()))?;
+
+        Ok(Self::new(address))
+    }
+}
+
 mod ffi {
+    use std::str::FromStr as _;
+
+    use bdk_chain::bitcoin::address::NetworkChecked;
+
     use super::*;
 
     #[uniffi::export]
     impl Address {
+        #[uniffi::constructor(name = "preview_new")]
+        pub fn preview_new() -> Self {
+            let address = BdkAddress::from_str(
+                "bc1p0000304alk4tg3vxcu7l9m4xf4cvauzml5608cssvz5f60jwg68q83lyn9",
+            )
+            .unwrap();
+
+            let address: BdkAddress<NetworkChecked> =
+                address.require_network(Network::Bitcoin.into()).unwrap();
+
+            Self::new(address)
+        }
+
         fn string(&self) -> String {
             self.to_string()
         }

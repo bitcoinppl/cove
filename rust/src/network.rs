@@ -1,3 +1,4 @@
+use bdk_chain::bitcoin::params::Params;
 use bdk_wallet::bitcoin;
 use serde::{Deserialize, Serialize};
 
@@ -61,6 +62,15 @@ impl From<bitcoin::Network> for Network {
             bitcoin::Network::Bitcoin => Network::Bitcoin,
             bitcoin::Network::Testnet => Network::Testnet,
             network => panic!("unsupported network: {network:?}"),
+        }
+    }
+}
+
+impl From<Network> for Params {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => Params::MAINNET,
+            Network::Testnet => Params::TESTNET,
         }
     }
 }

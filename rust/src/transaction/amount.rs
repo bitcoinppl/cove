@@ -1,5 +1,7 @@
 use bdk_wallet::bitcoin::Amount as BdkAmount;
 use numfmt::{Formatter, Precision};
+
+use super::Unit;
 #[derive(
     Debug,
     Clone,
@@ -13,7 +15,7 @@ use numfmt::{Formatter, Precision};
     derive_more::From,
     derive_more::Deref,
 )]
-pub struct Amount(BdkAmount);
+pub struct Amount(pub BdkAmount);
 
 #[uniffi::export]
 impl Amount {
@@ -34,6 +36,13 @@ impl Amount {
 
     pub fn as_btc(&self) -> f64 {
         self.0.to_btc()
+    }
+
+    pub fn fmt_string(&self, unit: Unit) -> String {
+        match unit {
+            Unit::Btc => self.btc_string(),
+            Unit::Sat => self.sats_string(),
+        }
     }
 
     pub fn as_sats(&self) -> u64 {
