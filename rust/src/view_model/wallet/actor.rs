@@ -256,7 +256,7 @@ impl WalletActor {
         self.state = ActorState::PerformingFullScan;
         let start = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
 
-        let full_scan_request = self.wallet.start_full_scan();
+        let full_scan_request = self.wallet.start_full_scan().build();
 
         let graph = self.wallet.tx_graph().clone();
         let node_client = self
@@ -288,7 +288,7 @@ impl WalletActor {
 
         let start = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
 
-        let scan_request = self.wallet.start_sync_with_revealed_spks();
+        let scan_request = self.wallet.start_sync_with_revealed_spks().build();
         let graph = self.wallet.tx_graph().clone();
         let node_client = self
             .node_client
@@ -315,12 +315,7 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("applying full scan result");
 
-        let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
-        let mut full_scan_result = full_scan_result?;
-
-        let _ = full_scan_result
-            .graph_update
-            .update_last_seen_unconfirmed(now);
+        let full_scan_result = full_scan_result?;
 
         self.wallet.apply_update(full_scan_result)?;
         self.wallet.persist()?;
@@ -340,11 +335,7 @@ impl WalletActor {
         &mut self,
         sync_result: Result<SyncResult, crate::node::client::Error>,
     ) -> ActorResult<()> {
-        let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
-
-        let mut sync_result = sync_result?;
-        let _ = sync_result.graph_update.update_last_seen_unconfirmed(now);
-
+        let sync_result = sync_result?;
         self.wallet.apply_update(sync_result)?;
         self.wallet.persist()?;
         self.last_scan_finished = Some(Instant::now());

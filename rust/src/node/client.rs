@@ -144,7 +144,10 @@ impl NodeClient {
             debug!("start populate_tx_cache");
             let client = client.clone();
             let tx_graph = tx_graph.clone();
-            crate::unblock::run_blocking(move || client.populate_tx_cache(tx_graph)).await;
+            crate::unblock::run_blocking(move || {
+                client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx))
+            })
+            .await;
             debug!("populate_tx_cache done");
         }
 
@@ -174,13 +177,16 @@ impl NodeClient {
     pub async fn sync(
         &self,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
-        scan_request: SyncRequest,
+        scan_request: SyncRequest<(KeychainKind, u32)>,
     ) -> Result<SyncResult, Error> {
         if let NodeClient::Electrum(client) = self {
             debug!("start populate_tx_cache");
             let client = client.clone();
             let tx_graph = tx_graph.clone();
-            crate::unblock::run_blocking(move || client.populate_tx_cache(tx_graph)).await;
+            crate::unblock::run_blocking(move || {
+                client.populate_tx_cache(tx_graph.full_txs().map(|tx_node| tx_node.tx))
+            })
+            .await;
             debug!("populate_tx_cache done");
         }
 

@@ -60,7 +60,7 @@ pub enum WalletError {
 pub struct Wallet {
     pub id: WalletId,
     pub network: Network,
-    pub bdk: bdk_wallet::PersistedWallet,
+    pub bdk: bdk_wallet::PersistedWallet<Store<bdk_wallet::ChangeSet>>,
     pub metadata: WalletMetadata,
 
     db: Store<bdk_wallet::ChangeSet>,
@@ -299,7 +299,7 @@ impl Wallet {
 }
 
 impl Deref for Wallet {
-    type Target = bdk_wallet::PersistedWallet;
+    type Target = bdk_wallet::PersistedWallet<Store<bdk_wallet::ChangeSet>>;
 
     fn deref(&self) -> &Self::Target {
         &self.bdk
