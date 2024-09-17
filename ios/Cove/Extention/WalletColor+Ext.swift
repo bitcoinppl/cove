@@ -60,30 +60,30 @@ extension WalletColor {
 extension FfiColor {
     func toColor() -> Color {
         switch self {
-        case .red:
-            return .red
-        case .blue:
-            return .blue
-        case .green:
-            return .green
-        case .yellow:
-            return .yellow
-        case .orange:
-            return .orange
-        case .purple:
-            return .purple
-        case .pink:
-            return .pink
-        case .white:
-            return .white
-        case .black:
-            return .black
-        case .gray:
-            return .gray
-        case .coolGray:
-            return .coolGray
-        case let .custom(r, g, b):
-            return customToColor(r: r, g: g, b: b)
+        case let .red(opacity):
+            .red.addOpacity(opacity)
+        case let .blue(opacity):
+            .blue.addOpacity(opacity)
+        case let .green(opacity):
+            .green.addOpacity(opacity)
+        case let .yellow(opacity):
+            .yellow.addOpacity(opacity)
+        case let .orange(opacity):
+            .orange.addOpacity(opacity)
+        case let .purple(opacity):
+            .purple.addOpacity(opacity)
+        case let .pink(opacity):
+            .pink.addOpacity(opacity)
+        case let .white(opacity):
+            .white.addOpacity(opacity)
+        case let .black(opacity):
+            .black.addOpacity(opacity)
+        case let .gray(opacity):
+            .gray.addOpacity(opacity)
+        case let .coolGray(opacity):
+            .coolGray.addOpacity(opacity)
+        case let .custom(rgb, opacity):
+            customToColor(r: rgb.r, g: rgb.g, b: rgb.b).addOpacity(opacity)
         }
     }
 }
@@ -109,6 +109,14 @@ extension Color {
             let (red, green, blue, _) = color.getRGB()
             return .custom(r: UInt8(red), g: UInt8(green), b: UInt8(blue))
         }
+    }
+
+    func addOpacity(_ opacity: FfiOpacity) -> Color {
+        if opacity == 100 {
+            return self
+        }
+
+        return self.opacity(Double(opacity) / 100)
     }
 }
 

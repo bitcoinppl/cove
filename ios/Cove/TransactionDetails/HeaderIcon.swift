@@ -68,57 +68,31 @@ struct HeaderIcon: View {
     }
 
     private var backgroundColor: Color {
-        switch (txnState, direction, colorScheme, confirmationCount) {
-        case (.pending, _, .dark, _):
-            return .black
-        case (.pending, _, .light, _):
-            return .coolGray
-        case (.confirmed, .incoming, .light, 1):
-            return .green.opacity(0.33)
-        case (.confirmed, .incoming, .light, 2):
-            return .green.opacity(0.55)
-        case (.confirmed, .incoming, .light, _):
-            return .green
-        case (.confirmed, .outgoing, .light, 1):
-            return .black.opacity(0.33)
-        case (.confirmed, .outgoing, .light, 2):
-            return .black.opacity(0.55)
-        case (.confirmed, .outgoing, .light, _):
-            return .black
-        case (.confirmed, _, .dark, _):
-            return .black
-        }
+        presenter.backgroundColor(
+            state: txnState,
+            direction: direction,
+            colorScheme: colorScheme,
+            confirmationCount: confirmationCount)
+            .toColor()
     }
 
     private var iconColor: Color {
-        switch (txnState, direction, colorScheme, confirmationCount) {
-        case (.confirmed, .incoming, .dark, 1):
-            return .green.opacity(0.5)
-        case (.confirmed, .incoming, .dark, 2):
-            return .green.opacity(0.8)
-        case (.confirmed, .incoming, .dark, _):
-            return .green
-        case (.confirmed, .incoming, .light, _):
-            return .white
-        case (.confirmed, .outgoing, _, 1):
-            return .white.opacity(0.5)
-        case (.confirmed, .outgoing, _, 2):
-            return .white.opacity(0.8)
-        case (.confirmed, .outgoing, _, _):
-            return .white
-        case (.pending, _, .light, _):
-            return .black.opacity(0.5)
-        case (.pending, _, .dark, _):
-            return .white
-        }
+        presenter.iconColor(
+            state: txnState,
+            direction: direction,
+            colorScheme: colorScheme,
+            confirmationCount:
+            confirmationCount)
+            .toColor()
     }
 
     private func ringColor(_ ringNumber: Int) -> Color {
-        presenter.ringColor(state: txnState,
-                            colorScheme: colorScheme,
-                            direction: direction,
-                            confirmations: confirmationCount,
-                            ringNumber: Int32(ringNumber))
+        presenter.ringColor(
+            state: txnState,
+            colorScheme: colorScheme,
+            direction: direction,
+            confirmations: confirmationCount,
+            ringNumber: Int32(ringNumber))
             .toColor()
     }
 

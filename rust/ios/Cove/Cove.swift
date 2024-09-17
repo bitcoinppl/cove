@@ -2369,6 +2369,10 @@ public func FfiConverterTypeGlobalFlagTable_lower(_ value: GlobalFlagTable) -> U
 }
 
 public protocol HeaderIconPresenterProtocol: AnyObject {
+    func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32) -> FfiColor
+
+    func iconColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32) -> FfiColor
+
     func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int32, ringNumber: Int32) -> FfiColor
 }
 
@@ -2417,6 +2421,26 @@ open class HeaderIconPresenter:
         }
 
         try! rustCall { uniffi_cove_fn_free_headericonpresenter(pointer, $0) }
+    }
+
+    open func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32) -> FfiColor {
+        return try! FfiConverterTypeFfiColor.lift(try! rustCall {
+            uniffi_cove_fn_method_headericonpresenter_background_color(self.uniffiClonePointer(),
+                                                                       FfiConverterTypeTransactionState.lower(state),
+                                                                       FfiConverterTypeTransactionDirection.lower(direction),
+                                                                       FfiConverterTypeFfiColorScheme.lower(colorScheme),
+                                                                       FfiConverterInt32.lower(confirmationCount), $0)
+        })
+    }
+
+    open func iconColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32) -> FfiColor {
+        return try! FfiConverterTypeFfiColor.lift(try! rustCall {
+            uniffi_cove_fn_method_headericonpresenter_icon_color(self.uniffiClonePointer(),
+                                                                 FfiConverterTypeTransactionState.lower(state),
+                                                                 FfiConverterTypeTransactionDirection.lower(direction),
+                                                                 FfiConverterTypeFfiColorScheme.lower(colorScheme),
+                                                                 FfiConverterInt32.lower(confirmationCount), $0)
+        })
     }
 
     open func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int32, ringNumber: Int32) -> FfiColor {
@@ -5373,6 +5397,66 @@ public func FfiConverterTypePendingWalletViewModelState_lower(_ value: PendingWa
     return FfiConverterTypePendingWalletViewModelState.lower(value)
 }
 
+public struct Rgb {
+    public var r: UInt8
+    public var g: UInt8
+    public var b: UInt8
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(r: UInt8, g: UInt8, b: UInt8) {
+        self.r = r
+        self.g = g
+        self.b = b
+    }
+}
+
+extension Rgb: Equatable, Hashable {
+    public static func == (lhs: Rgb, rhs: Rgb) -> Bool {
+        if lhs.r != rhs.r {
+            return false
+        }
+        if lhs.g != rhs.g {
+            return false
+        }
+        if lhs.b != rhs.b {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(r)
+        hasher.combine(g)
+        hasher.combine(b)
+    }
+}
+
+public struct FfiConverterTypeRgb: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Rgb {
+        return
+            try Rgb(
+                r: FfiConverterUInt8.read(from: &buf),
+                g: FfiConverterUInt8.read(from: &buf),
+                b: FfiConverterUInt8.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: Rgb, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.r, into: &buf)
+        FfiConverterUInt8.write(value.g, into: &buf)
+        FfiConverterUInt8.write(value.b, into: &buf)
+    }
+}
+
+public func FfiConverterTypeRgb_lift(_ buf: RustBuffer) throws -> Rgb {
+    return try FfiConverterTypeRgb.lift(buf)
+}
+
+public func FfiConverterTypeRgb_lower(_ value: Rgb) -> RustBuffer {
+    return FfiConverterTypeRgb.lower(value)
+}
+
 public struct Router {
     public var app: FfiApp
     public var `default`: Route
@@ -5939,18 +6023,29 @@ extension DatabaseError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum FfiColor {
-    case red
-    case blue
-    case green
-    case yellow
-    case orange
-    case purple
-    case pink
-    case white
-    case black
-    case gray
-    case coolGray
-    case custom(UInt8, UInt8, UInt8)
+    case red(FfiOpacity
+    )
+    case blue(FfiOpacity
+    )
+    case green(FfiOpacity
+    )
+    case yellow(FfiOpacity
+    )
+    case orange(FfiOpacity
+    )
+    case purple(FfiOpacity
+    )
+    case pink(FfiOpacity
+    )
+    case white(FfiOpacity
+    )
+    case black(FfiOpacity
+    )
+    case gray(FfiOpacity
+    )
+    case coolGray(FfiOpacity
+    )
+    case custom(Rgb, FfiOpacity)
 }
 
 public struct FfiConverterTypeFfiColor: FfiConverterRustBuffer {
@@ -5959,29 +6054,40 @@ public struct FfiConverterTypeFfiColor: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiColor {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .red
+        case 1: return try .red(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 2: return .blue
+        case 2: return try .blue(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 3: return .green
+        case 3: return try .green(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 4: return .yellow
+        case 4: return try .yellow(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 5: return .orange
+        case 5: return try .orange(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 6: return .purple
+        case 6: return try .purple(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 7: return .pink
+        case 7: return try .pink(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 8: return .white
+        case 8: return try .white(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 9: return .black
+        case 9: return try .black(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 10: return .gray
+        case 10: return try .gray(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 11: return .coolGray
+        case 11: return try .coolGray(FfiConverterTypeFfiOpacity.read(from: &buf)
+            )
 
-        case 12: return try .custom(FfiConverterUInt8.read(from: &buf), FfiConverterUInt8.read(from: &buf), FfiConverterUInt8.read(from: &buf))
+        case 12: return try .custom(FfiConverterTypeRgb.read(from: &buf), FfiConverterTypeFfiOpacity.read(from: &buf))
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -5989,44 +6095,54 @@ public struct FfiConverterTypeFfiColor: FfiConverterRustBuffer {
 
     public static func write(_ value: FfiColor, into buf: inout [UInt8]) {
         switch value {
-        case .red:
+        case let .red(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .blue:
+        case let .blue(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .green:
+        case let .green(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .yellow:
+        case let .yellow(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .orange:
+        case let .orange(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .purple:
+        case let .purple(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .pink:
+        case let .pink(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .white:
+        case let .white(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .black:
+        case let .black(v1):
             writeInt(&buf, Int32(9))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .gray:
+        case let .gray(v1):
             writeInt(&buf, Int32(10))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case .coolGray:
+        case let .coolGray(v1):
             writeInt(&buf, Int32(11))
+            FfiConverterTypeFfiOpacity.write(v1, into: &buf)
 
-        case let .custom(v1, v2, v3):
+        case let .custom(v1, v2):
             writeInt(&buf, Int32(12))
-            FfiConverterUInt8.write(v1, into: &buf)
-            FfiConverterUInt8.write(v2, into: &buf)
-            FfiConverterUInt8.write(v3, into: &buf)
+            FfiConverterTypeRgb.write(v1, into: &buf)
+            FfiConverterTypeFfiOpacity.write(v2, into: &buf)
         }
     }
 }
@@ -8921,6 +9037,37 @@ private struct FfiConverterSequenceSequenceTypeGroupedWord: FfiConverterRustBuff
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
+public typealias FfiOpacity = UInt8
+public struct FfiConverterTypeFfiOpacity: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiOpacity {
+        return try FfiConverterUInt8.read(from: &buf)
+    }
+
+    public static func write(_ value: FfiOpacity, into buf: inout [UInt8]) {
+        return FfiConverterUInt8.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: UInt8) throws -> FfiOpacity {
+        return try FfiConverterUInt8.lift(value)
+    }
+
+    public static func lower(_ value: FfiOpacity) -> UInt8 {
+        return FfiConverterUInt8.lower(value)
+    }
+}
+
+public func FfiConverterTypeFfiOpacity_lift(_ value: UInt8) throws -> FfiOpacity {
+    return try FfiConverterTypeFfiOpacity.lift(value)
+}
+
+public func FfiConverterTypeFfiOpacity_lower(_ value: FfiOpacity) -> UInt8 {
+    return FfiConverterTypeFfiOpacity.lower(value)
+}
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
 public typealias WalletId = String
 public struct FfiConverterTypeWalletId: FfiConverter {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletId {
@@ -9359,6 +9506,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_headericonpresenter_background_color() != 61819 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_headericonpresenter_icon_color() != 52203 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_headericonpresenter_ring_color() != 23010 {
