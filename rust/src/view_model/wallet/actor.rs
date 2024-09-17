@@ -206,11 +206,22 @@ impl WalletActor {
 
     pub async fn get_height(&mut self) -> ActorResult<usize> {
         if let Some((last_height_fetched, block_height)) = self.last_height_fetched {
-            if last_height_fetched.elapsed().as_secs() < 30 {
+            let elapsed = last_height_fetched.elapsed().as_secs();
+            if elapsed < 60 * 5 {
+                if elapsed < 60 {
+                    return Produces::ok(block_height);
+                }
+
+                send!(self.addr.update_height());
                 return Produces::ok(block_height);
             }
         }
 
+        let block_height = self.update_height().await?.await?;
+        Produces::ok(block_height)
+    }
+
+    async fn update_height(&mut self) -> ActorResult<usize> {
         let node_client = self
             .node_client
             .as_ref()
@@ -222,7 +233,6 @@ impl WalletActor {
             .map_err(|_| Error::GetHeightError)?;
 
         self.last_height_fetched = Some((Instant::now(), block_height));
-
         Produces::ok(block_height)
     }
 

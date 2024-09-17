@@ -66,7 +66,6 @@ struct TransactionsCardView: View {
                         Spacer()
                             .frame(minHeight: screenHeight * 0.2)
                     }
-                    .background(.thickMaterial)
                 }
             }
             .padding()
