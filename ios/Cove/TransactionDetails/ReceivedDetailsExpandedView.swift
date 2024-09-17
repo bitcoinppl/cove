@@ -38,14 +38,16 @@ struct ReceivedDetailsExpandedView: View {
                     .foregroundColor(.gray)
                     .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
 
-                if let numberOfConfirmations = self.numberOfConfirmations {
-                    Text(ThousandsFormatter(numberOfConfirmations).fmt())
-                        .fontWeight(.semibold)
-                        .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
-                        .padding(.bottom, 14)
-                } else {
-                    ProgressView()
+                Group {
+                    if let numberOfConfirmations = self.numberOfConfirmations {
+                        Text(ThousandsFormatter(numberOfConfirmations).fmt())
+                            .fontWeight(.semibold)
+                            .multilineTextAlignment(/*@START_MENU_TOKEN@*/ .leading/*@END_MENU_TOKEN@*/)
+                    } else {
+                        ProgressView()
+                    }
                 }
+                .padding(.bottom, 14)
 
                 expandedDetailsRow(header: "Block Number", content: String(transactionDetails.blockNumberFmt() ?? ""))
             }

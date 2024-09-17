@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 7/31/24.
 //
 
+import MijickPopupView
 import SwiftUI
 
 struct TransactionsCardView: View {
@@ -83,6 +84,7 @@ struct ConfirmedTransactionView: View {
 
     // private
     @State var transactionDetails: TransactionDetails? = nil
+    @State var loading: Bool = false
 
     func amount(_ sentAndReceived: SentAndReceived) -> String {
         if !metadata.sensitiveVisible {
@@ -123,16 +125,21 @@ struct ConfirmedTransactionView: View {
                     .foregroundColor(.secondary)
             }
         }.onTapGesture {
+            MiddlePopup(state: .loading).showAndStack()
             Task {
                 do {
                     let details = try await model.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
+                        PopupManager.dismiss()
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
                     }
                 } catch {
                     Log.error("Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())")
                 }
             }
+        }
+        .onDisappear {
+            PopupManager.dismiss()
         }
     }
 }
