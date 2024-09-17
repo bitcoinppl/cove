@@ -21,25 +21,11 @@ struct TransactionDetailsView: View {
     var model: WalletViewModel
 
     var headerIcon: HeaderIcon {
-        // pending
-        if !transactionDetails.isConfirmed() {
-            return HeaderIcon(icon: "clock.arrow.2.circlepath",
-                              backgroundColor: Color.coolGray,
-                              checkmarkColor: .black.opacity(0.6))
-        }
-
-        // confirmed received
-        if transactionDetails.isReceived() {
-            return HeaderIcon(icon: "checkmark", backgroundColor: .green, checkmarkColor: .white)
-        }
-
-        // confirmed sent
-        if transactionDetails.isSent() {
-            return HeaderIcon(icon: "checkmark", backgroundColor: .black, checkmarkColor: .white)
-        }
-
-        // default
-        return HeaderIcon(icon: "clock.arrow.2.circlepath", backgroundColor: .gray, checkmarkColor: .white)
+        HeaderIcon(
+            isSent: transactionDetails.isSent(),
+            isConfirmed: transactionDetails.isConfirmed(),
+            numberOfConfirmations: numberOfConfirmations
+        )
     }
 
     var metadata: WalletMetadata {
