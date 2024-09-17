@@ -14,6 +14,7 @@ struct TransactionDetailsView: View {
     private let screenHeight = UIScreen.main.bounds.height
 
     @State private var numberOfConfirmations: Int? = nil
+//    @State private var scrollPosition = ScrollPosition()
 
     // public
     let id: WalletId
@@ -178,14 +179,20 @@ struct TransactionDetailsView: View {
     func ScrollOrContent(content: () -> some View) -> some View {
         Group {
             if detailsExpanded {
-                ScrollView(.vertical) {
-                    content()
-                }
-                .scrollIndicators(.never)
-                .transition(.opacity)
-            } else {
-                content()
+                HStack(alignment: .top) {
+                    ScrollView(.vertical) {
+                        content()
+                    }
+                    .scrollIndicators(.never)
                     .transition(.opacity)
+                    .frame(alignment: .top)
+//                    .scrollPosition(id: $scrollPosition)
+                }
+            } else {
+                VStack {
+                    content()
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.3), value: detailsExpanded)
@@ -222,7 +229,16 @@ struct TransactionDetailsView: View {
                 }
 
                 Button(action: {
-                    model.dispatch(action: .toggleDetailsExpanded)
+                    if detailsExpanded {
+                        // scroll to top, wait and then hide
+                        // iOS 18
+//                        scrollPosition.scrollto(.top)
+//                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+//                            model.dispatch(action: .toggleDetailsExpanded)
+//                        }
+                    } else {
+                        model.dispatch(action: .toggleDetailsExpanded)
+                    }
                 }) {
                     Text(detailsExpanded ? "Hide Details" : "Show Details")
                         .font(.footnote)
