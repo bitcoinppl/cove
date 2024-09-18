@@ -79,7 +79,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
-            details_expanded: true,
+            details_expanded: false,
             internal: InternalOnlyMetadata::default(),
         }
     }
@@ -95,7 +95,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
-            details_expanded: true,
+            details_expanded: false,
             internal: InternalOnlyMetadata::default(),
         }
     }
@@ -111,7 +111,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
-            details_expanded: true,
+            details_expanded: false,
             internal: InternalOnlyMetadata::default(),
         }
     }
