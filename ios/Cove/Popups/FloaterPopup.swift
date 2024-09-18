@@ -32,5 +32,6 @@ struct FloaterPopup: TopPopup {
         return popup
             .tapOutsideToDismiss(true)
             .horizontalPadding(30)
+            .backgroundColour(.clear)
     }
 }
