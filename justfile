@@ -27,7 +27,7 @@ clean-xcode:
     cd ios && xcodebuild clean
 
 reset-xcode:
-    killAll Xcode
+    killAll Xcode || true
     rm -rf ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
     xcrun simctl --set previews delete all
     rm -rf ~/Library/Caches/org.swift.swiftpm

@@ -14,7 +14,7 @@ struct TransactionDetailsView: View {
     private let screenHeight = UIScreen.main.bounds.height
 
     @State private var numberOfConfirmations: Int? = nil
-//    @State private var scrollPosition = ScrollPosition()
+    @State private var scrollPosition = ScrollPosition()
 
     // public
     let id: WalletId
@@ -186,7 +186,7 @@ struct TransactionDetailsView: View {
                     .scrollIndicators(.never)
                     .transition(.opacity)
                     .frame(alignment: .top)
-//                    .scrollPosition(id: $scrollPosition)
+                    .scrollPosition($scrollPosition)
                 }
             } else {
                 VStack {
@@ -201,6 +201,7 @@ struct TransactionDetailsView: View {
     var body: some View {
         ScrollOrContent {
             VStack(spacing: 12) {
+                Spacer()
                 headerIcon
 
                 Group {
@@ -230,12 +231,12 @@ struct TransactionDetailsView: View {
 
                 Button(action: {
                     if detailsExpanded {
-                        // scroll to top, wait and then hide
-                        // iOS 18
-//                        scrollPosition.scrollto(.top)
-//                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-//                            model.dispatch(action: .toggleDetailsExpanded)
-//                        }
+                        withAnimation {
+                            scrollPosition.scrollTo(edge: .top)
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            model.dispatch(action: .toggleDetailsExpanded)
+                        }
                     } else {
                         model.dispatch(action: .toggleDetailsExpanded)
                     }
