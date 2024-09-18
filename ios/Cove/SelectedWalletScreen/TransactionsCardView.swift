@@ -23,7 +23,7 @@ struct TransactionsCardView: View {
                 case let .confirmed(txn):
                     ConfirmedTransactionView(txn: txn, metadata: metadata)
                 case let .unconfirmed(txn):
-                    UnconfirmedTransactionView(transaction: txn)
+                    UnconfirmedTransactionView(txn: txn, metadata: metadata)
                 }
             }
             .padding(.vertical, 6)
@@ -74,6 +74,15 @@ struct TransactionsCardView: View {
     }
 }
 
+private func amountColor(_ direction: TransactionDirection) -> Color {
+    switch direction {
+    case .incoming:
+        .green
+    case .outgoing:
+        .primary.opacity(0.8)
+    }
+}
+
 struct ConfirmedTransactionView: View {
     @Environment(\.navigate) private var navigate
     @Environment(WalletViewModel.self) var model
@@ -85,21 +94,8 @@ struct ConfirmedTransactionView: View {
     @State var transactionDetails: TransactionDetails? = nil
     @State var loading: Bool = false
 
-    func amount(_ sentAndReceived: SentAndReceived) -> String {
-        if !metadata.sensitiveVisible {
-            return "**************"
-        }
-
-        return sentAndReceived.amountFmt(unit: metadata.selectedUnit)
-    }
-
-    func amountColor(_ direction: TransactionDirection) -> Color {
-        switch direction {
-        case .incoming:
-            .green
-        case .outgoing:
-            .primary.opacity(0.8)
-        }
+    var amount: String {
+        model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
     }
 
     var body: some View {
@@ -117,7 +113,7 @@ struct ConfirmedTransactionView: View {
             }
             Spacer()
             VStack(alignment: .trailing) {
-                Text(amount(txn.sentAndReceived()))
+                Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()))
                 Text(txn.blockHeightFmt())
                     .font(.caption)
@@ -144,11 +140,48 @@ struct ConfirmedTransactionView: View {
 }
 
 struct UnconfirmedTransactionView: View {
-    let transaction: UnconfirmedTransaction
+    @Environment(\.navigate) private var navigate
+    @Environment(WalletViewModel.self) var model
+
+    let txn: UnconfirmedTransaction
+    let metadata: WalletMetadata
+
+    var amount: String {
+        model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+    }
 
     var body: some View {
         HStack {
-//            Text("Unconfirmed")
+            TxnIcon(direction: txn.sentAndReceived().direction(), confirmed: false)
+                .opacity(0.6)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(txn.label())
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary.opacity(0.4))
+            }
+            Spacer()
+            VStack(alignment: .trailing) {
+                Text(amount)
+                    .foregroundStyle(amountColor(txn.sentAndReceived().direction()).opacity(0.65))
+            }
+        }.onTapGesture {
+            MiddlePopup(state: .loading).showAndStack()
+            Task {
+                do {
+                    let details = try await model.rust.transactionDetails(txId: txn.id())
+                    await MainActor.run {
+                        PopupManager.dismiss()
+                        navigate(Route.transactionDetails(id: metadata.id, details: details))
+                    }
+                } catch {
+                    Log.error("Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())")
+                }
+            }
+        }
+        .onDisappear {
+            PopupManager.dismiss()
         }
     }
 }
@@ -157,17 +190,22 @@ private struct TxnIcon: View {
     @Environment(\.colorScheme) var colorScheme
 
     let direction: TransactionDirection
+    var confirmed: Bool = true
 
     var iconColor: Color {
         colorScheme == .dark ? .gray.opacity(0.35) : .primary.opacity(0.75)
     }
 
     var arrow: String {
+        if !confirmed {
+            return "clock.arrow.2.circlepath"
+        }
+
         switch direction {
         case .incoming:
-            "arrow.down.left"
+            return "arrow.down.left"
         case .outgoing:
-            "arrow.up.right"
+            return "arrow.up.right"
         }
     }
 
@@ -210,6 +248,17 @@ private struct TxnIcon: View {
     AsyncPreview {
         TransactionsCardView(transactions: [], scanComplete: false, metadata: walletMetadataPreview())
             .environment(WalletViewModel(preview: "preview_only"))
+    }
+}
+
+#Preview("With Unconfirmed Txns") {
+    AsyncPreview {
+        TransactionsCardView(
+            transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
+            scanComplete: true,
+            metadata: walletMetadataPreview()
+        )
+        .environment(WalletViewModel(preview: "preview_only"))
     }
 }
 

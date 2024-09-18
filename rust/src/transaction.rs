@@ -214,8 +214,8 @@ impl Ord for Transaction {
         let sort = match (self, other) {
             (Self::Confirmed(confirmed), Self::Confirmed(other)) => confirmed.cmp(other),
             (Self::Unconfirmed(unconfirmed), Self::Unconfirmed(other)) => unconfirmed.cmp(other),
-            (Self::Confirmed(_), Self::Unconfirmed(_)) => Ordering::Less,
-            (Self::Unconfirmed(_), Self::Confirmed(_)) => Ordering::Greater,
+            (Self::Confirmed(_), Self::Unconfirmed(_)) => Ordering::Greater,
+            (Self::Unconfirmed(_), Self::Confirmed(_)) => Ordering::Less,
         };
 
         if sort == Ordering::Equal {

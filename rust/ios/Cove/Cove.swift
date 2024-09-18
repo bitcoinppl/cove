@@ -3461,6 +3461,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func displayAmount(amount: Amount) -> String
 
+    func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> String
+
     func fingerprint() -> String
 
     func listenForUpdates(reconciler: WalletViewModelReconciler)
@@ -3590,6 +3592,13 @@ open class RustWalletViewModel:
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_display_amount(self.uniffiClonePointer(),
                                                                      FfiConverterTypeAmount.lower(amount), $0)
+        })
+    }
+
+    open func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_display_sent_and_received_amount(self.uniffiClonePointer(),
+                                                                                       FfiConverterTypeSentAndReceived.lower(sentAndReceived), $0)
         })
     }
 
@@ -9602,6 +9611,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_display_amount() != 59974 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_display_sent_and_received_amount() != 30788 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {

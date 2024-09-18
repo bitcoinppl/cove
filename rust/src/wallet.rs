@@ -290,6 +290,9 @@ impl Wallet {
         let passphrase = None;
         let metadata = WalletMetadata::preview_new();
 
+        delete_data_path(&metadata.id).unwrap();
+        Database::global().wallets.delete(&metadata.id).unwrap();
+
         Self::try_new_persisted_from_mnemonic(metadata, mnemonic, passphrase).unwrap()
     }
 

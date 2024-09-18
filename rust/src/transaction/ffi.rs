@@ -89,7 +89,11 @@ impl UnconfirmedTransaction {
 
     #[uniffi::method]
     pub fn label(&self) -> String {
-        self.sent_and_received.label()
+        match &self.sent_and_received.direction {
+            TransactionDirection::Incoming => "Receiving",
+            TransactionDirection::Outgoing => "Sending",
+        }
+        .to_string()
     }
 }
 

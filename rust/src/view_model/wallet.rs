@@ -5,7 +5,6 @@ use std::sync::Arc;
 use act_zero::{call, send, Addr};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
-use numfmt::{Formatter, Precision};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
@@ -13,10 +12,11 @@ use tracing::{debug, error};
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
+    format::NumberFormatter as _,
     keychain::{Keychain, KeychainError},
     router::Route,
     task,
-    transaction::{Amount, Transaction, TransactionDetails, TxId, Unit},
+    transaction::{Amount, SentAndReceived, Transaction, TransactionDetails, TxId, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
@@ -151,10 +151,31 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub fn display_amount(&self, amount: Arc<Amount>) -> String {
-        match self.metadata.read().selected_unit {
-            Unit::Btc => amount.btc_string(),
-            Unit::Sat => amount.sats_string(),
+        {
+            let sensitive_visible = self.metadata.read().sensitive_visible;
+            if !sensitive_visible {
+                return "**************".to_string();
+            }
         }
+
+        let unit = self.metadata.read().selected_unit;
+        amount.fmt_string(unit)
+    }
+
+    #[uniffi::method]
+    pub fn display_sent_and_received_amount(
+        &self,
+        sent_and_received: Arc<SentAndReceived>,
+    ) -> String {
+        {
+            let sensitive_visible = self.metadata.read().sensitive_visible;
+            if !sensitive_visible {
+                return "**************".to_string();
+            }
+        }
+
+        let unit = self.metadata.read().selected_unit;
+        sent_and_received.amount_fmt(unit)
     }
 
     #[uniffi::method]
@@ -190,15 +211,8 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub async fn number_of_confirmations_fmt(&self, block_height: u32) -> Result<String, Error> {
-        let mut f = Formatter::new()
-            .separator(',')
-            .unwrap()
-            .precision(Precision::Decimals(0));
-
         let number_of_confirmations = self.number_of_confirmations(block_height).await?;
-
-        let fmt = f.fmt2(number_of_confirmations).to_string();
-        Ok(fmt)
+        Ok(number_of_confirmations.thousands_int())
     }
 
     /// Get the next address for the wallet
