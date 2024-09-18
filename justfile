@@ -41,6 +41,9 @@ build-android:
 run-android: build-android
     bash scripts/run-android.sh
 
+build-ios-device:
+    bash scripts/build-ios.sh release-smaller --device false
+
 build-ios profile="debug" device="false" sign="false":
     bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}
 
