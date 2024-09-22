@@ -26,12 +26,9 @@ struct RouteView: View {
         .onChange(of: model.router.default) { _, newRoute in
             self.route = newRoute
         }
-        .enableInjection()
+
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 @MainActor @ViewBuilder

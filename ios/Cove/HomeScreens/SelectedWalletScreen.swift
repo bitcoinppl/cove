@@ -47,7 +47,7 @@ struct SelectedWalletScreen: View {
             }
         }
         .tint(.white)
-        .enableInjection()
+
     }
 }
 

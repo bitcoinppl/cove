@@ -259,12 +259,9 @@ private struct CardTab: View {
                 )
             }
         }
-        .enableInjection()
+
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 private struct AutocompleteField: View {
@@ -323,7 +320,7 @@ private struct AutocompleteField: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
-        .enableInjection()
+
     }
 
     func submitFocusField() {
@@ -409,9 +406,6 @@ private struct AutocompleteField: View {
             }
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 private struct DuplicateWalletItem: Identifiable {
