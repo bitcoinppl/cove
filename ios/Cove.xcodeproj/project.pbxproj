@@ -41,6 +41,7 @@
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
 		AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */; };
+		AC739D532CA0977D006B5FF1 /* CodeScanner in Frameworks */ = {isa = PBXBuildFile; productRef = AC739D522CA0977D006B5FF1 /* CodeScanner */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
@@ -69,7 +70,6 @@
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
 		ACF44D142C2857E9008C5034 /* FixedGlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* FixedGlassCard.swift */; };
 		ACF479F82C59D785008A9362 /* WeakReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF479F72C59D785008A9362 /* WeakReconciler.swift */; };
-		ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = ACF5B3482C2BA4BC00DDDEB9 /* Inject */; };
 		AD998F28BCDE0FFFCEF64986 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3073277B96EFD103FFE756E8 /* SettingsScreen.swift */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
@@ -126,6 +126,7 @@
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
 		AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeImportScreen.swift; sourceTree = "<group>"; };
+		AC739D542CA09AD6006B5FF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Ext.swift"; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
@@ -171,7 +172,7 @@
 			files = (
 				AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
-				ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */,
+				AC739D532CA0977D006B5FF1 /* CodeScanner in Frameworks */,
 				ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */,
 				ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */,
 			);
@@ -353,6 +354,7 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				AC739D542CA09AD6006B5FF1 /* Info.plist */,
 				AC4343612C6AF87B00105C03 /* SettingsScreen */,
 				AC4343602C6AF80000105C03 /* HomeScreens */,
 				ACF479F62C59D76E008A9362 /* FFI */,
@@ -411,9 +413,9 @@
 			name = Cove;
 			packageProductDependencies = (
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
-				ACF5B3482C2BA4BC00DDDEB9 /* Inject */,
 				AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */,
 				ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */,
+				AC739D522CA0977D006B5FF1 /* CodeScanner */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -445,9 +447,9 @@
 			mainGroup = D0245F432C0F7B4E0042B447;
 			packageReferences = (
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
-				ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */,
 				AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */,
 				ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */,
+				AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -680,8 +682,10 @@
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -719,8 +723,10 @@
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -770,6 +776,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/twostraws/CodeScanner.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
 		AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/exyte/ActivityIndicatorView";
@@ -794,17 +808,14 @@
 				minimumVersion = 2.7.0;
 			};
 		};
-		ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/krzysztofzablocki/Inject.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.5.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AC739D522CA0977D006B5FF1 /* CodeScanner */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */;
+			productName = CodeScanner;
+		};
 		AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */;
@@ -819,11 +830,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */;
 			productName = MijickPopupView;
-		};
-		ACF5B3482C2BA4BC00DDDEB9 /* Inject */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */;
-			productName = Inject;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
