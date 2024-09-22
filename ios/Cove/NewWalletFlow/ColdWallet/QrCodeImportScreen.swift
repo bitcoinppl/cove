@@ -21,24 +21,33 @@ struct QrCodeImportScreen: View {
     // private
     private let screenHeight = UIScreen.main.bounds.height
 
+    var qrCodeHeight: CGFloat {
+        screenHeight * 0.4
+    }
+
     var body: some View {
         VStack {
             Text("Scan your wallet export QR code")
-                .font(.headline)
+                .font(.title)
+                .fontWeight(.bold)
+                .multilineTextAlignment(.center)
                 .padding()
 
             ZStack {
                 RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.blue, lineWidth: 3)
-                    .frame(height: 300)
+                    .stroke(Color.primary, lineWidth: 2)
+                    .frame(height: qrCodeHeight)
 
                 CodeScannerView(codeTypes: [.qr],
+                                scanMode: .continuous,
+                                scanInterval: 0.20,
                                 simulatedData: "Simulated QR Code",
                                 completion: handleScan)
-                    .frame(height: screenHeight * 0.3)
+                    .frame(height: qrCodeHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
             }
             .padding(.horizontal)
+            .padding(.vertical, 36)
 
             Button("Where do I get the QR code?") {
                 showingHelp = true
@@ -50,6 +59,7 @@ struct QrCodeImportScreen: View {
             .sheet(isPresented: $showingHelp) {
                 HelpView()
             }
+            .padding()
         }
         .padding()
         .alert(item: $scannedCode) { code in
@@ -61,6 +71,7 @@ struct QrCodeImportScreen: View {
                 }
             )
         }
+        .navigationTitle("Scan QR")
     }
 
     func handleScan(result: Result<ScanResult, ScanError>) {
@@ -75,19 +86,48 @@ struct QrCodeImportScreen: View {
 
 struct HelpView: View {
     var body: some View {
-        VStack {
-            Text("How to get your wallet export QR code")
-                .font(.headline)
-                .padding()
+        Text("How do get my wallet export QR code?")
+            .font(.title)
+            .fontWeight(.bold)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 12)
+            .frame(alignment: .center)
+            .padding(.vertical, 18)
 
-            Text("1. Open your wallet app\n2. Go to settings\n3. Look for 'Export' or 'Backup'\n4. Generate QR code\n5. Scan the generated QR code with this app")
-                .padding()
+        VStack(alignment: .leading, spacing: 32) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("On ColdCard Q1")
+                    .font(.title2)
+                    .fontWeight(.bold)
 
-            Spacer()
+                Text("1. Go to 'Advanced / Tools'")
+                Text("2. Export Wallet > Generic JSON")
+                Text("3. Press the 'Enter' button, then the 'QR' button")
+                Text("5. Scan the Generated QR code")
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("On Other Hardware Wallets")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text("1. In your hardware wallet, go to settings")
+                Text("2. Look for 'Export'")
+                Text("3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work")
+                Text("4. Generate QR code")
+                Text("5. Scan the Generated QR code")
+            }
         }
+        .padding(22)
     }
 }
 
 #Preview {
     QrCodeImportScreen()
+}
+
+#Preview("help") {
+    HelpView()
 }
