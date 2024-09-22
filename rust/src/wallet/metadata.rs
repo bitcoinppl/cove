@@ -38,6 +38,8 @@ pub struct WalletMetadata {
     pub sensitive_visible: bool,
     #[serde(default = "default_false")]
     pub details_expanded: bool,
+    #[serde(default)]
+    pub wallet_type: WalletType,
 
     // internal only metadata, don't use in the UI
     // note: maybe better to use a separate table for this
@@ -54,6 +56,15 @@ pub struct InternalOnlyMetadata {
 pub struct AddressIndex {
     pub last_seen_index: u8,
     pub address_list_hash: u64,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum,
+)]
+pub enum WalletType {
+    #[default]
+    Hot,
+    Cold,
 }
 
 mod ffi {
@@ -80,6 +91,7 @@ impl WalletMetadata {
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
             details_expanded: false,
+            wallet_type: WalletType::Hot,
             internal: InternalOnlyMetadata::default(),
         }
     }
@@ -96,6 +108,7 @@ impl WalletMetadata {
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
             details_expanded: false,
+            wallet_type: WalletType::Hot,
             internal: InternalOnlyMetadata::default(),
         }
     }
@@ -112,6 +125,7 @@ impl WalletMetadata {
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
             details_expanded: false,
+            wallet_type: WalletType::Hot,
             internal: InternalOnlyMetadata::default(),
         }
     }
