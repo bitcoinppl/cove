@@ -654,6 +654,7 @@ dependencies = [
  "numfmt",
  "once_cell",
  "parking_lot",
+ "pubport",
  "rand",
  "redb",
  "reqwest 0.12.7",
@@ -1874,6 +1875,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "pubport"
+version = "0.1.0"
+source = "git+https://github.com/bitcoinppl/pubport.git#cdf8bcbf360c2b5ad2a7e607453aecd76c06f593"
+dependencies = [
+ "bitcoin",
+ "log",
+ "miniscript",
+ "secp256k1",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

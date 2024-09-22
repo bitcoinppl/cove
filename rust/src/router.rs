@@ -37,11 +37,11 @@ pub enum HotWalletRoute {
     VerifyWords(WalletId),
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum ColdWalletRoute {
-    #[default]
-    Create,
-    Import,
+    QrCode,
+    File,
+    Nfc,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -81,6 +81,12 @@ impl Router {
     }
 }
 
+impl From<ColdWalletRoute> for Route {
+    fn from(cold_wallet_route: ColdWalletRoute) -> Self {
+        Route::NewWallet(NewWalletRoute::ColdWallet(cold_wallet_route))
+    }
+}
+
 mod ffi {
     use std::hash::{Hash as _, Hasher as _};
 
@@ -117,16 +123,28 @@ mod ffi {
             Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
         }
 
-        pub fn new_cold_wallet(&self) -> Route {
-            Route::NewWallet(NewWalletRoute::ColdWallet(Default::default()))
-        }
-
         pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
             Route::NewWallet(NewWalletRoute::HotWallet(route))
         }
 
         pub fn secret_words(&self, wallet_id: WalletId) -> Route {
             Route::SecretWords(wallet_id)
+        }
+
+        pub fn cold_wallet_import(&self, route: ColdWalletRoute) -> Route {
+            route.into()
+        }
+
+        pub fn qr_import(&self) -> Route {
+            ColdWalletRoute::QrCode.into()
+        }
+
+        pub fn file_import(&self) -> Route {
+            ColdWalletRoute::File.into()
+        }
+
+        pub fn nfc_import(&self) -> Route {
+            ColdWalletRoute::Nfc.into()
         }
     }
 

@@ -3024,15 +3024,21 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
 }
 
 public protocol RouteFactoryProtocol: AnyObject {
+    func coldWalletImport(route: ColdWalletRoute) -> Route
+
+    func fileImport() -> Route
+
     func hotWallet(route: HotWalletRoute) -> Route
 
     func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool
 
-    func newColdWallet() -> Route
-
     func newHotWallet() -> Route
 
     func newWalletSelect() -> Route
+
+    func nfcImport() -> Route
+
+    func qrImport() -> Route
 
     func secretWords(walletId: WalletId) -> Route
 }
@@ -3084,6 +3090,19 @@ open class RouteFactory:
         try! rustCall { uniffi_cove_fn_free_routefactory(pointer, $0) }
     }
 
+    open func coldWalletImport(route: ColdWalletRoute) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_cold_wallet_import(self.uniffiClonePointer(),
+                                                                  FfiConverterTypeColdWalletRoute.lower(route), $0)
+        })
+    }
+
+    open func fileImport() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_file_import(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func hotWallet(route: HotWalletRoute) -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_hot_wallet(self.uniffiClonePointer(),
@@ -3099,12 +3118,6 @@ open class RouteFactory:
         })
     }
 
-    open func newColdWallet() -> Route {
-        return try! FfiConverterTypeRoute.lift(try! rustCall {
-            uniffi_cove_fn_method_routefactory_new_cold_wallet(self.uniffiClonePointer(), $0)
-        })
-    }
-
     open func newHotWallet() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_new_hot_wallet(self.uniffiClonePointer(), $0)
@@ -3114,6 +3127,18 @@ open class RouteFactory:
     open func newWalletSelect() -> Route {
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_new_wallet_select(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func nfcImport() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_nfc_import(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func qrImport() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_qr_import(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -5516,11 +5541,12 @@ public struct WalletMetadata {
     public var selectedFiatCurrency: String
     public var sensitiveVisible: Bool
     public var detailsExpanded: Bool
+    public var walletType: WalletType
     public var `internal`: InternalOnlyMetadata
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -5531,6 +5557,7 @@ public struct WalletMetadata {
         self.selectedFiatCurrency = selectedFiatCurrency
         self.sensitiveVisible = sensitiveVisible
         self.detailsExpanded = detailsExpanded
+        self.walletType = walletType
         self.internal = `internal`
     }
 }
@@ -5567,6 +5594,9 @@ extension WalletMetadata: Equatable, Hashable {
         if lhs.detailsExpanded != rhs.detailsExpanded {
             return false
         }
+        if lhs.walletType != rhs.walletType {
+            return false
+        }
         if lhs.internal != rhs.internal {
             return false
         }
@@ -5584,6 +5614,7 @@ extension WalletMetadata: Equatable, Hashable {
         hasher.combine(selectedFiatCurrency)
         hasher.combine(sensitiveVisible)
         hasher.combine(detailsExpanded)
+        hasher.combine(walletType)
         hasher.combine(`internal`)
     }
 }
@@ -5602,6 +5633,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 selectedFiatCurrency: FfiConverterString.read(from: &buf),
                 sensitiveVisible: FfiConverterBool.read(from: &buf),
                 detailsExpanded: FfiConverterBool.read(from: &buf),
+                walletType: FfiConverterTypeWalletType.read(from: &buf),
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
             )
     }
@@ -5617,6 +5649,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterString.write(value.selectedFiatCurrency, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
         FfiConverterBool.write(value.detailsExpanded, into: &buf)
+        FfiConverterTypeWalletType.write(value.walletType, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.internal, into: &buf)
     }
 }
@@ -5860,8 +5893,9 @@ public func FfiConverterTypeAppStateReconcileMessage_lower(_ value: AppStateReco
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ColdWalletRoute {
-    case create
-    case `import`
+    case qrCode
+    case file
+    case nfc
 }
 
 public struct FfiConverterTypeColdWalletRoute: FfiConverterRustBuffer {
@@ -5870,9 +5904,11 @@ public struct FfiConverterTypeColdWalletRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ColdWalletRoute {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .create
+        case 1: return .qrCode
 
-        case 2: return .import
+        case 2: return .file
+
+        case 3: return .nfc
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -5880,11 +5916,14 @@ public struct FfiConverterTypeColdWalletRoute: FfiConverterRustBuffer {
 
     public static func write(_ value: ColdWalletRoute, into buf: inout [UInt8]) {
         switch value {
-        case .create:
+        case .qrCode:
             writeInt(&buf, Int32(1))
 
-        case .import:
+        case .file:
             writeInt(&buf, Int32(2))
+
+        case .nfc:
+            writeInt(&buf, Int32(3))
         }
     }
 }
@@ -7991,6 +8030,49 @@ extension WalletTableError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum WalletType {
+    case hot
+    case cold
+}
+
+public struct FfiConverterTypeWalletType: FfiConverterRustBuffer {
+    typealias SwiftType = WalletType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .hot
+
+        case 2: return .cold
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletType, into buf: inout [UInt8]) {
+        switch value {
+        case .hot:
+            writeInt(&buf, Int32(1))
+
+        case .cold:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeWalletType_lift(_ buf: RustBuffer) throws -> WalletType {
+    return try FfiConverterTypeWalletType.lift(buf)
+}
+
+public func FfiConverterTypeWalletType_lower(_ value: WalletType) -> RustBuffer {
+    return FfiConverterTypeWalletType.lower(value)
+}
+
+extension WalletType: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum WalletViewModelAction {
     case updateName(String
     )
@@ -9547,19 +9629,28 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_nodeselector_selected_node() != 29849 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_routefactory_cold_wallet_import() != 14120 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_file_import() != 21511 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 43168 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_routefactory_new_cold_wallet() != 14639 {
-        return InitializationResult.apiChecksumMismatch
-    }
     if uniffi_cove_checksum_method_routefactory_new_hot_wallet() != 51032 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_nfc_import() != 27415 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_qr_import() != 17980 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_secret_words() != 64915 {

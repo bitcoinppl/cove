@@ -9,6 +9,10 @@ import SwiftUI
 
 struct NewWalletSelectScreen: View {
     @Environment(\.colorScheme) var colorScheme
+    @State var showSelectDialog: Bool = false
+
+    // private
+    let routeFactory: RouteFactory = .init()
 
     var body: some View {
         VStack(spacing: 30) {
@@ -27,27 +31,48 @@ struct NewWalletSelectScreen: View {
                     destination: RouteFactory().newHotWallet()
                 )
 
-                walletOptionButton(
-                    title: "On Hardware Wallet",
-                    icon: "externaldrive",
-                    color: .green,
-                    destination: RouteFactory().newColdWallet()
-                )
+                Button(action: { showSelectDialog = true }) {
+                    HStack {
+                        Image(systemName: "externaldrive")
+                            .font(.title2)
+                        Text("On a Hardware Wallet")
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 25)
+                    .background(.green.opacity(colorScheme == .dark ? 0.85 : 1))
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
             .padding(.horizontal)
+            .confirmationDialog(
+                "Import hardware wallet using",
+                isPresented: $showSelectDialog,
+                titleVisibility: .visible
+            ) {
+                NavigationLink(value: routeFactory.qrImport()) {
+                    Text("QR Code")
+                }
+                NavigationLink(value: routeFactory.nfcImport()) {
+                    Text("NFC coming soon...")
+                }
+
+                NavigationLink(value: routeFactory.fileImport()) {
+                    Text("File coming soon...")
+                }
+            }
 
             Spacer()
             Spacer()
         }
         .navigationBarTitleDisplayMode(.inline)
-        .enableInjection()
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
-
-    private func walletOptionButton(title: String, icon: String, color: Color, destination: some Hashable) -> some View {
+    private func walletOptionButton(
+        title: String, icon: String, color: Color, destination: some Hashable
+    ) -> some View {
         NavigationLink(value: destination) {
             HStack {
                 Image(systemName: icon)
