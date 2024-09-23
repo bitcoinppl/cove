@@ -29,7 +29,9 @@ struct Log {
     // MARK: - Create specific loggers for different domains
 
     func debug(_ message: String) {
-        logger.debug("[swift][debug]: \(message)")
+        #if DEBUG
+            logger.debug("[swift][debug]: \(message)")
+        #endif
     }
 
     func notice(_ message: String) {
@@ -51,7 +53,9 @@ struct Log {
     // MARK: - Shared Instance for convenience
 
     static func debug(_ message: String) {
-        Log.shared.debug("[swift][debug]: \(message)")
+        #if DEBUG
+            Log.shared.debug("[swift][debug]: \(message)")
+        #endif
     }
 
     static func info(_ message: String) {
