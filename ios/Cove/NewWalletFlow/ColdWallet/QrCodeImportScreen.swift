@@ -184,30 +184,42 @@ struct HelpView: View {
             .frame(alignment: .center)
             .padding(.vertical, 18)
 
-        VStack(alignment: .leading, spacing: 32) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("On ColdCard Q1")
-                    .font(.title2)
-                    .fontWeight(.bold)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 32) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("ColdCard Q1")
+                        .font(.title2)
+                        .fontWeight(.bold)
 
-                Text("1. Go to 'Advanced / Tools'")
-                Text("2. Export Wallet > Generic JSON")
-                Text("3. Press the 'Enter' button, then the 'QR' button")
-                Text("5. Scan the Generated QR code")
-            }
+                    Text("1. Go to 'Advanced / Tools'")
+                    Text("2. Export Wallet > Generic JSON")
+                    Text("3. Press the 'Enter' button, then the 'QR' button")
+                    Text("4. Scan the Generated QR code")
+                }
 
-            Divider()
+                Divider()
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text("On Other Hardware Wallets")
-                    .font(.title2)
-                    .fontWeight(.bold)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("ColdCard MK3/MK4")
+                        .font(.title2)
+                        .fontWeight(.bold)
 
-                Text("1. In your hardware wallet, go to settings")
-                Text("2. Look for 'Export'")
-                Text("3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work")
-                Text("4. Generate QR code")
-                Text("5. Scan the Generated QR code")
+                    Text("Use NFC or File import instead")
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Other Hardware Wallets")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text("1. In your hardware wallet, go to settings")
+                    Text("2. Look for 'Export'")
+                    Text("3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work")
+                    Text("4. Generate QR code")
+                    Text("5. Scan the Generated QR code")
+                }
             }
         }
         .padding(22)
