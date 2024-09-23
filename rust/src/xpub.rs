@@ -49,6 +49,15 @@ pub enum DescriptorError {
 
     #[error("Unable to parse xpub: {0:?}")]
     InvalidXpub(String),
+
+    #[error("Unable to parse xpub: {0}")]
+    UnableToParseXpub(String),
+
+    #[error("Unable to get xpub from descriptor")]
+    NoXpubInDescriptor,
+
+    #[error("Single pubkey is not supported, must be an extended key")]
+    SinglePubkeyNotSupported,
 }
 
 impl From<descriptor::Error> for DescriptorError {
@@ -66,6 +75,9 @@ impl From<descriptor::Error> for DescriptorError {
             DS::MissingScriptType => Self::MissingScriptType,
             DS::MissingFingerprint => Self::MissingFingerprint,
             DS::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
+            DS::SinglePubkeyNotSupported => Self::SinglePubkeyNotSupported,
+            DS::UnableToParseXpub(error) => Self::UnableToParseXpub(error.to_string()),
+            DS::NoXpubInDescriptor => Self::NoXpubInDescriptor,
         }
     }
 }
@@ -80,5 +92,11 @@ impl From<pubport::Error> for XpubError {
             Error::InvalidDescriptorInJson => Self::InvalidDescriptorInJson,
             Error::JsonNoDecriptor => Self::JsonNoDecriptor,
         }
+    }
+}
+
+impl From<descriptor::Error> for XpubError {
+    fn from(error: descriptor::Error) -> Self {
+        Self::InvalidDescriptor(error.into())
     }
 }

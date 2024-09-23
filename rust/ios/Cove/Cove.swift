@@ -6316,6 +6316,10 @@ public enum DescriptorError {
     case MissingFingerprint
     case InvalidXpub(String
     )
+    case UnableToParseXpub(String
+    )
+    case NoXpubInDescriptor
+    case SinglePubkeyNotSupported
 }
 
 public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
@@ -6340,6 +6344,11 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
         case 10: return try .InvalidXpub(
                 FfiConverterString.read(from: &buf)
             )
+        case 11: return try .UnableToParseXpub(
+                FfiConverterString.read(from: &buf)
+            )
+        case 12: return .NoXpubInDescriptor
+        case 13: return .SinglePubkeyNotSupported
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -6378,6 +6387,16 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
         case let .InvalidXpub(v1):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
+
+        case let .UnableToParseXpub(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterString.write(v1, into: &buf)
+
+        case .NoXpubInDescriptor:
+            writeInt(&buf, Int32(12))
+
+        case .SinglePubkeyNotSupported:
+            writeInt(&buf, Int32(13))
         }
     }
 }

@@ -167,6 +167,8 @@ impl Wallet {
     }
 
     pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
+        let keychain = Keychain::global();
+        let database = Database::global();
         let network = Database::global().global_config.selected_network();
 
         let id = WalletId::new();
@@ -177,7 +179,8 @@ impl Wallet {
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         let format = pubport::Format::try_new_from_str(&xpub)
-            .map_err(|error| Error::ParseXpubError(error.into()))?;
+            .map_err(Into::into)
+            .map_err(WalletError::ParseXpubError)?;
 
         let descriptors = match format {
             Format::Descriptor(descriptors) => descriptors,
@@ -196,13 +199,17 @@ impl Wallet {
             .as_ref()
             .map(Fingerprint::to_string);
 
+        let xpub = descriptors
+            .xpub()
+            .map_err(Into::into)
+            .map_err(WalletError::ParseXpubError)?;
+
         let wallet_name = match fingerprint {
             Some(fingerprint) => format!("Hardware Wallet ({fingerprint})"),
             None => "Hardware Wallet".to_string(),
         };
 
         let metadata = WalletMetadata::new_with_id(id.clone(), wallet_name);
-
         let descriptors: Descriptors = descriptors.into();
 
         let wallet = descriptors
@@ -210,6 +217,12 @@ impl Wallet {
             .network(network.into())
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
+
+        // save public key in keychain too
+        keychain.save_wallet_xpub(&id, xpub)?;
+
+        // save wallet_metadata to database
+        database.wallets.save_wallet(metadata.clone())?;
 
         Ok(Self {
             id,
