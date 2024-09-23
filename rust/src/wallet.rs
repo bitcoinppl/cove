@@ -205,8 +205,8 @@ impl Wallet {
             .map_err(WalletError::ParseXpubError)?;
 
         let wallet_name = match fingerprint {
-            Some(fingerprint) => format!("Hardware Wallet ({fingerprint})"),
-            None => "Hardware Wallet".to_string(),
+            Some(fingerprint) => format!("HWW Import ({})", fingerprint.to_ascii_uppercase()),
+            None => "HWW Import".to_string(),
         };
 
         let metadata = WalletMetadata::new_with_id(id.clone(), wallet_name);

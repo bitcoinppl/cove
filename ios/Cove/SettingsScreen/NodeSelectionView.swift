@@ -39,7 +39,6 @@ struct NodeSelectionView: View {
         }
     }
 
-    @MainActor
     private func showLoadingPopup() {
         cancelCheckUrlTask()
 
@@ -47,7 +46,6 @@ struct NodeSelectionView: View {
             .showAndStack()
     }
 
-    @MainActor
     private func completeLoading(_ state: PopupState) {
         checkUrlTask = nil
         PopupManager.dismiss()
@@ -61,9 +59,12 @@ struct NodeSelectionView: View {
         }
 
         Task {
-            MiddlePopup(state: state)
-                .showAndReplace()
-                .dismissAfter(dismissAfter)
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run {
+                let _ = MiddlePopup(state: state)
+                    .showAndReplace()
+                    .dismissAfter(dismissAfter)
+            }
         }
     }
 
@@ -94,16 +95,16 @@ struct NodeSelectionView: View {
 
             if let node = node {
                 Task {
-                    await showLoadingPopup()
+                    showLoadingPopup()
                     let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
 
                     switch result {
-                    case .success: await completeLoading(.success("Connected to node successfully"))
+                    case .success: completeLoading(.success("Connected to node successfully"))
                     case let .failure(error):
                         let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
                         let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
 
-                        await completeLoading(.failure(formattedMessage))
+                        completeLoading(.failure(formattedMessage))
                     }
                 }
             }
