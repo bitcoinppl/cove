@@ -128,7 +128,9 @@ struct QrCodeImportScreen: View {
         .onChange(of: scannedCode) { _, scannedCode in
             guard let scannedCode = scannedCode else { return }
             do {
-                _ = try Wallet.newFromXpub(xpub: scannedCode.value)
+                let wallet = try Wallet.newFromXpub(xpub: scannedCode.value)
+                let id = wallet.id()
+                Log.debug("Imported Wallet: \(id)")
                 self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
             } catch {
                 self.alert = AlertItem(type: .error(error.localizedDescription))

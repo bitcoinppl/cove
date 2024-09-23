@@ -170,9 +170,11 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = WalletId::new();
-        let mut db =
-            Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
-                .map_err(|error| WalletError::LoadError(error.to_string()))?;
+        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
+            id.to_string().as_bytes(),
+            data_path(&id),
+        )
+        .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         let format = pubport::Format::try_new_from_str(&xpub)
             .map_err(|error| Error::ParseXpubError(error.into()))?;
