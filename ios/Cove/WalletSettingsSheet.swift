@@ -65,15 +65,17 @@ struct WalletSettingsSheet: View {
                 }
 
                 Section(header: Text("Danger Zone")) {
-                    Button {
-                        showingSecretWordsConfirmation = true
-                    } label: {
-                        Label {
-                            Text("View Secret Words")
-                                .foregroundColor(.orange)
-                        } icon: {
-                            Image(systemName: "lock.trianglebadge.exclamationmark")
-                                .foregroundColor(.orange)
+                    if model.walletMetadata.walletType == .hot {
+                        Button {
+                            showingSecretWordsConfirmation = true
+                        } label: {
+                            Label {
+                                Text("View Secret Words")
+                                    .foregroundColor(.orange)
+                            } icon: {
+                                Image(systemName: "lock.trianglebadge.exclamationmark")
+                                    .foregroundColor(.orange)
+                            }
                         }
                     }
 
