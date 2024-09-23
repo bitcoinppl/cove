@@ -76,7 +76,7 @@ struct QrCodeImportScreen: View {
                 VStack {
                     ZStack {
                         RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.primary, lineWidth: 2)
+                            .stroke(Color.primary, lineWidth: 3)
                             .frame(height: qrCodeHeight)
 
                         CodeScannerView(codeTypes: [.qr],
@@ -204,7 +204,10 @@ struct HelpView: View {
                         .font(.title2)
                         .fontWeight(.bold)
 
-                    Text("Use NFC or File import instead")
+                    Text("1. Go to 'Advanced / Tools'")
+                    Text("2. Export Wallet > Descriptor")
+                    Text("3. Press the Enter (✓) and select your wallet type")
+                    Text("4. Scan the Generated QR code")
                 }
 
                 Divider()
