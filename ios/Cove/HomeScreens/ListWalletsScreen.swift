@@ -65,12 +65,9 @@ struct ListWalletsScreen: View {
         .navigationTitle("Wallets")
         .background(.background)
         .padding(.top, 10)
-        .enableInjection()
+
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 #Preview {

@@ -19,8 +19,8 @@ fmt:
 clippy:
     cd rust && cargo clippy
 
-update:
-    cd rust && cargo update
+update pkg="":
+    cd rust && cargo update {{pkg}}
 
 clean-xcode:
     rm -rf ~/Library/Caches/org.swift.swiftpm

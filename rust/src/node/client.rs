@@ -17,9 +17,9 @@ use crate::node::Node;
 
 use super::ApiType;
 
-const STOP_GAP: usize = 30;
-const ELECTRUM_BATCH_SIZE: usize = 20;
-const ESPLORA_BATCH_SIZE: usize = 2;
+const STOP_GAP: usize = 25;
+const ELECTRUM_BATCH_SIZE: usize = 10;
+const ESPLORA_BATCH_SIZE: usize = 1;
 
 #[derive(Clone)]
 pub enum NodeClient {

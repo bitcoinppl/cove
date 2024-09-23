@@ -16,12 +16,9 @@ struct HotWalletCreateScreen: View {
 
     var body: some View {
         WordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
-            .enableInjection()
+    
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 struct WordsView: View {
@@ -110,12 +107,9 @@ struct WordsView: View {
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
-        .enableInjection()
+
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 struct WordCardView: View {
@@ -138,12 +132,9 @@ struct WordCardView: View {
         }
         .padding()
         .foregroundColor(.white)
-        .enableInjection()
+
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 struct StyledWordCard<Content: View>: View {
@@ -158,12 +149,9 @@ struct StyledWordCard<Content: View>: View {
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
         }
         .padding()
-        .enableInjection()
+
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 #Preview("12 Words") {

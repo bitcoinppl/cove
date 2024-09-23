@@ -135,7 +135,7 @@ struct SidebarView: View {
             }
         }
         .offset(x: sidebarOffset)
-        .enableInjection()
+
     }
 
     func goTo(_ route: Route) {

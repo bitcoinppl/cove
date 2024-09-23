@@ -128,6 +128,7 @@ struct MiddlePopupView: View {
                 })
                 .progressViewStyle(.circular)
                 .frame(minWidth: screenWidth * 0.65)
+                .padding(.top)
             }
         }
         .cornerRadius(20)

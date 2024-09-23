@@ -40,6 +40,8 @@
 		AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
+		AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */; };
+		AC739D532CA0977D006B5FF1 /* CodeScanner in Frameworks */ = {isa = PBXBuildFile; productRef = AC739D522CA0977D006B5FF1 /* CodeScanner */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
@@ -68,9 +70,7 @@
 		ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D112C2642DD008C5034 /* SunsetWave.swift */; };
 		ACF44D142C2857E9008C5034 /* FixedGlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF44D132C2857E9008C5034 /* FixedGlassCard.swift */; };
 		ACF479F82C59D785008A9362 /* WeakReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF479F72C59D785008A9362 /* WeakReconciler.swift */; };
-		ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */ = {isa = PBXBuildFile; productRef = ACF5B3482C2BA4BC00DDDEB9 /* Inject */; };
 		AD998F28BCDE0FFFCEF64986 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3073277B96EFD103FFE756E8 /* SettingsScreen.swift */; };
-		B8C78037035013520DC6B7B8 /* NewColdWalletContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9BDFDEA059F357653CEAF8 /* NewColdWalletContainer.swift */; };
 		D000B2F22C0F7BB100E32143 /* Cove.swift in Sources */ = {isa = PBXBuildFile; fileRef = D000B2F12C0F7BB100E32143 /* Cove.swift */; };
 		D0245F502C0F7B4E0042B447 /* CoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */; };
 		D0245F542C0F7B500042B447 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0245F532C0F7B500042B447 /* Assets.xcassets */; };
@@ -102,7 +102,6 @@
 		4F6A06235CFE0DBA125358F3 /* KeyboardObserver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeyboardObserver.swift; sourceTree = "<group>"; };
 		5398BBCAD30C0F26920CC75C /* Network+Ext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Network+Ext.swift"; sourceTree = "<group>"; };
 		5D722195526284FA0FD24DDE /* WalletColor+Ext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "WalletColor+Ext.swift"; sourceTree = "<group>"; };
-		6D9BDFDEA059F357653CEAF8 /* NewColdWalletContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NewColdWalletContainer.swift; sourceTree = "<group>"; };
 		80049549984BDDA80E72D91C /* WalletSettingsSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalletSettingsSheet.swift; sourceTree = "<group>"; };
 		8328372CD79EE1B21B23EAF6 /* NewHotWalletContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NewHotWalletContainer.swift; sourceTree = "<group>"; };
 		845A3FB37C6A830D7647EE31 /* SelectedWalletScreen.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SelectedWalletScreen.swift; sourceTree = "<group>"; };
@@ -126,6 +125,8 @@
 		AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiColorScheme.swift; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
+		AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeImportScreen.swift; sourceTree = "<group>"; };
+		AC739D542CA09AD6006B5FF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Ext.swift"; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
@@ -171,7 +172,7 @@
 			files = (
 				AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
-				ACF5B3492C2BA4BC00DDDEB9 /* Inject in Frameworks */,
+				AC739D532CA0977D006B5FF1 /* CodeScanner in Frameworks */,
 				ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */,
 				ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */,
 			);
@@ -185,7 +186,6 @@
 			children = (
 				CBAE8286BEC382061EF00299 /* NewWalletContainer.swift */,
 				8328372CD79EE1B21B23EAF6 /* NewHotWalletContainer.swift */,
-				6D9BDFDEA059F357653CEAF8 /* NewColdWalletContainer.swift */,
 			);
 			path = Container;
 			sourceTree = "<group>";
@@ -232,6 +232,14 @@
 				AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */,
 			);
 			path = TransactionDetails;
+			sourceTree = "<group>";
+		};
+		AC739D4D2CA08F84006B5FF1 /* ColdWallet */ = {
+			isa = PBXGroup;
+			children = (
+				AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */,
+			);
+			path = ColdWallet;
 			sourceTree = "<group>";
 		};
 		AC97D1ED2C287FCE00873092 /* Styles */ = {
@@ -285,6 +293,7 @@
 		ACC3016B2C21095A006790DF /* NewWalletFlow */ = {
 			isa = PBXGroup;
 			children = (
+				AC739D4D2CA08F84006B5FF1 /* ColdWallet */,
 				AC43435F2C6AF7B400105C03 /* Container */,
 				ACC301722C21126C006790DF /* HotWallet */,
 				ACC301792C221450006790DF /* PendingWalletViewModel.swift */,
@@ -345,6 +354,7 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				AC739D542CA09AD6006B5FF1 /* Info.plist */,
 				AC4343612C6AF87B00105C03 /* SettingsScreen */,
 				AC4343602C6AF80000105C03 /* HomeScreens */,
 				ACF479F62C59D76E008A9362 /* FFI */,
@@ -403,9 +413,9 @@
 			name = Cove;
 			packageProductDependencies = (
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
-				ACF5B3482C2BA4BC00DDDEB9 /* Inject */,
 				AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */,
 				ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */,
+				AC739D522CA0977D006B5FF1 /* CodeScanner */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -437,9 +447,9 @@
 			mainGroup = D0245F432C0F7B4E0042B447;
 			packageReferences = (
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
-				ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */,
 				AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */,
 				ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */,
+				AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -479,6 +489,7 @@
 				ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */,
 				ACC1CD622C6D5ABC00C7AD89 /* FloaterPopup.swift in Sources */,
 				ACC3016A2C20C9D4006790DF /* Routes+Ext.swift in Sources */,
+				AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */,
 				ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */,
 				ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */,
 				AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */,
@@ -528,7 +539,6 @@
 				2344E4672757BE424B888B58 /* HotWalletImportScreen.swift in Sources */,
 				1C025A7627543FBFC072E0D1 /* VerifyWordsScreen.swift in Sources */,
 				240A3B1A16A45C43F8991A9E /* NodeSelectionView.swift in Sources */,
-				B8C78037035013520DC6B7B8 /* NewColdWalletContainer.swift in Sources */,
 				9BEA921FB93FC209CF7A8CA2 /* NewWalletContainer.swift in Sources */,
 				69455D17216AD109B6EE2F25 /* WalletMetadata+Ext.swift in Sources */,
 			);
@@ -672,8 +682,10 @@
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -711,8 +723,10 @@
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -762,6 +776,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/twostraws/CodeScanner.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
 		AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/exyte/ActivityIndicatorView";
@@ -786,17 +808,14 @@
 				minimumVersion = 2.7.0;
 			};
 		};
-		ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/krzysztofzablocki/Inject.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.5.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AC739D522CA0977D006B5FF1 /* CodeScanner */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */;
+			productName = CodeScanner;
+		};
 		AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */;
@@ -811,11 +830,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */;
 			productName = MijickPopupView;
-		};
-		ACF5B3482C2BA4BC00DDDEB9 /* Inject */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = ACF5B3472C2BA4BC00DDDEB9 /* XCRemoteSwiftPackageReference "Inject" */;
-			productName = Inject;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

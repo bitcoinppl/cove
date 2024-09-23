@@ -38,7 +38,7 @@ if [ $BUILD_TYPE == "release" ]; then
 else
     # debug on device or simulator
     if [ "$DEVICE" == "true" ] || [ "$DEVICE" == "--device" ]; then
-        TARGETS=(aarch64-apple-ios)
+        TARGETS=(aarch64-apple-ios aarch64-apple-ios-sim)
     else
         TARGETS=(aarch64-apple-ios-sim)
     fi

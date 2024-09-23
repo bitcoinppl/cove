@@ -32,12 +32,7 @@ struct SettingsScreen2: View {
             .listStyle(InsetGroupedListStyle())
             .navigationTitle("Settings")
         }
-        .enableInjection()
     }
-
-    #if DEBUG
-    @ObserveInjection var forceRedraw
-    #endif
 }
 
 struct SettingsRow: View {
@@ -55,12 +50,7 @@ struct SettingsRow: View {
 
             Text(text)
         }
-        .enableInjection()
     }
-
-    #if DEBUG
-    @ObserveInjection var forceRedraw
-    #endif
 }
 
 #Preview {

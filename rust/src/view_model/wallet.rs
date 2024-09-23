@@ -144,6 +144,25 @@ impl RustWalletViewModel {
         })
     }
 
+    #[uniffi::constructor(name = "try_new_from_xpub")]
+    pub fn try_new_from_xpub(xpub: String) -> Result<Self, Error> {
+        let (sender, receiver) = crossbeam::channel::bounded(1000);
+
+        let wallet = Wallet::try_new_persisted_from_xpub(xpub)?;
+        let id = wallet.id.clone();
+        let metadata = wallet.metadata.clone();
+
+        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+
+        Ok(Self {
+            id,
+            actor,
+            metadata: Arc::new(RwLock::new(metadata)),
+            reconciler: sender,
+            reconcile_receiver: Arc::new(receiver),
+        })
+    }
+
     #[uniffi::method]
     pub async fn balance(&self) -> Balance {
         call!(self.actor.balance()).await.unwrap_or_default()

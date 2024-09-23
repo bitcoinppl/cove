@@ -71,12 +71,9 @@ struct HotWalletSelectScreen: View {
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)
-        .enableInjection()
+
     }
 
-    #if DEBUG
-        @ObserveInjection var forceRedraw
-    #endif
 }
 
 #Preview {
