@@ -8,18 +8,31 @@
 import CodeScanner
 import SwiftUI
 
-struct IdentifiableString: Identifiable {
+struct IdentifiableString: Identifiable, Equatable {
     let id = UUID()
     let value: String
 }
 
 struct QrCodeImportScreen: View {
+    @State private var multiQr: MultiQr?
     @State private var scannedCode: IdentifiableString?
     @State private var showingHelp = false
     @Environment(\.presentationMode) var presentationMode
 
     // private
+    @State private var scanComplete = false
+    @State private var totalParts: Int? = nil
+    @State private var partsLeft: Int? = nil
+
     private let screenHeight = UIScreen.main.bounds.height
+
+    var partsScanned: Int {
+        if let totalParts, let partsLeft {
+            totalParts - partsLeft
+        } else {
+            0
+        }
+    }
 
     var qrCodeHeight: CGFloat {
         screenHeight * 0.4
@@ -33,21 +46,37 @@ struct QrCodeImportScreen: View {
                 .multilineTextAlignment(.center)
                 .padding()
 
-            ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.primary, lineWidth: 2)
-                    .frame(height: qrCodeHeight)
+            if !scanComplete {
+                VStack {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.primary, lineWidth: 2)
+                            .frame(height: qrCodeHeight)
 
-                CodeScannerView(codeTypes: [.qr],
-                                scanMode: .continuous,
-                                scanInterval: 0.20,
-                                simulatedData: "Simulated QR Code",
-                                completion: handleScan)
-                    .frame(height: qrCodeHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                        CodeScannerView(codeTypes: [.qr],
+                                        scanMode: .oncePerCode,
+                                        scanInterval: 0.20,
+                                        simulatedData: "Simulated QR Code",
+                                        completion: handleScan)
+                            .frame(height: qrCodeHeight)
+                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                    }
+                    .padding(.horizontal)
+
+                    if let totalParts, let partsLeft {
+                        Text("Scanned \(partsScanned) of \(totalParts)")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .padding(.top, 8)
+
+                        Text("\(partsLeft) parts left")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fontWeight(.bold)
+                    }
+                }
+                .padding(.vertical, 36)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 36)
 
             Button("Where do I get the QR code?") {
                 showingHelp = true
@@ -71,13 +100,37 @@ struct QrCodeImportScreen: View {
                 }
             )
         }
+        .onChange(of: scannedCode) { _, scannedCode in
+            guard let scannedCode = scannedCode else { return }
+            do {}
+        }
         .navigationTitle("Scan QR")
     }
 
     func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
         case .success(let result):
-            scannedCode = IdentifiableString(value: result.string)
+            if multiQr == nil {
+                multiQr = MultiQr(qr: result.string)
+            }
+
+            guard let multiQr else { return }
+            if multiQr.isSingle() {
+                scanComplete = true
+                scannedCode = IdentifiableString(value: result.string)
+            }
+
+            do {
+                let result = try multiQr.addPart(qr: result.string)
+                if result.isComplete() {
+                    scanComplete = true
+                    let data = try result.finalResult()
+                    scannedCode = IdentifiableString(value: data)
+                }
+            } catch {
+                print("error scanning bbqr part: \(error)")
+            }
+
         case .failure(let error):
             print("Scanning failed: \(error.localizedDescription)")
         }
