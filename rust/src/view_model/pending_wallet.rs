@@ -72,6 +72,9 @@ pub enum WalletCreationError {
 
     #[error("persist error: {0}")]
     PersisError(String),
+
+    #[error("failed to import hardware wallet: {0}")]
+    ImportError(String),
 }
 
 #[uniffi::export]
@@ -191,6 +194,7 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             WalletError::DatabaseError(error) => Self::DatabaseError(error),
             WalletError::BdkError(error) => Self::BdkError(error),
             WalletError::PersistError(error) => Self::PersisError(error),
+            WalletError::ParseXpubError(error) => Self::ImportError(error.to_string()),
 
             WalletError::WalletNotFound => unreachable!("no wallet found in creation"),
             WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),

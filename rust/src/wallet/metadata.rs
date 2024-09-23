@@ -96,20 +96,24 @@ impl WalletMetadata {
         }
     }
 
-    pub fn new_imported(name: impl Into<String>, network: Network) -> Self {
+    pub fn new_with_id(id: WalletId, name: impl Into<String>) -> Self {
+        let me = Self::new(name);
+
         Self {
-            id: WalletId::new(),
-            name: name.into(),
-            color: WalletColor::Blue,
+            id,
             verified: true,
+            wallet_type: WalletType::Cold,
+            ..me
+        }
+    }
+
+    pub fn new_imported(name: impl Into<String>, network: Network) -> Self {
+        let me = Self::new(name);
+
+        Self {
             network,
-            performed_full_scan: false,
-            selected_unit: Unit::default(),
-            selected_fiat_currency: default_fiat_currency(),
-            sensitive_visible: true,
-            details_expanded: false,
-            wallet_type: WalletType::Hot,
-            internal: InternalOnlyMetadata::default(),
+            verified: true,
+            ..me
         }
     }
 

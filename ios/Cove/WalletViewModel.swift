@@ -22,6 +22,17 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
+    public init(xpub: String) throws {
+        let rust = try RustWalletViewModel.tryNewFromXpub(xpub: xpub)
+        let metadata = rust.walletMetadata()
+
+        self.rust = rust
+        walletMetadata = metadata
+        id = metadata.id
+
+        rust.listenForUpdates(reconciler: WeakReconciler(self))
+    }
+
     var isVerified: Bool {
         walletMetadata.verified
     }

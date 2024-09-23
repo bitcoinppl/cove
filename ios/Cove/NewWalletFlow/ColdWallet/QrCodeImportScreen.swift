@@ -13,6 +13,30 @@ struct IdentifiableString: Identifiable, Equatable {
     let value: String
 }
 
+private struct AlertItem: Identifiable {
+    let id = UUID()
+    let type: AlertType
+}
+
+private enum AlertType: Equatable {
+    case success(String)
+    case error(String)
+
+    var message: String {
+        switch self {
+        case let .success(message): return message
+        case let .error(message): return message
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .success: return "Success"
+        case .error: return "Error"
+        }
+    }
+}
+
 struct QrCodeImportScreen: View {
     @State private var multiQr: MultiQr?
     @State private var scannedCode: IdentifiableString?
@@ -23,6 +47,7 @@ struct QrCodeImportScreen: View {
     @State private var scanComplete = false
     @State private var totalParts: Int? = nil
     @State private var partsLeft: Int? = nil
+    @State private var alert: AlertItem? = nil
 
     private let screenHeight = UIScreen.main.bounds.height
 
@@ -91,10 +116,10 @@ struct QrCodeImportScreen: View {
             .padding()
         }
         .padding()
-        .alert(item: $scannedCode) { code in
+        .alert(item: $alert) { alert in
             Alert(
-                title: Text("Scanned Code"),
-                message: Text(code.value),
+                title: Text(alert.type.title),
+                message: Text(alert.type.message),
                 dismissButton: .default(Text("OK")) {
                     presentationMode.wrappedValue.dismiss()
                 }
@@ -102,16 +127,22 @@ struct QrCodeImportScreen: View {
         }
         .onChange(of: scannedCode) { _, scannedCode in
             guard let scannedCode = scannedCode else { return }
-            do {}
+            do {
+                _ = try Wallet.newFromXpub(xpub: scannedCode.value)
+                self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
+            } catch {
+                self.alert = AlertItem(type: .error(error.localizedDescription))
+            }
         }
         .navigationTitle("Scan QR")
     }
 
     func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
-        case .success(let result):
+        case let .success(result):
             if multiQr == nil {
                 multiQr = MultiQr(qr: result.string)
+                totalParts = Int(multiQr?.totalParts() ?? 0)
             }
 
             guard let multiQr else { return }
@@ -122,6 +153,8 @@ struct QrCodeImportScreen: View {
 
             do {
                 let result = try multiQr.addPart(qr: result.string)
+                partsLeft = Int(result.partsLeft())
+
                 if result.isComplete() {
                     scanComplete = true
                     let data = try result.finalResult()
@@ -131,7 +164,7 @@ struct QrCodeImportScreen: View {
                 print("error scanning bbqr part: \(error)")
             }
 
-        case .failure(let error):
+        case let .failure(error):
             print("Scanning failed: \(error.localizedDescription)")
         }
     }

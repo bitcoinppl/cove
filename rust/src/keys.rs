@@ -130,3 +130,21 @@ impl DescriptorSecretKey {
         Self(descriptor_secret_key)
     }
 }
+
+impl From<ExtendedDescriptor> for Descriptor {
+    fn from(descriptor: ExtendedDescriptor) -> Self {
+        Self {
+            extended_descriptor: descriptor,
+            key_map: KeyMap::new(),
+        }
+    }
+}
+
+impl From<pubport::descriptor::Descriptors> for Descriptors {
+    fn from(descriptors: pubport::descriptor::Descriptors) -> Self {
+        let external = descriptors.external.into();
+        let internal = descriptors.internal.into();
+
+        Self { external, internal }
+    }
+}

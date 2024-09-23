@@ -1,5 +1,6 @@
 pub mod address;
 pub mod balance;
+pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
 
@@ -13,8 +14,10 @@ use crate::{
     consts::ROOT_DATA_DIR,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
+    keys::Descriptors,
     mnemonic::MnemonicExt as _,
     network::Network,
+    xpub::{self, XpubError},
 };
 use balance::Balance;
 use bdk_file_store::Store;
@@ -24,10 +27,13 @@ use bdk_wallet::{
 };
 use bip39::Mnemonic;
 use metadata::{WalletId, WalletMetadata};
+use pubport::formats::Format;
 use tracing::{error, warn};
 
 pub type Address = address::Address;
 pub type AddressInfo = address::AddressInfo;
+
+pub type Error = WalletError;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum WalletError {
@@ -54,6 +60,9 @@ pub enum WalletError {
 
     #[error("metadata not found")]
     MetadataNotFound,
+
+    #[error("failed to parse xpub: {0}")]
+    ParseXpubError(#[from] XpubError),
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -152,6 +161,58 @@ impl Wallet {
             id,
             network,
             metadata,
+            bdk: wallet,
+            db,
+        })
+    }
+
+    pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
+        let network = Database::global().global_config.selected_network();
+
+        let id = WalletId::new();
+        let mut db =
+            Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
+                .map_err(|error| WalletError::LoadError(error.to_string()))?;
+
+        let format = pubport::Format::try_new_from_str(&xpub)
+            .map_err(|error| Error::ParseXpubError(error.into()))?;
+
+        let descriptors = match format {
+            Format::Descriptor(descriptors) => descriptors,
+            Format::Json(json) => {
+                json.bip84
+                    .ok_or(WalletError::ParseXpubError(xpub::XpubError::MissingXpub(
+                        "No BIP84 xpub found".to_string(),
+                    )))?
+            }
+            Format::Wasabi(descriptors) => descriptors,
+            Format::Electrum(descriptors) => descriptors,
+        };
+
+        let fingerprint = descriptors
+            .fingerprint()
+            .as_ref()
+            .map(Fingerprint::to_string);
+
+        let wallet_name = match fingerprint {
+            Some(fingerprint) => format!("Hardware Wallet ({fingerprint})"),
+            None => "Hardware Wallet".to_string(),
+        };
+
+        let metadata = WalletMetadata::new_with_id(id.clone(), wallet_name);
+
+        let descriptors: Descriptors = descriptors.into();
+
+        let wallet = descriptors
+            .to_create_params()
+            .network(network.into())
+            .create_wallet(&mut db)
+            .map_err(|error| WalletError::BdkError(error.to_string()))?;
+
+        Ok(Self {
+            id,
+            metadata,
+            network,
             bdk: wallet,
             db,
         })

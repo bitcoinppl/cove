@@ -21,6 +21,7 @@ pub mod network;
 pub mod node;
 pub mod node_connect;
 pub mod pending_wallet;
+pub mod qr;
 pub mod redb;
 pub mod task;
 pub mod transaction;
@@ -29,5 +30,6 @@ pub mod util;
 pub mod view_model;
 pub mod wallet;
 pub mod word_validator;
+pub mod xpub;
 
 uniffi::setup_scaffolding!();
