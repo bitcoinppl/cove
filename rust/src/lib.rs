@@ -11,6 +11,7 @@ pub mod color;
 pub mod color_scheme;
 pub mod consts;
 pub mod encryption;
+pub mod ffi;
 pub mod fiat;
 pub mod format;
 pub mod header_icon_presenter;

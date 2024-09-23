@@ -44,6 +44,7 @@
 		AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
+		AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */; };
 		AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
@@ -132,6 +133,7 @@
 		AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiColorScheme.swift; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
+		AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiScanResultData.swift; sourceTree = "<group>"; };
 		AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeImportScreen.swift; sourceTree = "<group>"; };
 		AC739D542CA09AD6006B5FF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
@@ -342,6 +344,7 @@
 		ACF479F62C59D76E008A9362 /* FFI */ = {
 			isa = PBXGroup;
 			children = (
+				AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */,
 				ACF479F72C59D785008A9362 /* WeakReconciler.swift */,
 				AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */,
 				AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */,
@@ -540,6 +543,7 @@
 				AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */,
 				ACC1CD5A2C6D415400C7AD89 /* FloaterPopupView.swift in Sources */,
 				52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */,
+				AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */,
 				AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */,
 				AC2D59252C5B213500B67277 /* TransactionsCardView.swift in Sources */,
 				4B7D31B349728B3C573472DD /* Network+Ext.swift in Sources */,

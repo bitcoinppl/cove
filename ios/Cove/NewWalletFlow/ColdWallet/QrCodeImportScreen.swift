@@ -5,13 +5,7 @@
 //  Created by Praveen Perera on 9/22/24.
 //
 
-import CodeScanner
 import SwiftUI
-
-struct IdentifiableString: Identifiable, Equatable {
-    let id = UUID()
-    let value: String
-}
 
 private struct AlertItem: Identifiable {
     let id = UUID()
@@ -79,13 +73,15 @@ struct QrCodeImportScreen: View {
                             .stroke(Color.primary, lineWidth: 3)
                             .frame(height: qrCodeHeight)
 
-                        CodeScannerView(codeTypes: [.qr],
-                                        scanMode: .oncePerCode,
-                                        scanInterval: 0.1,
-                                        simulatedData: "Simulated QR Code",
-                                        completion: handleScan)
-                            .frame(height: qrCodeHeight)
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
+                        CodeScannerView(
+                            codeTypes: [.qr],
+                            scanMode: .oncePerCode,
+                            scanInterval: 0.1,
+                            simulatedData: "Simulated QR Code",
+                            completion: handleScan
+                        )
+                        .frame(height: qrCodeHeight)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
                     }
                     .padding(.horizontal)
 
@@ -141,22 +137,28 @@ struct QrCodeImportScreen: View {
         .navigationTitle("Scan QR")
     }
 
-    func handleScan(result: Result<ScanResult, ScanError>) {
+    private func handleScan(result: Result<ScanResult, ScanError>) {
         switch result {
         case let .success(result):
+            guard case let .string(stringValue) = result.data else { return }
+
             if multiQr == nil {
-                multiQr = MultiQr(qr: result.string)
+                multiQr = MultiQr.newFromString(qr: stringValue)
                 totalParts = Int(multiQr?.totalParts() ?? 0)
             }
 
             guard let multiQr else { return }
+
+            // single QR
             if multiQr.isSingle() {
                 scanComplete = true
-                scannedCode = IdentifiableString(value: result.string)
+                scannedCode = IdentifiableString(value: stringValue)
+                return
             }
 
+            // BBQr
             do {
-                let result = try multiQr.addPart(qr: result.string)
+                let result = try multiQr.addPart(qr: stringValue)
                 partsLeft = Int(result.partsLeft())
 
                 if result.isComplete() {
@@ -165,7 +167,7 @@ struct QrCodeImportScreen: View {
                     scannedCode = IdentifiableString(value: data)
                 }
             } catch {
-                print("error scanning bbqr part: \(error)")
+                Log.error("error scanning bbqr part: \(error)")
             }
 
         case let .failure(error):
@@ -219,7 +221,9 @@ struct HelpView: View {
 
                     Text("1. In your hardware wallet, go to settings")
                     Text("2. Look for 'Export'")
-                    Text("3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work")
+                    Text(
+                        "3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work"
+                    )
                     Text("4. Generate QR code")
                     Text("5. Scan the Generated QR code")
                 }

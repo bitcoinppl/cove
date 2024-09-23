@@ -1,5 +1,5 @@
-alias rx := reset-xcode
-alias cx := clean-xcode
+alias xc := xcode-clean
+alias xr := xcode-reset
 
 default:
     just --list
@@ -22,11 +22,11 @@ clippy:
 update pkg="":
     cd rust && cargo update {{pkg}}
 
-clean-xcode:
+xcode-clean:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     cd ios && xcodebuild clean
 
-reset-xcode:
+xcode-reset:
     killAll Xcode || true
     rm -rf ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
     xcrun simctl --set previews delete all

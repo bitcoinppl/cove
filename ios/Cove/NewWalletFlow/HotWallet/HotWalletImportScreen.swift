@@ -12,7 +12,7 @@ struct HotWalletImportScreen: View {
     let numberOfWords: NumberOfBip39Words
 
     @Environment(\.navigate) private var navigate
-    @Environment(MainViewModel.self) private var appModel
+    @Environment(MainViewModel.self) private var app
 
     @State private var tabIndex: Int = 0
 
@@ -28,6 +28,13 @@ struct HotWalletImportScreen: View {
 
     @State var enteredWords: [[String]] = [[]]
     @State var filteredSuggestions: [String] = []
+
+    // qr code scanning
+    @Environment(\.presentationMode) var presentationMode
+    @State private var multiQr: MultiQr?
+    @State private var isPresentingScanner = false
+    @State private var scannedCode: IdentifiableString?
+    @State private var scanComplete: Bool = false
 
     func initOnAppear() {
         enteredWords = numberOfWords.inGroups()
@@ -64,11 +71,43 @@ struct HotWalletImportScreen: View {
         }
     }
 
+    private func handleScan(result: Result<ScanResult, ScanError>) {
+        if case let .failure(error) = result {
+            Log.error("Scan error: \(error.localizedDescription)")
+            return
+        }
+
+        guard case let .success(scanResult) = result else { return }
+
+        let multiQr: MultiQr = switch multiQr {
+        case let .some(multiQr): multiQr
+        case .none:
+            let multiQr = MultiQr(qr: FfiScanResultData(scanResult.data))
+            self.multiQr = multiQr
+            multiQr
+        }
+
+        do {
+            switch multiQr.handleScanResult(qr: FfiScanResultData(scanResult.data)) {
+            case let .seedQr(seedQr):
+                ()
+            case let .single(string):
+                ()
+            case let .completedBBqr(bbqrJoined):
+                handleReceivedWords(bbqrJoined.data)
+            case let .inProgressBBqr(uInt32):
+                ()
+            }
+        } catch {}
+    }
+
+    func handleReceivedWords(_ words: [String]) {}
+
     func importWallet() {
         do {
             let walletMetadata = try model.rust.importWallet(enteredWords: enteredWords)
-            try appModel.rust.selectWallet(id: walletMetadata.id)
-            appModel.resetRoute(to: .selectedWallet(walletMetadata.id))
+            try app.rust.selectWallet(id: walletMetadata.id)
+            app.resetRoute(to: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
             switch error {
             case let .InvalidWordGroup(error):
@@ -193,7 +232,29 @@ struct HotWalletImportScreen: View {
 
             Spacer()
 
-            NextOrImportButton
+            NextOrImportButton.padding(.bottom, 24)
+
+            Button(action: {
+                isPresentingScanner = true
+            }) {
+                HStack {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 20))
+                    Text("Scan QR Code")
+                        .font(.headline)
+                }
+                .padding()
+                .foregroundColor(.white)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [.black.opacity(0.7), .black, .black.opacity(0.8)]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ))
+                .cornerRadius(10)
+                .shadow(color: .gray.opacity(0.5), radius: 5, x: 0, y: 2)
+            }
+            .buttonStyle(PlainButtonStyle())
 
             Spacer()
         }
@@ -209,9 +270,14 @@ struct HotWalletImportScreen: View {
             Alert(title: Text("Duplicate Wallet"),
                   message: Text("This wallet has already been imported!"),
                   dismissButton: .default(Text("OK")) {
-                      try? appModel.rust.selectWallet(id: duplicate.walletId)
-                      appModel.resetRoute(to: .selectedWallet(duplicate.walletId))
+                      try? app.rust.selectWallet(id: duplicate.walletId)
+                      app.resetRoute(to: .selectedWallet(duplicate.walletId))
                   })
+        }
+        .sheet(isPresented: $isPresentingScanner) {
+            CodeScannerView(codeTypes: [.qr]) { response in
+                handleScan(result: response)
+            }
         }
         .onAppear(perform: initOnAppear)
         .onChange(of: enteredWords) {
@@ -259,9 +325,7 @@ private struct CardTab: View {
                 )
             }
         }
-
     }
-
 }
 
 private struct AutocompleteField: View {
@@ -320,7 +384,6 @@ private struct AutocompleteField: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
-
     }
 
     func submitFocusField() {
@@ -405,7 +468,6 @@ private struct AutocompleteField: View {
                 }
             }
     }
-
 }
 
 private struct DuplicateWalletItem: Identifiable {
@@ -413,6 +475,12 @@ private struct DuplicateWalletItem: Identifiable {
     var walletId: WalletId
 }
 
-#Preview {
-    VerifyWordsScreen(id: WalletId())
+#Preview("12 Words") {
+    HotWalletImportScreen(numberOfWords: .twelve)
+        .environment(MainViewModel())
+}
+
+#Preview("24 Words") {
+    HotWalletImportScreen(numberOfWords: .twentyFour)
+        .environment(MainViewModel())
 }

@@ -520,6 +520,21 @@ private struct FfiConverterString: FfiConverter {
     }
 }
 
+private struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return try Data(readBytes(&buf, count: Int(len)))
+    }
+
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
+    }
+}
+
 public protocol AddressProtocol: AnyObject {
     func string() -> String
 }
@@ -1144,6 +1159,87 @@ public func FfiConverterTypeBbqrJoinResult_lift(_ pointer: UnsafeMutableRawPoint
 
 public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBbqrJoinResult.lower(value)
+}
+
+public protocol BbqrJoinedProtocol: AnyObject {}
+
+open class BbqrJoined:
+    BbqrJoinedProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_bbqrjoined(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_bbqrjoined(pointer, $0) }
+    }
+}
+
+public struct FfiConverterTypeBbqrJoined: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = BbqrJoined
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> BbqrJoined {
+        return BbqrJoined(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: BbqrJoined) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BbqrJoined {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: BbqrJoined, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeBbqrJoined_lift(_ pointer: UnsafeMutableRawPointer) throws -> BbqrJoined {
+    return try FfiConverterTypeBbqrJoined.lift(pointer)
+}
+
+public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBbqrJoined.lower(value)
 }
 
 public protocol Bip39AutoCompleteProtocol: AnyObject {
@@ -2795,6 +2891,12 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UnsafeMutableRa
 public protocol MultiQrProtocol: AnyObject {
     func addPart(qr: String) throws -> BbqrJoinResult
 
+    func handleScanResult(qr: FfiScanResultData) throws -> MultiQrScanResult
+
+    func isBbqr() -> Bool
+
+    func isSeedQr() -> Bool
+
     func isSingle() -> Bool
 
     func totalParts() -> UInt32
@@ -2830,11 +2932,11 @@ open class MultiQr:
         return try! rustCall { uniffi_cove_fn_clone_multiqr(self.pointer, $0) }
     }
 
-    public convenience init(qr: String) {
+    public convenience init(qr: FfiScanResultData) {
         let pointer =
             try! rustCall {
                 uniffi_cove_fn_constructor_multiqr_new(
-                    FfiConverterString.lower(qr), $0
+                    FfiConverterTypeFfiScanResultData.lower(qr), $0
                 )
             }
         self.init(unsafeFromRawPointer: pointer)
@@ -2848,10 +2950,45 @@ open class MultiQr:
         try! rustCall { uniffi_cove_fn_free_multiqr(pointer, $0) }
     }
 
+    public static func newFromData(data: Data) -> MultiQr {
+        return try! FfiConverterTypeMultiQr.lift(try! rustCall {
+            uniffi_cove_fn_constructor_multiqr_new_from_data(
+                FfiConverterData.lower(data), $0
+            )
+        })
+    }
+
+    public static func newFromString(qr: String) -> MultiQr {
+        return try! FfiConverterTypeMultiQr.lift(try! rustCall {
+            uniffi_cove_fn_constructor_multiqr_new_from_string(
+                FfiConverterString.lower(qr), $0
+            )
+        })
+    }
+
     open func addPart(qr: String) throws -> BbqrJoinResult {
         return try FfiConverterTypeBbqrJoinResult.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
             uniffi_cove_fn_method_multiqr_add_part(self.uniffiClonePointer(),
                                                    FfiConverterString.lower(qr), $0)
+        })
+    }
+
+    open func handleScanResult(qr: FfiScanResultData) throws -> MultiQrScanResult {
+        return try FfiConverterTypeMultiQrScanResult.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_multiqr_handle_scan_result(self.uniffiClonePointer(),
+                                                             FfiConverterTypeFfiScanResultData.lower(qr), $0)
+        })
+    }
+
+    open func isBbqr() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_multiqr_is_bbqr(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isSeedQr() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_multiqr_is_seed_qr(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -4006,6 +4143,95 @@ public func FfiConverterTypeRustWalletViewModel_lift(_ pointer: UnsafeMutableRaw
 
 public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewModel) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRustWalletViewModel.lower(value)
+}
+
+public protocol SeedQrProtocol: AnyObject {
+    func words() -> [String]
+}
+
+open class SeedQr:
+    SeedQrProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_seedqr(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_seedqr(pointer, $0) }
+    }
+
+    open func words() -> [String] {
+        return try! FfiConverterSequenceString.lift(try! rustCall {
+            uniffi_cove_fn_method_seedqr_words(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeSeedQr: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = SeedQr
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SeedQr {
+        return SeedQr(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: SeedQr) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SeedQr {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: SeedQr, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeSeedQr_lift(_ pointer: UnsafeMutableRawPointer) throws -> SeedQr {
+    return try FfiConverterTypeSeedQr.lift(pointer)
+}
+
+public func FfiConverterTypeSeedQr_lower(_ value: SeedQr) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSeedQr.lower(value)
 }
 
 public protocol SentAndReceivedProtocol: AnyObject {
@@ -6593,6 +6819,55 @@ extension FfiColorScheme: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum FfiScanResultData {
+    case string(String
+    )
+    case data(Data
+    )
+}
+
+public struct FfiConverterTypeFfiScanResultData: FfiConverterRustBuffer {
+    typealias SwiftType = FfiScanResultData
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiScanResultData {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .string(FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .data(FfiConverterData.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiScanResultData, into buf: inout [UInt8]) {
+        switch value {
+        case let .string(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .data(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeFfiScanResultData_lift(_ buf: RustBuffer) throws -> FfiScanResultData {
+    return try FfiConverterTypeFfiScanResultData.lift(buf)
+}
+
+public func FfiConverterTypeFfiScanResultData_lower(_ value: FfiScanResultData) -> RustBuffer {
+    return FfiConverterTypeFfiScanResultData.lower(value)
+}
+
+extension FfiScanResultData: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum FiatCurrency {
     case usd
     case eur
@@ -7211,10 +7486,12 @@ extension MnemonicError: Foundation.LocalizedError {
 
 public enum MultiQrError {
     case CannotAddPartToSingleQr
+    case CannotAddPartToSeedQr
     case ParseError(String
     )
     case InvalidUtf8
     case NotYetAvailable
+    case CannotAddBinaryDataToBbqr
 }
 
 public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
@@ -7224,11 +7501,13 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         case 1: return .CannotAddPartToSingleQr
-        case 2: return try .ParseError(
+        case 2: return .CannotAddPartToSeedQr
+        case 3: return try .ParseError(
                 FfiConverterString.read(from: &buf)
             )
-        case 3: return .InvalidUtf8
-        case 4: return .NotYetAvailable
+        case 4: return .InvalidUtf8
+        case 5: return .NotYetAvailable
+        case 6: return .CannotAddBinaryDataToBbqr
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -7238,15 +7517,21 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         case .CannotAddPartToSingleQr:
             writeInt(&buf, Int32(1))
 
-        case let .ParseError(v1):
+        case .CannotAddPartToSeedQr:
             writeInt(&buf, Int32(2))
+
+        case let .ParseError(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
 
         case .InvalidUtf8:
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
 
         case .NotYetAvailable:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
+
+        case .CannotAddBinaryDataToBbqr:
+            writeInt(&buf, Int32(6))
         }
     }
 }
@@ -7257,6 +7542,71 @@ extension MultiQrError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MultiQrScanResult {
+    case seedQr(SeedQr
+    )
+    case single(String
+    )
+    case completedBBqr(BbqrJoined
+    )
+    case inProgressBBqr(UInt32
+    )
+}
+
+public struct FfiConverterTypeMultiQrScanResult: FfiConverterRustBuffer {
+    typealias SwiftType = MultiQrScanResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiQrScanResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .seedQr(FfiConverterTypeSeedQr.read(from: &buf)
+            )
+
+        case 2: return try .single(FfiConverterString.read(from: &buf)
+            )
+
+        case 3: return try .completedBBqr(FfiConverterTypeBbqrJoined.read(from: &buf)
+            )
+
+        case 4: return try .inProgressBBqr(FfiConverterUInt32.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MultiQrScanResult, into buf: inout [UInt8]) {
+        switch value {
+        case let .seedQr(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeSeedQr.write(v1, into: &buf)
+
+        case let .single(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .completedBBqr(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeBbqrJoined.write(v1, into: &buf)
+
+        case let .inProgressBBqr(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeMultiQrScanResult_lift(_ buf: RustBuffer) throws -> MultiQrScanResult {
+    return try FfiConverterTypeMultiQrScanResult.lift(buf)
+}
+
+public func FfiConverterTypeMultiQrScanResult_lower(_ value: MultiQrScanResult) -> RustBuffer {
+    return FfiConverterTypeMultiQrScanResult.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -10096,6 +10446,15 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_multiqr_add_part() != 11179 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_multiqr_handle_scan_result() != 14202 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_multiqr_is_bbqr() != 22296 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_multiqr_is_seed_qr() != 10256 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_multiqr_is_single() != 64690 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10226,6 +10585,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_seedqr_words() != 44806 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_sentandreceived_amount() != 29581 {
@@ -10378,7 +10740,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_mnemonic_preview() != 3882 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_multiqr_new() != 46744 {
+    if uniffi_cove_checksum_constructor_multiqr_new() != 10702 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_multiqr_new_from_data() != 14734 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_multiqr_new_from_string() != 2028 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_nodeselector_new() != 61659 {
