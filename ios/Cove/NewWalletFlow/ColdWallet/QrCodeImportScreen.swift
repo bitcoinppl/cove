@@ -41,6 +41,7 @@ struct QrCodeImportScreen: View {
     @State private var multiQr: MultiQr?
     @State private var scannedCode: IdentifiableString?
     @State private var showingHelp = false
+    @Environment(MainViewModel.self) var app
     @Environment(\.presentationMode) var presentationMode
 
     // private
@@ -80,7 +81,7 @@ struct QrCodeImportScreen: View {
 
                         CodeScannerView(codeTypes: [.qr],
                                         scanMode: .oncePerCode,
-                                        scanInterval: 0.20,
+                                        scanInterval: 0.1,
                                         simulatedData: "Simulated QR Code",
                                         completion: handleScan)
                             .frame(height: qrCodeHeight)
@@ -132,6 +133,7 @@ struct QrCodeImportScreen: View {
                 let id = wallet.id()
                 Log.debug("Imported Wallet: \(id)")
                 self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
+                try app.rust.selectWallet(id: id)
             } catch {
                 self.alert = AlertItem(type: .error(error.localizedDescription))
             }
@@ -214,6 +216,7 @@ struct HelpView: View {
 
 #Preview {
     QrCodeImportScreen()
+        .environment(MainViewModel())
 }
 
 #Preview("help") {
