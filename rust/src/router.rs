@@ -33,7 +33,7 @@ pub enum HotWalletRoute {
     #[default]
     Select,
     Create(NumberOfBip39Words),
-    Import(NumberOfBip39Words),
+    Import(NumberOfBip39Words, bool),
     VerifyWords(WalletId),
 }
 
@@ -125,6 +125,13 @@ mod ffi {
 
         pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
             Route::NewWallet(NewWalletRoute::HotWallet(route))
+        }
+
+        pub fn hot_wallet_import_from_scan(&self) -> Route {
+            Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::Import(
+                NumberOfBip39Words::Twelve,
+                true,
+            )))
         }
 
         pub fn secret_words(&self, wallet_id: WalletId) -> Route {

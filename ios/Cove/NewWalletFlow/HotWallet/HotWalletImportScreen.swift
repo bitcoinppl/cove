@@ -8,9 +8,12 @@
 import SwiftUI
 
 struct HotWalletImportScreen: View {
+    // public
     let autocomplete = Bip39AutoComplete()
     @State var numberOfWords: NumberOfBip39Words
+    @State var isPresentingScanner = false
 
+    // private
     @Environment(\.navigate) private var navigate
     @Environment(MainViewModel.self) private var app
 
@@ -32,7 +35,6 @@ struct HotWalletImportScreen: View {
     // qr code scanning
     @Environment(\.presentationMode) var presentationMode
     @State private var multiQr: MultiQr?
-    @State private var isPresentingScanner = false
     @State private var scannedCode: IdentifiableString?
     @State private var scanComplete: Bool = false
     @State private var scanError: IdentifiableString?
@@ -88,8 +90,7 @@ struct HotWalletImportScreen: View {
                 return newMultiQr
             }()
 
-            let multiqr = try multiQr.handleScanResult(qr: qr)
-
+            // see if its single qr or seed qr
             if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(6)) {
                 let numberOfWords = words.compactMap(\.count).reduce(0, +)
                 switch numberOfWords {
@@ -102,8 +103,6 @@ struct HotWalletImportScreen: View {
                     return
                 }
 
-                print("NUMBER OF WRODS: \(numberOfWords)")
-
                 // reset multiqr on succesful scan
                 self.multiQr = nil
 
@@ -111,6 +110,8 @@ struct HotWalletImportScreen: View {
                 isPresentingScanner = false
                 tabIndex = lastIndex
             }
+
+            // might be a part of a bbqr, keep scanning
 
         } catch {
             Log.error("Seed QR failed to scan: \(error.localizedDescription)")

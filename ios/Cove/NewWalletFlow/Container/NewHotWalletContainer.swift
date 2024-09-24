@@ -16,8 +16,8 @@ struct NewHotWalletContainer: View {
             HotWalletSelectScreen()
         case let .create(numberOfWords):
             HotWalletCreateScreen(numberOfWords: numberOfWords)
-        case let .import(numberOfWords):
-            HotWalletImportScreen(numberOfWords: numberOfWords)
+        case let .import(numberOfWords, scanning):
+            HotWalletImportScreen(numberOfWords: numberOfWords, isPresentingScanner: scanning)
         case let .verifyWords(walletId):
             VerifyWordsScreen(id: walletId)
         }
@@ -33,5 +33,5 @@ struct NewHotWalletContainer: View {
 }
 
 #Preview("Import") {
-    NewHotWalletContainer(route: .import(.twelve))
+    NewHotWalletContainer(route: .import(.twelve, false))
 }

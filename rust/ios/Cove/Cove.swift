@@ -3422,6 +3422,8 @@ public protocol RouteFactoryProtocol: AnyObject {
 
     func hotWallet(route: HotWalletRoute) -> Route
 
+    func hotWalletImportFromScan() -> Route
+
     func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool
 
     func newHotWallet() -> Route
@@ -3499,6 +3501,12 @@ open class RouteFactory:
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_hot_wallet(self.uniffiClonePointer(),
                                                           FfiConverterTypeHotWalletRoute.lower(route), $0)
+        })
+    }
+
+    open func hotWalletImportFromScan() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_hot_wallet_import_from_scan(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -7280,8 +7288,7 @@ public enum HotWalletRoute {
     case select
     case create(NumberOfBip39Words
     )
-    case `import`(NumberOfBip39Words
-    )
+    case `import`(NumberOfBip39Words, Bool)
     case verifyWords(WalletId
     )
 }
@@ -7297,8 +7304,7 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
         case 2: return try .create(FfiConverterTypeNumberOfBip39Words.read(from: &buf)
             )
 
-        case 3: return try .import(FfiConverterTypeNumberOfBip39Words.read(from: &buf)
-            )
+        case 3: return try .import(FfiConverterTypeNumberOfBip39Words.read(from: &buf), FfiConverterBool.read(from: &buf))
 
         case 4: return try .verifyWords(FfiConverterTypeWalletId.read(from: &buf)
             )
@@ -7316,9 +7322,10 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterTypeNumberOfBip39Words.write(v1, into: &buf)
 
-        case let .import(v1):
+        case let .import(v1, v2):
             writeInt(&buf, Int32(3))
             FfiConverterTypeNumberOfBip39Words.write(v1, into: &buf)
+            FfiConverterBool.write(v2, into: &buf)
 
         case let .verifyWords(v1):
             writeInt(&buf, Int32(4))
@@ -10716,6 +10723,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_hot_wallet_import_from_scan() != 63262 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 43168 {
