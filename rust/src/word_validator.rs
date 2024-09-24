@@ -18,13 +18,13 @@ impl WordValidator {
     // get the grouped words
     #[uniffi::method]
     pub fn grouped_words(&self) -> Vec<Vec<GroupedWord>> {
-        self.mnemonic.bip_39_words_groups_of(6)
+        self.mnemonic.grouped_words_of(6)
     }
 
     // check if the word group passed in is valid
     #[uniffi::method]
     pub fn is_valid_word_group(&self, group_number: u8, entered_words: Vec<String>) -> bool {
-        let actual_words = &self.mnemonic.bip_39_words_groups_of(6)[group_number as usize];
+        let actual_words = &self.mnemonic.grouped_words_of(6)[group_number as usize];
 
         for (actual_word, entered_word) in actual_words.iter().zip(entered_words.iter()) {
             if !entered_word.trim().eq_ignore_ascii_case(&actual_word.word) {

@@ -11,4 +11,8 @@ import SwiftUI
 struct IdentifiableString: Identifiable, Equatable {
     let id = UUID()
     let value: String
+
+    init(_ value: String) {
+        self.value = value
+    }
 }

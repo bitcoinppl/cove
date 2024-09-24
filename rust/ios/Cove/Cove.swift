@@ -1161,7 +1161,11 @@ public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> Uns
     return FfiConverterTypeBbqrJoinResult.lower(value)
 }
 
-public protocol BbqrJoinedProtocol: AnyObject {}
+public protocol BbqrJoinedProtocol: AnyObject {
+    func getGroupedWords(chunks: UInt8) throws -> [[String]]
+
+    func getSeedWords() throws -> [String]
+}
 
 open class BbqrJoined:
     BbqrJoinedProtocol
@@ -1201,6 +1205,19 @@ open class BbqrJoined:
         }
 
         try! rustCall { uniffi_cove_fn_free_bbqrjoined(pointer, $0) }
+    }
+
+    open func getGroupedWords(chunks: UInt8) throws -> [[String]] {
+        return try FfiConverterSequenceSequenceString.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_bbqrjoined_get_grouped_words(self.uniffiClonePointer(),
+                                                               FfiConverterUInt8.lower(chunks), $0)
+        })
+    }
+
+    open func getSeedWords() throws -> [String] {
+        return try FfiConverterSequenceString.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_bbqrjoined_get_seed_words(self.uniffiClonePointer(), $0)
+        })
     }
 }
 
@@ -1351,6 +1368,8 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
 public protocol Bip39WordSpecificAutocompleteProtocol: AnyObject {
     func autocomplete(word: String, allWords: [[String]]) -> [String]
 
+    func isBip39Word(word: String) -> Bool
+
     func isValidWord(word: String, allWords: [[String]]) -> Bool
 }
 
@@ -1408,6 +1427,13 @@ open class Bip39WordSpecificAutocomplete:
             uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(self.uniffiClonePointer(),
                                                                              FfiConverterString.lower(word),
                                                                              FfiConverterSequenceSequenceString.lower(allWords), $0)
+        })
+    }
+
+    open func isBip39Word(word: String) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_bip39wordspecificautocomplete_is_bip39_word(self.uniffiClonePointer(),
+                                                                              FfiConverterString.lower(word), $0)
         })
     }
 
@@ -2891,6 +2917,8 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UnsafeMutableRa
 public protocol MultiQrProtocol: AnyObject {
     func addPart(qr: String) throws -> BbqrJoinResult
 
+    func getGroupedWords(qr: FfiScanResultData, groupsOf: UInt8) throws -> [[String]]?
+
     func handleScanResult(qr: FfiScanResultData) throws -> MultiQrScanResult
 
     func isBbqr() -> Bool
@@ -2932,15 +2960,7 @@ open class MultiQr:
         return try! rustCall { uniffi_cove_fn_clone_multiqr(self.pointer, $0) }
     }
 
-    public convenience init(qr: FfiScanResultData) {
-        let pointer =
-            try! rustCall {
-                uniffi_cove_fn_constructor_multiqr_new(
-                    FfiConverterTypeFfiScanResultData.lower(qr), $0
-                )
-            }
-        self.init(unsafeFromRawPointer: pointer)
-    }
+    // No primary constructor declared for this class.
 
     deinit {
         guard let pointer = pointer else {
@@ -2948,14 +2968,6 @@ open class MultiQr:
         }
 
         try! rustCall { uniffi_cove_fn_free_multiqr(pointer, $0) }
-    }
-
-    public static func newFromData(data: Data) -> MultiQr {
-        return try! FfiConverterTypeMultiQr.lift(try! rustCall {
-            uniffi_cove_fn_constructor_multiqr_new_from_data(
-                FfiConverterData.lower(data), $0
-            )
-        })
     }
 
     public static func newFromString(qr: String) -> MultiQr {
@@ -2966,10 +2978,34 @@ open class MultiQr:
         })
     }
 
+    public static func tryNew(qr: FfiScanResultData) throws -> MultiQr {
+        return try FfiConverterTypeMultiQr.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_constructor_multiqr_try_new(
+                FfiConverterTypeFfiScanResultData.lower(qr), $0
+            )
+        })
+    }
+
+    public static func tryNewFromData(data: Data) throws -> MultiQr {
+        return try FfiConverterTypeMultiQr.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_constructor_multiqr_try_new_from_data(
+                FfiConverterData.lower(data), $0
+            )
+        })
+    }
+
     open func addPart(qr: String) throws -> BbqrJoinResult {
         return try FfiConverterTypeBbqrJoinResult.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
             uniffi_cove_fn_method_multiqr_add_part(self.uniffiClonePointer(),
                                                    FfiConverterString.lower(qr), $0)
+        })
+    }
+
+    open func getGroupedWords(qr: FfiScanResultData, groupsOf: UInt8) throws -> [[String]]? {
+        return try FfiConverterOptionSequenceSequenceString.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_multiqr_get_grouped_words(self.uniffiClonePointer(),
+                                                            FfiConverterTypeFfiScanResultData.lower(qr),
+                                                            FfiConverterUInt8.lower(groupsOf), $0)
         })
     }
 
@@ -4146,7 +4182,7 @@ public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewMod
 }
 
 public protocol SeedQrProtocol: AnyObject {
-    func words() -> [String]
+    func getWords() -> [String]
 }
 
 open class SeedQr:
@@ -4189,9 +4225,9 @@ open class SeedQr:
         try! rustCall { uniffi_cove_fn_free_seedqr(pointer, $0) }
     }
 
-    open func words() -> [String] {
+    open func getWords() -> [String] {
         return try! FfiConverterSequenceString.lift(try! rustCall {
-            uniffi_cove_fn_method_seedqr_words(self.uniffiClonePointer(), $0)
+            uniffi_cove_fn_method_seedqr_get_words(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -6350,6 +6386,86 @@ public func FfiConverterTypeAppStateReconcileMessage_lower(_ value: AppStateReco
     return FfiConverterTypeAppStateReconcileMessage.lower(value)
 }
 
+public enum Bip39Error {
+    /**
+     * Mnemonic has a word count that is not a multiple of 6, found {0}.
+     */
+    case BadWordCount(UInt32
+    )
+    /**
+     * Mnemonic contains an unknown word at index {0}.
+     */
+    case UnknownWord(UInt32
+    )
+    /**
+     * Entropy was not a multiple of 32 bits or between 128-256n bits in length.
+     */
+    case BadEntropyBitCount(UInt32
+    )
+    /**
+     * The mnemonic has an invalid checksum.
+     */
+    case InvalidChecksum
+    /**
+     * The mnemonic can be interpreted as multiple languages.
+     * Use the helper methods of the inner struct to inspect
+     * which languages are possible.
+     */
+    case AmbiguousLanguages
+}
+
+public struct FfiConverterTypeBip39Error: FfiConverterRustBuffer {
+    typealias SwiftType = Bip39Error
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bip39Error {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .BadWordCount(
+                FfiConverterUInt32.read(from: &buf)
+            )
+        case 2: return try .UnknownWord(
+                FfiConverterUInt32.read(from: &buf)
+            )
+        case 3: return try .BadEntropyBitCount(
+                FfiConverterUInt32.read(from: &buf)
+            )
+        case 4: return .InvalidChecksum
+        case 5: return .AmbiguousLanguages
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Bip39Error, into buf: inout [UInt8]) {
+        switch value {
+        case let .BadWordCount(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt32.write(v1, into: &buf)
+
+        case let .UnknownWord(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(v1, into: &buf)
+
+        case let .BadEntropyBitCount(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt32.write(v1, into: &buf)
+
+        case .InvalidChecksum:
+            writeInt(&buf, Int32(4))
+
+        case .AmbiguousLanguages:
+            writeInt(&buf, Int32(5))
+        }
+    }
+}
+
+extension Bip39Error: Equatable, Hashable {}
+
+extension Bip39Error: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -7492,6 +7608,11 @@ public enum MultiQrError {
     case InvalidUtf8
     case NotYetAvailable
     case CannotAddBinaryDataToBbqr
+    case BbqrDidNotContainSeedWords
+    case InvalidSeedQr(SeedQrError
+    )
+    case InvalidPlainTextQr(String
+    )
 }
 
 public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
@@ -7508,6 +7629,13 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         case 4: return .InvalidUtf8
         case 5: return .NotYetAvailable
         case 6: return .CannotAddBinaryDataToBbqr
+        case 7: return .BbqrDidNotContainSeedWords
+        case 8: return try .InvalidSeedQr(
+                FfiConverterTypeSeedQrError.read(from: &buf)
+            )
+        case 9: return try .InvalidPlainTextQr(
+                FfiConverterString.read(from: &buf)
+            )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -7532,6 +7660,17 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
 
         case .CannotAddBinaryDataToBbqr:
             writeInt(&buf, Int32(6))
+
+        case .BbqrDidNotContainSeedWords:
+            writeInt(&buf, Int32(7))
+
+        case let .InvalidSeedQr(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeSeedQrError.write(v1, into: &buf)
+
+        case let .InvalidPlainTextQr(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(v1, into: &buf)
         }
     }
 }
@@ -8110,6 +8249,64 @@ public func FfiConverterTypeRoute_lift(_ buf: RustBuffer) throws -> Route {
 
 public func FfiConverterTypeRoute_lower(_ value: Route) -> RustBuffer {
     return FfiConverterTypeRoute.lower(value)
+}
+
+public enum SeedQrError {
+    case ContainsNonNumericChars
+    case IndexOutOfBounds(UInt16
+    )
+    case IncorrectWordLength(UInt16
+    )
+    case InvalidMnemonic(Bip39Error
+    )
+}
+
+public struct FfiConverterTypeSeedQrError: FfiConverterRustBuffer {
+    typealias SwiftType = SeedQrError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SeedQrError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .ContainsNonNumericChars
+        case 2: return try .IndexOutOfBounds(
+                FfiConverterUInt16.read(from: &buf)
+            )
+        case 3: return try .IncorrectWordLength(
+                FfiConverterUInt16.read(from: &buf)
+            )
+        case 4: return try .InvalidMnemonic(
+                FfiConverterTypeBip39Error.read(from: &buf)
+            )
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SeedQrError, into buf: inout [UInt8]) {
+        switch value {
+        case .ContainsNonNumericChars:
+            writeInt(&buf, Int32(1))
+
+        case let .IndexOutOfBounds(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt16.write(v1, into: &buf)
+
+        case let .IncorrectWordLength(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt16.write(v1, into: &buf)
+
+        case let .InvalidMnemonic(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeBip39Error.write(v1, into: &buf)
+        }
+    }
+}
+
+extension SeedQrError: Equatable, Hashable {}
+
+extension SeedQrError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
 }
 
 public enum SerdeError {
@@ -9684,6 +9881,27 @@ private struct FfiConverterOptionTypeAddressIndex: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionSequenceSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [[String]]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceSequenceString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceSequenceString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionTypeWalletId: FfiConverterRustBuffer {
     typealias SwiftType = WalletId?
 
@@ -10308,6 +10526,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_bbqrjoinresult_parts_left() != 39828 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_bbqrjoined_get_grouped_words() != 36018 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_bbqrjoined_get_seed_words() != 64693 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 21847 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10315,6 +10539,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete() != 34680 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_bip39_word() != 59249 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 4400 {
@@ -10444,6 +10671,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_add_part() != 11179 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_multiqr_get_grouped_words() != 53354 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_handle_scan_result() != 14202 {
@@ -10587,7 +10817,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_seedqr_words() != 44806 {
+    if uniffi_cove_checksum_method_seedqr_get_words() != 64188 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_sentandreceived_amount() != 29581 {
@@ -10740,13 +10970,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_mnemonic_preview() != 3882 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_multiqr_new() != 10702 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_constructor_multiqr_new_from_data() != 14734 {
-        return InitializationResult.apiChecksumMismatch
-    }
     if uniffi_cove_checksum_constructor_multiqr_new_from_string() != 2028 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_multiqr_try_new() != 17395 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_multiqr_try_new_from_data() != 36957 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_nodeselector_new() != 61659 {

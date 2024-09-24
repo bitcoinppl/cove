@@ -1,5 +1,15 @@
+# xcode aliases
 alias xc := xcode-clean
 alias xr := xcode-reset
+
+# watch aliases
+alias wt := watch-test
+alias wb := watch-build
+
+# build aliases
+alias bi := build-ios
+alias bir := build-ios-release
+alias bidd := build-ios-debug-device
 
 default:
     just --list
@@ -41,16 +51,19 @@ build-android:
 run-android: build-android
     bash scripts/run-android.sh
 
-build-ios-device:
-    bash scripts/build-ios.sh release-smaller --device false
-
 build-ios profile="debug" device="false" sign="false":
     bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}
+
+build-ios-release:
+    just build-ios release --device
+
+build-ios-debug-device:
+    just build-ios debug --device
 
 run-ios: build-ios
     bash scripts/run-ios.sh
 
-watch profile="debug" device="false":
+watch-build profile="debug" device="false":
     watchexec --exts rs just build-ios {{profile}} {{device}}
 
 test test="":

@@ -10,11 +10,12 @@ use crate::keys::Descriptors;
 
 // word access
 pub trait WordAccess {
-    fn bip_39_words_groups_of(&self, groups: usize) -> Vec<Vec<GroupedWord>>;
+    fn grouped_words_of(&self, groups: usize) -> Vec<Vec<GroupedWord>>;
+    fn grouped_plain_words_of(&self, groups: usize) -> Vec<Vec<String>>;
 }
 
 impl WordAccess for Mnemonic {
-    fn bip_39_words_groups_of(&self, groups: usize) -> Vec<Vec<GroupedWord>> {
+    fn grouped_words_of(&self, groups: usize) -> Vec<Vec<GroupedWord>> {
         self.word_iter()
             .chunks(groups)
             .into_iter()
@@ -29,6 +30,14 @@ impl WordAccess for Mnemonic {
                     })
                     .collect()
             })
+            .collect()
+    }
+
+    fn grouped_plain_words_of(&self, groups: usize) -> Vec<Vec<String>> {
+        self.word_iter()
+            .chunks(groups)
+            .into_iter()
+            .map(|chunk| chunk.map(ToString::to_string).collect())
             .collect()
     }
 }
@@ -185,11 +194,7 @@ mod ffi {
 
         #[uniffi::method]
         pub fn all_words(&self) -> Vec<GroupedWord> {
-            self.0
-                .bip_39_words_groups_of(1)
-                .into_iter()
-                .flatten()
-                .collect()
+            self.0.grouped_words_of(1).into_iter().flatten().collect()
         }
     }
 }

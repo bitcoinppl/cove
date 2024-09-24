@@ -9,7 +9,7 @@ import SwiftUI
 
 struct HotWalletImportScreen: View {
     let autocomplete = Bip39AutoComplete()
-    let numberOfWords: NumberOfBip39Words
+    @State var numberOfWords: NumberOfBip39Words
 
     @Environment(\.navigate) private var navigate
     @Environment(MainViewModel.self) private var app
@@ -35,6 +35,7 @@ struct HotWalletImportScreen: View {
     @State private var isPresentingScanner = false
     @State private var scannedCode: IdentifiableString?
     @State private var scanComplete: Bool = false
+    @State private var scanError: IdentifiableString?
 
     func initOnAppear() {
         enteredWords = numberOfWords.inGroups()
@@ -78,30 +79,45 @@ struct HotWalletImportScreen: View {
         }
 
         guard case let .success(scanResult) = result else { return }
-
-        let multiQr: MultiQr = switch multiQr {
-        case let .some(multiQr): multiQr
-        case .none:
-            let multiQr = MultiQr(qr: FfiScanResultData(scanResult.data))
-            self.multiQr = multiQr
-            multiQr
-        }
+        let qr = FfiScanResultData(scanResult.data)
 
         do {
-            switch multiQr.handleScanResult(qr: FfiScanResultData(scanResult.data)) {
-            case let .seedQr(seedQr):
-                ()
-            case let .single(string):
-                ()
-            case let .completedBBqr(bbqrJoined):
-                handleReceivedWords(bbqrJoined.data)
-            case let .inProgressBBqr(uInt32):
-                ()
-            }
-        } catch {}
-    }
+            let multiQr: MultiQr = try self.multiQr ?? {
+                let newMultiQr = try MultiQr.tryNew(qr: qr)
+                self.multiQr = newMultiQr
+                return newMultiQr
+            }()
 
-    func handleReceivedWords(_ words: [String]) {}
+            let multiqr = try multiQr.handleScanResult(qr: qr)
+
+            if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(6)) {
+                let numberOfWords = words.compactMap(\.count).reduce(0, +)
+                switch numberOfWords {
+                case 12: self.numberOfWords = .twelve
+                case 24: self.numberOfWords = .twentyFour
+                default:
+                    Log.warn("Invalid number of words: \(numberOfWords)")
+                    scanError = IdentifiableString("Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
+                    isPresentingScanner = false
+                    return
+                }
+
+                print("NUMBER OF WRODS: \(numberOfWords)")
+
+                // reset multiqr on succesful scan
+                self.multiQr = nil
+
+                enteredWords = words
+                isPresentingScanner = false
+                tabIndex = lastIndex
+            }
+
+        } catch {
+            Log.error("Seed QR failed to scan: \(error.localizedDescription)")
+            scanError = IdentifiableString(error.localizedDescription)
+            isPresentingScanner = false
+        }
+    }
 
     func importWallet() {
         do {
@@ -274,6 +290,13 @@ struct HotWalletImportScreen: View {
                       app.resetRoute(to: .selectedWallet(duplicate.walletId))
                   })
         }
+        .alert(item: $scanError) { error in
+            Alert(title: Text("Error Scanning QR Code"),
+                  message: Text(error.value),
+                  dismissButton: .default(Text("OK")) {
+                      scanError = nil
+                  })
+        }
         .sheet(isPresented: $isPresentingScanner) {
             CodeScannerView(codeTypes: [.qr]) { response in
                 handleScan(result: response)
@@ -384,6 +407,11 @@ private struct AutocompleteField: View {
                         .stroke(color, lineWidth: 2)
                 }
             })
+        .onAppear {
+            if !text.isEmpty && autocomplete.isBip39Word(word: text) {
+                state = .valid
+            }
+        }
     }
 
     func submitFocusField() {

@@ -61,16 +61,16 @@ impl SeedQr {
         Ok(Self::Compact(mnemonic))
     }
 
-    fn words(&self) -> impl Iterator<Item = &'static str> + '_ {
-        let mnemonic = self.mnemonic();
-        mnemonic.word_iter()
-    }
-
-    fn mnemonic(&self) -> &Mnemonic {
+    pub fn mnemonic(&self) -> &Mnemonic {
         match self {
             SeedQr::Standard(mnemonic) => mnemonic,
             SeedQr::Compact(mnemonic) => mnemonic,
         }
+    }
+
+    fn words(&self) -> impl Iterator<Item = &'static str> + '_ {
+        let mnemonic = self.mnemonic();
+        mnemonic.word_iter()
     }
 }
 

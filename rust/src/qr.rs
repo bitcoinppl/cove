@@ -5,11 +5,12 @@ use bbqr::{
     header::Header,
     join::Joined,
 };
-use bip39::Language;
+use bip39::{Language, Mnemonic};
 use parking_lot::Mutex;
 
 use crate::{
     ffi::scan_result_data::FfiScanResultData,
+    mnemonic::WordAccess as _,
     seed_qr::{SeedQr, SeedQrError},
 };
 
@@ -53,6 +54,9 @@ pub enum MultiQrError {
 
     #[error(transparent)]
     InvalidSeedQr(#[from] SeedQrError),
+
+    #[error("Invalid plain text seed QR")]
+    InvalidPlainTextQr(String),
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -143,6 +147,44 @@ impl MultiQr {
     }
 
     #[uniffi::method]
+    pub fn get_grouped_words(
+        &self,
+        qr: FfiScanResultData,
+        groups_of: u8,
+    ) -> Result<Option<Vec<Vec<String>>>, MultiQrError> {
+        let words: Option<Vec<Vec<String>>> = match self.handle_scan_result(qr)? {
+            MultiQrScanResult::SeedQr(seed_qr) => {
+                let mnemonic = seed_qr.mnemonic();
+                let grouped = mnemonic.grouped_plain_words_of(groups_of as usize);
+
+                Some(grouped)
+            }
+            MultiQrScanResult::Single(qr) => {
+                let bip39 = Mnemonic::parse_in(Language::English, qr.as_str());
+                if bip39.is_err() {
+                    return Err(MultiQrError::InvalidPlainTextQr(qr));
+                }
+
+                let words = qr
+                    .split_whitespace()
+                    .collect::<Vec<&str>>()
+                    .chunks(groups_of as usize)
+                    .map(|chunk| chunk.iter().map(ToString::to_string).collect())
+                    .collect::<Vec<Vec<String>>>();
+
+                Some(words)
+            }
+            MultiQrScanResult::CompletedBBqr(joined) => {
+                let words = joined.get_grouped_words(groups_of)?;
+                Some(words)
+            }
+            MultiQrScanResult::InProgressBBqr(_) => None,
+        };
+
+        Ok(words)
+    }
+
+    #[uniffi::method]
     pub fn is_single(&self) -> bool {
         matches!(self, MultiQr::Single(_))
     }
@@ -215,6 +257,24 @@ impl BbqrJoinResult {
 #[uniffi::export]
 impl BbqrJoined {
     pub fn get_seed_words(&self) -> Result<Vec<String>, Error> {
+        self.get_words_iter()
+            .map(|s| s.map(|s| s.to_string()))
+            .collect()
+    }
+
+    pub fn get_grouped_words(&self, chunks: u8) -> Result<Vec<Vec<String>>, Error> {
+        let words = self.get_seed_words()?;
+        let grouped = words
+            .chunks(chunks as usize)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        Ok(grouped)
+    }
+}
+
+impl BbqrJoined {
+    pub fn get_words_iter(&self) -> impl Iterator<Item = Result<&'static str, Error>> + '_ {
         let word_list = Language::English.word_list();
 
         self.0
@@ -224,8 +284,7 @@ impl BbqrJoined {
             .map(|word| word_list.iter().find(|w| w.starts_with(&word)))
             .map(|word| {
                 let word = word.ok_or(MultiQrError::BbqrDidNotContainSeedWords)?;
-                Ok(word.to_string())
+                Ok(*word)
             })
-            .collect()
     }
 }

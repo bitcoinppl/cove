@@ -152,7 +152,7 @@ struct QrCodeImportScreen: View {
             // single QR
             if multiQr.isSingle() {
                 scanComplete = true
-                scannedCode = IdentifiableString(value: stringValue)
+                scannedCode = IdentifiableString(stringValue)
                 return
             }
 
@@ -164,7 +164,7 @@ struct QrCodeImportScreen: View {
                 if result.isComplete() {
                     scanComplete = true
                     let data = try result.finalResult()
-                    scannedCode = IdentifiableString(value: data)
+                    scannedCode = IdentifiableString(data)
                 }
             } catch {
                 Log.error("error scanning bbqr part: \(error)")
