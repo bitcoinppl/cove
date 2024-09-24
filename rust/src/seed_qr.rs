@@ -1,10 +1,10 @@
-use bip39::Language;
-use bitvec::{field::BitField as _, order::Msb0, vec::BitVec};
+use bip39::{Language, Mnemonic};
+use derive_more::Display;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub enum SeedQr {
-    Standard(Vec<u16>),
-    Compact(Vec<u16>),
+    Standard(Mnemonic),
+    Compact(Mnemonic),
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -17,76 +17,68 @@ pub enum SeedQrError {
 
     #[error("Incorrect word length, got: {0}, expected: 12,15,18,21 or 24")]
     IncorrectWordLength(u16),
+
+    #[error("unable to parse mnemonic: {0}")]
+    InvalidMnemonic(#[from] Bip39Error),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Display, thiserror::Error, uniffi::Error)]
+pub enum Bip39Error {
+    /// Mnemonic has a word count that is not a multiple of 6, found {0}.
+    BadWordCount(u32),
+    /// Mnemonic contains an unknown word at index {0}.
+    // Error contains the index of the word.
+    // Use `mnemonic.split_whitespace().get(i)` to get the word.
+    UnknownWord(u32),
+    /// Entropy was not a multiple of 32 bits or between 128-256n bits in length.
+    BadEntropyBitCount(u32),
+    /// The mnemonic has an invalid checksum.
+    InvalidChecksum,
+    /// The mnemonic can be interpreted as multiple languages.
+    /// Use the helper methods of the inner struct to inspect
+    /// which languages are possible.
+    AmbiguousLanguages,
 }
 
 type Error = SeedQrError;
 
 impl SeedQr {
     pub fn try_from_str(qr: &str) -> Result<Self, Error> {
-        let word_indexes = parse_str_into_word_indexes(qr)?;
-        Ok(Self::Standard(word_indexes))
+        let word_list = Language::English.word_list();
+        let indexes = parse_str_into_word_indexes(qr)?;
+        let words: String = indexes
+            .iter()
+            .map(|index| word_list[*index as usize])
+            .collect::<Vec<&str>>()
+            .join(" ");
+
+        let mnemonic = Mnemonic::parse_in(Language::English, &words)?;
+        Ok(Self::Standard(mnemonic))
     }
 
     pub fn try_from_data(data: Vec<u8>) -> Result<Self, Error> {
-        let word_indexes = parse_data_into_word_indexes(data)?;
-        Ok(Self::Compact(word_indexes))
+        let mnemonic = Mnemonic::from_entropy(&data)?;
+        Ok(Self::Compact(mnemonic))
     }
 
-    fn word_indexes(&self) -> &[u16] {
+    fn words(&self) -> impl Iterator<Item = &'static str> + '_ {
+        let mnemonic = self.mnemonic();
+        mnemonic.word_iter()
+    }
+
+    fn mnemonic(&self) -> &Mnemonic {
         match self {
-            SeedQr::Standard(word_indexes) => word_indexes,
-            SeedQr::Compact(word_indexes) => word_indexes,
+            SeedQr::Standard(mnemonic) => mnemonic,
+            SeedQr::Compact(mnemonic) => mnemonic,
         }
-    }
-
-    fn words(&self) -> Vec<&str> {
-        let word_indexes = self.word_indexes();
-        let word_list = Language::English.word_list();
-
-        word_indexes
-            .iter()
-            .map(|word_index| word_list[*word_index as usize])
-            .collect()
     }
 }
 
 #[uniffi::export]
 impl SeedQr {
     pub fn get_words(&self) -> Vec<String> {
-        self.words().iter().map(|word| word.to_string()).collect()
+        self.words().map(|word| word.to_string()).collect()
     }
-}
-
-fn parse_data_into_word_indexes(data: Vec<u8>) -> Result<Vec<u16>, SeedQrError> {
-    let checksum = calculate_checksum(&data);
-
-    let mut bits = BitVec::<u8, Msb0>::from_vec(data);
-    bits.extend(checksum);
-
-    let indexes: Vec<u16> = bits
-        .chunks(11)
-        .filter(|chunk| chunk.len() == 11)
-        .map(|chunk| chunk.load_be::<u16>())
-        .collect();
-
-    match indexes.len() {
-        12 | 15 | 18 | 21 | 24 => Ok(indexes),
-        other => Err(SeedQrError::IncorrectWordLength(other as u16)),
-    }
-}
-
-fn calculate_checksum(entropy: &[u8]) -> BitVec<u8, Msb0> {
-    use sha2::{Digest, Sha256};
-
-    let mut hasher = Sha256::new();
-    hasher.update(entropy);
-    let hash = hasher.finalize();
-
-    let checksum_bits = entropy.len() * 8 / 32;
-    BitVec::<u8, Msb0>::from_slice(&hash[..])
-        .into_iter()
-        .take(checksum_bits)
-        .collect::<BitVec<u8, Msb0>>()
 }
 
 fn parse_str_into_word_indexes(qr: &str) -> Result<Vec<u16>, SeedQrError> {
@@ -130,6 +122,24 @@ fn parse_str_into_word_indexes(qr: &str) -> Result<Vec<u16>, SeedQrError> {
     }
 }
 
+impl From<bip39::Error> for Bip39Error {
+    fn from(error: bip39::Error) -> Self {
+        match error {
+            bip39::Error::BadWordCount(words) => Self::BadWordCount(words as u32),
+            bip39::Error::UnknownWord(index) => Self::UnknownWord(index as u32),
+            bip39::Error::BadEntropyBitCount(bits) => Self::BadEntropyBitCount(bits as u32),
+            bip39::Error::InvalidChecksum => Self::InvalidChecksum,
+            bip39::Error::AmbiguousLanguages(_) => Self::AmbiguousLanguages,
+        }
+    }
+}
+
+impl From<bip39::Error> for SeedQrError {
+    fn from(error: bip39::Error) -> Self {
+        Self::InvalidMnemonic(error.into())
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -159,21 +169,7 @@ pub mod tests {
         ];
 
         let seed_qr = SeedQr::try_from_str(qr).unwrap();
-        assert_eq!(seed_qr.words(), words);
-    }
-
-    #[test]
-    fn test_parse_data_into_word_indexes() {
-        let bytes = b"\x0et\xb6A\x07\xf9L\xc0\xcc\xfa\xe6\xa1=\xcb\xec6b\x15O\xecg\xe0\xe0\t\x99\xc0x\x92Y}\x19\n";
-        let expected = vec![
-            115, 1325, 1154, 127, 1190, 771, 415, 742, 1289, 1906, 2008, 870, 266, 1343, 1420,
-            2016, 1792, 614, 896, 1929, 300, 1524, 801, 643,
-        ];
-
-        assert_eq!(
-            parse_data_into_word_indexes(bytes.to_vec()).unwrap(),
-            expected
-        );
+        assert_eq!(seed_qr.get_words(), words);
     }
 
     #[test]
@@ -195,7 +191,7 @@ pub mod tests {
             .split_whitespace()
             .collect::<Vec<&str>>();
 
-        assert_eq!(seed_qr.words(), expected);
+        assert_eq!(seed_qr.get_words(), expected);
     }
 
     #[test]
@@ -255,12 +251,12 @@ pub mod tests {
             let seed_qr = SeedQr::try_from_str(vector.standard);
             assert!(seed_qr.is_ok());
             let seed_qr = seed_qr.unwrap();
-            assert_eq!(seed_qr.words(), vector_words);
+            assert_eq!(seed_qr.get_words(), vector_words);
 
             let seed_qr = SeedQr::try_from_data(vector.bytes);
             assert!(seed_qr.is_ok());
             let seed_qr = seed_qr.unwrap();
-            assert_eq!(seed_qr.words(), vector_words);
+            assert_eq!(seed_qr.get_words(), vector_words);
         }
     }
 
@@ -270,7 +266,7 @@ pub mod tests {
         let bytes = hex::decode("a648f5c90a5fe427952e42a819d2eec1f8f03d99").unwrap();
 
         let seed_qr = SeedQr::try_from_data(bytes).unwrap();
-        assert_eq!(seed_qr.words(), words);
+        assert_eq!(seed_qr.get_words(), words);
     }
 
     #[test]
@@ -279,7 +275,7 @@ pub mod tests {
         let bytes = hex::decode("2896bb4e77f0b401aa8a6a98d381ef7eeef8a58c7dcd3780").unwrap();
 
         let seed_qr = SeedQr::try_from_data(bytes).unwrap();
-        assert_eq!(seed_qr.words(), words);
+        assert_eq!(seed_qr.get_words(), words);
     }
 
     #[test]
@@ -289,6 +285,6 @@ pub mod tests {
             hex::decode("2916036ebff2c1042ff7ed4080af7ec6dee62ac3ab20754e13f83aad").unwrap();
 
         let seed_qr = SeedQr::try_from_data(bytes).unwrap();
-        assert_eq!(seed_qr.words(), words);
+        assert_eq!(seed_qr.get_words(), words);
     }
 }
