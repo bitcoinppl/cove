@@ -476,17 +476,24 @@
                 return
             }
 
-            let data: ScanResultData? =
+            let data: ScanResultData? = {
                 switch (readableObject.stringValue, readableObject.descriptor) {
-                case (nil, nil): .none
-                case let (.some(stringValue), _): .string(stringValue)
+                case (nil, nil): return .none
+                case let (.some(stringValue), _): return .string(stringValue)
                 case let (_, .some(descriptor)):
                     if let descriptor = descriptor as? CIQRCodeDescriptor {
-                        ScanResultData.data(Data(descriptor.errorCorrectedPayload))
+                        let decoder = BinaryDecoder()
+
+                        let payload = descriptor.errorCorrectedPayload
+                        let symbolVersion = descriptor.symbolVersion
+
+                        let data = decoder.decodeQRErrorCorrectedBytes(payload, symbolVersion: symbolVersion)!
+                        return ScanResultData.data(data)
                     } else {
-                        .none
+                        return .none
                     }
                 }
+            }()
 
             guard let data else { return }
 
