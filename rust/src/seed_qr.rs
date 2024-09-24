@@ -246,6 +246,7 @@ pub mod tests {
                 standard: "038719631547010112530489185713790169032209701051",
                 bytes: vec![0x30, 0x7e, 0xaf, 0x05, 0x86, 0x59, 0xca, 0x7a, 0x7a, 0x0d, 0x63, 0x15, 0x25, 0x09, 0xe5, 0x41],
             },
+
         ];
 
         for vector in test_vectors {
@@ -261,5 +262,33 @@ pub mod tests {
             let seed_qr = seed_qr.unwrap();
             assert_eq!(seed_qr.words(), vector_words);
         }
+    }
+
+    #[test]
+    fn test_15_word_length() {
+        let words = "play element inch believe wrestle because feed sign pool soldier roof loop monitor burst grace".split_whitespace().collect::<Vec<&str>>();
+        let bytes = hex::decode("a648f5c90a5fe427952e42a819d2eec1f8f03d99").unwrap();
+
+        let seed_qr = SeedQr::try_from_data(bytes).unwrap();
+        assert_eq!(seed_qr.words(), words);
+    }
+
+    #[test]
+    fn test_18_word_length() {
+        let words = "chuckle remind squeeze useful area absorb pretty essence occur orchard knock worry usage fan cradle rifle daring abandon".split_whitespace().collect::<Vec<&str>>();
+        let bytes = hex::decode("2896bb4e77f0b401aa8a6a98d381ef7eeef8a58c7dcd3780").unwrap();
+
+        let seed_qr = SeedQr::try_from_data(bytes).unwrap();
+        assert_eq!(seed_qr.words(), words);
+    }
+
+    #[test]
+    fn test_21_word_length() {
+        let words = "cinnamon quote sweet lend clown link save world dog air text misery unveil betray attitude goat inspire identify wrap inspire tank".split_whitespace().collect::<Vec<&str>>();
+        let bytes =
+            hex::decode("2916036ebff2c1042ff7ed4080af7ec6dee62ac3ab20754e13f83aad").unwrap();
+
+        let seed_qr = SeedQr::try_from_data(bytes).unwrap();
+        assert_eq!(seed_qr.words(), words);
     }
 }

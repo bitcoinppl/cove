@@ -53,6 +53,12 @@ run-ios: build-ios
 watch profile="debug" device="false":
     watchexec --exts rs just build-ios {{profile}} {{device}}
 
+test test="":
+    cd rust && cargo test {{test}}
+
+watch-test test="":
+    watchexec --exts rs just test {{test}}
+
 ci:
     cd rust && cargo fmt --check
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
