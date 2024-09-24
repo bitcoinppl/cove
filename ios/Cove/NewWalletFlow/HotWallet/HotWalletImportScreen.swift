@@ -117,6 +117,9 @@ struct HotWalletImportScreen: View {
             Log.error("Seed QR failed to scan: \(error.localizedDescription)")
             scanError = IdentifiableString(error.localizedDescription)
             isPresentingScanner = false
+
+            // reset multiqr on error
+            multiQr = nil
         }
     }
 
@@ -299,7 +302,10 @@ struct HotWalletImportScreen: View {
                   })
         }
         .sheet(isPresented: $isPresentingScanner) {
-            CodeScannerView(codeTypes: [.qr]) { response in
+            CodeScannerView(codeTypes: [.qr],
+                            scanMode: .oncePerCode,
+                            scanInterval: 0.1)
+            { response in
                 handleScan(result: response)
             }
         }

@@ -159,25 +159,34 @@ impl MultiQr {
 
                 Some(grouped)
             }
-            MultiQrScanResult::Single(qr) => {
-                let bip39 = Mnemonic::parse_in(Language::English, qr.as_str());
-                if bip39.is_err() {
-                    return Err(MultiQrError::InvalidPlainTextQr(qr));
-                }
 
-                let words = qr
-                    .split_whitespace()
-                    .collect::<Vec<&str>>()
-                    .chunks(groups_of as usize)
-                    .map(|chunk| chunk.iter().map(ToString::to_string).collect())
-                    .collect::<Vec<Vec<String>>>();
+            MultiQrScanResult::Single(qr) => {
+                let word_list = Language::English.word_list();
+
+                let bip39 = Mnemonic::parse_in(Language::English, &qr).or_else(|_| {
+                    let phrase = qr
+                        .split_whitespace()
+                        .map(|word| word.to_string().to_ascii_lowercase())
+                        .filter_map(|word| word_list.iter().find(|w| w.starts_with(&word)))
+                        .copied()
+                        .collect::<Vec<&str>>()
+                        .join(" ");
+
+                    Mnemonic::parse_in(Language::English, &phrase)
+                });
+
+                let words = bip39
+                    .map_err(|_| MultiQrError::InvalidPlainTextQr(qr))?
+                    .grouped_plain_words_of(groups_of as usize);
 
                 Some(words)
             }
+
             MultiQrScanResult::CompletedBBqr(joined) => {
                 let words = joined.get_grouped_words(groups_of)?;
                 Some(words)
             }
+
             MultiQrScanResult::InProgressBBqr(_) => None,
         };
 
