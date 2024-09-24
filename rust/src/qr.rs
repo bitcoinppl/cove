@@ -8,19 +8,16 @@ use bbqr::{
 use bip39::Language;
 use parking_lot::Mutex;
 
-use crate::ffi::scan_result_data::FfiScanResultData;
+use crate::{
+    ffi::scan_result_data::FfiScanResultData,
+    seed_qr::{SeedQr, SeedQrError},
+};
 
 #[derive(uniffi::Object)]
 pub enum MultiQr {
     SeedQr(SeedQr),
     Single(String),
     Bbqr(Header, Arc<Mutex<ContinuousJoiner>>),
-}
-
-#[derive(Debug, Clone, uniffi::Object)]
-pub enum SeedQr {
-    Standard(Vec<u16>),
-    Compact(Vec<u8>),
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -53,6 +50,9 @@ pub enum MultiQrError {
 
     #[error("BBQr did not container seed words")]
     BbqrDidNotContainSeedWords,
+
+    #[error(transparent)]
+    InvalidSeedQr(#[from] SeedQrError),
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -66,17 +66,17 @@ pub enum MultiQrScanResult {
 #[uniffi::export]
 impl MultiQr {
     #[uniffi::constructor]
-    pub fn new(qr: FfiScanResultData) -> Self {
+    pub fn try_new(qr: FfiScanResultData) -> Result<Self, Error> {
         type R = FfiScanResultData;
         match qr {
-            R::String(qr) => Self::new_from_string(qr),
-            R::Data(data) => Self::new_from_data(data),
+            R::String(qr) => Ok(Self::new_from_string(qr)),
+            R::Data(data) => Self::try_new_from_data(data),
         }
     }
 
     #[uniffi::constructor]
     pub fn new_from_string(qr: String) -> Self {
-        // bbqr
+        // try to parse bbqr
         if let Ok(header) = bbqr::header::Header::try_from_str(&qr) {
             let mut continuous_joiner = bbqr::continuous_join::ContinuousJoiner::new();
             continuous_joiner
@@ -87,12 +87,19 @@ impl MultiQr {
             return Self::Bbqr(header, continuous_joiner);
         }
 
+        // try to parse standard seed qr
+        if let Ok(seed_qr) = SeedQr::try_from_str(&qr) {
+            return Self::SeedQr(seed_qr);
+        }
+
+        // default to single qr
         Self::Single(qr)
     }
 
     #[uniffi::constructor]
-    pub fn new_from_data(data: Vec<u8>) -> Self {
-        Self::SeedQr(SeedQr::Compact(data))
+    pub fn try_new_from_data(data: Vec<u8>) -> Result<Self, Error> {
+        todo!()
+        // Ok(Self::SeedQr(SeedQr::Compact(data)))
     }
 
     #[uniffi::method]
@@ -201,20 +208,6 @@ impl BbqrJoinResult {
             ContinuousJoinResult::Complete(_) => 0,
             ContinuousJoinResult::InProgress { parts_left } => parts_left as u32,
             ContinuousJoinResult::NotStarted => panic!("not started, not possible"),
-        }
-    }
-}
-
-#[uniffi::export]
-impl SeedQr {
-    pub fn words(&self) -> Vec<String> {
-        match self {
-            SeedQr::Standard(words) => {
-                vec![]
-            }
-            SeedQr::Compact(bytes) => {
-                vec![]
-            }
         }
     }
 }

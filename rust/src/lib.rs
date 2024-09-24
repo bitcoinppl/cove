@@ -24,6 +24,7 @@ pub mod node_connect;
 pub mod pending_wallet;
 pub mod qr;
 pub mod redb;
+pub mod seed_qr;
 pub mod task;
 pub mod transaction;
 pub mod unblock;
