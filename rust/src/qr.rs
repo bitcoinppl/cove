@@ -98,8 +98,8 @@ impl MultiQr {
 
     #[uniffi::constructor]
     pub fn try_new_from_data(data: Vec<u8>) -> Result<Self, Error> {
-        todo!()
-        // Ok(Self::SeedQr(SeedQr::Compact(data)))
+        let seed_qr = SeedQr::try_from_data(data)?;
+        Ok(Self::SeedQr(seed_qr))
     }
 
     #[uniffi::method]
@@ -132,7 +132,7 @@ impl MultiQr {
             }
 
             // errors
-            (Self::Bbqr(_, _), FfiScanResultData::Data(vec)) => {
+            (Self::Bbqr(_, _), FfiScanResultData::Data(_vec)) => {
                 return Err(MultiQrError::CannotAddBinaryDataToBbqr)
             }
 

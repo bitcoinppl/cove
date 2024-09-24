@@ -111,6 +111,9 @@ reqwest = { version = "0.12", features = ["json"] }
 # qr
 bbqr = "0.3.3"
 
+# hex
+hex = "0.4.3"
+
 
 [build-dependencies]
 uniffi = { version = "=0.28.1", features = ["build"] }
