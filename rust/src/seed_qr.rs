@@ -35,8 +35,8 @@ impl SeedQr {
 fn parse_data_into_word_indexes(mut data: Vec<u8>) -> Result<Vec<u16>, SeedQrError> {
     let checksum = calculate_checksum(&data);
 
-    data.push(checksum);
-    let bits = BitVec::<u8, Msb0>::from_vec(data);
+    let mut bits = BitVec::<u8, Msb0>::from_vec(data);
+    bits.extend(checksum);
 
     let indexes: Vec<u16> = bits
         .chunks(11)
@@ -50,7 +50,7 @@ fn parse_data_into_word_indexes(mut data: Vec<u8>) -> Result<Vec<u16>, SeedQrErr
     }
 }
 
-fn calculate_checksum(entropy: &[u8]) -> u8 {
+fn calculate_checksum(entropy: &[u8]) -> BitVec<u8, Msb0> {
     use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();
@@ -62,7 +62,6 @@ fn calculate_checksum(entropy: &[u8]) -> u8 {
         .into_iter()
         .take(checksum_bits)
         .collect::<BitVec<u8, Msb0>>()
-        .load_be::<u8>()
 }
 
 fn parse_str_into_word_indexes(qr: &str) -> Result<Vec<u16>, SeedQrError> {
