@@ -49,8 +49,8 @@ pub enum MultiQrError {
     #[error("Cannot add binary data to BBQR")]
     CannotAddBinaryDataToBbqr,
 
-    #[error("BBQr did not container seed words")]
-    BbqrDidNotContainSeedWords,
+    #[error("BBQr did not container seed words, found: {0}")]
+    BbqrDidNotContainSeedWords(String),
 
     #[error(transparent)]
     InvalidSeedQr(#[from] SeedQrError),
@@ -266,7 +266,7 @@ impl BbqrJoinResult {
 #[uniffi::export]
 impl BbqrJoined {
     pub fn get_seed_words(&self) -> Result<Vec<String>, Error> {
-        self.get_words_iter()
+        self.get_words_iter()?
             .map(|s| s.map(|s| s.to_string()))
             .collect()
     }
@@ -283,17 +283,34 @@ impl BbqrJoined {
 }
 
 impl BbqrJoined {
-    pub fn get_words_iter(&self) -> impl Iterator<Item = Result<&'static str, Error>> + '_ {
+    pub fn get_words_iter(
+        &self,
+    ) -> Result<impl Iterator<Item = Result<&'static str, Error>> + '_, Error> {
         let word_list = Language::English.word_list();
 
-        self.0
-            .data
-            .iter()
+        let words_string =
+            String::from_utf8(self.0.data.clone()).map_err(|_| MultiQrError::InvalidUtf8)?;
+
+        let words = words_string
+            .split_whitespace()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>();
+
+        let words_iter = words
+            .into_iter()
             .map(|word| word.to_string().to_ascii_lowercase())
-            .map(|word| word_list.iter().find(|w| w.starts_with(&word)))
+            .map(|word| word_list.iter().find(|w| w.starts_with(&word)).copied())
             .map(|word| {
-                let word = word.ok_or(MultiQrError::BbqrDidNotContainSeedWords)?;
-                Ok(*word)
-            })
+                let word = word.ok_or({
+                    let words = String::from_utf8(self.0.data.clone())
+                        .expect("already checked that data is valid utf-8");
+
+                    MultiQrError::BbqrDidNotContainSeedWords(words)
+                })?;
+
+                Ok(word)
+            });
+
+        Ok(words_iter)
     }
 }

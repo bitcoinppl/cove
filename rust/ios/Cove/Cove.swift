@@ -7615,7 +7615,8 @@ public enum MultiQrError {
     case InvalidUtf8
     case NotYetAvailable
     case CannotAddBinaryDataToBbqr
-    case BbqrDidNotContainSeedWords
+    case BbqrDidNotContainSeedWords(String
+    )
     case InvalidSeedQr(SeedQrError
     )
     case InvalidPlainTextQr(String
@@ -7636,7 +7637,9 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         case 4: return .InvalidUtf8
         case 5: return .NotYetAvailable
         case 6: return .CannotAddBinaryDataToBbqr
-        case 7: return .BbqrDidNotContainSeedWords
+        case 7: return try .BbqrDidNotContainSeedWords(
+                FfiConverterString.read(from: &buf)
+            )
         case 8: return try .InvalidSeedQr(
                 FfiConverterTypeSeedQrError.read(from: &buf)
             )
@@ -7668,8 +7671,9 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         case .CannotAddBinaryDataToBbqr:
             writeInt(&buf, Int32(6))
 
-        case .BbqrDidNotContainSeedWords:
+        case let .BbqrDidNotContainSeedWords(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
 
         case let .InvalidSeedQr(v1):
             writeInt(&buf, Int32(8))
