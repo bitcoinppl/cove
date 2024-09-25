@@ -28,7 +28,7 @@ use bdk_wallet::{
 use bip39::Mnemonic;
 use metadata::{WalletId, WalletMetadata};
 use pubport::formats::Format;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 pub type Address = address::Address;
 pub type AddressInfo = address::AddressInfo;
@@ -366,8 +366,13 @@ impl Wallet {
         let passphrase = None;
         let metadata = WalletMetadata::preview_new();
 
-        delete_data_path(&metadata.id).unwrap();
-        Database::global().wallets.delete(&metadata.id).unwrap();
+        if let Err(error) = delete_data_path(&metadata.id) {
+            debug!("clean up failed, failed to delete wallet data: {error}");
+        }
+
+        if let Err(error) = Database::global().wallets.delete(&metadata.id) {
+            debug!("clean up failed, failed to delete wallet: {error}");
+        }
 
         Self::try_new_persisted_from_mnemonic(metadata, mnemonic, passphrase).unwrap()
     }
