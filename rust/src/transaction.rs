@@ -16,6 +16,7 @@ use bdk_wallet::bitcoin::{
     OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
+use bitcoin_units::Amount as BdkAmount;
 use rand::Rng as _;
 
 use crate::wallet::Wallet;
@@ -135,6 +136,16 @@ impl Transaction {
 
                 Self::Confirmed(Arc::new(confirmed))
             }
+        }
+    }
+}
+
+impl From<(BdkAmount, BdkAmount)> for TransactionDirection {
+    fn from((sent, received): (BdkAmount, BdkAmount)) -> Self {
+        if sent > received {
+            Self::Outgoing
+        } else {
+            Self::Incoming
         }
     }
 }

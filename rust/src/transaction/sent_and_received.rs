@@ -9,12 +9,9 @@ pub struct SentAndReceived {
 }
 
 impl From<(BdkAmount, BdkAmount)> for SentAndReceived {
-    fn from((sent, received): (BdkAmount, BdkAmount)) -> Self {
-        let direction = if sent > received {
-            TransactionDirection::Outgoing
-        } else {
-            TransactionDirection::Incoming
-        };
+    fn from(sent_and_received: (BdkAmount, BdkAmount)) -> Self {
+        let (sent, received) = sent_and_received;
+        let direction = sent_and_received.into();
 
         Self {
             direction,
