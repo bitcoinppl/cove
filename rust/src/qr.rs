@@ -291,24 +291,16 @@ impl BbqrJoined {
         let words_string =
             String::from_utf8(self.0.data.clone()).map_err(|_| MultiQrError::InvalidUtf8)?;
 
-        let words = words_string
+        let words_vec: Vec<String> = words_string
             .split_whitespace()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>();
+            .map(|word| word.to_ascii_lowercase())
+            .collect();
 
-        let words_iter = words
+        let words_iter = words_vec
             .into_iter()
-            .map(|word| word.to_string().to_ascii_lowercase())
-            .map(|word| word_list.iter().find(|w| w.starts_with(&word)).copied())
-            .map(|word| {
-                let word = word.ok_or({
-                    let words = String::from_utf8(self.0.data.clone())
-                        .expect("already checked that data is valid utf-8");
-
-                    MultiQrError::BbqrDidNotContainSeedWords(words)
-                })?;
-
-                Ok(word)
+            .map(move |word| word_list.iter().find(|&w| w.starts_with(&word)).copied())
+            .map(move |word| {
+                word.ok_or_else(|| MultiQrError::BbqrDidNotContainSeedWords(words_string.clone()))
             });
 
         Ok(words_iter)
