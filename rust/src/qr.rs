@@ -1,3 +1,4 @@
+use core::str;
 use std::sync::Arc;
 
 use bbqr::{
@@ -10,7 +11,7 @@ use parking_lot::Mutex;
 
 use crate::{
     ffi::scan_result_data::FfiScanResultData,
-    mnemonic::WordAccess as _,
+    mnemonic::{ParseMnemonic as _, WordAccess as _},
     seed_qr::{SeedQr, SeedQrError},
 };
 
@@ -161,19 +162,8 @@ impl MultiQr {
             }
 
             MultiQrScanResult::Single(qr) => {
-                let word_list = Language::English.word_list();
-
-                let bip39 = Mnemonic::parse_in(Language::English, &qr).or_else(|_| {
-                    let phrase = qr
-                        .split_whitespace()
-                        .map(|word| word.to_string().to_ascii_lowercase())
-                        .filter_map(|word| word_list.iter().find(|w| w.starts_with(&word)))
-                        .copied()
-                        .collect::<Vec<&str>>()
-                        .join(" ");
-
-                    Mnemonic::parse_in(Language::English, &phrase)
-                });
+                let bip39 =
+                    Mnemonic::parse_in(Language::English, &qr).or_else(|_| qr.parse_mnemonic());
 
                 let words = bip39
                     .map_err(|_| MultiQrError::InvalidPlainTextQr(qr))?
@@ -266,9 +256,12 @@ impl BbqrJoinResult {
 #[uniffi::export]
 impl BbqrJoined {
     pub fn get_seed_words(&self) -> Result<Vec<String>, Error> {
-        self.get_words_iter()?
-            .map(|s| s.map(|s| s.to_string()))
-            .collect()
+        let words_str = str::from_utf8(&self.0.data).map_err(|_| MultiQrError::InvalidUtf8)?;
+        let mnemonic = words_str
+            .parse_mnemonic()
+            .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+
+        Ok(mnemonic.word_iter().map(ToString::to_string).collect())
     }
 
     pub fn get_grouped_words(&self, chunks: u8) -> Result<Vec<Vec<String>>, Error> {
@@ -279,30 +272,5 @@ impl BbqrJoined {
             .collect();
 
         Ok(grouped)
-    }
-}
-
-impl BbqrJoined {
-    pub fn get_words_iter(
-        &self,
-    ) -> Result<impl Iterator<Item = Result<&'static str, Error>> + '_, Error> {
-        let word_list = Language::English.word_list();
-
-        let words_string =
-            String::from_utf8(self.0.data.clone()).map_err(|_| MultiQrError::InvalidUtf8)?;
-
-        let words_vec: Vec<String> = words_string
-            .split_whitespace()
-            .map(|word| word.to_ascii_lowercase())
-            .collect();
-
-        let words_iter = words_vec
-            .into_iter()
-            .map(move |word| word_list.iter().find(|&w| w.starts_with(&word)).copied())
-            .map(move |word| {
-                word.ok_or_else(|| MultiQrError::BbqrDidNotContainSeedWords(words_string.clone()))
-            });
-
-        Ok(words_iter)
     }
 }
