@@ -93,6 +93,7 @@ struct ReceivedDetailsExpandedView: View {
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
+                    .frame(minWidth: 100)
                 }
                 .buttonStyle(PlainButtonStyle())
             }

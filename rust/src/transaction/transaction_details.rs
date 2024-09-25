@@ -53,7 +53,7 @@ impl TransactionDetails {
         let fee = wallet.calculate_fee(&tx_details).ok().map(Into::into);
         let fee_rate = wallet.calculate_fee_rate(&tx_details).ok().map(Into::into);
 
-        let address = Address::try_new(&tx_details, wallet.network().into())?;
+        let address = Address::try_new(&tx, wallet)?;
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
 
         let me = Self {

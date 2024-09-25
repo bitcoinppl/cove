@@ -1,11 +1,15 @@
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::sync::Arc;
 
 use bdk_chain::bitcoin::params::Params;
 use bdk_chain::bitcoin::Address as BdkAddress;
+use bdk_chain::tx_graph::CanonicalTx;
+use bdk_chain::ConfirmationBlockTime;
 use bdk_wallet::{bitcoin::Transaction as BdkTransaction, AddressInfo as BdkAddressInfo};
 
 use crate::network::Network;
+use crate::transaction::TransactionDirection;
 
 #[derive(
     Debug,
@@ -66,8 +70,27 @@ impl Address {
         Self(address)
     }
 
-    pub fn try_new(tx: &BdkTransaction, network: Network) -> Result<Self, Error> {
-        let output = tx.output.first().ok_or(AddressError::NoOutputs)?;
+    pub fn try_new(
+        tx: &CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
+        wallet: &bdk_wallet::Wallet,
+    ) -> Result<Self, Error> {
+        let txid = tx.tx_node.txid;
+        let network = wallet.network();
+        let direction: TransactionDirection = wallet.sent_and_received(&tx.tx_node.tx).into();
+        let tx_details = wallet.get_tx(txid).expect("transaction").tx_node.tx;
+
+        let output = match direction {
+            TransactionDirection::Incoming => tx_details
+                .output
+                .iter()
+                .find(|output| wallet.is_mine(output.script_pubkey.clone()))
+                .ok_or(AddressError::NoOutputs)?,
+
+            TransactionDirection::Outgoing => {
+                tx_details.output.first().ok_or(AddressError::NoOutputs)?
+            }
+        };
+
         let script = output.script_pubkey.clone().into_boxed_script();
 
         let address = BdkAddress::from_script(&script, Params::from(network))
