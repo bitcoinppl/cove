@@ -16,10 +16,10 @@ struct HotWalletSelectScreen: View {
     @State private var isSheetShown = false
     @State private var nextScreen: NextScreenDialog = .create
 
-    func route(_ words: NumberOfBip39Words) -> Route {
+    func route(_ words: NumberOfBip39Words, scanning: Bool = false) -> Route {
         switch nextScreen {
         case .import_:
-            HotWalletRoute.import(words).intoRoute()
+            HotWalletRoute.import(words, scanning).intoRoute()
         case .create:
             HotWalletRoute.create(words).intoRoute()
         }
@@ -46,6 +46,9 @@ struct HotWalletSelectScreen: View {
                 .cornerRadius(10)
             }
             .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
+                NavigationLink(value: route(.twentyFour, scanning: true)) {
+                    Text("Scan QR")
+                }
                 NavigationLink(value: route(.twelve)) {
                     Text("12 Words")
                 }
@@ -71,9 +74,7 @@ struct HotWalletSelectScreen: View {
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)
-
     }
-
 }
 
 #Preview {

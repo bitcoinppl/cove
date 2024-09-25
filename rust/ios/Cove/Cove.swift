@@ -520,6 +520,21 @@ private struct FfiConverterString: FfiConverter {
     }
 }
 
+private struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return try Data(readBytes(&buf, count: Int(len)))
+    }
+
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
+    }
+}
+
 public protocol AddressProtocol: AnyObject {
     func string() -> String
 }
@@ -1146,6 +1161,104 @@ public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> Uns
     return FfiConverterTypeBbqrJoinResult.lower(value)
 }
 
+public protocol BbqrJoinedProtocol: AnyObject {
+    func getGroupedWords(chunks: UInt8) throws -> [[String]]
+
+    func getSeedWords() throws -> [String]
+}
+
+open class BbqrJoined:
+    BbqrJoinedProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_bbqrjoined(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_bbqrjoined(pointer, $0) }
+    }
+
+    open func getGroupedWords(chunks: UInt8) throws -> [[String]] {
+        return try FfiConverterSequenceSequenceString.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_bbqrjoined_get_grouped_words(self.uniffiClonePointer(),
+                                                               FfiConverterUInt8.lower(chunks), $0)
+        })
+    }
+
+    open func getSeedWords() throws -> [String] {
+        return try FfiConverterSequenceString.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_bbqrjoined_get_seed_words(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeBbqrJoined: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = BbqrJoined
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> BbqrJoined {
+        return BbqrJoined(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: BbqrJoined) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BbqrJoined {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: BbqrJoined, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeBbqrJoined_lift(_ pointer: UnsafeMutableRawPointer) throws -> BbqrJoined {
+    return try FfiConverterTypeBbqrJoined.lift(pointer)
+}
+
+public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBbqrJoined.lower(value)
+}
+
 public protocol Bip39AutoCompleteProtocol: AnyObject {
     func autocomplete(word: String) -> [String]
 
@@ -1255,6 +1368,8 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
 public protocol Bip39WordSpecificAutocompleteProtocol: AnyObject {
     func autocomplete(word: String, allWords: [[String]]) -> [String]
 
+    func isBip39Word(word: String) -> Bool
+
     func isValidWord(word: String, allWords: [[String]]) -> Bool
 }
 
@@ -1312,6 +1427,13 @@ open class Bip39WordSpecificAutocomplete:
             uniffi_cove_fn_method_bip39wordspecificautocomplete_autocomplete(self.uniffiClonePointer(),
                                                                              FfiConverterString.lower(word),
                                                                              FfiConverterSequenceSequenceString.lower(allWords), $0)
+        })
+    }
+
+    open func isBip39Word(word: String) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_bip39wordspecificautocomplete_is_bip39_word(self.uniffiClonePointer(),
+                                                                              FfiConverterString.lower(word), $0)
         })
     }
 
@@ -2795,6 +2917,14 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UnsafeMutableRa
 public protocol MultiQrProtocol: AnyObject {
     func addPart(qr: String) throws -> BbqrJoinResult
 
+    func getGroupedWords(qr: FfiScanResultData, groupsOf: UInt8) throws -> [[String]]?
+
+    func handleScanResult(qr: FfiScanResultData) throws -> MultiQrScanResult
+
+    func isBbqr() -> Bool
+
+    func isSeedQr() -> Bool
+
     func isSingle() -> Bool
 
     func totalParts() -> UInt32
@@ -2830,15 +2960,7 @@ open class MultiQr:
         return try! rustCall { uniffi_cove_fn_clone_multiqr(self.pointer, $0) }
     }
 
-    public convenience init(qr: String) {
-        let pointer =
-            try! rustCall {
-                uniffi_cove_fn_constructor_multiqr_new(
-                    FfiConverterString.lower(qr), $0
-                )
-            }
-        self.init(unsafeFromRawPointer: pointer)
-    }
+    // No primary constructor declared for this class.
 
     deinit {
         guard let pointer = pointer else {
@@ -2848,10 +2970,61 @@ open class MultiQr:
         try! rustCall { uniffi_cove_fn_free_multiqr(pointer, $0) }
     }
 
+    public static func newFromString(qr: String) -> MultiQr {
+        return try! FfiConverterTypeMultiQr.lift(try! rustCall {
+            uniffi_cove_fn_constructor_multiqr_new_from_string(
+                FfiConverterString.lower(qr), $0
+            )
+        })
+    }
+
+    public static func tryNew(qr: FfiScanResultData) throws -> MultiQr {
+        return try FfiConverterTypeMultiQr.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_constructor_multiqr_try_new(
+                FfiConverterTypeFfiScanResultData.lower(qr), $0
+            )
+        })
+    }
+
+    public static func tryNewFromData(data: Data) throws -> MultiQr {
+        return try FfiConverterTypeMultiQr.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_constructor_multiqr_try_new_from_data(
+                FfiConverterData.lower(data), $0
+            )
+        })
+    }
+
     open func addPart(qr: String) throws -> BbqrJoinResult {
         return try FfiConverterTypeBbqrJoinResult.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
             uniffi_cove_fn_method_multiqr_add_part(self.uniffiClonePointer(),
                                                    FfiConverterString.lower(qr), $0)
+        })
+    }
+
+    open func getGroupedWords(qr: FfiScanResultData, groupsOf: UInt8) throws -> [[String]]? {
+        return try FfiConverterOptionSequenceSequenceString.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_multiqr_get_grouped_words(self.uniffiClonePointer(),
+                                                            FfiConverterTypeFfiScanResultData.lower(qr),
+                                                            FfiConverterUInt8.lower(groupsOf), $0)
+        })
+    }
+
+    open func handleScanResult(qr: FfiScanResultData) throws -> MultiQrScanResult {
+        return try FfiConverterTypeMultiQrScanResult.lift(rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+            uniffi_cove_fn_method_multiqr_handle_scan_result(self.uniffiClonePointer(),
+                                                             FfiConverterTypeFfiScanResultData.lower(qr), $0)
+        })
+    }
+
+    open func isBbqr() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_multiqr_is_bbqr(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isSeedQr() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_multiqr_is_seed_qr(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -3249,6 +3422,8 @@ public protocol RouteFactoryProtocol: AnyObject {
 
     func hotWallet(route: HotWalletRoute) -> Route
 
+    func hotWalletImportFromScan() -> Route
+
     func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool
 
     func newHotWallet() -> Route
@@ -3326,6 +3501,12 @@ open class RouteFactory:
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_hot_wallet(self.uniffiClonePointer(),
                                                           FfiConverterTypeHotWalletRoute.lower(route), $0)
+        })
+    }
+
+    open func hotWalletImportFromScan() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_hot_wallet_import_from_scan(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -4006,6 +4187,95 @@ public func FfiConverterTypeRustWalletViewModel_lift(_ pointer: UnsafeMutableRaw
 
 public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewModel) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRustWalletViewModel.lower(value)
+}
+
+public protocol SeedQrProtocol: AnyObject {
+    func getWords() -> [String]
+}
+
+open class SeedQr:
+    SeedQrProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_seedqr(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_seedqr(pointer, $0) }
+    }
+
+    open func getWords() -> [String] {
+        return try! FfiConverterSequenceString.lift(try! rustCall {
+            uniffi_cove_fn_method_seedqr_get_words(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeSeedQr: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = SeedQr
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SeedQr {
+        return SeedQr(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: SeedQr) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SeedQr {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: SeedQr, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeSeedQr_lift(_ pointer: UnsafeMutableRawPointer) throws -> SeedQr {
+    return try FfiConverterTypeSeedQr.lift(pointer)
+}
+
+public func FfiConverterTypeSeedQr_lower(_ value: SeedQr) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSeedQr.lower(value)
 }
 
 public protocol SentAndReceivedProtocol: AnyObject {
@@ -6124,6 +6394,86 @@ public func FfiConverterTypeAppStateReconcileMessage_lower(_ value: AppStateReco
     return FfiConverterTypeAppStateReconcileMessage.lower(value)
 }
 
+public enum Bip39Error {
+    /**
+     * Mnemonic has a word count that is not a multiple of 6, found {0}.
+     */
+    case BadWordCount(UInt32
+    )
+    /**
+     * Mnemonic contains an unknown word at index {0}.
+     */
+    case UnknownWord(UInt32
+    )
+    /**
+     * Entropy was not a multiple of 32 bits or between 128-256n bits in length.
+     */
+    case BadEntropyBitCount(UInt32
+    )
+    /**
+     * The mnemonic has an invalid checksum.
+     */
+    case InvalidChecksum
+    /**
+     * The mnemonic can be interpreted as multiple languages.
+     * Use the helper methods of the inner struct to inspect
+     * which languages are possible.
+     */
+    case AmbiguousLanguages
+}
+
+public struct FfiConverterTypeBip39Error: FfiConverterRustBuffer {
+    typealias SwiftType = Bip39Error
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bip39Error {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .BadWordCount(
+                FfiConverterUInt32.read(from: &buf)
+            )
+        case 2: return try .UnknownWord(
+                FfiConverterUInt32.read(from: &buf)
+            )
+        case 3: return try .BadEntropyBitCount(
+                FfiConverterUInt32.read(from: &buf)
+            )
+        case 4: return .InvalidChecksum
+        case 5: return .AmbiguousLanguages
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Bip39Error, into buf: inout [UInt8]) {
+        switch value {
+        case let .BadWordCount(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt32.write(v1, into: &buf)
+
+        case let .UnknownWord(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(v1, into: &buf)
+
+        case let .BadEntropyBitCount(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt32.write(v1, into: &buf)
+
+        case .InvalidChecksum:
+            writeInt(&buf, Int32(4))
+
+        case .AmbiguousLanguages:
+            writeInt(&buf, Int32(5))
+        }
+    }
+}
+
+extension Bip39Error: Equatable, Hashable {}
+
+extension Bip39Error: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -6593,6 +6943,55 @@ extension FfiColorScheme: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum FfiScanResultData {
+    case string(String
+    )
+    case data(Data
+    )
+}
+
+public struct FfiConverterTypeFfiScanResultData: FfiConverterRustBuffer {
+    typealias SwiftType = FfiScanResultData
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiScanResultData {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .string(FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .data(FfiConverterData.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiScanResultData, into buf: inout [UInt8]) {
+        switch value {
+        case let .string(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .data(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeFfiScanResultData_lift(_ buf: RustBuffer) throws -> FfiScanResultData {
+    return try FfiConverterTypeFfiScanResultData.lift(buf)
+}
+
+public func FfiConverterTypeFfiScanResultData_lower(_ value: FfiScanResultData) -> RustBuffer {
+    return FfiConverterTypeFfiScanResultData.lower(value)
+}
+
+extension FfiScanResultData: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum FiatCurrency {
     case usd
     case eur
@@ -6889,8 +7288,7 @@ public enum HotWalletRoute {
     case select
     case create(NumberOfBip39Words
     )
-    case `import`(NumberOfBip39Words
-    )
+    case `import`(NumberOfBip39Words, Bool)
     case verifyWords(WalletId
     )
 }
@@ -6906,8 +7304,7 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
         case 2: return try .create(FfiConverterTypeNumberOfBip39Words.read(from: &buf)
             )
 
-        case 3: return try .import(FfiConverterTypeNumberOfBip39Words.read(from: &buf)
-            )
+        case 3: return try .import(FfiConverterTypeNumberOfBip39Words.read(from: &buf), FfiConverterBool.read(from: &buf))
 
         case 4: return try .verifyWords(FfiConverterTypeWalletId.read(from: &buf)
             )
@@ -6925,9 +7322,10 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterTypeNumberOfBip39Words.write(v1, into: &buf)
 
-        case let .import(v1):
+        case let .import(v1, v2):
             writeInt(&buf, Int32(3))
             FfiConverterTypeNumberOfBip39Words.write(v1, into: &buf)
+            FfiConverterBool.write(v2, into: &buf)
 
         case let .verifyWords(v1):
             writeInt(&buf, Int32(4))
@@ -7211,10 +7609,18 @@ extension MnemonicError: Foundation.LocalizedError {
 
 public enum MultiQrError {
     case CannotAddPartToSingleQr
+    case CannotAddPartToSeedQr
     case ParseError(String
     )
     case InvalidUtf8
     case NotYetAvailable
+    case CannotAddBinaryDataToBbqr
+    case BbqrDidNotContainSeedWords(String
+    )
+    case InvalidSeedQr(SeedQrError
+    )
+    case InvalidPlainTextQr(String
+    )
 }
 
 public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
@@ -7224,11 +7630,22 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         case 1: return .CannotAddPartToSingleQr
-        case 2: return try .ParseError(
+        case 2: return .CannotAddPartToSeedQr
+        case 3: return try .ParseError(
                 FfiConverterString.read(from: &buf)
             )
-        case 3: return .InvalidUtf8
-        case 4: return .NotYetAvailable
+        case 4: return .InvalidUtf8
+        case 5: return .NotYetAvailable
+        case 6: return .CannotAddBinaryDataToBbqr
+        case 7: return try .BbqrDidNotContainSeedWords(
+                FfiConverterString.read(from: &buf)
+            )
+        case 8: return try .InvalidSeedQr(
+                FfiConverterTypeSeedQrError.read(from: &buf)
+            )
+        case 9: return try .InvalidPlainTextQr(
+                FfiConverterString.read(from: &buf)
+            )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -7238,15 +7655,33 @@ public struct FfiConverterTypeMultiQrError: FfiConverterRustBuffer {
         case .CannotAddPartToSingleQr:
             writeInt(&buf, Int32(1))
 
-        case let .ParseError(v1):
+        case .CannotAddPartToSeedQr:
             writeInt(&buf, Int32(2))
+
+        case let .ParseError(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
 
         case .InvalidUtf8:
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
 
         case .NotYetAvailable:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
+
+        case .CannotAddBinaryDataToBbqr:
+            writeInt(&buf, Int32(6))
+
+        case let .BbqrDidNotContainSeedWords(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .InvalidSeedQr(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeSeedQrError.write(v1, into: &buf)
+
+        case let .InvalidPlainTextQr(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(v1, into: &buf)
         }
     }
 }
@@ -7257,6 +7692,71 @@ extension MultiQrError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum MultiQrScanResult {
+    case seedQr(SeedQr
+    )
+    case single(String
+    )
+    case completedBBqr(BbqrJoined
+    )
+    case inProgressBBqr(UInt32
+    )
+}
+
+public struct FfiConverterTypeMultiQrScanResult: FfiConverterRustBuffer {
+    typealias SwiftType = MultiQrScanResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultiQrScanResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .seedQr(FfiConverterTypeSeedQr.read(from: &buf)
+            )
+
+        case 2: return try .single(FfiConverterString.read(from: &buf)
+            )
+
+        case 3: return try .completedBBqr(FfiConverterTypeBbqrJoined.read(from: &buf)
+            )
+
+        case 4: return try .inProgressBBqr(FfiConverterUInt32.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MultiQrScanResult, into buf: inout [UInt8]) {
+        switch value {
+        case let .seedQr(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeSeedQr.write(v1, into: &buf)
+
+        case let .single(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .completedBBqr(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeBbqrJoined.write(v1, into: &buf)
+
+        case let .inProgressBBqr(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(v1, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeMultiQrScanResult_lift(_ buf: RustBuffer) throws -> MultiQrScanResult {
+    return try FfiConverterTypeMultiQrScanResult.lift(buf)
+}
+
+public func FfiConverterTypeMultiQrScanResult_lower(_ value: MultiQrScanResult) -> RustBuffer {
+    return FfiConverterTypeMultiQrScanResult.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -7760,6 +8260,64 @@ public func FfiConverterTypeRoute_lift(_ buf: RustBuffer) throws -> Route {
 
 public func FfiConverterTypeRoute_lower(_ value: Route) -> RustBuffer {
     return FfiConverterTypeRoute.lower(value)
+}
+
+public enum SeedQrError {
+    case ContainsNonNumericChars
+    case IndexOutOfBounds(UInt16
+    )
+    case IncorrectWordLength(UInt16
+    )
+    case InvalidMnemonic(Bip39Error
+    )
+}
+
+public struct FfiConverterTypeSeedQrError: FfiConverterRustBuffer {
+    typealias SwiftType = SeedQrError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SeedQrError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .ContainsNonNumericChars
+        case 2: return try .IndexOutOfBounds(
+                FfiConverterUInt16.read(from: &buf)
+            )
+        case 3: return try .IncorrectWordLength(
+                FfiConverterUInt16.read(from: &buf)
+            )
+        case 4: return try .InvalidMnemonic(
+                FfiConverterTypeBip39Error.read(from: &buf)
+            )
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SeedQrError, into buf: inout [UInt8]) {
+        switch value {
+        case .ContainsNonNumericChars:
+            writeInt(&buf, Int32(1))
+
+        case let .IndexOutOfBounds(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt16.write(v1, into: &buf)
+
+        case let .IncorrectWordLength(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt16.write(v1, into: &buf)
+
+        case let .InvalidMnemonic(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeBip39Error.write(v1, into: &buf)
+        }
+    }
+}
+
+extension SeedQrError: Equatable, Hashable {}
+
+extension SeedQrError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
 }
 
 public enum SerdeError {
@@ -9334,6 +9892,27 @@ private struct FfiConverterOptionTypeAddressIndex: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionSequenceSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [[String]]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceSequenceString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceSequenceString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionTypeWalletId: FfiConverterRustBuffer {
     typealias SwiftType = WalletId?
 
@@ -9958,6 +10537,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_bbqrjoinresult_parts_left() != 39828 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_bbqrjoined_get_grouped_words() != 36018 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_bbqrjoined_get_seed_words() != 64693 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_bip39autocomplete_autocomplete() != 21847 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -9965,6 +10550,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete() != 34680 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_bip39_word() != 59249 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 4400 {
@@ -10096,6 +10684,18 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_multiqr_add_part() != 11179 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_multiqr_get_grouped_words() != 53354 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_multiqr_handle_scan_result() != 14202 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_multiqr_is_bbqr() != 22296 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_multiqr_is_seed_qr() != 10256 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_multiqr_is_single() != 64690 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -10127,6 +10727,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_hot_wallet() != 7846 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_hot_wallet_import_from_scan() != 63262 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 43168 {
@@ -10226,6 +10829,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_word_validator() != 32309 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_seedqr_get_words() != 64188 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_sentandreceived_amount() != 29581 {
@@ -10378,7 +10984,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_mnemonic_preview() != 3882 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_multiqr_new() != 46744 {
+    if uniffi_cove_checksum_constructor_multiqr_new_from_string() != 2028 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_multiqr_try_new() != 17395 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_multiqr_try_new_from_data() != 36957 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_nodeselector_new() != 61659 {

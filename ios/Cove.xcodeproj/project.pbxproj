@@ -28,6 +28,10 @@
 		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
+		AC2B13532CA1EC1000C5C708 /* IdentifiableString.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13522CA1EC0200C5C708 /* IdentifiableString.swift */; };
+		AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */; };
+		AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */; };
+		AC2B135A2CA1F49A00C5C708 /* CodeScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */; };
 		AC2D59252C5B213500B67277 /* TransactionsCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2D59242C5B213500B67277 /* TransactionsCardView.swift */; };
 		AC45C4A32C991C1F002C5AEB /* ConfirmationIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC45C4A22C991C1F002C5AEB /* ConfirmationIndicatorView.swift */; };
 		AC45C4A52C991F3C002C5AEB /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC45C4A42C991F3C002C5AEB /* Format.swift */; };
@@ -40,8 +44,9 @@
 		AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
+		AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */; };
+		AC6F511E2CA36C7600D4D27A /* BinaryDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */; };
 		AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */; };
-		AC739D532CA0977D006B5FF1 /* CodeScanner in Frameworks */ = {isa = PBXBuildFile; productRef = AC739D522CA0977D006B5FF1 /* CodeScanner */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
@@ -112,6 +117,10 @@
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
+		AC2B13522CA1EC0200C5C708 /* IdentifiableString.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifiableString.swift; sourceTree = "<group>"; };
+		AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AVCaptureDevice+bestForBuiltInCamera.swift"; sourceTree = "<group>"; };
+		AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeScanner.swift; sourceTree = "<group>"; };
+		AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerViewController.swift; sourceTree = "<group>"; };
 		AC2D59242C5B213500B67277 /* TransactionsCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsCardView.swift; sourceTree = "<group>"; };
 		AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WalletViewModel.swift; sourceTree = "<group>"; };
 		AC45C4A22C991C1F002C5AEB /* ConfirmationIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmationIndicatorView.swift; sourceTree = "<group>"; };
@@ -125,6 +134,8 @@
 		AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiColorScheme.swift; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
+		AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiScanResultData.swift; sourceTree = "<group>"; };
+		AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinaryDecoder.swift; sourceTree = "<group>"; };
 		AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeImportScreen.swift; sourceTree = "<group>"; };
 		AC739D542CA09AD6006B5FF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
@@ -172,7 +183,6 @@
 			files = (
 				AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
-				AC739D532CA0977D006B5FF1 /* CodeScanner in Frameworks */,
 				ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */,
 				ACC4D39A2C2CA6AD008E32A0 /* Cove.xcframework in Frameworks */,
 			);
@@ -181,6 +191,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AC2B13572CA1F49A00C5C708 /* CodeScanner */ = {
+			isa = PBXGroup;
+			children = (
+				AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */,
+				AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */,
+				AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */,
+				AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */,
+			);
+			path = CodeScanner;
+			sourceTree = "<group>";
+		};
 		AC43435F2C6AF7B400105C03 /* Container */ = {
 			isa = PBXGroup;
 			children = (
@@ -326,6 +347,7 @@
 		ACF479F62C59D76E008A9362 /* FFI */ = {
 			isa = PBXGroup;
 			children = (
+				AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */,
 				ACF479F72C59D785008A9362 /* WeakReconciler.swift */,
 				AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */,
 				AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */,
@@ -338,6 +360,7 @@
 			children = (
 				AC9AB5782C34956C00BAE3BE /* Logger.swift */,
 				D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */,
+				AC2B13572CA1F49A00C5C708 /* CodeScanner */,
 				D0245F4E2C0F7B4E0042B447 /* Cove */,
 				D0245F4D2C0F7B4E0042B447 /* Products */,
 			);
@@ -369,6 +392,7 @@
 				ACC301662C20C11D006790DF /* Extention */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */,
+				AC2B13522CA1EC0200C5C708 /* IdentifiableString.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
@@ -415,7 +439,6 @@
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
 				AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */,
 				ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */,
-				AC739D522CA0977D006B5FF1 /* CodeScanner */,
 			);
 			productName = Cove;
 			productReference = D0245F4C2C0F7B4E0042B447 /* Cove.app */;
@@ -449,7 +472,6 @@
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
 				AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */,
 				ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */,
-				AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */,
 			);
 			productRefGroup = D0245F4D2C0F7B4E0042B447 /* Products */;
 			projectDirPath = "";
@@ -493,11 +515,15 @@
 				ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */,
 				ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */,
 				AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */,
+				AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */,
+				AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */,
+				AC2B135A2CA1F49A00C5C708 /* CodeScanner.swift in Sources */,
 				ACC301742C211281006790DF /* HotWalletSelectScreen.swift in Sources */,
 				AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */,
 				AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */,
 				AC49121B2C77B8A100ED8ED7 /* SecretWordsScreen.swift in Sources */,
 				ACCB02CE2C97572100FB2EDF /* AsyncView.swift in Sources */,
+				AC2B13532CA1EC1000C5C708 /* IdentifiableString.swift in Sources */,
 				AC5F3CDB2C99E96000469EBA /* SentDetailsExpandedView.swift in Sources */,
 				AC5F3CE12C99EBD600469EBA /* TransactionDetailsView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
@@ -520,9 +546,11 @@
 				AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */,
 				ACC1CD5A2C6D415400C7AD89 /* FloaterPopupView.swift in Sources */,
 				52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */,
+				AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */,
 				AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */,
 				AC2D59252C5B213500B67277 /* TransactionsCardView.swift in Sources */,
 				4B7D31B349728B3C573472DD /* Network+Ext.swift in Sources */,
+				AC6F511E2CA36C7600D4D27A /* BinaryDecoder.swift in Sources */,
 				2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */,
 				AC5F3CDD2C99E99800469EBA /* HeaderIcon.swift in Sources */,
 				4998F4A296FA2217EC2BD80F /* WalletSettingsSheet.swift in Sources */,
@@ -776,14 +804,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/twostraws/CodeScanner.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.5.1;
-			};
-		};
 		AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/exyte/ActivityIndicatorView";
@@ -811,11 +831,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		AC739D522CA0977D006B5FF1 /* CodeScanner */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = AC739D512CA0977D006B5FF1 /* XCRemoteSwiftPackageReference "CodeScanner" */;
-			productName = CodeScanner;
-		};
 		AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */;

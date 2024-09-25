@@ -52,11 +52,7 @@ mod ffi {
 
         #[uniffi::method]
         fn is_valid_word(&self, word: String) -> bool {
-            let word = word.to_ascii_lowercase();
-
-            bip39::Language::English
-                .word_list()
-                .contains(&word.as_str())
+            is_bip39_word(word)
         }
     }
 
@@ -119,5 +115,21 @@ mod ffi {
                 }
             }
         }
+
+        #[uniffi::method]
+        pub fn is_bip39_word(&self, word: String) -> bool {
+            match self {
+                Self::Regular(ac) => ac.is_valid_word(word),
+                Self::LastWord(_number_of_words) => is_bip39_word(word),
+            }
+        }
+    }
+
+    fn is_bip39_word(word: String) -> bool {
+        let word = word.to_ascii_lowercase();
+
+        bip39::Language::English
+            .word_list()
+            .contains(&word.as_str())
     }
 }
