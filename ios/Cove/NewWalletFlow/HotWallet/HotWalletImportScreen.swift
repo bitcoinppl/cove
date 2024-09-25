@@ -302,9 +302,9 @@ struct HotWalletImportScreen: View {
                   })
         }
         .sheet(isPresented: $isPresentingScanner) {
-            CodeScannerView(codeTypes: [.qr],
-                            scanMode: .oncePerCode,
-                            scanInterval: 0.1)
+            ScannerView(codeTypes: [.qr],
+                        scanMode: .oncePerCode,
+                        scanInterval: 0.1)
             { response in
                 handleScan(result: response)
             }

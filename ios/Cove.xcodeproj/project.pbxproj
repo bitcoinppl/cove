@@ -50,6 +50,7 @@
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
+		AC8459B92CA492FE00A3083F /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8459B82CA492FE00A3083F /* ScannerView.swift */; };
 		AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */; };
 		AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */ = {isa = PBXBuildFile; productRef = AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */; };
 		AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */; };
@@ -141,6 +142,7 @@
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Ext.swift"; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
+		AC8459B82CA492FE00A3083F /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScannerView.swift; path = Cove/ScannerView.swift; sourceTree = "<group>"; };
 		AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NodeSelection+Ext.swift"; sourceTree = "<group>"; };
 		AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NumberOfWords+Ext.swift"; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
@@ -358,6 +360,7 @@
 		D0245F432C0F7B4E0042B447 = {
 			isa = PBXGroup;
 			children = (
+				AC8459B82CA492FE00A3083F /* ScannerView.swift */,
 				AC9AB5782C34956C00BAE3BE /* Logger.swift */,
 				D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */,
 				AC2B13572CA1F49A00C5C708 /* CodeScanner */,
@@ -540,6 +543,7 @@
 				ACCB02CC2C9747AA00FB2EDF /* TransactionCapsule.swift in Sources */,
 				AC45C4A32C991C1F002C5AEB /* ConfirmationIndicatorView.swift in Sources */,
 				AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */,
+				AC8459B92CA492FE00A3083F /* ScannerView.swift in Sources */,
 				6B2189B893A545A2F4E3107E /* WalletColor+Ext.swift in Sources */,
 				AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */,
 				0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */,

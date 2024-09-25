@@ -73,11 +73,10 @@ struct QrCodeImportScreen: View {
                             .stroke(Color.primary, lineWidth: 3)
                             .frame(height: qrCodeHeight)
 
-                        CodeScannerView(
+                        ScannerView(
                             codeTypes: [.qr],
                             scanMode: .oncePerCode,
                             scanInterval: 0.1,
-                            simulatedData: "Simulated QR Code",
                             completion: handleScan
                         )
                         .frame(height: qrCodeHeight)
@@ -100,13 +99,15 @@ struct QrCodeImportScreen: View {
                 .padding(.vertical, 36)
             }
 
-            Button("Where do I get the QR code?") {
+            Button(action: {
                 showingHelp = true
+            }) {
+                Label("Help", systemImage: "questionmark.circle.fill")
+                    .padding()
+                    .frame(minWidth: 120)
             }
-            .padding()
-            .background(Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(10)
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
             .sheet(isPresented: $showingHelp) {
                 HelpView()
             }
