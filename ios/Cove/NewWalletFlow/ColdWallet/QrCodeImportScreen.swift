@@ -55,17 +55,11 @@ struct QrCodeImportScreen: View {
     }
 
     var qrCodeHeight: CGFloat {
-        screenHeight * 0.4
+        screenHeight * 0.6
     }
 
     var body: some View {
         VStack {
-            Text("Scan your wallet export QR code")
-                .font(.title)
-                .fontWeight(.bold)
-                .multilineTextAlignment(.center)
-                .padding()
-
             if !scanComplete {
                 VStack {
                     ZStack {
@@ -96,7 +90,8 @@ struct QrCodeImportScreen: View {
                             .fontWeight(.bold)
                     }
                 }
-                .padding(.vertical, 36)
+                .padding(.top, 18)
+                .padding(.bottom, 36)
             }
 
             Button(action: {
