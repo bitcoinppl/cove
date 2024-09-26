@@ -4,5 +4,8 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>We need to scan the QR code using the camera</string>
+
+	<key>NFCReaderUsageDescription</key>
+	<string>Need access to NFC to read info</string>
 </dict>
 </plist>

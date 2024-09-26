@@ -16,6 +16,7 @@ struct NewWalletSelectScreen: View {
     @State var showSelectDialog: Bool = false
 
     // private
+    @State private var nfcReader = NFCReader()
     let routeFactory: RouteFactory = .init()
 
     // file import
@@ -66,9 +67,13 @@ struct NewWalletSelectScreen: View {
                 Button("File") {
                     isImporting = true
                 }
-                NavigationLink(value: routeFactory.nfcImport()) {
-                    Text("NFC coming soon...")
+                Button("NFC") {
+                    nfcReader.scan()
                 }
+            }
+
+            if let nfc = nfcReader.scannedMessage {
+                Text("NFC: \(nfc)")
             }
 
             Spacer()
