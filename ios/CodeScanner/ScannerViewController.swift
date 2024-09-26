@@ -11,8 +11,8 @@
     import UIKit
 
     @available(macCatalyst 14.0, *)
-    public extension CodeScannerView {
-        final class ScannerViewController: UIViewController, UINavigationControllerDelegate {
+    extension CodeScannerView {
+        public final class ScannerViewController: UIViewController, UINavigationControllerDelegate {
             private let photoOutput = AVCapturePhotoOutput()
             private var isCapturing = false
             private var handler: ((UIImage?) -> Void)?
@@ -161,7 +161,7 @@
                         return
                     }
                     guard let connection = captureSession?.connections.last,
-                          connection.isVideoOrientationSupported
+                        connection.isVideoOrientationSupported
                     else { return }
                     switch orientation {
                     case .portrait:
@@ -260,7 +260,7 @@
 
                     guard
                         let videoCaptureDevice = parentView.videoCaptureDevice
-                        ?? fallbackVideoCaptureDevice
+                            ?? fallbackVideoCaptureDevice
                     else {
                         return
                     }
@@ -329,9 +329,9 @@
                 /** Touch the screen for autofocus */
                 override public func touchesBegan(_ touches: Set<UITouch>, with _: UIEvent?) {
                     guard touches.first?.view == view,
-                          let touchPoint = touches.first,
-                          let device = parentView.videoCaptureDevice ?? fallbackVideoCaptureDevice,
-                          device.isFocusPointOfInterestSupported
+                        let touchPoint = touches.first,
+                        let device = parentView.videoCaptureDevice ?? fallbackVideoCaptureDevice,
+                        device.isFocusPointOfInterestSupported
                     else { return }
 
                     let videoView = view
@@ -402,7 +402,7 @@
             ) {
                 guard
                     let videoCaptureDevice = parentView.videoCaptureDevice
-                    ?? fallbackVideoCaptureDevice
+                        ?? fallbackVideoCaptureDevice
                 else {
                     return
                 }
@@ -468,10 +468,10 @@
             from _: AVCaptureConnection
         ) {
             guard let metadataObject = metadataObjects.first,
-                  !parentView.isPaused,
-                  !didFinishScanning,
-                  !isCapturing,
-                  let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
+                !parentView.isPaused,
+                !didFinishScanning,
+                !isCapturing,
+                let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject
             else {
                 return
             }
@@ -487,7 +487,9 @@
                         let payload = descriptor.errorCorrectedPayload
                         let symbolVersion = descriptor.symbolVersion
 
-                        let data = decoder.decodeQRErrorCorrectedBytes(payload, symbolVersion: symbolVersion)!
+                        let data = decoder.decodeQRErrorCorrectedBytes(
+                            payload, symbolVersion: symbolVersion
+                        )!
                         return ScanResultData.data(data)
                     } else {
                         return .none
@@ -558,11 +560,11 @@
             }
 
             guard let qrcodeImg = info[.originalImage] as? UIImage,
-                  let detector = CIDetector(
-                      ofType: CIDetectorTypeQRCode, context: nil,
-                      options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]
-                  ),
-                  let ciImage = CIImage(image: qrcodeImg)
+                let detector = CIDetector(
+                    ofType: CIDetectorTypeQRCode, context: nil,
+                    options: [CIDetectorAccuracy: CIDetectorAccuracyHigh]
+                ),
+                let ciImage = CIImage(image: qrcodeImg)
             else {
                 return
             }
@@ -645,9 +647,9 @@
     // MARK: - AVCaptureDevice
 
     @available(macCatalyst 14.0, *)
-    public extension AVCaptureDevice {
+    extension AVCaptureDevice {
         /// This returns the Ultra Wide Camera on capable devices and the default Camera for Video otherwise.
-        static var bestForVideo: AVCaptureDevice? {
+        public static var bestForVideo: AVCaptureDevice? {
             let deviceHasUltraWideCamera = !AVCaptureDevice.DiscoverySession(
                 deviceTypes: [.builtInUltraWideCamera], mediaType: .video, position: .back
             ).devices.isEmpty
