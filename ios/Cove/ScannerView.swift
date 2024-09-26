@@ -19,7 +19,7 @@ struct ScannerView: View {
     var showFocusIndicator: Bool = true
     var focusIndicatorSize: CGFloat = 175
     var focusIndicatorColor: Color = .yellow
-    @State var codeSize = 50.0
+    @State var codeSize = 40.0
     var completion: (Result<ScanResult, ScanError>) -> Void = { _ in () }
 
     // private
@@ -29,14 +29,13 @@ struct ScannerView: View {
     @State private var containerHeight: CGFloat = UIScreen.main.bounds.height
 
     let startingCodeSize: CGFloat = 40
-    let minimumCodeSize: CGFloat = 20
-    let tapDownBy: CGFloat = 20
+    let minimumCodeSize: CGFloat = 15
+    let tapDownBy: CGFloat = 25
 
     var zoomLevel: String {
         switch codeSize {
         case 40.0: "1x"
-        case 20.0: "2x"
-        default: "1x"
+        default: "2x"
         }
     }
 
@@ -86,10 +85,10 @@ struct ScannerView: View {
                         Spacer()
                         Button(action: {
                             withAnimation {
-                                if codeSize == 50.0 {
-                                    codeSize = 20
+                                if codeSize == startingCodeSize {
+                                    codeSize = codeSize - tapDownBy
                                 } else {
-                                    codeSize = 50
+                                    codeSize = startingCodeSize
                                 }
                             }
                         }) {
@@ -108,27 +107,6 @@ struct ScannerView: View {
                 containerHeight = geo.size.height
             }
         }
-        .gesture(
-            SpatialTapGesture()
-                .onEnded { _ in
-                    if codeSize <= minimumCodeSize {
-                        withAnimation {
-                            codeSize = startingCodeSize
-                        }
-                        return
-                    }
-
-                    withAnimation {
-                        codeSize = max(minimumCodeSize, codeSize - tapDownBy)
-                    }
-                }
-        )
-        .gesture(
-            TapGesture(count: 2)
-                .onEnded {
-                    codeSize = startingCodeSize
-                }
-        )
     }
 }
 
