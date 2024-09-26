@@ -19,14 +19,18 @@ struct ScannerView: View {
     var showFocusIndicator: Bool = true
     var focusIndicatorSize: CGFloat = 175
     var focusIndicatorColor: Color = .yellow
+    @State var codeSize = 50.0
     var completion: (Result<ScanResult, ScanError>) -> Void = { _ in () }
 
     // private
     @State private var isTorchOn = false
-    @State private var focusPoint = CGPoint(x: 0.5, y: 0.5)
 
     @State private var containerWidth: CGFloat = UIScreen.main.bounds.width
     @State private var containerHeight: CGFloat = UIScreen.main.bounds.height
+
+    let startingCodeSize: CGFloat = 50
+    let minimumCodeSize: CGFloat = 5
+    let tapDownBy: CGFloat = 15
 
     var body: some View {
         GeometryReader { geo in
@@ -37,17 +41,21 @@ struct ScannerView: View {
                     scanInterval: scanInterval,
                     simulatedData: simulatedData,
                     isTorchOn: showTorchButton ? isTorchOn : false,
+                    videoCaptureDevice: AVCaptureDevice.zoomedCameraForQRCode(withMinimumCodeSize: Float(codeSize)),
                     completion: completion
                 )
 
                 // Focus indicator
                 if showFocusIndicator {
-                    Rectangle()
-                        .stroke(focusIndicatorColor, lineWidth: 3)
-                        .frame(width: focusIndicatorSize, height: focusIndicatorSize, alignment: .center)
+                    Image(systemName: "viewfinder")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .foregroundColor(focusIndicatorColor)
+                        .frame(width: focusIndicatorSize, height: focusIndicatorSize)
+                        .font(.system(size: focusIndicatorSize, weight: .ultraLight))
                         .position(
-                            x: focusPoint.x * containerWidth,
-                            y: focusPoint.y * containerHeight
+                            x: 0.5 * containerWidth,
+                            y: 0.5 * containerHeight
                         )
                 }
 
@@ -72,13 +80,23 @@ struct ScannerView: View {
         }
         .gesture(
             SpatialTapGesture()
-                .onEnded { value in
-                    withAnimation {
-                        focusPoint = CGPoint(
-                            x: value.location.x / containerWidth,
-                            y: value.location.y / containerHeight
-                        )
+                .onEnded { _ in
+                    if codeSize <= minimumCodeSize {
+                        withAnimation {
+                            codeSize = startingCodeSize
+                        }
+                        return
                     }
+
+                    withAnimation {
+                        codeSize = max(minimumCodeSize, codeSize - tapDownBy)
+                    }
+                }
+        )
+        .gesture(
+            TapGesture(count: 2)
+                .onEnded {
+                    codeSize = startingCodeSize
                 }
         )
     }
