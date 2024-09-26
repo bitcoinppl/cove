@@ -14,6 +14,12 @@ class NFCReader: NSObject, NFCNDEFReaderSessionDelegate {
     private var session: NFCNDEFReaderSession?
     
     func scan() {
+        guard NFCNDEFReaderSession.readingAvailable else {
+            print("Scanning Not Supported")
+            print("This device doesn't support tag scanning.")
+            return
+        }
+        
         session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
         session?.alertMessage = "Hold your iPhone near your hardware wallets NFC chip."
         session?.begin()
