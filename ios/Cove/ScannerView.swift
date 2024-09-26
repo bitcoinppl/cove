@@ -32,6 +32,16 @@ struct ScannerView: View {
     let minimumCodeSize: CGFloat = 5
     let tapDownBy: CGFloat = 15
 
+    var zoomLevel: String {
+        switch codeSize {
+        case 50.0: "1x"
+        case 35.0: "2x"
+        case 20: "3x"
+        case 5.0: "4x"
+        default: "1x"
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -59,11 +69,33 @@ struct ScannerView: View {
                         )
                 }
 
-                if showTorchButton {
+                HStack(spacing: 25) {
+                    if showTorchButton {
+                        VStack {
+                            Spacer()
+                            Button(action: { isTorchOn.toggle() }) {
+                                Image(systemName: isTorchOn ? "bolt.fill" : "bolt.slash.fill")
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .background(Color.black.opacity(0.7))
+                                    .clipShape(Circle())
+                            }
+                            .padding(.bottom, 40)
+                        }
+                    }
+
                     VStack {
                         Spacer()
-                        Button(action: { isTorchOn.toggle() }) {
-                            Image(systemName: isTorchOn ? "bolt.fill" : "bolt.slash.fill")
+                        Button(action: {
+                            withAnimation {
+                                if codeSize == 50.0 {
+                                    codeSize = 20
+                                } else {
+                                    codeSize = 50
+                                }
+                            }
+                        }) {
+                            Text(zoomLevel)
                                 .foregroundColor(.white)
                                 .padding()
                                 .background(Color.black.opacity(0.7))
