@@ -28,16 +28,14 @@ struct ScannerView: View {
     @State private var containerWidth: CGFloat = UIScreen.main.bounds.width
     @State private var containerHeight: CGFloat = UIScreen.main.bounds.height
 
-    let startingCodeSize: CGFloat = 50
-    let minimumCodeSize: CGFloat = 5
-    let tapDownBy: CGFloat = 15
+    let startingCodeSize: CGFloat = 40
+    let minimumCodeSize: CGFloat = 20
+    let tapDownBy: CGFloat = 20
 
     var zoomLevel: String {
         switch codeSize {
-        case 50.0: "1x"
-        case 35.0: "2x"
-        case 20: "3x"
-        case 5.0: "4x"
+        case 40.0: "1x"
+        case 20.0: "2x"
         default: "1x"
         }
     }

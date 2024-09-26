@@ -55,7 +55,7 @@ build-ios profile="debug" device="false" sign="false":
     bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}
 
 build-ios-release:
-    just build-ios release --device
+    just build-ios release-smaller --device
 
 build-ios-debug-device:
     just build-ios debug --device
