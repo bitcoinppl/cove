@@ -12,21 +12,36 @@ private struct AlertItem: Identifiable {
     let type: AlertType
 }
 
+private struct CustomAlert: Equatable, Identifiable {
+    let id = UUID()
+    let alert: Alert
+
+    init(_ alert: Alert) {
+        self.alert = alert
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 private enum AlertType: Equatable {
     case success(String)
     case error(String)
+    case custom(CustomAlert)
 
-    var message: String {
-        switch self {
-        case let .success(message): return message
-        case let .error(message): return message
-        }
+    init(_ alert: Alert) {
+        self = .custom(CustomAlert(alert))
     }
 
-    var title: String {
+    var alert: Alert {
         switch self {
-        case .success: return "Success"
-        case .error: return "Error"
+        case let .success(message):
+            return .init(title: Text("Success"), message: Text(message), dismissButton: .default(Text("OK")))
+        case let .error(message):
+            return .init(title: Text("Error"), message: Text(message), dismissButton: .default(Text("OK")))
+        case let .custom(alert):
+            return alert.alert
         }
     }
 }
@@ -71,6 +86,7 @@ struct QrCodeImportScreen: View {
                             codeTypes: [.qr],
                             scanMode: .oncePerCode,
                             scanInterval: 0.1,
+                            showAlert: false,
                             completion: handleScan
                         )
                         .frame(height: qrCodeHeight)
@@ -110,13 +126,7 @@ struct QrCodeImportScreen: View {
         }
         .padding()
         .alert(item: $alert) { alert in
-            Alert(
-                title: Text(alert.type.title),
-                message: Text(alert.type.message),
-                dismissButton: .default(Text("OK")) {
-                    presentationMode.wrappedValue.dismiss()
-                }
-            )
+            alert.type.alert
         }
         .onChange(of: scannedCode) { _, scannedCode in
             guard let scannedCode = scannedCode else { return }
@@ -167,7 +177,32 @@ struct QrCodeImportScreen: View {
             }
 
         case let .failure(error):
-            print("Scanning failed: \(error.localizedDescription)")
+            if case ScanError.permissionDenied = error {
+                DispatchQueue.main.async {
+                    let customAlert =
+                        Alert(
+                            title: Text("Camera Access Required"),
+                            message: Text("Please allow camera access in Settings to use this feature."),
+                            primaryButton: Alert.Button.default(Text("Settings")) {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                                    app.popRoute()
+                                }
+
+                                let url = URL(string: UIApplication.openSettingsURLString)!
+                                UIApplication.shared.open(url)
+                            },
+                            secondaryButton: Alert.Button.cancel {
+                                Task {
+                                    await MainActor.run {
+                                        app.popRoute()
+                                    }
+                                }
+                            }
+                        )
+
+                    alert = AlertItem(type: .init(customAlert))
+                }
+            }
         }
     }
 }

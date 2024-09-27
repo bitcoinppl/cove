@@ -20,13 +20,17 @@ struct ScannerView: View {
     var focusIndicatorSize: CGFloat = 175
     var focusIndicatorColor: Color = .yellow
     @State var codeSize = 40.0
+    var showAlert = true
     var completion: (Result<ScanResult, ScanError>) -> Void = { _ in () }
 
     // private
     @State private var isTorchOn = false
-
     @State private var containerWidth: CGFloat = UIScreen.main.bounds.width
     @State private var containerHeight: CGFloat = UIScreen.main.bounds.height
+    @State private var showingPermissionAlert: Bool = false
+    @State private var scanError: ScanError?
+
+    @State private var viewLoaded: Bool = false
 
     let startingCodeSize: CGFloat = 40
     let minimumCodeSize: CGFloat = 15
@@ -39,18 +43,37 @@ struct ScannerView: View {
         }
     }
 
+    func completeScan(_ result: Result<ScanResult, ScanError>) {
+        if !showAlert {
+            return completion(result)
+        }
+
+        if case .failure(ScanError.permissionDenied) = result {
+            DispatchQueue.main.async {
+                showingPermissionAlert = true
+                scanError = ScanError.permissionDenied
+            }
+
+            return
+        }
+
+        completion(result)
+    }
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                CodeScannerView(
-                    codeTypes: codeTypes,
-                    scanMode: scanMode,
-                    scanInterval: scanInterval,
-                    simulatedData: simulatedData,
-                    isTorchOn: showTorchButton ? isTorchOn : false,
-                    videoCaptureDevice: AVCaptureDevice.zoomedCameraForQRCode(withMinimumCodeSize: Float(codeSize)),
-                    completion: completion
-                )
+                if viewLoaded && !showingPermissionAlert && scanError == nil {
+                    CodeScannerView(
+                        codeTypes: codeTypes,
+                        scanMode: scanMode,
+                        scanInterval: scanInterval,
+                        simulatedData: simulatedData,
+                        isTorchOn: showTorchButton ? isTorchOn : false,
+                        videoCaptureDevice: AVCaptureDevice.zoomedCameraForQRCode(withMinimumCodeSize: Float(codeSize)),
+                        completion: completeScan
+                    )
+                }
 
                 // Focus indicator
                 if showFocusIndicator {
@@ -105,6 +128,27 @@ struct ScannerView: View {
             .onAppear {
                 containerWidth = geo.size.width
                 containerHeight = geo.size.height
+                viewLoaded = true
+            }
+            .alert(isPresented: $showingPermissionAlert) {
+                Alert(
+                    title: Text("Camera Access Required"),
+                    message: Text("Please allow camera access in Settings to use this feature."),
+                    primaryButton: Alert.Button.default(Text("Settings")) {
+                        let url = URL(string: UIApplication.openSettingsURLString)!
+                        UIApplication.shared.open(url)
+                    },
+                    secondaryButton: Alert.Button.cancel {
+                        Task {
+                            await MainActor.run {
+                                showingPermissionAlert = false
+                                if let error = scanError {
+                                    completion(.failure(error))
+                                }
+                            }
+                        }
+                    }
+                )
             }
         }
     }

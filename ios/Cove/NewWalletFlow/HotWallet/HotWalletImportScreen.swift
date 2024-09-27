@@ -20,7 +20,7 @@ struct HotWalletImportScreen: View {
     @State private var tabIndex: Int = 0
 
     @State private var showErrorAlert = false
-    @State private var duplicateWallet: Optional<DuplicateWalletItem> = .none
+    @State private var duplicateWallet: DuplicateWalletItem? = .none
 
     @State private var focusField: Int?
 
@@ -52,11 +52,13 @@ struct HotWalletImportScreen: View {
     }
 
     var buttonIsDisabled: Bool {
-        return enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(false)
+        return enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(
+            false)
     }
 
     var isAllWordsValid: Bool {
-        return !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(false)
+        return !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(
+            false)
     }
 
     var navDisplay: NavigationBarItem.TitleDisplayMode {
@@ -77,6 +79,7 @@ struct HotWalletImportScreen: View {
     private func handleScan(result: Result<ScanResult, ScanError>) {
         if case let .failure(error) = result {
             Log.error("Scan error: \(error.localizedDescription)")
+            presentationMode.wrappedValue.dismiss()
             return
         }
 
@@ -84,11 +87,13 @@ struct HotWalletImportScreen: View {
         let qr = FfiScanResultData(scanResult.data)
 
         do {
-            let multiQr: MultiQr = try self.multiQr ?? {
-                let newMultiQr = try MultiQr.tryNew(qr: qr)
-                self.multiQr = newMultiQr
-                return newMultiQr
-            }()
+            let multiQr: MultiQr =
+                try self.multiQr
+                ?? {
+                    let newMultiQr = try MultiQr.tryNew(qr: qr)
+                    self.multiQr = newMultiQr
+                    return newMultiQr
+                }()
 
             // see if its single qr or seed qr
             if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(6)) {
@@ -98,7 +103,8 @@ struct HotWalletImportScreen: View {
                 case 24: self.numberOfWords = .twentyFour
                 default:
                     Log.warn("Invalid number of words: \(numberOfWords)")
-                    scanError = IdentifiableString("Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
+                    scanError = IdentifiableString(
+                        "Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
                     isPresentingScanner = false
                     return
                 }
@@ -167,8 +173,11 @@ struct HotWalletImportScreen: View {
                         outerIndex = outerIndex - 1
                     }
 
-                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
-                        Log.error("Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)")
+                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0
+                    {
+                        Log.error(
+                            "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)"
+                        )
                         return
                     }
 
@@ -215,14 +224,16 @@ struct HotWalletImportScreen: View {
             TabView(selection: $tabIndex) {
                 ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
                     VStack {
-                        CardTab(fields: $enteredWords[index],
-                                groupIndex: index,
-                                filteredSuggestions: $filteredSuggestions,
-                                focusField: $focusField,
-                                allEnteredWords: enteredWords,
-                                numberOfWords: numberOfWords)
-                            .tag(index)
-                            .padding(.bottom, keyboardIsShowing ? 60 : 20)
+                        CardTab(
+                            fields: $enteredWords[index],
+                            groupIndex: index,
+                            filteredSuggestions: $filteredSuggestions,
+                            focusField: $focusField,
+                            allEnteredWords: enteredWords,
+                            numberOfWords: numberOfWords
+                        )
+                        .tag(index)
+                        .padding(.bottom, keyboardIsShowing ? 60 : 20)
                     }
                 }
                 .padding(.horizontal, 30)
@@ -267,10 +278,13 @@ struct HotWalletImportScreen: View {
                 .foregroundColor(.white)
                 .background(
                     LinearGradient(
-                        gradient: Gradient(colors: [.black.opacity(0.7), .black, .black.opacity(0.8)]),
+                        gradient: Gradient(colors: [
+                            .black.opacity(0.7), .black, .black.opacity(0.8),
+                        ]),
                         startPoint: .leading,
                         endPoint: .trailing
-                    ))
+                    )
+                )
                 .cornerRadius(10)
                 .shadow(color: .gray.opacity(0.5), radius: 5, x: 0, y: 2)
             }
@@ -284,28 +298,35 @@ struct HotWalletImportScreen: View {
         .alert("Words not valid", isPresented: $showErrorAlert) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("The words you entered does not create a valid wallet. Please check the words and try again.")
+            Text(
+                "The words you entered does not create a valid wallet. Please check the words and try again."
+            )
         }
         .alert(item: $duplicateWallet) { duplicate in
-            Alert(title: Text("Duplicate Wallet"),
-                  message: Text("This wallet has already been imported!"),
-                  dismissButton: .default(Text("OK")) {
-                      try? app.rust.selectWallet(id: duplicate.walletId)
-                      app.resetRoute(to: .selectedWallet(duplicate.walletId))
-                  })
+            Alert(
+                title: Text("Duplicate Wallet"),
+                message: Text("This wallet has already been imported!"),
+                dismissButton: .default(Text("OK")) {
+                    try? app.rust.selectWallet(id: duplicate.walletId)
+                    app.resetRoute(to: .selectedWallet(duplicate.walletId))
+                }
+            )
         }
         .alert(item: $scanError) { error in
-            Alert(title: Text("Error Scanning QR Code"),
-                  message: Text(error.value),
-                  dismissButton: .default(Text("OK")) {
-                      scanError = nil
-                  })
+            Alert(
+                title: Text("Error Scanning QR Code"),
+                message: Text(error.value),
+                dismissButton: .default(Text("OK")) {
+                    scanError = nil
+                }
+            )
         }
         .sheet(isPresented: $isPresentingScanner) {
-            ScannerView(codeTypes: [.qr],
-                        scanMode: .oncePerCode,
-                        scanInterval: 0.1)
-            { response in
+            ScannerView(
+                codeTypes: [.qr],
+                scanMode: .oncePerCode,
+                scanInterval: 0.1
+            ) { response in
                 handleScan(result: response)
             }
         }
@@ -313,7 +334,9 @@ struct HotWalletImportScreen: View {
         .onChange(of: enteredWords) {
             // if its the last word on the non last card and all words are valid words, then go to next tab
             // focusField will already have changed by now
-            if let focusField = self.focusField, !buttonIsDisabled && tabIndex < lastIndex && focusField % 6 == 1 {
+            if let focusField = self.focusField,
+                !buttonIsDisabled && tabIndex < lastIndex && focusField % 6 == 1
+            {
                 withAnimation {
                     tabIndex += 1
                 }
@@ -346,7 +369,10 @@ private struct CardTab: View {
             ForEach(Array(fields.enumerated()), id: \.offset) { index, _ in
                 AutocompleteField(
                     number: (groupIndex * 6) + (index + 1),
-                    autocomplete: Bip39WordSpecificAutocomplete(wordNumber: UInt16((groupIndex * 6) + (index + 1)), numberOfWords: numberOfWords),
+                    autocomplete: Bip39WordSpecificAutocomplete(
+                        wordNumber: UInt16((groupIndex * 6) + (index + 1)),
+                        numberOfWords: numberOfWords
+                    ),
                     allEnteredWords: allEnteredWords,
                     numberOfWords: numberOfWords,
                     text: $fields[index],
@@ -413,7 +439,8 @@ private struct AutocompleteField: View {
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(color, lineWidth: 2)
                 }
-            })
+            }
+        )
         .onAppear {
             if !text.isEmpty && autocomplete.isBip39Word(word: text) {
                 state = .valid
@@ -437,71 +464,82 @@ private struct AutocompleteField: View {
     }
 
     var textField: some View {
-        TextField("", text: $text,
-                  prompt: Text("enter secret word...")
-                      .foregroundColor(.secondary))
-            .foregroundColor(textColor)
-            .frame(alignment: .trailing)
-            .padding(.trailing, 8)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .keyboardType(.asciiCapable)
-            .focused($isFocused)
-            .onChange(of: isFocused) {
-                if !self.isFocused { return self.showSuggestions = false }
+        TextField(
+            "", text: $text,
+            prompt: Text("enter secret word...")
+                .foregroundColor(.secondary)
+        )
+        .foregroundColor(textColor)
+        .frame(alignment: .trailing)
+        .padding(.trailing, 8)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled(true)
+        .keyboardType(.asciiCapable)
+        .focused($isFocused)
+        .onChange(of: isFocused) {
+            if !self.isFocused {
+                self.showSuggestions = false
+                return
+            }
 
-                filteredSuggestions = autocomplete.autocomplete(word: text, allWords: allEnteredWords)
+            filteredSuggestions = autocomplete.autocomplete(word: text, allWords: allEnteredWords)
 
-                if isFocused {
-                    focusField = number
+            if isFocused {
+                focusField = number
+            }
+        }
+        .onSubmit {
+            submitFocusField()
+        }
+        .onChange(of: focusField) { _, fieldNumber in
+            guard let fieldNumber = fieldNumber else { return }
+            if number == fieldNumber {
+                isFocused = true
+            }
+        }
+        .onChange(of: text) { oldText, newText in
+            filteredSuggestions = autocomplete.autocomplete(
+                word: newText, allWords: allEnteredWords
+            )
+
+            if oldText.count > newText.count {
+                // erasing, reset state
+                state = .initial
+            }
+
+            // empty is always initial
+            if newText == "" {
+                state = .initial
+                return
+            }
+
+            // invalid, no words match
+            if filteredSuggestions.isEmpty {
+                state = .invalid
+                return
+            }
+
+            // if only one suggestion left and if we added a letter (not backspace)
+            // then auto select the first selection, because we want auto selection
+            // but also allow the user to fix a wrong word
+            if let word = filteredSuggestions.last,
+                filteredSuggestions.count == 1 && oldText.count < newText.count
+            {
+                state = .valid
+                filteredSuggestions = []
+
+                if self.text != word {
+                    self.text = word
+                    submitFocusField()
+                    return
                 }
             }
-            .onSubmit {
-                submitFocusField()
+        }
+        .onAppear {
+            if let focusField = self.focusField, focusField == number {
+                isFocused = true
             }
-            .onChange(of: focusField) { _, fieldNumber in
-                guard let fieldNumber = fieldNumber else { return }
-                if number == fieldNumber {
-                    isFocused = true
-                }
-            }
-            .onChange(of: text) { oldText, newText in
-                filteredSuggestions = autocomplete.autocomplete(word: newText, allWords: allEnteredWords)
-
-                if oldText.count > newText.count {
-                    // erasing, reset state
-                    state = .initial
-                }
-
-                // empty is always initial
-                if newText == "" {
-                    return state = .initial
-                }
-
-                // invalid, no words match
-                if filteredSuggestions.isEmpty {
-                    return state = .invalid
-                }
-
-                // if only one suggestion left and if we added a letter (not backspace)
-                // then auto select the first selection, because we want auto selection
-                // but also allow the user to fix a wrong word
-                if let word = filteredSuggestions.last, filteredSuggestions.count == 1 && oldText.count < newText.count {
-                    state = .valid
-                    filteredSuggestions = []
-
-                    if self.text != word {
-                        self.text = word
-                        submitFocusField()
-                        return
-                    }
-                }
-            }
-            .onAppear {
-                if let focusField = self.focusField, focusField == number {
-                    isFocused = true
-                }
-            }
+        }
     }
 }
 
