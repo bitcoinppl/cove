@@ -45,18 +45,6 @@ struct HotWalletSelectScreen: View {
                 .foregroundColor(.white)
                 .cornerRadius(10)
             }
-            .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
-                NavigationLink(value: route(.twentyFour, scanning: true)) {
-                    Text("Scan QR")
-                }
-                NavigationLink(value: route(.twelve)) {
-                    Text("12 Words")
-                }
-                NavigationLink(value: route(.twentyFour)) {
-                    Text("24 Words")
-                }
-            }
-
             Button(action: { isSheetShown = true; nextScreen = .import_ }) {
                 HStack {
                     Image(systemName: "arrow.down.circle.fill")
@@ -71,6 +59,19 @@ struct HotWalletSelectScreen: View {
 
             Spacer()
             Spacer()
+        }
+        .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
+            if nextScreen == .import_ {
+                NavigationLink(value: route(.twentyFour, scanning: true)) {
+                    Text("Scan QR")
+                }
+            }
+            NavigationLink(value: route(.twelve)) {
+                Text("12 Words")
+            }
+            NavigationLink(value: route(.twentyFour)) {
+                Text("24 Words")
+            }
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)

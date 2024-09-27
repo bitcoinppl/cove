@@ -717,7 +717,9 @@
 				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read NFC from hardware wallet";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "We need access to your documents folder to read the wallet export file";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -758,7 +760,9 @@
 				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read NFC from hardware wallet";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "We need access to your documents folder to read the wallet export file";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
