@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct NewWalletSelectScreen: View {
     @Environment(MainViewModel.self) var app
@@ -78,7 +79,7 @@ struct NewWalletSelectScreen: View {
             switch result {
             case let .success(file):
                 do {
-                    let fileContents = try String(contentsOf: file, encoding: .utf8)
+                    let fileContents = try readFile(from: file)
                     let wallet = try Wallet.newFromXpub(xpub: fileContents)
                     let id = wallet.id()
                     Log.debug("Imported Wallet: \(id)")
@@ -120,6 +121,19 @@ struct NewWalletSelectScreen: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
+
+    func readFile(from url: URL) throws -> String {
+        guard url.startAccessingSecurityScopedResource() else {
+            throw FileReadError(message: "Failed to access the file at \(url.path)")
+        }
+
+        defer { url.stopAccessingSecurityScopedResource() }
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+}
+
+private struct FileReadError: Error {
+    let message: String
 }
 
 private struct AlertItem: Identifiable {
