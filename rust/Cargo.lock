@@ -684,6 +684,7 @@ name = "cove_nfc"
 version = "0.1.0"
 dependencies = [
  "derive_more",
+ "nom",
  "thiserror",
  "tracing",
  "tracing-log",

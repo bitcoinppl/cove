@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# ffi
 uniffi = { workspace = true }
+
+# parsing
+nom = "7.1"
 
 # error handling
 thiserror = { workspace = true }
@@ -15,5 +19,3 @@ derive_more = { workspace = true }
 # logging
 tracing = { workspace = true }
 tracing-log = { workspace = true }
-
-
