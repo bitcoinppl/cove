@@ -8,7 +8,7 @@ use nom::{
 };
 
 #[derive(Debug)]
-struct NdefHeader {
+pub(crate) struct NdefHeader {
     message_begin: bool,
     message_end: bool,
     chunked: bool,
@@ -21,7 +21,7 @@ struct NdefHeader {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum NdefType {
+pub(crate) enum NdefType {
     Empty,
     WellKnown,
     Mime,
@@ -33,15 +33,15 @@ enum NdefType {
 }
 
 #[derive(Debug)]
-struct NdefRecord {
-    header: NdefHeader,
-    type_: Vec<u8>,
-    id: Option<Vec<u8>>,
-    payload: NdefPayload,
+pub(crate) struct NdefRecord {
+    pub(crate) header: NdefHeader,
+    pub(crate) type_: Vec<u8>,
+    pub(crate) id: Option<Vec<u8>>,
+    pub(crate) payload: NdefPayload,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum NdefPayload {
+pub enum NdefPayload {
     Text(TextPayload),
     Data(Vec<u8>),
 }
@@ -207,7 +207,7 @@ fn parse_ndef_record(input: &[u8]) -> IResult<&[u8], NdefRecord> {
     ))
 }
 
-fn parse_ndef_message(input: &[u8]) -> IResult<&[u8], Vec<NdefRecord>> {
+pub(crate) fn parse_ndef_message(input: &[u8]) -> IResult<&[u8], Vec<NdefRecord>> {
     nom::multi::many1(parse_ndef_record)(input)
 }
 
