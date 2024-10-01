@@ -14,13 +14,13 @@ struct NdefHeader {
     chunked: bool,
     short_record: bool,
     has_id_length: bool,
-    type_name_format: u8,
+    type_name_format: NdefType,
     type_length: u8,
     payload_length: u32,
     id_length: Option<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum NdefType {
     Empty,
     WellKnown,
@@ -55,6 +55,20 @@ fn parse_header(input: &[u8]) -> IResult<&[u8], NdefHeader> {
         )),
         |(a, b, c, d, e, f): (u8, u8, u8, u8, u8, u8)| (a == 1, b == 1, c == 1, d == 1, e == 1, f),
     ))(input)?;
+
+    let type_name_format = match type_name_format {
+        0 => NdefType::Empty,
+        1 => NdefType::WellKnown,
+        2 => NdefType::Mime,
+        3 => NdefType::AbsoluteUri,
+        4 => NdefType::External,
+        5 => NdefType::Unknown,
+        6 => NdefType::Unchanged,
+        7 => NdefType::Reserved,
+        _ => {
+            unreachable!("only 3 bits are used for type name format")
+        }
+    };
 
     let (input, type_length) = be_u8(input)?;
 
@@ -115,10 +129,25 @@ fn parse_payload(input: &[u8], payload_length: u32) -> IResult<&[u8], Vec<u8>> {
 }
 
 fn parse_ndef_record(input: &[u8]) -> IResult<&[u8], NdefRecord> {
+    let (input, _payload_length) = parse_payload_length(input)?;
     let (input, header) = parse_header(input)?;
     let (input, type_) = parse_type(input, header.type_length)?;
     let (input, id) = parse_id(input, header.id_length)?;
     let (input, payload) = parse_payload(input, header.payload_length)?;
+
+    let payload = if type_ == b"T" {
+        // todo: T payload, only accepting UTF-8 english for now
+        if payload[..3] != [0x02, 0x65, 0x6E] {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Tag,
+            )));
+        }
+
+        payload[3..].to_vec()
+    } else {
+        payload
+    };
 
     Ok((
         input,
@@ -224,7 +253,7 @@ mod tests {
         assert!(!header.chunked);
         assert!(header.short_record);
         assert!(!header.has_id_length);
-        assert_eq!(header.type_name_format, 1);
+        assert_eq!(header.type_name_format, NdefType::WellKnown);
         assert_eq!(header.type_length, 1);
         assert_eq!(header.payload_length, 13);
     }
@@ -241,7 +270,7 @@ mod tests {
         assert!(!header.chunked);
         assert!(!header.short_record);
         assert!(!header.has_id_length);
-        assert_eq!(header.type_name_format, 2);
+        assert_eq!(header.type_name_format, NdefType::Mime);
         assert_eq!(header.type_length, 16);
         assert_eq!(header.payload_length, 3009);
 
@@ -255,7 +284,7 @@ mod tests {
         assert!(!header.chunked);
         assert!(header.short_record);
         assert!(!header.has_id_length);
-        assert_eq!(header.type_name_format, 1);
+        assert_eq!(header.type_name_format, NdefType::WellKnown);
         assert_eq!(header.type_length, 1);
         assert_eq!(header.payload_length, 157)
     }
@@ -270,7 +299,7 @@ mod tests {
         assert!(!header.chunked);
         assert!(header.short_record);
         assert!(!header.has_id_length);
-        assert_eq!(header.type_name_format, 1);
+        assert_eq!(header.type_name_format, NdefType::WellKnown);
         assert_eq!(header.type_length, 1);
         assert_eq!(header.payload_length, 157)
     }
@@ -283,6 +312,13 @@ mod tests {
         let (_, type_) = parse_type(data, header.type_length).unwrap();
         let type_string = String::from_utf8(type_).unwrap();
         assert_eq!(type_string, "application/json");
+
+        // descriptor
+        let data = descriptor_bytes();
+        let (data, header) = parse_header(&data).unwrap();
+        let (_, type_) = parse_type(data, header.type_length).unwrap();
+        let type_string = String::from_utf8(type_).unwrap();
+        assert_eq!(type_string, "T");
     }
     //
     #[test]
@@ -300,10 +336,17 @@ mod tests {
         assert_eq!(type_string, "T".to_string());
         assert_eq!(id, None);
 
-        let payload_string = String::from_utf8(payload).unwrap();
-        let descriptor_string = std::fs::read_to_string("test/data/descriptor.txt").unwrap();
+        let payload_string = String::from_utf8(payload[3..].to_vec())
+            .unwrap()
+            .trim()
+            .to_string();
 
-        // assert_eq!(payload_string, descriptor_string);
+        let descriptor_string = std::fs::read_to_string("test/data/descriptor.txt")
+            .unwrap()
+            .trim()
+            .to_string();
+
+        assert_eq!(payload_string, descriptor_string);
     }
     //
     #[test]
@@ -321,5 +364,39 @@ mod tests {
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
 
         assert_eq!(payload_json, export_json);
+    }
+
+    #[test]
+    fn test_getting_entire_ndef_message_export() {
+        let (_, message) = parse_ndef_message(&EXPORT).unwrap();
+        assert_eq!(message.len(), 1);
+
+        let record = &message[0];
+        assert_eq!(record.type_, b"application/json");
+
+        let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
+        let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
+
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&record.payload).unwrap(),
+            export_json
+        );
+    }
+
+    #[test]
+    fn test_getting_entire_ndef_message_descriptor() {
+        let (_, message) = parse_ndef_message(&DESCRIPTOR).unwrap();
+        assert_eq!(message.len(), 1);
+
+        let record = &message[0];
+        assert_eq!(record.type_, b"T");
+
+        let known_descriptor_string = std::fs::read_to_string("test/data/descriptor.txt")
+            .unwrap()
+            .trim()
+            .to_string();
+
+        let descriptor_string = String::from_utf8(record.payload.clone()).unwrap();
+        assert_eq!(descriptor_string, known_descriptor_string);
     }
 }
