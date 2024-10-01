@@ -1,0 +1,19 @@
+[package]
+name = "cove_nfc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uniffi = { workspace = true }
+
+# error handling
+thiserror = { workspace = true }
+
+# derive macros
+derive_more = { workspace = true }
+
+# logging
+tracing = { workspace = true }
+tracing-log = { workspace = true }
+
+

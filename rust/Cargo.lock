@@ -645,6 +645,7 @@ dependencies = [
  "bitcoin_hashes 0.14.0",
  "bitvec",
  "chacha20poly1305",
+ "cove_nfc",
  "crossbeam",
  "data-encoding",
  "derive_more",
@@ -676,6 +677,17 @@ dependencies = [
  "uniffi",
  "url",
  "zeroize",
+]
+
+[[package]]
+name = "cove_nfc"
+version = "0.1.0"
+dependencies = [
+ "derive_more",
+ "thiserror",
+ "tracing",
+ "tracing-log",
+ "uniffi",
 ]
 
 [[package]]
