@@ -16,6 +16,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     var scannedMessage: String?
     var retries = 0
     
+    var blocksToRead = 32
+    
     func scan() {
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
@@ -38,6 +40,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             case .iso15693(let iso15693Tag):
                 Log.debug("found tag iso15693: \(iso15693Tag)")
                 self.readBlocks(tag: iso15693Tag, session: session)
+//                self.readNDEF(from: iso15693Tag, session: session)
             case .iso7816(let iso7816Tag):
                 Log.debug("found tag iso7816")
                 self.readNDEF(from: iso7816Tag, session: session)
@@ -57,29 +60,51 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     func readBlocks(tag: NFCISO15693Tag, session: NFCTagReaderSession) {
         session.alertMessage = "Reading tag, please hold still..."
         
-        var allData = Data()
+        var allData: [UInt8] = []
         var currentBlock = 0
         
         func readNextBlock() {
-            if currentBlock >= 255 {
-                print(allData.base64EncodedString())
-                let bytes = [UInt8](allData)
+            let message = NFCNDEFMessage(data: Data(allData))
+            if let message = message, let record = message.records.first {
+                if !record.payload.isEmpty {
+                    print("payload: \(record.payload)")
+                }
+            }
+
+            if currentBlock >= 800 {
+                let bytes = allData
                 print("bytes: \(bytes)")
+                session.invalidate()
                 return
             }
             
             print("current block: \(currentBlock)")
             
-            tag.readSingleBlock(requestFlags: .highDataRate, blockNumber: UInt8(currentBlock)) { result in
+            tag.extendedReadMultipleBlocks(requestFlags: .highDataRate, blockRange: NSRange(location: currentBlock, length: blocksToRead)) { data, error in
+                let result: Result<[Data], any Error> = {
+                    if let error = error {
+                        return .failure(error)
+                    }
+                    
+                    return .success(data)
+                }()
+                
                 switch result {
                 case .success(let data):
-                    allData.append(data)
-                    currentBlock += 1
+                    for data in data {
+                        print("\(currentBlock): \(data)")
+                        let uint = [UInt8](data)
+                        print("\(currentBlock) uint: \(uint)")
+                        allData.append(contentsOf: uint)
+                    }
                     
+                    currentBlock = currentBlock + self.blocksToRead
+                    
+                    self.retries = 0
                     readNextBlock()
                 case .failure(let error):
-                    if self.retries < 3 {
-                        Log.error("read error: \(error.localizedDescription), retrying")
+                    if self.retries < 10 {
+                        Log.warn("read error: \(error.localizedDescription), retrying")
                         readNextBlock()
                         self.retries = self.retries + 1
                     } else {
@@ -126,6 +151,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         Log.debug("processing NDEF message, \(message)")
         var _message = ""
         
+        print("num of records: \(message.records.count)")
+        
         for record in message.records {
             print("Record type: \(record.typeNameFormat)")
             if let type = String(data: record.type, encoding: .utf8) {
@@ -136,6 +163,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 _message += "\(payload)\n"
                 print("Payload: \(payload)")
             }
+            
+            print("ID: \(record.identifier)")
             _message += "----\n"
             print("---")
         }
