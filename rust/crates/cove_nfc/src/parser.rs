@@ -37,7 +37,26 @@ struct NdefRecord {
     header: NdefHeader,
     type_: Vec<u8>,
     id: Option<Vec<u8>>,
-    payload: Vec<u8>,
+    payload: NdefPayload,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum NdefPayload {
+    Text(TextPayload),
+    Data(Vec<u8>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextPayload {
+    format: TextPayloadFormat,
+    language: String,
+    text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TextPayloadFormat {
+    Utf8,
+    Utf16,
 }
 
 fn parse_header(input: &[u8]) -> IResult<&[u8], NdefHeader> {
@@ -124,8 +143,50 @@ fn parse_id(input: &[u8], id_length: Option<u8>) -> IResult<&[u8], Option<Vec<u8
     }
 }
 
-fn parse_payload(input: &[u8], payload_length: u32) -> IResult<&[u8], Vec<u8>> {
-    map(take(payload_length), |s: &[u8]| s.to_vec())(input)
+fn parse_payload<'a, 'b>(
+    input: &'a [u8],
+    payload_length: u32,
+    type_: &'b [u8],
+) -> IResult<&'a [u8], NdefPayload> {
+    if type_ == b"T" {
+        let (input, (is_utf16, language_code_length)): (&[u8], (u8, u8)) =
+            bits::<_, _, nom::error::Error<(&[u8], usize)>, _, _>(tuple((
+                take_bits(1_u8), // UTF-16 flag
+                take_bits(7_u8), // Language code length
+            )))(input)?;
+
+        let (input, language_code) = take(language_code_length)(input)?;
+
+        let remaining_length = payload_length - language_code_length as u32 - 1;
+        let (input, text) = take(remaining_length)(input)?;
+
+        let parsed_text = if is_utf16 == 1 {
+            String::from_utf16_lossy(
+                &text
+                    .chunks_exact(2)
+                    .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
+                    .collect::<Vec<u16>>(),
+            )
+        } else {
+            String::from_utf8_lossy(&text).to_string()
+        };
+
+        let parsed_text = TextPayload {
+            format: if is_utf16 == 1 {
+                TextPayloadFormat::Utf16
+            } else {
+                TextPayloadFormat::Utf8
+            },
+            language: String::from_utf8_lossy(&language_code).to_string(),
+            text: parsed_text,
+        };
+
+        Ok((input, NdefPayload::Text(parsed_text)))
+    } else {
+        map(take(payload_length), |s: &[u8]| {
+            NdefPayload::Data(s.to_vec())
+        })(input)
+    }
 }
 
 fn parse_ndef_record(input: &[u8]) -> IResult<&[u8], NdefRecord> {
@@ -133,21 +194,7 @@ fn parse_ndef_record(input: &[u8]) -> IResult<&[u8], NdefRecord> {
     let (input, header) = parse_header(input)?;
     let (input, type_) = parse_type(input, header.type_length)?;
     let (input, id) = parse_id(input, header.id_length)?;
-    let (input, payload) = parse_payload(input, header.payload_length)?;
-
-    let payload = if type_ == b"T" {
-        // todo: T payload, only accepting UTF-8 english for now
-        if payload[..3] != [0x02, 0x65, 0x6E] {
-            return Err(nom::Err::Error(nom::error::Error::new(
-                input,
-                nom::error::ErrorKind::Tag,
-            )));
-        }
-
-        payload[3..].to_vec()
-    } else {
-        payload
-    };
+    let (input, payload) = parse_payload(input, header.payload_length, &type_)?;
 
     Ok((
         input,
@@ -328,34 +375,35 @@ mod tests {
         let (data, header) = parse_header(&data).unwrap();
         let (data, type_) = parse_type(data, header.type_length).unwrap();
         let (data, id) = parse_id(data, header.id_length).unwrap();
-        let (_data, payload) = parse_payload(data, header.payload_length).unwrap();
-
-        println!("{:?}", &payload[..4]);
+        let (_data, payload) = parse_payload(data, header.payload_length, &type_).unwrap();
 
         let type_string = String::from_utf8(type_).unwrap();
         assert_eq!(type_string, "T".to_string());
         assert_eq!(id, None);
 
-        let payload_string = String::from_utf8(payload[3..].to_vec())
-            .unwrap()
-            .trim()
-            .to_string();
+        let NdefPayload::Text(payload_string) = payload else {
+            panic!("payload is not text")
+        };
 
         let descriptor_string = std::fs::read_to_string("test/data/descriptor.txt")
             .unwrap()
             .trim()
             .to_string();
 
-        assert_eq!(payload_string, descriptor_string);
+        assert_eq!(payload_string.text, descriptor_string);
     }
     //
     #[test]
     fn parse_payload_with_complete_data_export() {
         let data = export_bytes();
         let (data, header) = parse_header(&data).unwrap();
-        let (data, _type) = parse_type(data, header.type_length).unwrap();
+        let (data, type_) = parse_type(data, header.type_length).unwrap();
         let (data, _id) = parse_id(data, header.id_length).unwrap();
-        let (_data, payload) = parse_payload(data, header.payload_length).unwrap();
+        let (_data, payload) = parse_payload(data, header.payload_length, &type_).unwrap();
+
+        let NdefPayload::Data(payload) = payload else {
+            panic!("payload is not data")
+        };
 
         let payload_string = String::from_utf8(payload).unwrap();
         let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
@@ -374,11 +422,15 @@ mod tests {
         let record = &message[0];
         assert_eq!(record.type_, b"application/json");
 
+        let NdefPayload::Data(payload) = &record.payload else {
+            panic!("payload is not data")
+        };
+
         let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
 
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&record.payload).unwrap(),
+            serde_json::from_slice::<serde_json::Value>(&payload).unwrap(),
             export_json
         );
     }
@@ -396,7 +448,10 @@ mod tests {
             .trim()
             .to_string();
 
-        let descriptor_string = String::from_utf8(record.payload.clone()).unwrap();
-        assert_eq!(descriptor_string, known_descriptor_string);
+        let NdefPayload::Text(payload_string) = &record.payload else {
+            panic!("payload is not text")
+        };
+
+        assert_eq!(payload_string.text, known_descriptor_string);
     }
 }
