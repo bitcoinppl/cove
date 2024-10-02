@@ -487,4 +487,32 @@ mod tests {
             assert_eq!(needed, Needed::new(original_length - 101));
         }
     }
+
+    #[test]
+    fn test_parse_partial_in_chunks() {
+        let mut data = Vec::new();
+        let mut chunks_processed = 0;
+
+        EXPORT.chunks(100).for_each(|chunk| {
+            let mut chunk_data = std::mem::take(&mut data);
+            chunk_data.extend_from_slice(chunk);
+
+            let stream = Stream::new(Bytes::new(&chunk_data));
+
+            match parse_ndef_message(stream) {
+                Ok((_, message)) => {
+                    assert_eq!(message.len(), 1);
+                    return;
+                }
+                Err(winnow::error::ErrMode::Incomplete(Needed::Size(_))) => {
+                    chunks_processed += 1;
+                    data = chunk_data;
+                }
+
+                Err(e) => panic!("unexpected error: {e}"),
+            };
+        });
+
+        assert_eq!(chunks_processed, 30);
+    }
 }
