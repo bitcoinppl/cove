@@ -2,9 +2,8 @@ use winnow::{
     binary::{
         be_u16, be_u8,
         bits::{bool as take_bool, take as take_bits},
-        length_repeat, Endianness,
+        Endianness,
     },
-    combinator::repeat,
     stream::{Bytes, Partial},
     token::{any, literal, take},
     PResult, Parser,
@@ -16,20 +15,20 @@ pub struct MessageInfo {
 }
 
 #[derive(Debug)]
-pub(crate) struct NdefHeader {
-    message_begin: bool,
-    message_end: bool,
-    chunked: bool,
-    short_record: bool,
-    has_id_length: bool,
-    type_name_format: NdefType,
-    type_length: u8,
-    payload_length: u32,
-    id_length: Option<u8>,
+pub struct NdefHeader {
+    pub message_begin: bool,
+    pub message_end: bool,
+    pub chunked: bool,
+    pub short_record: bool,
+    pub has_id_length: bool,
+    pub type_name_format: NdefType,
+    pub type_length: u8,
+    pub payload_length: u32,
+    pub id_length: Option<u8>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum NdefType {
+pub enum NdefType {
     Empty,
     WellKnown,
     Mime,
@@ -42,10 +41,10 @@ pub(crate) enum NdefType {
 
 #[derive(Debug)]
 pub struct NdefRecord {
-    pub(crate) header: NdefHeader,
-    pub(crate) type_: Vec<u8>,
-    pub(crate) id: Option<Vec<u8>>,
-    pub(crate) payload: NdefPayload,
+    pub header: NdefHeader,
+    pub type_: Vec<u8>,
+    pub id: Option<Vec<u8>>,
+    pub payload: NdefPayload,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,11 +68,27 @@ pub enum TextPayloadFormat {
 
 type Stream<'i> = Partial<&'i Bytes>;
 
-fn stream(b: &[u8]) -> Stream<'_> {
+pub fn stream(b: &[u8]) -> Stream<'_> {
     Partial::new(Bytes::new(b))
 }
 
-pub fn parse_ndef_record<'a>(input: &mut Stream<'_>) -> PResult<NdefRecord> {
+pub fn parse_message_info(input: &mut Stream<'_>) -> PResult<MessageInfo> {
+    literal([226, 67, 0, 1, 0, 0, 4, 0, 3]).parse_next(input)?;
+
+    let length_indicator = be_u8.parse_next(input)?;
+
+    let total_payload_length = if length_indicator == 255 {
+        be_u16.parse_next(input)?
+    } else {
+        length_indicator as u16
+    };
+
+    Ok(MessageInfo {
+        total_payload_length,
+    })
+}
+
+pub fn parse_ndef_record(input: &mut Stream<'_>) -> PResult<NdefRecord> {
     let header = parse_header.parse_next(input)?;
     let type_ = parse_type(input, header.type_length)?;
     let id = parse_id(input, header.id_length)?;
@@ -87,7 +102,7 @@ pub fn parse_ndef_record<'a>(input: &mut Stream<'_>) -> PResult<NdefRecord> {
     })
 }
 
-pub fn parse_ndef_message<'a>(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
+pub fn parse_ndef_message(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
     let info = parse_message_info.parse_next(input)?;
 
     let mut records = Vec::new();
@@ -112,21 +127,7 @@ pub fn parse_ndef_message<'a>(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>
     Ok(records)
 }
 
-fn parse_message_info<'a>(input: &mut Stream<'_>) -> PResult<MessageInfo> {
-    literal([226, 67, 0, 1, 0, 0, 4, 0, 3]).parse_next(input)?;
-
-    let length_indicator = be_u8.parse_next(input)?;
-
-    let total_payload_length = if length_indicator == 255 {
-        be_u16.parse_next(input)?
-    } else {
-        length_indicator as u16
-    };
-
-    Ok(MessageInfo {
-        total_payload_length,
-    })
-}
+// private
 
 fn parse_header(input: &mut Stream<'_>) -> PResult<NdefHeader> {
     let first_byte = [any.parse_next(input)?];
@@ -178,13 +179,13 @@ fn parse_header(input: &mut Stream<'_>) -> PResult<NdefHeader> {
     })
 }
 
-fn parse_type<'a>(input: &mut Stream<'_>, type_length: u8) -> PResult<Vec<u8>> {
+fn parse_type(input: &mut Stream<'_>, type_length: u8) -> PResult<Vec<u8>> {
     take(type_length as usize)
         .map(|s: &[u8]| s.to_vec())
         .parse_next(input)
 }
 
-fn parse_id<'a>(input: &mut Stream<'_>, id_length: Option<u8>) -> PResult<Option<Vec<u8>>> {
+fn parse_id(input: &mut Stream<'_>, id_length: Option<u8>) -> PResult<Option<Vec<u8>>> {
     if let Some(id_len) = id_length {
         take(id_len as usize)
             .map(|s: &[u8]| Some(s.to_vec()))
@@ -194,7 +195,7 @@ fn parse_id<'a>(input: &mut Stream<'_>, id_length: Option<u8>) -> PResult<Option
     }
 }
 
-fn parse_payload<'a>(
+fn parse_payload(
     input: &mut Stream<'_>,
     payload_length: u32,
     type_: &[u8],
