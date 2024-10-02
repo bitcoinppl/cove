@@ -9,61 +9,16 @@ use winnow::{
     PResult, Parser,
 };
 
+use crate::{
+    header::NdefHeader,
+    ndef_type::NdefType,
+    payload::{NdefPayload, TextPayload, TextPayloadFormat},
+    record::NdefRecord,
+};
+
 #[derive(Debug)]
 pub struct MessageInfo {
     pub total_payload_length: u16,
-}
-
-#[derive(Debug)]
-pub struct NdefHeader {
-    pub message_begin: bool,
-    pub message_end: bool,
-    pub chunked: bool,
-    pub short_record: bool,
-    pub has_id_length: bool,
-    pub type_name_format: NdefType,
-    pub type_length: u8,
-    pub payload_length: u32,
-    pub id_length: Option<u8>,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum NdefType {
-    Empty,
-    WellKnown,
-    Mime,
-    AbsoluteUri,
-    External,
-    Unknown,
-    Unchanged,
-    Reserved,
-}
-
-#[derive(Debug)]
-pub struct NdefRecord {
-    pub header: NdefHeader,
-    pub type_: Vec<u8>,
-    pub id: Option<Vec<u8>>,
-    pub payload: NdefPayload,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NdefPayload {
-    Text(TextPayload),
-    Data(Vec<u8>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TextPayload {
-    format: TextPayloadFormat,
-    language: String,
-    text: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TextPayloadFormat {
-    Utf8,
-    Utf16,
 }
 
 type Stream<'i> = Partial<&'i Bytes>;
@@ -248,6 +203,8 @@ mod tests {
 
     use super::*;
 
+    use crate::{header::NdefHeader, ndef_type::NdefType, payload::NdefPayload};
+
     fn owned_stream(bytes: Vec<u8>) -> Stream<'static> {
         let bytes = Box::leak(bytes.into_boxed_slice());
         Stream::new(Bytes::new(bytes))
@@ -280,13 +237,13 @@ mod tests {
     });
 
     fn export_bytes() -> Stream<'static> {
-        let mut data = EXPORT.clone();
+        let mut data = *EXPORT;
         let _payload_length = parse_message_info(&mut data).unwrap();
         data
     }
 
     fn descriptor_bytes() -> Stream<'static> {
-        let mut data = DESCRIPTOR.clone();
+        let mut data = *DESCRIPTOR;
         let _payload_length = parse_message_info(&mut data).unwrap();
         data
     }
@@ -309,7 +266,7 @@ mod tests {
     #[test]
     fn test_header_parsing_with_complete_data() {
         // export
-        let mut data = EXPORT.clone();
+        let mut data = *EXPORT;
         let message_info = parse_message_info(&mut data).unwrap();
         assert_eq!(message_info.total_payload_length, 3031);
 
@@ -324,7 +281,7 @@ mod tests {
         assert_eq!(header.payload_length, 3009);
 
         // descriptor
-        let mut data = DESCRIPTOR.clone();
+        let mut data = *DESCRIPTOR;
         let message_info = parse_message_info(&mut data).unwrap();
         assert_eq!(message_info.total_payload_length, 161);
 
@@ -424,7 +381,7 @@ mod tests {
 
     #[test]
     fn verify_parsing_keeps_track_of_bytes_left_over() {
-        let mut export = EXPORT.clone();
+        let mut export = *EXPORT;
         let export_len = export.len();
         let _message = parse_ndef_message(&mut export).unwrap();
 
@@ -434,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_getting_entire_ndef_message_export() {
-        let mut export = EXPORT.clone();
+        let mut export = *EXPORT;
         let message = parse_ndef_message(&mut export).unwrap();
         assert_eq!(message.len(), 1);
 
@@ -449,14 +406,14 @@ mod tests {
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
 
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&payload).unwrap(),
+            serde_json::from_slice::<serde_json::Value>(payload).unwrap(),
             export_json
         );
     }
 
     #[test]
     fn test_getting_entire_ndef_message_descriptor() {
-        let mut descriptor = DESCRIPTOR.clone();
+        let mut descriptor = *DESCRIPTOR;
         let message = parse_ndef_message(&mut descriptor).unwrap();
 
         assert_eq!(message.len(), 1);
@@ -479,7 +436,7 @@ mod tests {
     #[test]
     fn test_partial_parsing() {
         let original_length = EXPORT.len();
-        let mut export = owned_stream(EXPORT.clone()[..100].to_vec());
+        let mut export = owned_stream((*EXPORT)[..100].to_vec());
         let message = parse_ndef_message(&mut export);
 
         assert!(matches!(
