@@ -1,10 +1,12 @@
-use nom::{
-    bits::{bits, streaming::take as take_bits},
-    bytes::streaming::{tag, take},
-    combinator::map,
-    number::streaming::{be_u16, be_u32, be_u8},
-    sequence::tuple,
-    IResult,
+use winnow::{
+    binary::{
+        be_u16, be_u8,
+        bits::{bool as take_bool, take as take_bits},
+        Endianness,
+    },
+    combinator::repeat,
+    token::{any, literal, take},
+    Bytes, PResult, Parser, Partial,
 };
 
 #[derive(Debug)]
@@ -59,21 +61,24 @@ pub enum TextPayloadFormat {
     Utf16,
 }
 
-fn parse_header(input: &[u8]) -> IResult<&[u8], NdefHeader> {
-    let (
-        input,
-        (message_begin, message_end, chunk_flag, short_record, id_length_present, type_name_format),
-    ) = bits::<_, _, nom::error::Error<(&[u8], usize)>, _, _>(map(
-        tuple((
-            take_bits(1usize),
-            take_bits(1usize),
-            take_bits(1usize),
-            take_bits(1usize),
-            take_bits(1usize),
-            take_bits(3u8),
-        )),
-        |(a, b, c, d, e, f): (u8, u8, u8, u8, u8, u8)| (a == 1, b == 1, c == 1, d == 1, e == 1, f),
-    ))(input)?;
+type Stream<'i> = Partial<&'i Bytes>;
+
+fn stream(b: &[u8]) -> Stream<'_> {
+    Partial::new(Bytes::new(b))
+}
+
+fn parse_header(input: &mut Stream<'_>) -> PResult<NdefHeader> {
+    let first_byte = [any.parse_next(input)?];
+    let first_byte = Bytes::new(&first_byte);
+
+    let (first_byte, message_begin) = take_bool.parse_peek((first_byte, 0))?;
+    let (first_byte, message_end) = take_bool.parse_peek(first_byte)?;
+    let (first_byte, chunked) = take_bool.parse_peek(first_byte)?;
+    let (first_byte, short_record) = take_bool.parse_peek(first_byte)?;
+    let (first_byte, has_id_length) = take_bool.parse_peek(first_byte)?;
+    let (_, type_name_format): (_, u8) = take_bits(3_u8).parse_peek(first_byte)?;
+
+    let type_length = winnow::binary::u8.parse_next(input)?;
 
     let type_name_format = match type_name_format {
         0 => NdefType::Empty,
@@ -84,83 +89,79 @@ fn parse_header(input: &[u8]) -> IResult<&[u8], NdefHeader> {
         5 => NdefType::Unknown,
         6 => NdefType::Unchanged,
         7 => NdefType::Reserved,
-        _ => {
-            unreachable!("only 3 bits are used for type name format")
-        }
+        _ => panic!("number out of range, impossible, only 3 bits"),
     };
 
-    let (input, type_length) = be_u8(input)?;
-
-    let (input, payload_length) = if short_record {
-        map(be_u8, |x| x as u32)(input)?
+    let payload_length = if short_record {
+        any.map(|x: u8| x as u32).parse_next(input)?
     } else {
-        be_u32(input)?
+        winnow::binary::u32(Endianness::Big).parse_next(input)?
     };
 
-    let (input, id_length) = if id_length_present {
-        map(be_u8, Some)(input)?
+    let id_length = if has_id_length {
+        Some(any.parse_next(input)?)
     } else {
-        (input, None)
+        None
     };
 
-    Ok((
-        input,
-        NdefHeader {
-            message_begin,
-            message_end,
-            chunked: chunk_flag,
-            short_record,
-            has_id_length: id_length_present,
-            type_name_format,
-            type_length,
-            payload_length,
-            id_length,
-        },
-    ))
+    Ok(NdefHeader {
+        message_begin,
+        message_end,
+        chunked,
+        short_record,
+        has_id_length,
+        type_name_format,
+        type_length,
+        payload_length,
+        id_length,
+    })
 }
-fn parse_payload_length(input: &[u8]) -> IResult<&[u8], u16> {
-    let (input, _) = tag(&[226, 67, 0, 1, 0, 0, 4, 0, 3])(input)?;
 
-    let (input, length_indicator) = be_u8(input)?;
+fn parse_payload_length<'a>(input: &mut Stream<'_>) -> PResult<u16> {
+    literal([226, 67, 0, 1, 0, 0, 4, 0, 3]).parse_next(input)?;
+
+    let length_indicator = be_u8.parse_next(input)?;
 
     if length_indicator == 255 {
-        let (input, payload_length) = be_u16(input)?;
-        Ok((input, payload_length))
+        be_u16.parse_next(input)
     } else {
-        Ok((input, length_indicator as u16))
+        Ok(length_indicator as u16)
     }
 }
 
-fn parse_type(input: &[u8], type_length: u8) -> IResult<&[u8], Vec<u8>> {
-    map(take(type_length), |s: &[u8]| s.to_vec())(input)
+fn parse_type<'a>(input: &mut Stream<'_>, type_length: u8) -> PResult<Vec<u8>> {
+    take(type_length as usize)
+        .map(|s: &[u8]| s.to_vec())
+        .parse_next(input)
 }
 
-fn parse_id(input: &[u8], id_length: Option<u8>) -> IResult<&[u8], Option<Vec<u8>>> {
+fn parse_id<'a>(input: &mut Stream<'_>, id_length: Option<u8>) -> PResult<Option<Vec<u8>>> {
     if let Some(id_len) = id_length {
-        map(take(id_len), |s: &[u8]| Some(s.to_vec()))(input)
+        take(id_len as usize)
+            .map(|s: &[u8]| Some(s.to_vec()))
+            .parse_next(input)
     } else {
-        Ok((input, None))
+        Ok(None)
     }
 }
 
-fn parse_payload<'a, 'b>(
-    input: &'a [u8],
+fn parse_payload<'a>(
+    input: &mut Stream<'_>,
     payload_length: u32,
-    type_: &'b [u8],
-) -> IResult<&'a [u8], NdefPayload> {
+    type_: &[u8],
+) -> PResult<NdefPayload> {
     if type_ == b"T" {
-        let (input, (is_utf16, language_code_length)): (&[u8], (u8, u8)) =
-            bits::<_, _, nom::error::Error<(&[u8], usize)>, _, _>(tuple((
-                take_bits(1_u8), // UTF-16 flag
-                take_bits(7_u8), // Language code length
-            )))(input)?;
+        let next_byte = [any.parse_next(input)?];
+        let next_byte = Bytes::new(&next_byte);
 
-        let (input, language_code) = take(language_code_length)(input)?;
+        let (next_byte, is_utf16) = take_bool.parse_peek((next_byte, 0))?;
+        let (_, language_code_length): (_, u8) = take_bits(7_u8).parse_peek(next_byte)?;
+        let language_code = take(language_code_length as usize).parse_next(input)?;
 
         let remaining_length = payload_length - language_code_length as u32 - 1;
-        let (input, text) = take(remaining_length)(input)?;
+        let text = take(remaining_length as usize).parse_next(input)?;
 
-        let parsed_text = if is_utf16 == 1 {
+        let parsed_text = if is_utf16 {
             String::from_utf16_lossy(
                 &text
                     .chunks_exact(2)
@@ -168,47 +169,44 @@ fn parse_payload<'a, 'b>(
                     .collect::<Vec<u16>>(),
             )
         } else {
-            String::from_utf8_lossy(&text).to_string()
+            String::from_utf8_lossy(text).to_string()
         };
 
         let parsed_text = TextPayload {
-            format: if is_utf16 == 1 {
+            format: if is_utf16 {
                 TextPayloadFormat::Utf16
             } else {
                 TextPayloadFormat::Utf8
             },
-            language: String::from_utf8_lossy(&language_code).to_string(),
+            language: String::from_utf8_lossy(language_code).to_string(),
             text: parsed_text,
         };
 
-        Ok((input, NdefPayload::Text(parsed_text)))
+        Ok(NdefPayload::Text(parsed_text))
     } else {
-        map(take(payload_length), |s: &[u8]| {
-            NdefPayload::Data(s.to_vec())
-        })(input)
+        take(payload_length as usize)
+            .map(|s: &[u8]| NdefPayload::Data(s.to_vec()))
+            .parse_next(input)
     }
 }
 
-fn parse_ndef_record(input: &[u8]) -> IResult<&[u8], NdefRecord> {
-    let (input, _payload_length) = parse_payload_length(input)?;
-    let (input, header) = parse_header(input)?;
-    let (input, type_) = parse_type(input, header.type_length)?;
-    let (input, id) = parse_id(input, header.id_length)?;
-    let (input, payload) = parse_payload(input, header.payload_length, &type_)?;
+fn parse_ndef_record<'a>(input: &mut Stream<'_>) -> PResult<NdefRecord> {
+    let _payload_length = parse_payload_length.parse_next(input)?;
+    let header = parse_header.parse_next(input)?;
+    let type_ = parse_type(input, header.type_length)?;
+    let id = parse_id(input, header.id_length)?;
+    let payload = parse_payload(input, header.payload_length, &type_)?;
 
-    Ok((
-        input,
-        NdefRecord {
-            header,
-            type_,
-            id,
-            payload,
-        },
-    ))
+    Ok(NdefRecord {
+        header,
+        type_,
+        id,
+        payload,
+    })
 }
 
-pub(crate) fn parse_ndef_message(input: &[u8]) -> IResult<&[u8], Vec<NdefRecord>> {
-    nom::multi::many1(parse_ndef_record)(input)
+pub(crate) fn parse_ndef_message<'a>(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
+    repeat(1.., parse_ndef_record).parse_next(input)
 }
 
 #[cfg(test)]
@@ -217,46 +215,54 @@ mod tests {
 
     use super::*;
 
-    static EXPORT: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    fn owned_stream(bytes: Vec<u8>) -> Stream<'static> {
+        let bytes = Box::leak(bytes.into_boxed_slice());
+        Stream::new(Bytes::new(bytes))
+    }
+
+    static EXPORT: LazyLock<Stream<'static>> = LazyLock::new(|| {
         let file_contents = include_bytes!("../test/data/export_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
-        let numbers: Vec<u8> = file_string
+        let bytes: Vec<u8> = file_string
             .split(',')
             .map(|s| s.trim())
             .map(|s| s.parse::<u8>().unwrap())
             .collect();
 
-        numbers
+        owned_stream(bytes)
     });
 
-    static DESCRIPTOR: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    static DESCRIPTOR: LazyLock<Stream<'static>> = LazyLock::new(|| {
         let file_contents = include_bytes!("../test/data/descriptor_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
-        let numbers: Vec<u8> = file_string
+        let bytes: Vec<u8> = file_string
             .split(',')
             .map(|s| s.trim())
             .map(|s| s.parse::<u8>().unwrap())
             .collect();
 
-        numbers
+        owned_stream(bytes)
     });
 
-    fn export_bytes() -> &'static [u8] {
-        let (data, _payload_length) = parse_payload_length(&EXPORT).unwrap();
+    fn export_bytes() -> Stream<'static> {
+        let mut data = EXPORT.clone();
+        let _payload_length = parse_payload_length(&mut data).unwrap();
         data
     }
 
-    fn descriptor_bytes() -> &'static [u8] {
-        let (data, _payload_length) = parse_payload_length(&DESCRIPTOR).unwrap();
+    fn descriptor_bytes() -> Stream<'static> {
+        let mut data = DESCRIPTOR.clone();
+        let _payload_length = parse_payload_length(&mut data).unwrap();
         data
     }
 
     #[test]
     fn known_header_parse() {
-        let header_bytes = [0xD1, 0x01, 0x0D, 0x55, 0x02];
-        let (_, header) = parse_header(&header_bytes).unwrap();
+        let mut header_bytes = owned_stream(vec![0xD1, 0x01, 0x0D, 0x55, 0x02]);
+        let header: NdefHeader = parse_header(&mut header_bytes).unwrap();
+
         assert!(header.message_begin);
         assert!(header.message_end);
         assert!(!header.chunked);
@@ -270,10 +276,11 @@ mod tests {
     #[test]
     fn test_header_parsing_with_complete_data() {
         // export
-        let (data, payload_length) = parse_payload_length(&EXPORT).unwrap();
+        let mut data = EXPORT.clone();
+        let payload_length = parse_payload_length(&mut data).unwrap();
         assert_eq!(payload_length, 3031);
 
-        let (_, header) = parse_header(&data).unwrap();
+        let header = parse_header(&mut data).unwrap();
         assert!(header.message_begin);
         assert!(header.message_end);
         assert!(!header.chunked);
@@ -284,10 +291,11 @@ mod tests {
         assert_eq!(header.payload_length, 3009);
 
         // descriptor
-        let (data, payload_length) = parse_payload_length(&DESCRIPTOR).unwrap();
+        let mut data = DESCRIPTOR.clone();
+        let payload_length = parse_payload_length(&mut data).unwrap();
         assert_eq!(payload_length, 161);
 
-        let (_, header) = parse_header(&data).unwrap();
+        let header = parse_header(&mut data).unwrap();
         assert!(header.message_begin);
         assert!(header.message_end);
         assert!(!header.chunked);
@@ -301,7 +309,8 @@ mod tests {
     #[test]
     fn test_header_parsing_with_incomplete_data() {
         let data = descriptor_bytes();
-        let (_, header) = parse_header(&data[0..6]).unwrap();
+        let header = parse_header(&mut stream(&data[0..6])).unwrap();
+
         assert!(header.message_end);
         assert!(header.message_begin);
         assert!(header.message_end);
@@ -316,16 +325,16 @@ mod tests {
     #[test]
     fn parse_type_with_complete_data() {
         // export
-        let data = export_bytes();
-        let (data, header) = parse_header(&data).unwrap();
-        let (_, type_) = parse_type(data, header.type_length).unwrap();
+        let mut data = export_bytes();
+        let header = parse_header(&mut data).unwrap();
+        let type_ = parse_type(&mut data, header.type_length).unwrap();
         let type_string = String::from_utf8(type_).unwrap();
         assert_eq!(type_string, "application/json");
 
         // descriptor
-        let data = descriptor_bytes();
-        let (data, header) = parse_header(&data).unwrap();
-        let (_, type_) = parse_type(data, header.type_length).unwrap();
+        let mut data = descriptor_bytes();
+        let header = parse_header(&mut data).unwrap();
+        let type_ = parse_type(&mut data, header.type_length).unwrap();
         let type_string = String::from_utf8(type_).unwrap();
         assert_eq!(type_string, "T");
     }
@@ -333,11 +342,13 @@ mod tests {
     #[test]
     fn parse_payload_with_complete_data_descriptor() {
         // let record_1
-        let data = descriptor_bytes();
-        let (data, header) = parse_header(&data).unwrap();
-        let (data, type_) = parse_type(data, header.type_length).unwrap();
-        let (data, id) = parse_id(data, header.id_length).unwrap();
-        let (_data, payload) = parse_payload(data, header.payload_length, &type_).unwrap();
+        let mut data = descriptor_bytes();
+        let data = &mut data;
+
+        let header = parse_header(data).unwrap();
+        let type_ = parse_type(data, header.type_length).unwrap();
+        let id = parse_id(data, header.id_length).unwrap();
+        let payload = parse_payload(data, header.payload_length, &type_).unwrap();
 
         let type_string = String::from_utf8(type_).unwrap();
         assert_eq!(type_string, "T".to_string());
@@ -354,14 +365,16 @@ mod tests {
 
         assert_eq!(payload_string.text, descriptor_string);
     }
-    //
+
     #[test]
     fn parse_payload_with_complete_data_export() {
-        let data = export_bytes();
-        let (data, header) = parse_header(&data).unwrap();
-        let (data, type_) = parse_type(data, header.type_length).unwrap();
-        let (data, _id) = parse_id(data, header.id_length).unwrap();
-        let (_data, payload) = parse_payload(data, header.payload_length, &type_).unwrap();
+        let mut data = export_bytes();
+        let data = &mut data;
+
+        let header = parse_header(data).unwrap();
+        let type_ = parse_type(data, header.type_length).unwrap();
+        let _id = parse_id(data, header.id_length).unwrap();
+        let payload = parse_payload(data, header.payload_length, &type_).unwrap();
 
         let NdefPayload::Data(payload) = payload else {
             panic!("payload is not data")
@@ -377,8 +390,19 @@ mod tests {
     }
 
     #[test]
+    fn verify_parsing_keeps_track_of_bytes_left_over() {
+        let mut export = EXPORT.clone();
+        let export_len = export.len();
+        let _message = parse_ndef_message(&mut export).unwrap();
+
+        assert_ne!(export.len(), export_len);
+        assert!(export_len > export.len());
+    }
+
+    #[test]
     fn test_getting_entire_ndef_message_export() {
-        let (_, message) = parse_ndef_message(&EXPORT).unwrap();
+        let mut export = EXPORT.clone();
+        let message = parse_ndef_message(&mut export).unwrap();
         assert_eq!(message.len(), 1);
 
         let record = &message[0];
@@ -399,7 +423,8 @@ mod tests {
 
     #[test]
     fn test_getting_entire_ndef_message_descriptor() {
-        let (_, message) = parse_ndef_message(&DESCRIPTOR).unwrap();
+        let mut descriptor = DESCRIPTOR.clone();
+        let message = parse_ndef_message(&mut descriptor).unwrap();
         assert_eq!(message.len(), 1);
 
         let record = &message[0];

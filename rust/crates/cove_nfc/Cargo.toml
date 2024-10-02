@@ -8,7 +8,7 @@ edition = "2021"
 uniffi = { workspace = true }
 
 # parsing
-nom = "7.1"
+winnow =  { version = "0.6"  }
 
 # error handling
 thiserror = { workspace = true }
