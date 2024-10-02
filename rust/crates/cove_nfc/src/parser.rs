@@ -211,44 +211,6 @@ pub(crate) fn parse_ndef_message(input: &[u8]) -> IResult<&[u8], Vec<NdefRecord>
     nom::multi::many1(parse_ndef_record)(input)
 }
 
-fn main() {
-    // Example usage with incomplete data
-    let incomplete_ndef_data = vec![
-        0xD1, 0x01, 0x0E, 0x55, 0x03, 0x67, 0x6F, 0x6F,
-        // ... missing rest of the data
-    ];
-
-    match parse_ndef_message(&incomplete_ndef_data) {
-        Ok((remaining, records)) => {
-            println!("Parsed NDEF records: {:?}", records);
-            println!("Remaining data: {:?}", remaining);
-        }
-        Err(nom::Err::Incomplete(needed)) => {
-            println!("Need more data: {:?}", needed);
-        }
-        Err(e) => println!("Error: {:?}", e),
-    }
-}
-
-fn process_stream(mut data: &[u8]) {
-    loop {
-        match parse_ndef_message(data) {
-            Ok((remaining, records)) => {
-                println!("Parsed records: {:?}", records);
-                data = remaining;
-            }
-            Err(nom::Err::Incomplete(_)) => {
-                println!("Need more data");
-                break; // Wait for more data
-            }
-            Err(e) => {
-                println!("Error: {:?}", e);
-                break; // Handle error
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
