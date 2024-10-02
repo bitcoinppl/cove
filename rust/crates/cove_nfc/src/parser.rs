@@ -10,6 +10,11 @@ use winnow::{
 };
 
 #[derive(Debug)]
+pub struct MessageInfo {
+    pub total_payload_length: u16,
+}
+
+#[derive(Debug)]
 pub(crate) struct NdefHeader {
     message_begin: bool,
     message_end: bool,
@@ -117,16 +122,20 @@ fn parse_header(input: &mut Stream<'_>) -> PResult<NdefHeader> {
     })
 }
 
-fn parse_payload_length<'a>(input: &mut Stream<'_>) -> PResult<u16> {
+fn parse_message_info<'a>(input: &mut Stream<'_>) -> PResult<MessageInfo> {
     literal([226, 67, 0, 1, 0, 0, 4, 0, 3]).parse_next(input)?;
 
     let length_indicator = be_u8.parse_next(input)?;
 
-    if length_indicator == 255 {
-        be_u16.parse_next(input)
+    let total_payload_length = if length_indicator == 255 {
+        be_u16.parse_next(input)?
     } else {
-        Ok(length_indicator as u16)
-    }
+        length_indicator as u16
+    };
+
+    Ok(MessageInfo {
+        total_payload_length,
+    })
 }
 
 fn parse_type<'a>(input: &mut Stream<'_>, type_length: u8) -> PResult<Vec<u8>> {
@@ -191,7 +200,7 @@ fn parse_payload<'a>(
 }
 
 fn parse_ndef_record<'a>(input: &mut Stream<'_>) -> PResult<NdefRecord> {
-    let _payload_length = parse_payload_length.parse_next(input)?;
+    let _payload_length = parse_message_info.parse_next(input)?;
     let header = parse_header.parse_next(input)?;
     let type_ = parse_type(input, header.type_length)?;
     let id = parse_id(input, header.id_length)?;
@@ -212,6 +221,8 @@ pub(crate) fn parse_ndef_message<'a>(input: &mut Stream<'_>) -> PResult<Vec<Ndef
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
+
+    use winnow::error::Needed;
 
     use super::*;
 
@@ -248,13 +259,13 @@ mod tests {
 
     fn export_bytes() -> Stream<'static> {
         let mut data = EXPORT.clone();
-        let _payload_length = parse_payload_length(&mut data).unwrap();
+        let _payload_length = parse_message_info(&mut data).unwrap();
         data
     }
 
     fn descriptor_bytes() -> Stream<'static> {
         let mut data = DESCRIPTOR.clone();
-        let _payload_length = parse_payload_length(&mut data).unwrap();
+        let _payload_length = parse_message_info(&mut data).unwrap();
         data
     }
 
@@ -277,8 +288,8 @@ mod tests {
     fn test_header_parsing_with_complete_data() {
         // export
         let mut data = EXPORT.clone();
-        let payload_length = parse_payload_length(&mut data).unwrap();
-        assert_eq!(payload_length, 3031);
+        let message_info = parse_message_info(&mut data).unwrap();
+        assert_eq!(message_info.total_payload_length, 3031);
 
         let header = parse_header(&mut data).unwrap();
         assert!(header.message_begin);
@@ -292,8 +303,8 @@ mod tests {
 
         // descriptor
         let mut data = DESCRIPTOR.clone();
-        let payload_length = parse_payload_length(&mut data).unwrap();
-        assert_eq!(payload_length, 161);
+        let message_info = parse_message_info(&mut data).unwrap();
+        assert_eq!(message_info.total_payload_length, 161);
 
         let header = parse_header(&mut data).unwrap();
         assert!(header.message_begin);
@@ -425,6 +436,7 @@ mod tests {
     fn test_getting_entire_ndef_message_descriptor() {
         let mut descriptor = DESCRIPTOR.clone();
         let message = parse_ndef_message(&mut descriptor).unwrap();
+
         assert_eq!(message.len(), 1);
 
         let record = &message[0];
@@ -440,5 +452,21 @@ mod tests {
         };
 
         assert_eq!(payload_string.text, known_descriptor_string);
+    }
+
+    #[test]
+    fn test_partial_parsing() {
+        let original_length = EXPORT.len();
+        let mut export = owned_stream(EXPORT.clone()[..100].to_vec());
+        let message = parse_ndef_message(&mut export);
+
+        assert!(matches!(
+            message,
+            Err(winnow::error::ErrMode::Incomplete(Needed::Size(_)))
+        ));
+
+        if let Err(winnow::error::ErrMode::Incomplete(needed)) = message {
+            assert_eq!(needed, Needed::new(original_length - 101));
+        }
     }
 }
