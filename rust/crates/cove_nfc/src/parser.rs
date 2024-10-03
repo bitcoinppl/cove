@@ -1,3 +1,5 @@
+pub mod stream_ext;
+
 use winnow::{
     binary::{
         be_u16, be_u8,
@@ -274,7 +276,7 @@ mod tests {
     fn test_header_parsing_with_complete_data() {
         // export
         let export = &EXPORT[0..3031];
-        let mut data = stream(&export);
+        let mut data = stream(export);
         assert_eq!(data.len(), export.len());
 
         let message_info = parse_message_info(&mut data).unwrap();

@@ -1,6 +1,6 @@
 use derive_more::derive::Display;
 use message_info::MessageInfo;
-use parser::{parse_message_info, Stream};
+use parser::{parse_message_info, stream_ext::ParserStreamExt};
 use record::NdefRecord;
 
 pub mod header;
@@ -56,6 +56,12 @@ pub struct NfcReader {
     state: ParserState,
 }
 
+impl Default for NfcReader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NfcReader {
     pub fn new() -> NfcReader {
         NfcReader {
@@ -66,7 +72,7 @@ impl NfcReader {
     /// Parse the entire message if possible, if not return the unused data and the message info
     pub fn parse(&mut self, data: Vec<u8>) -> Result<ParseResult, NfcReaderError> {
         match &mut self.state {
-            &mut ParserState::NotStarted => {
+            ParserState::NotStarted => {
                 let mut stream = parser::stream(&data);
                 let message_info =
                     parse_message_info(&mut stream).map_err(|_e| NfcReaderError::NotEnoughData)?;
@@ -78,19 +84,22 @@ impl NfcReader {
                     needed: message_info.total_payload_length - parsed as u16,
                 });
 
-                self.parse_incomplete(stream)
+                self.parse_incomplete(&stream)
             }
 
-            &mut ParserState::Parsing(_) => {
-                let stream = parser::stream(&data);
-                self.parse_incomplete(stream)
+            ParserState::Parsing(_) => {
+                let data = data.as_slice();
+                self.parse_incomplete(&data)
             }
 
-            &mut ParserState::Complete => return Err(NfcReaderError::AlreadyParsed),
+            ParserState::Complete => Err(NfcReaderError::AlreadyParsed),
         }
     }
 
-    fn parse_incomplete(&mut self, mut data: Stream<'_>) -> Result<ParseResult, NfcReaderError> {
+    fn parse_incomplete<'a, 'b, S>(&'a mut self, data: &'b S) -> Result<ParseResult, NfcReaderError>
+    where
+        S: ParserStreamExt<'b>,
+    {
         let parsing = match &mut self.state {
             ParserState::Parsing(parsing_state) => parsing_state,
             _ => panic!("not in parsing state"),
@@ -110,7 +119,8 @@ impl NfcReader {
         }
 
         // have enough data to parse the message
-        let result = parser::parse_ndef_records(&mut data, &parsing.message_info)
+        let mut stream = data.to_stream();
+        let result = parser::parse_ndef_records(&mut stream, &parsing.message_info)
             .map_err(|e| NfcReaderError::ParsingError(format!("error parsing message: {e}")))?;
 
         let result = ParseResult::Complete(parsing.message_info, result);
