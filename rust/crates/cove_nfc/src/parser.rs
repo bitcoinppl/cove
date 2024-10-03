@@ -1,13 +1,13 @@
 use winnow::{
     binary::{
         be_u16, be_u8,
-        bits::{bool as take_bool, take as take_bits},
+        bits::{bits, bool as take_bool, take as take_bits},
         Endianness,
     },
-    error::{ErrMode, ErrorKind, ParserError as _},
+    error::InputError,
     stream::{Bytes, Partial},
     token::{any, literal, take},
-    IResult, PResult, Parser,
+    IResult, Parser,
 };
 
 use crate::{
@@ -91,37 +91,25 @@ pub fn parse_ndef_message(input: Stream<'_>) -> IResult<Stream<'_>, Vec<NdefReco
 }
 
 // private
+//
+//
+fn parse_header_byte(input: Stream<'_>) -> IResult<Stream<'_>, (bool, bool, bool, bool, bool, u8)> {
+    bits::<_, _, InputError<(_, usize)>, _, _>((
+        take_bool,
+        take_bool,
+        take_bool,
+        take_bool,
+        take_bool,
+        take_bits(3_u8),
+    ))
+    .parse_peek(input)
+}
 
 fn parse_header(input: Stream<'_>) -> IResult<Stream<'_>, NdefHeader> {
-    let (input, first_byte) = any.parse_peek(input)?;
-
-    let first_byte = [first_byte];
-    let first_byte = stream(&first_byte);
-
-    let parse_byte = |first_byte: Stream<'_>| -> PResult<(bool, bool, bool, bool, bool, u8)> {
-        let (first_byte, message_begin) = take_bool.parse_peek((first_byte, 0))?;
-        let (first_byte, message_end) = take_bool.parse_peek(first_byte)?;
-        let (first_byte, chunked) = take_bool.parse_peek(first_byte)?;
-        let (first_byte, short_record) = take_bool.parse_peek(first_byte)?;
-        let (first_byte, has_id_length) = take_bool.parse_peek(first_byte)?;
-        let (_, type_name_format): (_, u8) = take_bits(3_u8).parse_peek(first_byte)?;
-
-        Ok((
-            message_begin,
-            message_end,
-            chunked,
-            short_record,
-            has_id_length,
-            type_name_format,
-        ))
-    };
-
-    let (message_begin, message_end, chunked, short_record, has_id_length, type_name_format) =
-        parse_byte(first_byte).map_err(|_e| {
-            let error_kind = ErrorKind::Fail;
-            let error = ErrMode::from_error_kind(&input, error_kind);
-            error
-        })?;
+    let (
+        input,
+        (message_begin, message_end, chunked, short_record, has_id_length, type_name_format),
+    ) = parse_header_byte(input)?;
 
     let (input, type_length) = winnow::binary::u8.parse_peek(input)?;
 
@@ -182,28 +170,15 @@ fn parse_id(input: Stream<'_>, id_length: Option<u8>) -> IResult<Stream<'_>, Opt
     }
 }
 
-fn parse_payload<'a, 'b>(
+fn parse_payload<'a>(
     input: Stream<'a>,
     payload_length: u32,
-    type_: &'b [u8],
+    type_: &[u8],
 ) -> IResult<Stream<'a>, NdefPayload> {
     if type_ == b"T" {
-        let (input, next_byte) = any.parse_peek(input)?;
-        let next_byte = [next_byte];
-        let next_byte = stream(&next_byte);
-
-        let parse_byte = |next_byte: Stream<'_>| -> PResult<(bool, u8)> {
-            let (mut next_byte, is_utf16) = take_bool.parse_peek((next_byte, 0_usize))?;
-            let language_code_length = take_bits(7_u8).parse_next(&mut next_byte)?;
-
-            Ok((is_utf16, language_code_length))
-        };
-
-        let (is_utf16, language_code_length) = parse_byte(next_byte).map_err(|_e| {
-            let error_kind = ErrorKind::Fail;
-            let error = ErrMode::from_error_kind(&input, error_kind);
-            error
-        })?;
+        let (input, (is_utf16, language_code_length)): (Stream<'a>, (bool, u8)) =
+            bits::<_, _, InputError<(_, usize)>, _, _>((take_bool, take_bits(7_u8)))
+                .parse_peek(input)?;
 
         let (input, language_code) = take(language_code_length as usize).parse_peek(input)?;
         let remaining_length = payload_length - language_code_length as u32 - 1;
@@ -502,7 +477,6 @@ mod tests {
             match parse_ndef_message(stream) {
                 Ok((_, message)) => {
                     assert_eq!(message.len(), 1);
-                    return;
                 }
                 Err(winnow::error::ErrMode::Incomplete(Needed::Size(_))) => {
                     chunks_processed += 1;
