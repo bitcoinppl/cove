@@ -87,18 +87,15 @@ impl NfcReader {
                 self.parse_incomplete(&stream)
             }
 
-            ParserState::Parsing(_) => {
-                let data = data.as_slice();
-                self.parse_incomplete(&data)
-            }
+            ParserState::Parsing(_) => self.parse_incomplete(&data),
 
             ParserState::Complete => Err(NfcReaderError::AlreadyParsed),
         }
     }
 
-    fn parse_incomplete<'a, 'b, S>(&'a mut self, data: &'b S) -> Result<ParseResult, NfcReaderError>
+    fn parse_incomplete<'a, S>(&'a mut self, data: &'a S) -> Result<ParseResult, NfcReaderError>
     where
-        S: ParserStreamExt<'b>,
+        S: ParserStreamExt<'a>,
     {
         let parsing = match &mut self.state {
             ParserState::Parsing(parsing_state) => parsing_state,

@@ -9,7 +9,7 @@ pub trait ParserStreamExt<'a> {
     fn to_stream(&'a self) -> Stream<'a>;
 }
 
-impl<'a> ParserStreamExt<'a> for &'a [u8] {
+impl<'a> ParserStreamExt<'a> for Vec<u8> {
     fn to_vec(&self) -> Vec<u8> {
         <[u8]>::to_vec(self)
     }
