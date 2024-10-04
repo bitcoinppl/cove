@@ -14,13 +14,6 @@ impl<'a> StreamOrVec<'a> {
         }
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        match self {
-            StreamOrVec::Stream(stream) => stream.as_ref(),
-            StreamOrVec::Vec(vec) => vec.as_slice(),
-        }
-    }
-
     pub fn to_stream(&'a self) -> Stream<'a> {
         match self {
             StreamOrVec::Stream(stream) => *stream,

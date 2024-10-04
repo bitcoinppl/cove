@@ -112,7 +112,7 @@ impl NfcReader {
         let data = data.into();
 
         // need more data to parse the message
-        if (parsing.needed as usize) >= data.as_slice().len() {
+        if (parsing.needed as usize) >= data.len() {
             let left_over_bytes = data.to_vec();
 
             // return incomplete
