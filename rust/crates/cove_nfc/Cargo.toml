@@ -23,6 +23,8 @@ tracing-log = { workspace = true }
 # mutex
 parking_lot = { workspace = true }
 
+# hashing
+seahash = "4.1"
 
 [dev-dependencies]
 hex = "0.4"

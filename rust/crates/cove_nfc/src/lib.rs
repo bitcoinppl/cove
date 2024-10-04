@@ -11,6 +11,12 @@ pub mod parser;
 pub mod payload;
 pub mod record;
 
+/// Number of blocks read at a time from the NFC chip
+pub const NUMBER_OF_BLOCKS_PER_CHUNK: u16 = 32;
+
+/// Number of bytes per block read from the NFC chip
+pub const BYTES_PER_BLOCK: u16 = 4;
+
 #[derive(Debug, PartialEq, Eq, thiserror::Error, Display, uniffi::Error)]
 pub enum NfcReaderError {
     /// Error parsing the NDEF message
