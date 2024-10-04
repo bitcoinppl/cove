@@ -34,6 +34,10 @@ impl<'a> StreamOrVec<'a> {
             StreamOrVec::Vec(vec) => vec,
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<'a> From<Stream<'a>> for StreamOrVec<'a> {

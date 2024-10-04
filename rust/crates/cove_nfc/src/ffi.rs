@@ -43,3 +43,9 @@ impl NfcConst {
         }
     }
 }
+
+impl Default for NfcConst {
+    fn default() -> Self {
+        Self::new()
+    }
+}
