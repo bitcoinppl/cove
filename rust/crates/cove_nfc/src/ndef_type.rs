@@ -1,4 +1,4 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum NdefType {
     Empty,
     WellKnown,

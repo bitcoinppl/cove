@@ -19,3 +19,6 @@ derive_more = { version = "1", features = ["display", "from", "error"]}
 # logging
 tracing = "0.1"
 tracing-log = "0.2"
+
+# sync
+parking_lot = "0.12"

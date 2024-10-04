@@ -1,6 +1,6 @@
 use crate::ndef_type::NdefType;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NdefHeader {
     pub message_begin: bool,
     pub message_end: bool,

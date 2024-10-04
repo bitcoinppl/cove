@@ -1,6 +1,6 @@
 use crate::{header::NdefHeader, payload::NdefPayload};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NdefRecord {
     pub header: NdefHeader,
     pub type_: Vec<u8>,

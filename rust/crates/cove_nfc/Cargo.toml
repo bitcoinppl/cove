@@ -20,6 +20,9 @@ derive_more = { workspace = true }
 tracing = { workspace = true }
 tracing-log = { workspace = true }
 
+# mutex
+parking_lot = { workspace = true }
+
 
 [dev-dependencies]
 hex = "0.4"

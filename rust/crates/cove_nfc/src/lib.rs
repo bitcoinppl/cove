@@ -3,6 +3,7 @@ use message_info::MessageInfo;
 use parser::{parse_message_info, stream_ext::ParserStreamExt};
 use record::NdefRecord;
 
+pub mod ffi;
 pub mod header;
 pub mod message_info;
 pub mod ndef_type;
@@ -10,7 +11,7 @@ pub mod parser;
 pub mod payload;
 pub mod record;
 
-#[derive(Debug, PartialEq, Eq, thiserror::Error, Display)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error, Display, uniffi::Error)]
 pub enum NfcReaderError {
     /// Error parsing the NDEF message
     ParsingError(String),
@@ -22,7 +23,7 @@ pub enum NfcReaderError {
     AlreadyParsed,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum ParseResult {
     /// Completed The message is a NDEF message
     Complete(MessageInfo, Vec<NdefRecord>),
@@ -31,13 +32,13 @@ pub enum ParseResult {
     Incomplete(ParsingMessage),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ParsingMessage {
     pub message_info: MessageInfo,
     pub left_over_bytes: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Enum)]
 pub enum ParserState {
     #[default]
     NotStarted,
@@ -45,13 +46,13 @@ pub enum ParserState {
     Complete,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ParsingContext {
     pub message_info: MessageInfo,
     pub needed: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NfcReader {
     state: ParserState,
 }

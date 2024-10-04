@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, uniffi::Record)]
 pub struct MessageInfo {
     pub total_payload_length: u16,
 }
