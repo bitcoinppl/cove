@@ -1,6 +1,6 @@
 use derive_more::derive::Display;
 use message_info::MessageInfo;
-use parser::{parse_message_info, stream::StreamOrVec};
+use parser::{parse_message_info, stream::StreamExt};
 use record::NdefRecord;
 
 pub mod ffi;
@@ -102,14 +102,12 @@ impl NfcReader {
 
     fn parse_incomplete<'a>(
         &mut self,
-        data: impl Into<StreamOrVec<'a>>,
+        data: impl StreamExt + 'a,
     ) -> Result<ParseResult, NfcReaderError> {
         let parsing = match &mut self.state {
             ParserState::Parsing(parsing_state) => parsing_state,
             _ => panic!("not in parsing state"),
         };
-
-        let data = data.into();
 
         // need more data to parse the message
         if (parsing.needed as usize) >= data.len() {

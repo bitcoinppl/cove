@@ -203,7 +203,7 @@ fn parse_payload(
 mod tests {
     use std::sync::LazyLock;
 
-    use winnow::error::Needed;
+    use winnow::{error::Needed, Bytes};
 
     use super::*;
 
@@ -271,7 +271,7 @@ mod tests {
     fn test_header_parsing_with_complete_data() {
         // export
         let export = &EXPORT[0..3031];
-        let mut data = stream(export);
+        let mut data = super::stream::new(export);
         assert_eq!(data.len(), export.len());
 
         let message_info = parse_message_info(&mut data).unwrap();
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn test_header_parsing_with_incomplete_data() {
         let data = descriptor_bytes();
-        let header = parse_header(&mut stream(&data[0..6])).unwrap();
+        let header = parse_header(&mut super::stream::new(&data[0..6])).unwrap();
 
         assert!(header.message_end);
         assert!(header.message_begin);
