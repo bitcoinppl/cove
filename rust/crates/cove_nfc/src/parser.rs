@@ -1,5 +1,6 @@
-pub mod stream_ext;
+pub mod stream;
 
+use stream::Stream;
 use winnow::{
     binary::{
         be_u16, be_u8,
@@ -7,7 +8,6 @@ use winnow::{
         Endianness,
     },
     error::{ErrMode, InputError, ParserError as _},
-    stream::{Bytes, Partial},
     token::{any, literal, take},
     PResult, Parser,
 };
@@ -19,11 +19,6 @@ use crate::{
     payload::{NdefPayload, TextPayload, TextPayloadFormat},
     record::NdefRecord,
 };
-
-pub type Stream<'i> = Partial<&'i Bytes>;
-pub fn stream(b: &[u8]) -> Stream<'_> {
-    Partial::new(Bytes::new(b))
-}
 
 pub fn parse_ndef_message(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
     let info = parse_message_info.parse_next(input)?;

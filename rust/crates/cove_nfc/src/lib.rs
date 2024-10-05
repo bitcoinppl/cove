@@ -1,6 +1,6 @@
 use derive_more::derive::Display;
 use message_info::MessageInfo;
-use parser::{parse_message_info, stream_ext::StreamOrVec};
+use parser::{parse_message_info, stream::StreamOrVec};
 use record::NdefRecord;
 
 pub mod ffi;
@@ -80,7 +80,7 @@ impl NfcReader {
     pub fn parse(&mut self, data: Vec<u8>) -> Result<ParseResult, NfcReaderError> {
         match &mut self.state {
             ParserState::NotStarted => {
-                let mut stream = parser::stream(&data);
+                let mut stream = parser::stream::new(&data);
                 let message_info =
                     parse_message_info(&mut stream).map_err(|_e| NfcReaderError::NotEnoughData)?;
 

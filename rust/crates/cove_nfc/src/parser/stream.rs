@@ -1,4 +1,9 @@
-use super::{stream, Stream};
+use winnow::{Bytes, Partial};
+
+pub type Stream<'i> = Partial<&'i Bytes>;
+pub fn new(b: &[u8]) -> Stream<'_> {
+    Partial::new(Bytes::new(b))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StreamOrVec<'a> {
@@ -17,7 +22,7 @@ impl<'a> StreamOrVec<'a> {
     pub fn to_stream(&'a self) -> Stream<'a> {
         match self {
             StreamOrVec::Stream(stream) => *stream,
-            StreamOrVec::Vec(vec) => stream(vec),
+            StreamOrVec::Vec(vec) => new(vec),
         }
     }
 
