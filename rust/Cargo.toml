@@ -18,19 +18,18 @@ default = ["uniffi/cli"]
 # cove crates
 cove_nfc = { path = "./crates/cove_nfc" }
 
-
 # bdk / bitcoin
-bdk_wallet = { version = "1.0.0-beta.4", features = ["keys-bip39", "file_store"] }
+bdk_wallet = { version = "1.0.0-beta.5", features = ["keys-bip39", "file_store"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
-bdk_esplora = {  version = "0.18", features = ["async-https"] }
-bdk_electrum = { version = "0.18", features = ["use-rustls-ring"], default-features = false }
+bdk_esplora = {  version = "0.19", features = ["async-https"] }
+bdk_electrum = { version = "0.19", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # store bdk wallet data
-bdk_file_store = { version =  "0.16.0"}
-bdk_chain = { version = "0.19.0"}
+bdk_file_store = { version =  "0.17.0"}
+bdk_chain = { version = "0.20.0"}
 
 # import / export hardware wallet public keys
 pubport = { version = "0.1.0", git = "https://github.com/bitcoinppl/pubport.git", features = []}

@@ -6656,7 +6656,8 @@ public enum DescriptorError {
     case InvalidDescriptor(String
     )
     case MissingKeys
-    case TooManyKeys
+    case TooManyKeys(UInt32
+    )
     case InvalidDescriptorParse(String
     )
     case MissingDescriptor
@@ -6682,7 +6683,9 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
                 FfiConverterString.read(from: &buf)
             )
         case 2: return .MissingKeys
-        case 3: return .TooManyKeys
+        case 3: return try .TooManyKeys(
+                FfiConverterUInt32.read(from: &buf)
+            )
         case 4: return try .InvalidDescriptorParse(
                 FfiConverterString.read(from: &buf)
             )
@@ -6712,8 +6715,9 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
         case .MissingKeys:
             writeInt(&buf, Int32(2))
 
-        case .TooManyKeys:
+        case let .TooManyKeys(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterUInt32.write(v1, into: &buf)
 
         case let .InvalidDescriptorParse(v1):
             writeInt(&buf, Int32(4))
