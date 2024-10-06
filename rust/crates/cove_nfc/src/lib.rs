@@ -1,3 +1,5 @@
+uniffi::setup_scaffolding!();
+
 use derive_more::derive::Display;
 use message_info::MessageInfo;
 use parser::{parse_message_info, stream::StreamExt};
@@ -133,8 +135,6 @@ impl NfcReader {
         Ok(result)
     }
 }
-
-uniffi::setup_scaffolding!();
 
 #[cfg(test)]
 mod tests {

@@ -32,9 +32,12 @@ pub struct NfcConst {
 }
 
 #[uniffi::export]
+fn nfc_consts() -> NfcConst {
+    Default::default()
+}
+
 impl NfcConst {
-    #[uniffi::constructor]
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             number_of_blocks_per_chunk: crate::NUMBER_OF_BLOCKS_PER_CHUNK,
             bytes_per_block: crate::BYTES_PER_BLOCK,
