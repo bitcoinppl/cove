@@ -1,11 +1,12 @@
 use std::hash::Hash;
 
 use crate::transaction::Unit;
+use macros::{impl_default_for, new_type};
 use nid::Nanoid;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
-use crate::{database::Database, impl_default_for, network::Network, new_type};
+use crate::{database::Database, network::Network};
 
 use super::AddressInfo;
 

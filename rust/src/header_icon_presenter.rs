@@ -1,4 +1,4 @@
-use crate::impl_default_for;
+use macros::impl_default_for;
 
 #[derive(Clone, uniffi::Object)]
 pub struct HeaderIconPresenter {}

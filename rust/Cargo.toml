@@ -17,6 +17,7 @@ default = ["uniffi/cli"]
 [dependencies]
 # cove crates
 cove_nfc = { path = "./crates/cove_nfc" }
+macros = { path = "./crates/macros" }
 
 # bdk / bitcoin
 bdk_wallet = { version = "1.0.0-beta.5", features = ["keys-bip39", "file_store"] }

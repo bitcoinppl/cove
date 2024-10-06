@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
-    app::FfiApp, database::Database, impl_default_for, mnemonic::NumberOfBip39Words,
-    transaction::TransactionDetails, wallet::metadata::WalletId,
+    app::FfiApp, database::Database, mnemonic::NumberOfBip39Words, transaction::TransactionDetails,
+    wallet::metadata::WalletId,
 };
 
 use derive_more::From;
+use macros::impl_default_for;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {

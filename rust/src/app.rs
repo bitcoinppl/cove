@@ -7,13 +7,13 @@ use std::sync::Arc;
 use crate::{
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
-    impl_default_for,
     network::Network,
     node::Node,
     router::{Route, Router},
     wallet::metadata::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
+use macros::impl_default_for;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage, FfiReconcile, Updater};

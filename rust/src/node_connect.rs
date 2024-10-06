@@ -1,7 +1,8 @@
 use tracing::error;
 use url::Url;
 
-use crate::{database::Database, impl_default_for, network::Network, node::Node};
+use crate::{database::Database, network::Network, node::Node};
+use macros::impl_default_for;
 
 pub const BITCOIN_ESPLORA: [(&str, &str); 2] = [
     ("blockstream.info", "https://blockstream.info/api/"),

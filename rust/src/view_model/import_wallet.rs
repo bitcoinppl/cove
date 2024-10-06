@@ -6,7 +6,6 @@ use parking_lot::RwLock;
 
 use crate::{
     database::{self, Database},
-    impl_default_for,
     keychain::KeychainError,
     mnemonic::MnemonicExt as _,
     wallet::{
@@ -15,6 +14,8 @@ use crate::{
         Wallet,
     },
 };
+
+use macros::impl_default_for;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ImportWalletViewModelReconcileMessage {

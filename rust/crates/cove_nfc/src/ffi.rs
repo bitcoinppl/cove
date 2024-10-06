@@ -3,12 +3,16 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use crate::{NfcReaderError, ParseResult};
+use macros::impl_default_for;
+
+impl_default_for!(FfiNfcReader);
+impl_default_for!(NfcConst);
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct NfcReader(Arc<Mutex<crate::NfcReader>>);
+pub struct FfiNfcReader(Arc<Mutex<crate::NfcReader>>);
 
 #[uniffi::export]
-impl NfcReader {
+impl FfiNfcReader {
     #[uniffi::constructor]
     pub fn new() -> Self {
         let reader = crate::NfcReader::new();
@@ -18,12 +22,6 @@ impl NfcReader {
     #[uniffi::method]
     pub fn parse(&self, data: Vec<u8>) -> Result<ParseResult, NfcReaderError> {
         self.0.lock().parse(data)
-    }
-}
-
-impl Default for NfcReader {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -41,11 +39,5 @@ impl NfcConst {
             number_of_blocks_per_chunk: crate::NUMBER_OF_BLOCKS_PER_CHUNK,
             bytes_per_block: crate::BYTES_PER_BLOCK,
         }
-    }
-}
-
-impl Default for NfcConst {
-    fn default() -> Self {
-        Self::new()
     }
 }
