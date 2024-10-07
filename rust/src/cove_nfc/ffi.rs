@@ -5,7 +5,7 @@ use parking_lot::Mutex;
 use crate::cove_nfc::{NfcReaderError, ParseResult};
 use macros::impl_default_for;
 
-use super::message_info::MessageInfo;
+use super::{message_info::MessageInfo, record::NdefRecord};
 
 impl_default_for!(FfiNfcReader);
 impl_default_for!(NfcConst);
@@ -39,6 +39,20 @@ impl FfiNfcReader {
     #[uniffi::method]
     pub fn message_info(&self) -> Option<MessageInfo> {
         self.0.lock().message_info().cloned()
+    }
+
+    #[uniffi::method]
+    // TODO: need to handle messages with multiple records
+    pub fn string_from_record(&self, record: NdefRecord) -> String {
+        match record.payload {
+            crate::cove_nfc::payload::NdefPayload::Text(text_payload) => {
+                let text = text_payload.text;
+                text
+            }
+            crate::cove_nfc::payload::NdefPayload::Data(data) => {
+                String::from_utf8_lossy(&data).into_owned()
+            }
+        }
     }
 }
 

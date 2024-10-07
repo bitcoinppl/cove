@@ -2132,6 +2132,8 @@ public protocol FfiNfcReaderProtocol: AnyObject {
     func messageInfo() -> MessageInfo?
 
     func parse(data: Data) throws -> ParseResult
+
+    func stringFromRecord(record: NdefRecord) -> String
 }
 
 open class FfiNfcReader:
@@ -2203,6 +2205,13 @@ open class FfiNfcReader:
         return try FfiConverterTypeParseResult.lift(rustCallWithError(FfiConverterTypeNfcReaderError.lift) {
             uniffi_cove_fn_method_ffinfcreader_parse(self.uniffiClonePointer(),
                                                      FfiConverterData.lower(data), $0)
+        })
+    }
+
+    open func stringFromRecord(record: NdefRecord) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_ffinfcreader_string_from_record(self.uniffiClonePointer(),
+                                                                  FfiConverterTypeNdefRecord.lower(record), $0)
         })
     }
 }
@@ -11797,6 +11806,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffinfcreader_parse() != 39581 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffinfcreader_string_from_record() != 18298 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_fingerprint_to_lowercase() != 27643 {
