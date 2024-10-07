@@ -12,7 +12,7 @@ use winnow::{
     PResult, Parser,
 };
 
-use crate::{
+use crate::cove_nfc::{
     header::NdefHeader,
     message_info::MessageInfo,
     ndef_type::NdefType,
@@ -207,7 +207,7 @@ mod tests {
 
     use super::*;
 
-    use crate::{header::NdefHeader, ndef_type::NdefType, payload::NdefPayload};
+    use crate::cove_nfc::{header::NdefHeader, ndef_type::NdefType, payload::NdefPayload};
 
     fn owned_stream(bytes: Vec<u8>) -> Stream<'static> {
         let bytes = Box::leak(bytes.into_boxed_slice());
@@ -215,7 +215,7 @@ mod tests {
     }
 
     static EXPORT: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../test/data/export_bytes.txt");
+        let file_contents = include_bytes!("../../test/data/export_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
         let bytes: Vec<u8> = file_string
@@ -228,7 +228,7 @@ mod tests {
     });
 
     static DESCRIPTOR: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../test/data/descriptor_bytes.txt");
+        let file_contents = include_bytes!("../../test/data/descriptor_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
         let bytes: Vec<u8> = file_string

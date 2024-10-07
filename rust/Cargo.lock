@@ -780,7 +780,6 @@ dependencies = [
  "bitcoin_hashes 0.14.0",
  "bitvec",
  "chacha20poly1305",
- "cove_nfc",
  "crossbeam",
  "data-encoding",
  "derive_more",
@@ -812,22 +811,8 @@ dependencies = [
  "tracing-subscriber",
  "uniffi",
  "url",
- "zeroize",
-]
-
-[[package]]
-name = "cove_nfc"
-version = "0.1.0"
-dependencies = [
- "derive_more",
- "macros",
- "parking_lot",
- "seahash",
- "thiserror",
- "tracing",
- "tracing-log",
- "uniffi",
  "winnow",
+ "zeroize",
 ]
 
 [[package]]
@@ -2513,12 +2498,6 @@ dependencies = [
  "ring",
  "untrusted",
 ]
-
-[[package]]
-name = "seahash"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "secp256k1"

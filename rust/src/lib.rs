@@ -9,6 +9,7 @@ pub mod bip39;
 pub mod color;
 pub mod color_scheme;
 pub mod consts;
+pub mod cove_nfc;
 pub mod encryption;
 pub mod ffi;
 pub mod fiat;

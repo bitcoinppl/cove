@@ -1,9 +1,10 @@
-uniffi::setup_scaffolding!();
-
 use derive_more::derive::Display;
 use message_info::MessageInfo;
 use parser::{parse_message_info, stream::StreamExt};
 use record::NdefRecord;
+use resume::ResumeError;
+use sha2::{Digest, Sha256};
+use tracing::warn;
 
 pub mod ffi;
 pub mod header;
@@ -12,6 +13,7 @@ pub mod ndef_type;
 pub mod parser;
 pub mod payload;
 pub mod record;
+pub mod resume;
 
 /// Number of blocks read at a time from the NFC chip
 pub const NUMBER_OF_BLOCKS_PER_CHUNK: u16 = 32;
@@ -58,6 +60,7 @@ pub enum ParserState {
 pub struct ParsingContext {
     pub message_info: MessageInfo,
     pub needed: u16,
+    first_block_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -91,6 +94,7 @@ impl NfcReader {
                 self.state = ParserState::Parsing(ParsingContext {
                     message_info,
                     needed: message_info.total_payload_length - parsed as u16,
+                    first_block_hash: get_first_block_hash(&data),
                 });
 
                 self.parse_incomplete(stream)
@@ -134,6 +138,63 @@ impl NfcReader {
 
         Ok(result)
     }
+
+    /// Try resuming on a partially parsed message
+    pub fn is_resumeable(&mut self, data: Vec<u8>) -> Result<(), ResumeError> {
+        let expected_bytes = BYTES_PER_BLOCK * NUMBER_OF_BLOCKS_PER_CHUNK;
+        let data_len = data.len() as u16;
+
+        if data_len < expected_bytes {
+            return Err(ResumeError::BlockSizeMismatch {
+                expected: expected_bytes,
+                actual: data_len,
+            });
+        }
+
+        let parsing_state = match &mut self.state {
+            ParserState::Parsing(parsing_state) => parsing_state,
+            ParserState::Complete => return Err(ResumeError::AlreadyParsed),
+            ParserState::NotStarted => {
+                warn!(
+                    "resuming on a message that has not been parsed, starting from the beginning"
+                );
+
+                return Ok(());
+            }
+        };
+
+        let Some(first_block_hash) = &get_first_block_hash(&data) else {
+            return Err(ResumeError::UnableToGetFirstBlockHash);
+        };
+
+        let Some(existing_first_block_hash) = &parsing_state.first_block_hash else {
+            return Err(ResumeError::UnableToGetFirstBlockHash);
+        };
+
+        // scanning a different message
+        if first_block_hash != existing_first_block_hash {
+            return Err(ResumeError::BlocksDoNotMatch);
+        }
+
+        // scanning the same message
+        Ok(())
+    }
+}
+
+fn get_first_block_hash(data: &[u8]) -> Option<String> {
+    let hash_bytes_length = (BYTES_PER_BLOCK * NUMBER_OF_BLOCKS_PER_CHUNK) as usize;
+    if data.len() < hash_bytes_length {
+        return None;
+    }
+
+    let data = &data[..hash_bytes_length];
+
+    let mut sha256 = Sha256::new();
+    sha256.update(data);
+    let hash = sha256.finalize();
+
+    let hash = hex::encode(hash);
+    Some(hash)
 }
 
 #[cfg(test)]

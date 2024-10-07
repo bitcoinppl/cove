@@ -16,7 +16,6 @@ default = ["uniffi/cli"]
 
 [dependencies]
 # cove crates
-cove_nfc = { path = "./crates/cove_nfc" }
 macros = { path = "./crates/macros" }
 
 # bdk / bitcoin
@@ -117,6 +116,9 @@ bbqr = "0.3"
 
 # hex
 hex = "0.4.3"
+
+# parsing
+winnow = "0.6.0"
 
 [build-dependencies]
 uniffi = { version = "=0.28.1", features = ["build"] }

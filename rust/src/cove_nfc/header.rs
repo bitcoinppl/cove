@@ -1,4 +1,4 @@
-use crate::ndef_type::NdefType;
+use crate::cove_nfc::ndef_type::NdefType;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NdefHeader {
