@@ -1,6 +1,7 @@
 /// create mod to remove all logs
 mod ffi {
-    use crate::{impl_default_for, mnemonic::NumberOfBip39Words};
+    use crate::mnemonic::NumberOfBip39Words;
+    use macros::impl_default_for;
 
     #[uniffi::export(with_foreign)]
     pub trait AutoComplete: Send + Sync + std::fmt::Debug + 'static {

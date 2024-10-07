@@ -4,7 +4,9 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::{fiat::FiatCurrency, impl_default_for, transaction::Amount};
+use crate::{fiat::FiatCurrency, transaction::Amount};
+use macros::impl_default_for;
+
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 
 // Global client for getting prices

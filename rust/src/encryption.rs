@@ -3,7 +3,7 @@ use chacha20poly1305::{Key, Nonce};
 use data_encoding::BASE64;
 use rand::rngs::OsRng;
 
-use crate::impl_default_for;
+use macros::impl_default_for;
 
 const SPLITTER: &str = "::";
 

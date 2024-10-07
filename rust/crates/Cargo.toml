@@ -1,0 +1,24 @@
+[package]
+name = "crates"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [ "./macros" ]
+
+[workspace.dependencies]
+# bindings
+uniffi = {  version = "=0.28.1", features = ["tokio"] }
+
+# error handling
+thiserror = "1.0"
+
+# derive macros
+derive_more = { version = "1", features = ["display", "from", "error"]}
+
+# logging
+tracing = "0.1"
+tracing-log = "0.2"
+
+# sync
+parking_lot = "0.12"

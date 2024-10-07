@@ -51,6 +51,7 @@
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
 		AC8459BF2CA5DF4800A3083F /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8459BE2CA5DF4800A3083F /* ScannerView.swift */; };
+		AC8459C12CA5ED7E00A3083F /* NFCReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8459C02CA5ED7700A3083F /* NFCReader.swift */; };
 		AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */; };
 		AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */ = {isa = PBXBuildFile; productRef = AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */; };
 		AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */; };
@@ -143,6 +144,8 @@
 		AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Ext.swift"; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
 		AC8459BE2CA5DF4800A3083F /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
+		AC8459C02CA5ED7700A3083F /* NFCReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCReader.swift; sourceTree = "<group>"; };
+		AC8459C22CA5F13A00A3083F /* Cove.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Cove.entitlements; sourceTree = "<group>"; };
 		AC8C1FAB2C4D5D6600158283 /* NodeSelection+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NodeSelection+Ext.swift"; sourceTree = "<group>"; };
 		AC93DAE22C4572C3002E5AF2 /* NumberOfWords+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NumberOfWords+Ext.swift"; sourceTree = "<group>"; };
 		AC97D1EB2C287D4F00873092 /* CommonButtonStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonButtonStyles.swift; sourceTree = "<group>"; };
@@ -380,6 +383,7 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				AC8459C22CA5F13A00A3083F /* Cove.entitlements */,
 				AC739D542CA09AD6006B5FF1 /* Info.plist */,
 				AC4343612C6AF87B00105C03 /* SettingsScreen */,
 				AC4343602C6AF80000105C03 /* HomeScreens */,
@@ -394,6 +398,7 @@
 				ACC1CD5E2C6D4F0500C7AD89 /* Popups */,
 				ACC301662C20C11D006790DF /* Extention */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
+				AC8459C02CA5ED7700A3083F /* NFCReader.swift */,
 				ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */,
 				AC2B13522CA1EC0200C5C708 /* IdentifiableString.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
@@ -562,6 +567,7 @@
 				AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */,
 				ACF479F82C59D785008A9362 /* WeakReconciler.swift in Sources */,
 				AC5F3CDF2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift in Sources */,
+				AC8459C12CA5ED7E00A3083F /* NFCReader.swift in Sources */,
 				09890D7BB033D5000D5EFA66 /* Balance+Ext.swift in Sources */,
 				AD998F28BCDE0FFFCEF64986 /* SettingsScreen.swift in Sources */,
 				1333E89ACE42F5331C4B7AEB /* SelectedWalletScreen.swift in Sources */,
@@ -707,6 +713,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1;
@@ -751,6 +758,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.0.1;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
@@ -778,6 +787,7 @@
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

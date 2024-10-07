@@ -16,6 +16,7 @@ struct NewWalletSelectScreen: View {
     @State var showSelectDialog: Bool = false
 
     // private
+    @State private var nfcReader = NFCReader()
     let routeFactory: RouteFactory = .init()
 
     // file import
@@ -32,14 +33,14 @@ struct NewWalletSelectScreen: View {
             Spacer()
 
             VStack(spacing: 30) {
-                walletOptionButton(
+                self.walletOptionButton(
                     title: "On This Device",
                     icon: "iphone",
                     color: .blue,
                     destination: RouteFactory().newHotWallet()
                 )
 
-                Button(action: { showSelectDialog = true }) {
+                Button(action: { self.showSelectDialog = true }) {
                     HStack {
                         Image(systemName: "externaldrive")
                             .font(.title2)
@@ -48,7 +49,7 @@ struct NewWalletSelectScreen: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 25)
-                    .background(.green.opacity(colorScheme == .dark ? 0.85 : 1))
+                    .background(.green.opacity(self.colorScheme == .dark ? 0.85 : 1))
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
@@ -57,17 +58,17 @@ struct NewWalletSelectScreen: View {
             .padding(.horizontal)
             .confirmationDialog(
                 "Import hardware wallet using",
-                isPresented: $showSelectDialog,
+                isPresented: self.$showSelectDialog,
                 titleVisibility: .visible
             ) {
-                NavigationLink(value: routeFactory.qrImport()) {
+                NavigationLink(value: self.routeFactory.qrImport()) {
                     Text("QR Code")
                 }
                 Button("File") {
-                    isImporting = true
+                    self.isImporting = true
                 }
-                NavigationLink(value: routeFactory.nfcImport()) {
-                    Text("NFC coming soon...")
+                Button("NFC") {
+                    self.nfcReader.scan()
                 }
             }
 
@@ -75,16 +76,12 @@ struct NewWalletSelectScreen: View {
             Spacer()
         }
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $isImporting, allowedContentTypes: [.plainText, .json]) { result in
+        .fileImporter(isPresented: self.$isImporting, allowedContentTypes: [.plainText, .json]) { result in
             switch result {
             case let .success(file):
                 do {
                     let fileContents = try readFile(from: file)
-                    let wallet = try Wallet.newFromXpub(xpub: fileContents)
-                    let id = wallet.id()
-                    Log.debug("Imported Wallet: \(id)")
-                    self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
-                    try app.rust.selectWallet(id: id)
+                    self.newWalletFromXpub(fileContents)
                 } catch {
                     self.alert = AlertItem(type: .error(error.localizedDescription))
                 }
@@ -92,14 +89,29 @@ struct NewWalletSelectScreen: View {
                 self.alert = AlertItem(type: .error(error.localizedDescription))
             }
         }
-        .alert(item: $alert) { alert in
+        .alert(item: self.$alert) { alert in
             Alert(
                 title: Text(alert.type.title),
                 message: Text(alert.type.message),
                 dismissButton: .default(Text("OK")) {
-                    presentationMode.wrappedValue.dismiss()
+                    self.presentationMode.wrappedValue.dismiss()
                 }
             )
+        }
+        .onChange(of: self.nfcReader.scannedMessage) { _, message in
+            if let message = message { self.newWalletFromXpub(message) }
+        }
+    }
+
+    private func newWalletFromXpub(_ xpub: String) {
+        do {
+            let wallet = try Wallet.newFromXpub(xpub: xpub)
+            let id = wallet.id()
+            Log.debug("Imported Wallet: \(id)")
+            self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
+            try self.app.rust.selectWallet(id: id)
+        } catch {
+            self.alert = AlertItem(type: .error(error.localizedDescription))
         }
     }
 
@@ -115,7 +127,7 @@ struct NewWalletSelectScreen: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 25)
-            .background(color.opacity(colorScheme == .dark ? 0.85 : 1))
+            .background(color.opacity(self.colorScheme == .dark ? 0.85 : 1))
             .foregroundColor(.white)
             .cornerRadius(12)
         }

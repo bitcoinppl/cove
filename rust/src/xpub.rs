@@ -27,7 +27,7 @@ pub enum DescriptorError {
     MissingKeys,
 
     #[error("Too many keys in descriptor, only supports 1 external and 1 internal key")]
-    TooManyKeys,
+    TooManyKeys(u32),
 
     #[error("Unable to parse descriptor: {0}")]
     InvalidDescriptorParse(String),
@@ -67,7 +67,7 @@ impl From<descriptor::Error> for DescriptorError {
         match error {
             DS::InvalidDescriptor(error) => Self::InvalidDescriptor(error.to_string()),
             DS::MissingKeys => Self::MissingKeys,
-            DS::TooManyKeys => Self::TooManyKeys,
+            DS::TooManyKeys(keys) => Self::TooManyKeys(keys as u32),
             DS::InvalidDescriptorParse(error) => Self::InvalidDescriptorParse(error.to_string()),
             DS::MissingDescriptor => Self::MissingDescriptor,
             DS::MissingXpub => Self::MissingXpub,

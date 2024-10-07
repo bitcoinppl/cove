@@ -75,6 +75,19 @@ struct HotWalletSelectScreen: View {
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
+            if nextScreen == .import_ {
+                NavigationLink(value: route(.twentyFour, scanning: true)) {
+                    Text("Scan QR")
+                }
+            }
+            NavigationLink(value: route(.twelve)) {
+                Text("12 Words")
+            }
+            NavigationLink(value: route(.twentyFour)) {
+                Text("24 Words")
+            }
+        }
     }
 }
 

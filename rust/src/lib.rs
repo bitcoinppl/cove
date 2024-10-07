@@ -2,7 +2,6 @@ pub mod database;
 
 pub(crate) mod app;
 pub(crate) mod logging;
-pub(crate) mod macros;
 pub(crate) mod router;
 
 pub mod autocomplete;
@@ -10,6 +9,7 @@ pub mod bip39;
 pub mod color;
 pub mod color_scheme;
 pub mod consts;
+pub mod cove_nfc;
 pub mod encryption;
 pub mod ffi;
 pub mod fiat;
