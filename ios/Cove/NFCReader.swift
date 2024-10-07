@@ -22,6 +22,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     var messageInfo: MessageInfo?
 
     var readingMessage = ""
+    var currentBlock = 0
 
     // should continue reading next block
     enum ParsingState {
@@ -39,6 +40,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     }
 
     func scan() {
+        scannedMessage = nil
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
         session?.begin()
@@ -49,6 +51,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         scannedMessage = nil
         reader = FfiNfcReader()
         readBytes = Data()
+        currentBlock = 0
     }
 
     func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
@@ -92,29 +95,39 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         if reader.isStarted() && !readBytes.isEmpty {
             // read the first block chunk
             tag.readMultipleBlocks(requestFlags: .highDataRate, blockRange: NSRange(location: 0, length: blocksToRead)) { data, error in
-                // error lets reset the reader
+                // error try again
                 if error != nil {
                     self.retries += 1
-                    readNextBlock()
+                    if self.retries < 10 {
+                        Log.error("Error reading block: \(error!.localizedDescription)")
+                        self.readBlocks(tag: tag, session: session)
+                    }
+
+                    return
                 }
+
+                // succesful read, reset retries
+                self.retries = 0
 
                 // is resumable set the currentBlock to how much data we already have
                 let data = data.flatMap { $0 }
-                if case let .success(resumeFrom) = Result(catching: { try self.reader.isResumeable(data: Data(data)) }) {
-                    Log.debug("read: \(self.readBytes.count) bytes, resume \(resumeFrom)")
-
-                    currentBlock = Int(resumeFrom.blockNumber)
-                    Log.info("Resuming from block: \(currentBlock)")
+                if (try? self.reader.isResumeable(data: Data(data))) != nil {
+                    Log.info("Resuming from block: \(self.currentBlock)")
                 } else {
                     // reset reader and bytes read
+                    Log.warn("Trying to scan a different NFC message, resetting")
                     self.resetReader()
-                    currentBlock = 0
                 }
             }
         }
 
         func readNextBlock() {
             Log.debug("current block: \(currentBlock)")
+            // already complete
+            if scannedMessage != nil {
+                Log.debug("scanning complete")
+                return
+            }
 
             let blockRange = NSRange(location: currentBlock, length: blocksToRead)
 
@@ -135,7 +148,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     session.alertMessage = self.readingMessage
 
                     let dataChunk = data.flatMap { $0 }
-                    currentBlock = currentBlock + self.blocksToRead
+                    self.currentBlock = self.currentBlock + self.blocksToRead
 
                     self.retries = 0
                     self.readBytes.append(contentsOf: dataChunk)
@@ -153,8 +166,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                             return self.readNDEF(from: tag, session: session)
                         }
                     }
-
-                    Log.debug("messageInfo: \(self.messageInfo), \(self.reader.isStarted())")
 
                     readNextBlock()
 
