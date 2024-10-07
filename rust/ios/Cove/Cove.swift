@@ -2125,6 +2125,12 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
 }
 
 public protocol FfiNfcReaderProtocol: AnyObject {
+    func isResumeable(data: Data) throws
+
+    func isStarted() -> Bool
+
+    func messageInfo() -> MessageInfo?
+
     func parse(data: Data) throws -> ParseResult
 }
 
@@ -2173,6 +2179,24 @@ open class FfiNfcReader:
         }
 
         try! rustCall { uniffi_cove_fn_free_ffinfcreader(pointer, $0) }
+    }
+
+    open func isResumeable(data: Data) throws { try rustCallWithError(FfiConverterTypeResumeError.lift) {
+        uniffi_cove_fn_method_ffinfcreader_is_resumeable(self.uniffiClonePointer(),
+                                                         FfiConverterData.lower(data), $0)
+    }
+    }
+
+    open func isStarted() -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_ffinfcreader_is_started(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func messageInfo() -> MessageInfo? {
+        return try! FfiConverterOptionTypeMessageInfo.lift(try! rustCall {
+            uniffi_cove_fn_method_ffinfcreader_message_info(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func parse(data: Data) throws -> ParseResult {
@@ -3174,6 +3198,118 @@ public func FfiConverterTypeMultiQr_lift(_ pointer: UnsafeMutableRawPointer) thr
 
 public func FfiConverterTypeMultiQr_lower(_ value: MultiQr) -> UnsafeMutableRawPointer {
     return FfiConverterTypeMultiQr.lower(value)
+}
+
+public protocol NfcConstProtocol: AnyObject {
+    func bytesPerBlock() -> UInt16
+
+    func numberOfBlocksPerChunk() -> UInt16
+
+    func totalBytesPerChunk() -> UInt16
+}
+
+open class NfcConst:
+    NfcConstProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_nfcconst(self.pointer, $0) }
+    }
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_nfcconst_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_nfcconst(pointer, $0) }
+    }
+
+    open func bytesPerBlock() -> UInt16 {
+        return try! FfiConverterUInt16.lift(try! rustCall {
+            uniffi_cove_fn_method_nfcconst_bytes_per_block(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func numberOfBlocksPerChunk() -> UInt16 {
+        return try! FfiConverterUInt16.lift(try! rustCall {
+            uniffi_cove_fn_method_nfcconst_number_of_blocks_per_chunk(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func totalBytesPerChunk() -> UInt16 {
+        return try! FfiConverterUInt16.lift(try! rustCall {
+            uniffi_cove_fn_method_nfcconst_total_bytes_per_chunk(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeNfcConst: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = NfcConst
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcConst {
+        return NfcConst(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcConst {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: NfcConst, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeNfcConst_lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcConst {
+    return try FfiConverterTypeNfcConst.lift(pointer)
+}
+
+public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeNfcConst.lower(value)
 }
 
 public protocol NodeSelectorProtocol: AnyObject {
@@ -6104,58 +6240,6 @@ public func FfiConverterTypeNdefRecord_lift(_ buf: RustBuffer) throws -> NdefRec
 
 public func FfiConverterTypeNdefRecord_lower(_ value: NdefRecord) -> RustBuffer {
     return FfiConverterTypeNdefRecord.lower(value)
-}
-
-public struct NfcConst {
-    public var numberOfBlocksPerChunk: UInt16
-    public var bytesPerBlock: UInt16
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(numberOfBlocksPerChunk: UInt16, bytesPerBlock: UInt16) {
-        self.numberOfBlocksPerChunk = numberOfBlocksPerChunk
-        self.bytesPerBlock = bytesPerBlock
-    }
-}
-
-extension NfcConst: Equatable, Hashable {
-    public static func == (lhs: NfcConst, rhs: NfcConst) -> Bool {
-        if lhs.numberOfBlocksPerChunk != rhs.numberOfBlocksPerChunk {
-            return false
-        }
-        if lhs.bytesPerBlock != rhs.bytesPerBlock {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(numberOfBlocksPerChunk)
-        hasher.combine(bytesPerBlock)
-    }
-}
-
-public struct FfiConverterTypeNfcConst: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcConst {
-        return
-            try NfcConst(
-                numberOfBlocksPerChunk: FfiConverterUInt16.read(from: &buf),
-                bytesPerBlock: FfiConverterUInt16.read(from: &buf)
-            )
-    }
-
-    public static func write(_ value: NfcConst, into buf: inout [UInt8]) {
-        FfiConverterUInt16.write(value.numberOfBlocksPerChunk, into: &buf)
-        FfiConverterUInt16.write(value.bytesPerBlock, into: &buf)
-    }
-}
-
-public func FfiConverterTypeNfcConst_lift(_ buf: RustBuffer) throws -> NfcConst {
-    return try FfiConverterTypeNfcConst.lift(buf)
-}
-
-public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> RustBuffer {
-    return FfiConverterTypeNfcConst.lower(value)
 }
 
 public struct NfcReader {
@@ -10934,6 +11018,27 @@ private struct FfiConverterOptionTypeAddressIndex: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
+    typealias SwiftType = MessageInfo?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeMessageInfo.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeMessageInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionSequenceSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [[String]]?
 
@@ -11417,13 +11522,6 @@ public func networkToString(network: Network) -> String {
     })
 }
 
-public func nfcConsts() -> NfcConst {
-    return try! FfiConverterTypeNfcConst.lift(try! rustCall {
-        uniffi_cove_fn_func_nfc_consts($0
-        )
-    })
-}
-
 public func nodeSelectionToNode(node: NodeSelection) -> Node {
     return try! FfiConverterTypeNode.lift(try! rustCall {
         uniffi_cove_fn_func_node_selection_to_node(
@@ -11537,9 +11635,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_network_to_string() != 60660 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_func_nfc_consts() != 20483 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_node_selection_to_node() != 57209 {
@@ -11692,6 +11787,15 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_state() != 19551 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_ffinfcreader_is_resumeable() != 21759 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffinfcreader_is_started() != 956 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffinfcreader_message_info() != 7402 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_ffinfcreader_parse() != 39581 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -11777,6 +11881,15 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_total_parts() != 51119 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nfcconst_bytes_per_block() != 35854 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nfcconst_number_of_blocks_per_chunk() != 48258 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_nfcconst_total_bytes_per_chunk() != 41799 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 48519 {
@@ -12071,6 +12184,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_multiqr_try_new_from_data() != 36957 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_nfcconst_new() != 22455 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_nodeselector_new() != 61659 {

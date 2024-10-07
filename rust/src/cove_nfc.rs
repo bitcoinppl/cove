@@ -179,6 +179,19 @@ impl NfcReader {
         // scanning the same message
         Ok(())
     }
+
+    /// Check if the reader is started
+    pub fn is_started(&self) -> bool {
+        matches!(self.state, ParserState::Parsing(_))
+    }
+
+    /// Get the message info, if we have that info
+    pub fn message_info(&self) -> Option<&MessageInfo> {
+        match &self.state {
+            ParserState::Parsing(parsing_state) => Some(&parsing_state.message_info),
+            ParserState::Complete | ParserState::NotStarted => None,
+        }
+    }
 }
 
 fn get_first_block_hash(data: &[u8]) -> Option<String> {
