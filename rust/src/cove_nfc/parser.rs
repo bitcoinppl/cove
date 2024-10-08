@@ -240,6 +240,19 @@ mod tests {
         owned_stream(bytes)
     });
 
+    static SEED_WORDS_BYTES: LazyLock<Stream<'static>> = LazyLock::new(|| {
+        let file_contents = include_bytes!("../../test/data/seed_words_bytes.txt");
+        let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
+
+        let bytes: Vec<u8> = file_string
+            .split(',')
+            .map(|s| s.trim())
+            .map(|s| s.parse::<u8>().unwrap())
+            .collect();
+
+        owned_stream(bytes)
+    });
+
     fn export_bytes() -> Stream<'static> {
         let mut data = *EXPORT;
         let _payload_length = parse_message_info(&mut data).unwrap();
@@ -483,5 +496,28 @@ mod tests {
         });
 
         assert_eq!(chunks_processed, 30);
+    }
+
+    #[test]
+    fn test_parse_seed_words_bytes() {
+        let mut data = *SEED_WORDS_BYTES;
+
+        let info = parse_message_info(&mut data);
+        assert!(info.is_ok());
+        let info = info.unwrap();
+        println!("{info:?}");
+        // let header = parse_header(&mut data).unwrap();
+        // assert_eq!(header.payload_length, 122);
+        //
+        // let mut data = *EXPORT;
+        // let info = parse_message_info(&mut data).unwrap();
+        // println!("{info:?}");
+        // let header = parse_header(&mut data).unwrap();
+        // let payload_length = header.payload_length as usize;
+        //
+        // let mut data_trunc = stream::new(&EXPORT[..payload_length]);
+        // let parsed = parse_ndef_message(&mut data_trunc);
+        //
+        // assert!(parsed.is_ok());
     }
 }
