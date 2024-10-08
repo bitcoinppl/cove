@@ -43,15 +43,10 @@ impl FfiNfcReader {
 
     #[uniffi::method]
     // TODO: need to handle messages with multiple records
-    pub fn string_from_record(&self, record: NdefRecord) -> String {
+    pub fn string_from_record(&self, record: NdefRecord) -> Option<String> {
         match record.payload {
-            crate::cove_nfc::payload::NdefPayload::Text(text_payload) => {
-                let text = text_payload.text;
-                text
-            }
-            crate::cove_nfc::payload::NdefPayload::Data(data) => {
-                String::from_utf8_lossy(&data).into_owned()
-            }
+            crate::cove_nfc::payload::NdefPayload::Text(text_payload) => Some(text_payload.text),
+            crate::cove_nfc::payload::NdefPayload::Data(data) => String::from_utf8(data).ok(),
         }
     }
 }
