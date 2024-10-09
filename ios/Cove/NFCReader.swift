@@ -26,8 +26,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     var readingMessage = ""
     var currentBlock = 0
 
-    private var isScanning = false
-
     override init() {
         Log.debug("create nfc reader")
         consts = NfcConst()
@@ -39,13 +37,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     func scan() {
         Log.info("started scanning")
 
-        if isScanning {
-            Log.warn("Trying to scan when already scanning")
-            return
-        }
-
         scannedMessage = nil
-        isScanning = true
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
@@ -68,7 +60,9 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
         session.connect(to: tag) { error in
             if let error = error {
-                session.invalidate(errorMessage: "Connection error: \(error.localizedDescription), please try again")
+                session.invalidate(
+                    errorMessage:
+                        "Connection error: \(error.localizedDescription), please try again")
                 return
             }
 
@@ -99,7 +93,9 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         // when readBlocks is called if the old one is in started status then this might be the user trying to scan the same tag again
         if reader.isStarted() && !readBytes.isEmpty {
             // read the first block chunk
-            tag.readMultipleBlocks(requestFlags: .highDataRate, blockRange: NSRange(location: 0, length: blocksToRead)) { data, error in
+            tag.readMultipleBlocks(
+                requestFlags: .highDataRate, blockRange: NSRange(location: 0, length: blocksToRead)
+            ) { data, error in
                 // error try again
                 if error != nil {
                     self.retries += 1
@@ -138,7 +134,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
             let blockRange = NSRange(location: currentBlock, length: blocksToRead)
 
-            tag.extendedReadMultipleBlocks(requestFlags: .highDataRate, blockRange: blockRange) { data, error in
+            tag.extendedReadMultipleBlocks(requestFlags: .highDataRate, blockRange: blockRange) {
+                data, error in
                 // if there is an error, add it to the result
                 let result: Result<[Data], any Error> = {
                     if let error = error {
@@ -161,7 +158,9 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     self.readBytes.append(contentsOf: dataChunk)
 
                     // has read enough data to get the message
-                    if let messageInfo = self.messageInfo, self.readBytes.count >= messageInfo.fullMessageLength {
+                    if let messageInfo = self.messageInfo,
+                        self.readBytes.count >= messageInfo.fullMessageLength
+                    {
                         if case .error = self.parseAndHandleResult(session: session) {
                             return
                         }
@@ -169,7 +168,9 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
                     if self.messageInfo == nil {
                         if case .error = self.parseAndHandleResult(session: session) {
-                            Log.warn("Trying to read TAG in unsupported format, falling back to built in NDEF reader")
+                            Log.warn(
+                                "Trying to read TAG in unsupported format, falling back to built in NDEF reader"
+                            )
                             return self.readNDEF(from: tag, session: session)
                         }
                     }
@@ -188,7 +189,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     }
                 }
             }
-        } // END: ReadNextBlock
+        }  // END: ReadNextBlock
 
         // start calling the readNextBlock() recursive function
         readNextBlock()
@@ -211,10 +212,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             }
 
             session.invalidate()
-            DispatchQueue.main.async {
-                self.isScanning = false
-            }
-
             return .complete
 
         case let .failure(error):
@@ -250,7 +247,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 DispatchQueue.main.async {
                     session.alertMessage = "Tag read successfully!"
                     session.invalidate()
-                    self.isScanning = false
                 }
             }
         }
@@ -288,7 +284,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: any Error) {
         Log.error("Tag reader session did invalidate with error: \(error.localizedDescription)")
 
-        isScanning = false
         switch error as? NFCReaderError {
         case .none:
             session.invalidate(errorMessage: "Unable to read NFC tag, try again")

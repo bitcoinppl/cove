@@ -41,18 +41,22 @@ struct HotWalletImportScreen: View {
     @State private var scanError: IdentifiableString?
 
     // nfc scanning
-    @State private var nfcReader: NFCReader?
+    @State private var nfcReader: NFCReader = .init()
 
     func initOnAppear() {
         Log.info("initOnAppear: \(importType), routes: \(app.router.routes) || \(app.router.default)")
-        if nfcReader == nil {
-            nfcReader = NFCReader()
-        }
+        nfcReader = NFCReader()
 
         switch importType {
         case .manual: ()
         case .qr: isPresentingScanner = true
-        case .nfc: nfcReader!.scan()
+        case .nfc:
+            Task {
+                try? await Task.sleep(for: .milliseconds(50))
+                await MainActor.run {
+                    nfcReader.scan()
+                }
+            }
         }
 
         importType = .manual
@@ -291,7 +295,7 @@ struct HotWalletImportScreen: View {
                 .buttonStyle(PlainButtonStyle())
 
                 Button(action: {
-                    nfcReader?.scan()
+                    nfcReader.scan()
                 }) {
                     HStack {
                         Image(systemName: "wave.3.right")
@@ -369,7 +373,7 @@ struct HotWalletImportScreen: View {
                 }
             }
         }
-        .onChange(of: nfcReader?.scannedMessage) { _, msg in
+        .onChange(of: nfcReader.scannedMessage) { _, msg in
             guard let msg = msg else { return }
             do {
                 let words = try groupedPlainWordsOf(mnemonic: msg, groups: 6)
@@ -379,7 +383,7 @@ struct HotWalletImportScreen: View {
             }
         }
 
-        .onChange(of: nfcReader?.scannedMessageData) { _, data in
+        .onChange(of: nfcReader.scannedMessageData) { _, data in
             // received data, probably a SeedQR in NFC
             guard let data = data else { return }
             do {
@@ -391,8 +395,8 @@ struct HotWalletImportScreen: View {
             }
         }
         .onDisappear {
-            self.nfcReader?.resetReader()
-            self.nfcReader?.session = nil
+            self.nfcReader.resetReader()
+            self.nfcReader.session = nil
         }
     }
 
@@ -411,8 +415,8 @@ struct HotWalletImportScreen: View {
 
         // reset multiqr and nfc reader on succesful scan
         multiQr = nil
-        nfcReader?.resetReader()
-        nfcReader?.session = nil
+        nfcReader.resetReader()
+        nfcReader.session = nil
 
         enteredWords = words
         isPresentingScanner = false
