@@ -4157,6 +4157,10 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func fingerprint() -> String
 
+    func forceUpdateHeight() async throws -> UInt32
+
+    func forceWalletScan() async throws
+
     func listenForUpdates(reconciler: WalletViewModelReconciler)
 
     func markWalletAsVerified() throws
@@ -4306,6 +4310,38 @@ open class RustWalletViewModel:
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_fingerprint(self.uniffiClonePointer(), $0)
         })
+    }
+
+    open func forceUpdateHeight() async throws -> UInt32 {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_force_update_height(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_u32,
+                completeFunc: ffi_cove_rust_future_complete_u32,
+                freeFunc: ffi_cove_rust_future_free_u32,
+                liftFunc: FfiConverterUInt32.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func forceWalletScan() async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_force_wallet_scan(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_void,
+                completeFunc: ffi_cove_rust_future_complete_void,
+                freeFunc: ffi_cove_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
     }
 
     open func listenForUpdates(reconciler: WalletViewModelReconciler) { try! rustCall {
@@ -12240,6 +12276,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_force_update_height() != 17709 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_force_wallet_scan() != 47434 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064 {

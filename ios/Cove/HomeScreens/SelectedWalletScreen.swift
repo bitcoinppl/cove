@@ -161,6 +161,10 @@ struct SelectedWalletScreenInner: View {
                     WalletSettingsSheet(model: model)
                 }
             }
+            .refreshable {
+                try? await model.rust.forceWalletScan()
+                let _ = try? await model.rust.forceUpdateHeight()
+            }
         }
         .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
     }

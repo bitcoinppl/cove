@@ -123,7 +123,7 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn wallet_scan_and_notify(&mut self) -> ActorResult<()> {
+    pub async fn wallet_scan_and_notify(&mut self, force_scan: bool) -> ActorResult<()> {
         use WalletViewModelReconcileMessage as Msg;
         debug!("wallet_scan_and_notify");
 
@@ -147,7 +147,7 @@ impl WalletActor {
         }
 
         // start the wallet scan in a background task
-        self.start_wallet_scan_in_task()
+        self.start_wallet_scan_in_task(force_scan)
             .await?
             .await
             .map_err(|error| Error::WalletScanError(error.to_string()))?;
@@ -155,14 +155,16 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn start_wallet_scan_in_task(&mut self) -> ActorResult<()> {
+    pub async fn start_wallet_scan_in_task(&mut self, force_scan: bool) -> ActorResult<()> {
         use WalletViewModelReconcileMessage as Msg;
         debug!("start_wallet_scan");
 
-        if let Some(last_scan) = self.last_scan_finished() {
-            if elapsed_secs_since(last_scan) < 60 {
-                info!("skipping wallet scan, last scan was less than 60 seconds ago");
-                return Produces::ok(());
+        if !force_scan {
+            if let Some(last_scan) = self.last_scan_finished() {
+                if elapsed_secs_since(last_scan) < 60 {
+                    info!("skipping wallet scan, last scan was less than 60 seconds ago");
+                    return Produces::ok(());
+                }
             }
         }
 
@@ -201,16 +203,18 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn get_height(&mut self) -> ActorResult<usize> {
-        if let Some((last_height_fetched, block_height)) = self.last_height_fetched() {
-            let elapsed = elapsed_secs_since(last_height_fetched);
-            if elapsed < 60 * 5 {
-                if elapsed < 60 {
+    pub async fn get_height(&mut self, force: bool) -> ActorResult<usize> {
+        if !force {
+            if let Some((last_height_fetched, block_height)) = self.last_height_fetched() {
+                let elapsed = elapsed_secs_since(last_height_fetched);
+                if elapsed < 60 * 5 {
+                    if elapsed < 60 {
+                        return Produces::ok(block_height);
+                    }
+
+                    send!(self.addr.update_height());
                     return Produces::ok(block_height);
                 }
-
-                send!(self.addr.update_height());
-                return Produces::ok(block_height);
             }
         }
 
