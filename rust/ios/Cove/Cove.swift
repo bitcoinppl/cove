@@ -535,6 +535,31 @@ private struct FfiConverterData: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterDuration: FfiConverterRustBuffer {
+    typealias SwiftType = TimeInterval
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TimeInterval {
+        let seconds: UInt64 = try readInt(&buf)
+        let nanoseconds: UInt32 = try readInt(&buf)
+        return Double(seconds) + (Double(nanoseconds) / 1.0e9)
+    }
+
+    public static func write(_ value: TimeInterval, into buf: inout [UInt8]) {
+        if value.rounded(.down) > Double(Int64.max) {
+            fatalError("Duration overflow, exceeds max bounds supported by Uniffi")
+        }
+
+        if value < 0 {
+            fatalError("Invalid duration, must be non-negative")
+        }
+
+        let seconds = UInt64(value)
+        let nanoseconds = UInt32((value - Double(seconds)) * 1.0e9)
+        writeInt(&buf, seconds)
+        writeInt(&buf, nanoseconds)
+    }
+}
+
 public protocol AddressProtocol: AnyObject {
     func string() -> String
 }
@@ -4132,6 +4157,10 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func fingerprint() -> String
 
+    func forceUpdateHeight() async throws -> UInt32
+
+    func forceWalletScan() async throws
+
     func listenForUpdates(reconciler: WalletViewModelReconciler)
 
     func markWalletAsVerified() throws
@@ -4281,6 +4310,38 @@ open class RustWalletViewModel:
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_fingerprint(self.uniffiClonePointer(), $0)
         })
+    }
+
+    open func forceUpdateHeight() async throws -> UInt32 {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_force_update_height(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_u32,
+                completeFunc: ffi_cove_rust_future_complete_u32,
+                freeFunc: ffi_cove_rust_future_free_u32,
+                liftFunc: FfiConverterUInt32.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func forceWalletScan() async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_force_wallet_scan(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_void,
+                completeFunc: ffi_cove_rust_future_complete_void,
+                freeFunc: ffi_cove_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
     }
 
     open func listenForUpdates(reconciler: WalletViewModelReconciler) { try! rustCall {
@@ -5876,6 +5937,58 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> RustBuffer {
     return FfiConverterTypeBalance.lower(value)
 }
 
+public struct BlockSizeLast {
+    public var blockHeight: UInt64
+    public var lastSeen: TimeInterval
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(blockHeight: UInt64, lastSeen: TimeInterval) {
+        self.blockHeight = blockHeight
+        self.lastSeen = lastSeen
+    }
+}
+
+extension BlockSizeLast: Equatable, Hashable {
+    public static func == (lhs: BlockSizeLast, rhs: BlockSizeLast) -> Bool {
+        if lhs.blockHeight != rhs.blockHeight {
+            return false
+        }
+        if lhs.lastSeen != rhs.lastSeen {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(blockHeight)
+        hasher.combine(lastSeen)
+    }
+}
+
+public struct FfiConverterTypeBlockSizeLast: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlockSizeLast {
+        return
+            try BlockSizeLast(
+                blockHeight: FfiConverterUInt64.read(from: &buf),
+                lastSeen: FfiConverterDuration.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: BlockSizeLast, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.blockHeight, into: &buf)
+        FfiConverterDuration.write(value.lastSeen, into: &buf)
+    }
+}
+
+public func FfiConverterTypeBlockSizeLast_lift(_ buf: RustBuffer) throws -> BlockSizeLast {
+    return try FfiConverterTypeBlockSizeLast.lift(buf)
+}
+
+public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustBuffer {
+    return FfiConverterTypeBlockSizeLast.lower(value)
+}
+
 public struct ConfirmedDetails {
     public var blockNumber: UInt32
     public var confirmationTime: UInt64
@@ -6013,11 +6126,15 @@ public func FfiConverterTypeImportWalletViewModelState_lower(_ value: ImportWall
 
 public struct InternalOnlyMetadata {
     public var addressIndex: AddressIndex?
+    public var lastScanFinished: TimeInterval?
+    public var lastHeightFetched: BlockSizeLast?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(addressIndex: AddressIndex?) {
+    public init(addressIndex: AddressIndex?, lastScanFinished: TimeInterval?, lastHeightFetched: BlockSizeLast?) {
         self.addressIndex = addressIndex
+        self.lastScanFinished = lastScanFinished
+        self.lastHeightFetched = lastHeightFetched
     }
 }
 
@@ -6026,11 +6143,19 @@ extension InternalOnlyMetadata: Equatable, Hashable {
         if lhs.addressIndex != rhs.addressIndex {
             return false
         }
+        if lhs.lastScanFinished != rhs.lastScanFinished {
+            return false
+        }
+        if lhs.lastHeightFetched != rhs.lastHeightFetched {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(addressIndex)
+        hasher.combine(lastScanFinished)
+        hasher.combine(lastHeightFetched)
     }
 }
 
@@ -6038,12 +6163,16 @@ public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InternalOnlyMetadata {
         return
             try InternalOnlyMetadata(
-                addressIndex: FfiConverterOptionTypeAddressIndex.read(from: &buf)
+                addressIndex: FfiConverterOptionTypeAddressIndex.read(from: &buf),
+                lastScanFinished: FfiConverterOptionDuration.read(from: &buf),
+                lastHeightFetched: FfiConverterOptionTypeBlockSizeLast.read(from: &buf)
             )
     }
 
     public static func write(_ value: InternalOnlyMetadata, into buf: inout [UInt8]) {
         FfiConverterOptionTypeAddressIndex.write(value.addressIndex, into: &buf)
+        FfiConverterOptionDuration.write(value.lastScanFinished, into: &buf)
+        FfiConverterOptionTypeBlockSizeLast.write(value.lastHeightFetched, into: &buf)
     }
 }
 
@@ -6064,7 +6193,7 @@ public struct MessageInfo {
      * The payload length of the message, reported in the info header
      * This is the length of the payload, without the header info
      */
-    public var reportedLength: UInt16
+    public var payloadLength: UInt16
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -6075,10 +6204,10 @@ public struct MessageInfo {
         /**
             * The payload length of the message, reported in the info header
             * This is the length of the payload, without the header info
-            */ reportedLength: UInt16
+            */ payloadLength: UInt16
     ) {
         self.fullMessageLength = fullMessageLength
-        self.reportedLength = reportedLength
+        self.payloadLength = payloadLength
     }
 }
 
@@ -6087,7 +6216,7 @@ extension MessageInfo: Equatable, Hashable {
         if lhs.fullMessageLength != rhs.fullMessageLength {
             return false
         }
-        if lhs.reportedLength != rhs.reportedLength {
+        if lhs.payloadLength != rhs.payloadLength {
             return false
         }
         return true
@@ -6095,7 +6224,7 @@ extension MessageInfo: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(fullMessageLength)
-        hasher.combine(reportedLength)
+        hasher.combine(payloadLength)
     }
 }
 
@@ -6104,13 +6233,13 @@ public struct FfiConverterTypeMessageInfo: FfiConverterRustBuffer {
         return
             try MessageInfo(
                 fullMessageLength: FfiConverterUInt16.read(from: &buf),
-                reportedLength: FfiConverterUInt16.read(from: &buf)
+                payloadLength: FfiConverterUInt16.read(from: &buf)
             )
     }
 
     public static func write(_ value: MessageInfo, into buf: inout [UInt8]) {
         FfiConverterUInt16.write(value.fullMessageLength, into: &buf)
-        FfiConverterUInt16.write(value.reportedLength, into: &buf)
+        FfiConverterUInt16.write(value.payloadLength, into: &buf)
     }
 }
 
@@ -11095,6 +11224,27 @@ private struct FfiConverterOptionData: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionDuration: FfiConverterRustBuffer {
+    typealias SwiftType = TimeInterval?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterDuration.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterDuration.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionTypeAddressIndex: FfiConverterRustBuffer {
     typealias SwiftType = AddressIndex?
 
@@ -11111,6 +11261,27 @@ private struct FfiConverterOptionTypeAddressIndex: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeAddressIndex.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+private struct FfiConverterOptionTypeBlockSizeLast: FfiConverterRustBuffer {
+    typealias SwiftType = BlockSizeLast?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBlockSizeLast.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBlockSizeLast.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -12105,6 +12276,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_force_update_height() != 17709 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_force_wallet_scan() != 47434 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064 {

@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 @Observable class MainViewModel: FfiReconcile {
@@ -58,6 +59,10 @@ import SwiftUI
         walletViewModel = walletvm
 
         return walletViewModel!
+    }
+
+    public func updateWalletVm(_ vm: WalletViewModel) {
+        walletViewModel = vm
     }
 
     var currentRoute: Route {

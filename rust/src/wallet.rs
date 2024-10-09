@@ -323,8 +323,10 @@ impl Wallet {
         // the gap limit and not be able to see it their wallet
         //
         // note: index to use is the index of the address in the list of addresses, not the derivation index
-        let index_to_use = if let Some(last_index) =
-            self.metadata.internal().last_seen_address_index(&addresses)
+        let index_to_use = if let Some(last_index) = self
+            .metadata
+            .internal_mut()
+            .last_seen_address_index(&addresses)
         {
             (last_index + 1) % MAX_ADDRESSES
         } else {
@@ -333,7 +335,7 @@ impl Wallet {
 
         let address_info = addresses[index_to_use].clone();
         self.metadata
-            .internal()
+            .internal_mut()
             .set_last_seen_address_index(&addresses, index_to_use);
 
         Database::global()

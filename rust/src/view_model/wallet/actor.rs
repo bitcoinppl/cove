@@ -3,13 +3,13 @@ use crate::{
     node::client::NodeClient,
     transaction::{Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
-    wallet::{balance::Balance, AddressInfo, Wallet},
+    wallet::{balance::Balance, metadata::BlockSizeLast, AddressInfo, Wallet},
 };
 use act_zero::*;
 use bdk_chain::spk_client::{FullScanResult, SyncResult};
 use bdk_wallet::KeychainKind;
 use crossbeam::channel::Sender;
-use tokio::time::Instant;
+use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, info};
 
 use super::WalletViewModelReconcileMessage;
@@ -21,8 +21,8 @@ pub struct WalletActor {
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
 
-    pub last_scan_finished: Option<Instant>,
-    pub last_height_fetched: Option<(Instant, usize)>,
+    last_scan_finished_: Option<Duration>,
+    last_height_fetched_: Option<(Duration, usize)>,
 
     pub state: ActorState,
 }
@@ -75,8 +75,8 @@ impl WalletActor {
             reconciler,
             wallet,
             node_client: None,
-            last_scan_finished: None,
-            last_height_fetched: None,
+            last_scan_finished_: None,
+            last_height_fetched_: None,
             state: ActorState::Initial,
         }
     }
@@ -123,12 +123,9 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn wallet_scan_and_notify(&mut self) -> ActorResult<()> {
+    pub async fn wallet_scan_and_notify(&mut self, force_scan: bool) -> ActorResult<()> {
         use WalletViewModelReconcileMessage as Msg;
         debug!("wallet_scan_and_notify");
-
-        // notify the frontend that the wallet is starting to scan
-        self.send(Msg::StartedWalletScan);
 
         // get the initial balance and transactions
         {
@@ -150,7 +147,7 @@ impl WalletActor {
         }
 
         // start the wallet scan in a background task
-        self.start_wallet_scan_in_task()
+        self.start_wallet_scan_in_task(force_scan)
             .await?
             .await
             .map_err(|error| Error::WalletScanError(error.to_string()))?;
@@ -158,14 +155,16 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn start_wallet_scan_in_task(&mut self) -> ActorResult<()> {
+    pub async fn start_wallet_scan_in_task(&mut self, force_scan: bool) -> ActorResult<()> {
         use WalletViewModelReconcileMessage as Msg;
         debug!("start_wallet_scan");
 
-        if let Some(last_scan) = self.last_scan_finished {
-            if last_scan.elapsed().as_secs() < 10 {
-                info!("skipping wallet scan, last scan was less than 10 seconds ago");
-                return Produces::ok(());
+        if !force_scan {
+            if let Some(last_scan) = self.last_scan_finished() {
+                if elapsed_secs_since(last_scan) < 60 {
+                    info!("skipping wallet scan, last scan was less than 60 seconds ago");
+                    return Produces::ok(());
+                }
             }
         }
 
@@ -204,16 +203,18 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    pub async fn get_height(&mut self) -> ActorResult<usize> {
-        if let Some((last_height_fetched, block_height)) = self.last_height_fetched {
-            let elapsed = last_height_fetched.elapsed().as_secs();
-            if elapsed < 60 * 5 {
-                if elapsed < 60 {
+    pub async fn get_height(&mut self, force: bool) -> ActorResult<usize> {
+        if !force {
+            if let Some((last_height_fetched, block_height)) = self.last_height_fetched() {
+                let elapsed = elapsed_secs_since(last_height_fetched);
+                if elapsed < 60 * 5 {
+                    if elapsed < 60 {
+                        return Produces::ok(block_height);
+                    }
+
+                    send!(self.addr.update_height());
                     return Produces::ok(block_height);
                 }
-
-                send!(self.addr.update_height());
-                return Produces::ok(block_height);
             }
         }
 
@@ -232,7 +233,7 @@ impl WalletActor {
             .await
             .map_err(|_| Error::GetHeightError)?;
 
-        self.last_height_fetched = Some((Instant::now(), block_height));
+        self.set_last_height_fetched(block_height);
         Produces::ok(block_height)
     }
 
@@ -254,7 +255,7 @@ impl WalletActor {
         debug!("starting full scan");
 
         self.state = ActorState::PerformingFullScan;
-        let start = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
+        let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
         let full_scan_request = self.wallet.start_full_scan().build();
 
@@ -272,7 +273,7 @@ impl WalletActor {
                 .start_wallet_scan(&graph, full_scan_request)
                 .await;
 
-            let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
+            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("done full scan in {}s", now - start);
 
             // update wallet state
@@ -286,7 +287,7 @@ impl WalletActor {
         debug!("starting incremental scan");
         self.state = ActorState::PerformingIncrementalScan;
 
-        let start = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
+        let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
         let scan_request = self.wallet.start_sync_with_revealed_spks().build();
         let graph = self.wallet.tx_graph().clone();
@@ -299,7 +300,7 @@ impl WalletActor {
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
             let sync_result = node_client.sync(&graph, scan_request).await;
-            let now = std::time::UNIX_EPOCH.elapsed().unwrap().as_secs();
+            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("done incremental scan in {}s", now - start);
 
             // update wallet state
@@ -319,7 +320,7 @@ impl WalletActor {
 
         self.wallet.apply_update(full_scan_result)?;
         self.wallet.persist()?;
-        self.last_scan_finished = Some(Instant::now());
+        self.set_last_scan_finished();
 
         self.wallet.metadata.performed_full_scan = true;
         Database::global()
@@ -338,7 +339,7 @@ impl WalletActor {
         let sync_result = sync_result?;
         self.wallet.apply_update(sync_result)?;
         self.wallet.persist()?;
-        self.last_scan_finished = Some(Instant::now());
+        self.set_last_scan_finished();
 
         self.mark_and_notify_scan_complete().await?;
 
@@ -374,6 +375,75 @@ impl WalletActor {
 
         Produces::ok(())
     }
+
+    fn last_scan_finished(&mut self) -> Option<Duration> {
+        if let Some(last_scan_finished) = self.last_scan_finished_ {
+            return Some(last_scan_finished);
+        }
+
+        let metadata = Database::global()
+            .wallets()
+            .get(&self.wallet.id, self.wallet.network)
+            .ok()??;
+
+        let last_scan_finished = metadata.internal().last_scan_finished;
+        self.last_scan_finished_ = last_scan_finished;
+
+        last_scan_finished
+    }
+
+    fn set_last_scan_finished(&mut self) -> Option<()> {
+        let now = UNIX_EPOCH.elapsed().unwrap();
+        self.last_scan_finished_ = Some(now);
+
+        let wallets = Database::global().wallets();
+
+        let mut metadata = wallets.get(&self.wallet.id, self.wallet.network).ok()??;
+        metadata.internal_mut().last_scan_finished = Some(now);
+
+        wallets.save_wallet(metadata).ok()
+    }
+
+    fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
+        if let Some(last_height_fetched) = self.last_height_fetched_ {
+            return Some(last_height_fetched);
+        }
+
+        let metadata = Database::global()
+            .wallets()
+            .get(&self.wallet.id, self.wallet.network)
+            .ok()??;
+
+        let BlockSizeLast {
+            block_height,
+            last_seen,
+        } = &metadata.internal().last_height_fetched?;
+
+        let last_height_fetched = Some((*last_seen, *(block_height) as usize));
+        self.last_height_fetched_ = last_height_fetched;
+
+        last_height_fetched
+    }
+
+    fn set_last_height_fetched(&mut self, block_height: usize) -> Option<()> {
+        let now = UNIX_EPOCH.elapsed().unwrap();
+        self.last_height_fetched_ = Some((now, block_height));
+
+        let wallets = Database::global().wallets();
+        let mut metadata = wallets.get(&self.wallet.id, self.wallet.network).ok()??;
+
+        metadata.internal_mut().last_height_fetched = Some(BlockSizeLast {
+            block_height: block_height as u64,
+            last_seen: now,
+        });
+
+        wallets.save_wallet(metadata).ok()
+    }
+}
+
+fn elapsed_secs_since(earlier: Duration) -> u64 {
+    let now = UNIX_EPOCH.elapsed().expect("time went backwards");
+    (now - earlier).as_secs()
 }
 
 impl WalletActor {

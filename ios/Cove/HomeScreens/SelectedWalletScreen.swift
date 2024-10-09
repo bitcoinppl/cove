@@ -35,9 +35,10 @@ struct SelectedWalletScreen: View {
                 Text("Loading...")
             }
         }
-        .task {
+        .onAppear {
             loadModel()
-
+        }
+        .task {
             // small delay and then start scanning wallet
             if let model = self.model {
                 do {
@@ -45,6 +46,13 @@ struct SelectedWalletScreen: View {
                     try await model.rust.startWalletScan()
                 } catch {
                     Log.error("Wallet Scan Failed \(error.localizedDescription)")
+                }
+            }
+        }
+        .onChange(of: model?.loadState) { _, loadState in
+            if case .loaded = loadState {
+                if let model = model {
+                    app.updateWalletVm(model)
                 }
             }
         }
@@ -152,6 +160,10 @@ struct SelectedWalletScreenInner: View {
                 .sheet(isPresented: $showSettings) {
                     WalletSettingsSheet(model: model)
                 }
+            }
+            .refreshable {
+                try? await model.rust.forceWalletScan()
+                let _ = try? await model.rust.forceUpdateHeight()
             }
         }
         .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)

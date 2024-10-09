@@ -199,7 +199,16 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub async fn current_block_height(&self) -> Result<u32, Error> {
-        let height = call!(self.actor.get_height())
+        let height = call!(self.actor.get_height(false))
+            .await
+            .map_err(|_| Error::GetHeightError)?;
+
+        Ok(height as u32)
+    }
+
+    #[uniffi::method]
+    pub async fn force_update_height(&self) -> Result<u32, Error> {
+        let height = call!(self.actor.get_height(true))
             .await
             .map_err(|_| Error::GetHeightError)?;
 
@@ -290,9 +299,20 @@ impl RustWalletViewModel {
         debug!("start_wallet_scan: {}", self.id);
 
         let actor = self.actor.clone();
-
         tokio::spawn(async move {
-            send!(actor.wallet_scan_and_notify());
+            send!(actor.wallet_scan_and_notify(false));
+        });
+
+        Ok(())
+    }
+
+    #[uniffi::method]
+    pub async fn force_wallet_scan(&self) -> Result<(), Error> {
+        debug!("force_wallet_scan: {}", self.id);
+
+        let actor = self.actor.clone();
+        tokio::spawn(async move {
+            send!(actor.wallet_scan_and_notify(true));
         });
 
         Ok(())

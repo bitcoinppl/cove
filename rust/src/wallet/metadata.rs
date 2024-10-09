@@ -1,4 +1,4 @@
-use std::hash::Hash;
+use std::{hash::Hash, time::Duration};
 
 use crate::transaction::Unit;
 use macros::{impl_default_for, new_type};
@@ -51,6 +51,16 @@ pub struct WalletMetadata {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct InternalOnlyMetadata {
     pub address_index: Option<AddressIndex>,
+    pub last_scan_finished: Option<Duration>,
+    pub last_height_fetched: Option<BlockSizeLast>,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record,
+)]
+pub struct BlockSizeLast {
+    pub block_height: u64,
+    pub last_seen: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
@@ -135,7 +145,11 @@ impl WalletMetadata {
         }
     }
 
-    pub fn internal(&mut self) -> &mut InternalOnlyMetadata {
+    pub fn internal(&self) -> &InternalOnlyMetadata {
+        &self.internal
+    }
+
+    pub fn internal_mut(&mut self) -> &mut InternalOnlyMetadata {
         &mut self.internal
     }
 }

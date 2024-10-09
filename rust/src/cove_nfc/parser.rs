@@ -27,7 +27,7 @@ pub fn parse_ndef_message(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
 
 pub fn parse_ndef_records(input: &mut Stream<'_>, info: &MessageInfo) -> PResult<Vec<NdefRecord>> {
     let mut records = Vec::new();
-    let payload_length = info.full_message_length as usize;
+    let payload_length = info.payload_length as usize;
     let mut total_parsed_bytes = 0;
 
     loop {
@@ -281,13 +281,13 @@ mod tests {
     #[test]
     fn test_header_parsing_with_complete_data() {
         // export
-        let export = &EXPORT[0..3031];
+        let export = &EXPORT[0..3043];
         let mut data = super::stream::new(export);
         assert_eq!(data.len(), export.len());
 
         let message_info = parse_message_info(&mut data).unwrap();
-
         assert_eq!(message_info.full_message_length, 3043);
+
         assert_eq!(export.len(), message_info.full_message_length as usize);
 
         let header = parse_header(&mut data).unwrap();
@@ -436,6 +436,7 @@ mod tests {
         let mut descriptor = *DESCRIPTOR;
         let message = parse_ndef_message(&mut descriptor).unwrap();
 
+        println!("{message:?}");
         assert_eq!(message.len(), 1);
 
         let record = &message[0];
