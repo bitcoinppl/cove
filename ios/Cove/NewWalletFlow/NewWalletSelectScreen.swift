@@ -174,4 +174,5 @@ private enum AlertType: Equatable {
 
 #Preview {
     NewWalletSelectScreen()
+        .environment(MainViewModel())
 }
