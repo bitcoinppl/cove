@@ -5,14 +5,14 @@ pub struct MessageInfo {
 
     /// The payload length of the message, reported in the info header
     /// This is the length of the payload, without the header info
-    reported_length: u16,
+    pub payload_length: u16,
 }
 
 impl MessageInfo {
-    pub fn new(reported_length: u16) -> Self {
+    pub fn new(payload_length: u16) -> Self {
         Self {
-            reported_length,
-            full_message_length: total_with_info(reported_length),
+            payload_length,
+            full_message_length: total_with_info(payload_length),
         }
     }
 }

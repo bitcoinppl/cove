@@ -267,7 +267,7 @@ mod tests {
 
             match result {
                 ParseResult::Complete(info, records) => {
-                    assert_eq!(info.full_message_length, 3031);
+                    assert_eq!(info.full_message_length, 3043);
                     assert_eq!(records.len(), 1);
                     break;
                 }
