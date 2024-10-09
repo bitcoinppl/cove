@@ -5,6 +5,7 @@ use record::NdefRecord;
 use resume::ResumeError;
 use sha2::{Digest, Sha256};
 use tracing::warn;
+use winnow::error::Needed;
 
 pub mod ffi;
 pub mod header;
@@ -63,7 +64,7 @@ pub struct ParsingContext {
     first_block_hash: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NfcReader {
     state: ParserState,
 }
@@ -93,7 +94,7 @@ impl NfcReader {
 
                 self.state = ParserState::Parsing(ParsingContext {
                     message_info,
-                    needed: message_info.total_payload_length - parsed as u16,
+                    needed: message_info.full_message_length - parsed as u16,
                     first_block_hash: get_first_block_hash(&data),
                 });
 
@@ -117,6 +118,7 @@ impl NfcReader {
 
         // need more data to parse the message
         if (parsing.needed as usize) >= data.len() {
+            tracing::debug!("not enough data to parse message, continuing");
             let left_over_bytes = data.to_vec();
 
             // return incomplete
@@ -129,14 +131,34 @@ impl NfcReader {
         }
 
         // have enough data to parse the message
+        tracing::debug!("enough data to parse message, trying to parse");
+
         let mut stream = data.to_stream();
-        let result = parser::parse_ndef_records(&mut stream, &parsing.message_info)
-            .map_err(|e| NfcReaderError::ParsingError(format!("error parsing message: {e}")))?;
+        match parser::parse_ndef_records(&mut stream, &parsing.message_info) {
+            Ok(result) => {
+                let result = ParseResult::Complete(parsing.message_info, result);
+                self.state = ParserState::Complete;
+                Ok(result)
+            }
 
-        let result = ParseResult::Complete(parsing.message_info, result);
-        self.state = ParserState::Complete;
+            Err(winnow::error::ErrMode::Incomplete(Needed::Size(need_more))) => {
+                tracing::warn!("incomplete, need more data, incorrect payload length was provided");
 
-        Ok(result)
+                // add the number of missing bytes to the full message length
+                parsing.message_info.full_message_length += need_more.get() as u16;
+
+                let result = ParseResult::Incomplete(ParsingMessage {
+                    message_info: parsing.message_info,
+                    left_over_bytes: data.to_vec(),
+                });
+
+                Ok(result)
+            }
+
+            Err(error) => Err(NfcReaderError::ParsingError(format!(
+                "error parsing message: {error}"
+            ))),
+        }
     }
 
     /// Try resuming on a partially parsed message
@@ -245,7 +267,7 @@ mod tests {
 
             match result {
                 ParseResult::Complete(info, records) => {
-                    assert_eq!(info.total_payload_length, 3031);
+                    assert_eq!(info.full_message_length, 3031);
                     assert_eq!(records.len(), 1);
                     break;
                 }

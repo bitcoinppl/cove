@@ -38,8 +38,10 @@ struct SelectedWalletScreen: View {
         .task {
             loadModel()
 
+            // small delay and then start scanning wallet
             if let model = self.model {
                 do {
+                    try? await Task.sleep(for: .milliseconds(200))
                     try await model.rust.startWalletScan()
                 } catch {
                     Log.error("Wallet Scan Failed \(error.localizedDescription)")
@@ -47,7 +49,6 @@ struct SelectedWalletScreen: View {
             }
         }
         .tint(.white)
-
     }
 }
 

@@ -2133,7 +2133,7 @@ public protocol FfiNfcReaderProtocol: AnyObject {
 
     func parse(data: Data) throws -> ParseResult
 
-    func stringFromRecord(record: NdefRecord) -> String
+    func stringFromRecord(record: NdefRecord) -> String?
 }
 
 open class FfiNfcReader:
@@ -2208,8 +2208,8 @@ open class FfiNfcReader:
         })
     }
 
-    open func stringFromRecord(record: NdefRecord) -> String {
-        return try! FfiConverterString.lift(try! rustCall {
+    open func stringFromRecord(record: NdefRecord) -> String? {
+        return try! FfiConverterOptionString.lift(try! rustCall {
             uniffi_cove_fn_method_ffinfcreader_string_from_record(self.uniffiClonePointer(),
                                                                   FfiConverterTypeNdefRecord.lower(record), $0)
         })
@@ -4433,6 +4433,8 @@ public func FfiConverterTypeRustWalletViewModel_lower(_ value: RustWalletViewMod
 
 public protocol SeedQrProtocol: AnyObject {
     func getWords() -> [String]
+
+    func groupedPlainWords() -> [[String]]
 }
 
 open class SeedQr:
@@ -4475,9 +4477,31 @@ open class SeedQr:
         try! rustCall { uniffi_cove_fn_free_seedqr(pointer, $0) }
     }
 
+    public static func newFromData(data: Data) throws -> SeedQr {
+        return try FfiConverterTypeSeedQr.lift(rustCallWithError(FfiConverterTypeSeedQrError.lift) {
+            uniffi_cove_fn_constructor_seedqr_new_from_data(
+                FfiConverterData.lower(data), $0
+            )
+        })
+    }
+
+    public static func newFromStr(qr: String) throws -> SeedQr {
+        return try FfiConverterTypeSeedQr.lift(rustCallWithError(FfiConverterTypeSeedQrError.lift) {
+            uniffi_cove_fn_constructor_seedqr_new_from_str(
+                FfiConverterString.lower(qr), $0
+            )
+        })
+    }
+
     open func getWords() -> [String] {
         return try! FfiConverterSequenceString.lift(try! rustCall {
             uniffi_cove_fn_method_seedqr_get_words(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func groupedPlainWords() -> [[String]] {
+        return try! FfiConverterSequenceSequenceString.lift(try! rustCall {
+            uniffi_cove_fn_method_seedqr_grouped_plain_words(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -6032,25 +6056,46 @@ public func FfiConverterTypeInternalOnlyMetadata_lower(_ value: InternalOnlyMeta
 }
 
 public struct MessageInfo {
-    public var totalPayloadLength: UInt16
+    /**
+     * The payload length of the message, including the header info
+     */
+    public var fullMessageLength: UInt16
+    /**
+     * The payload length of the message, reported in the info header
+     * This is the length of the payload, without the header info
+     */
+    public var reportedLength: UInt16
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(totalPayloadLength: UInt16) {
-        self.totalPayloadLength = totalPayloadLength
+    public init(
+        /**
+         * The payload length of the message, including the header info
+         */ fullMessageLength: UInt16,
+        /**
+            * The payload length of the message, reported in the info header
+            * This is the length of the payload, without the header info
+            */ reportedLength: UInt16
+    ) {
+        self.fullMessageLength = fullMessageLength
+        self.reportedLength = reportedLength
     }
 }
 
 extension MessageInfo: Equatable, Hashable {
     public static func == (lhs: MessageInfo, rhs: MessageInfo) -> Bool {
-        if lhs.totalPayloadLength != rhs.totalPayloadLength {
+        if lhs.fullMessageLength != rhs.fullMessageLength {
+            return false
+        }
+        if lhs.reportedLength != rhs.reportedLength {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(totalPayloadLength)
+        hasher.combine(fullMessageLength)
+        hasher.combine(reportedLength)
     }
 }
 
@@ -6058,12 +6103,14 @@ public struct FfiConverterTypeMessageInfo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageInfo {
         return
             try MessageInfo(
-                totalPayloadLength: FfiConverterUInt16.read(from: &buf)
+                fullMessageLength: FfiConverterUInt16.read(from: &buf),
+                reportedLength: FfiConverterUInt16.read(from: &buf)
             )
     }
 
     public static func write(_ value: MessageInfo, into buf: inout [UInt8]) {
-        FfiConverterUInt16.write(value.totalPayloadLength, into: &buf)
+        FfiConverterUInt16.write(value.fullMessageLength, into: &buf)
+        FfiConverterUInt16.write(value.reportedLength, into: &buf)
     }
 }
 
@@ -6249,50 +6296,6 @@ public func FfiConverterTypeNdefRecord_lift(_ buf: RustBuffer) throws -> NdefRec
 
 public func FfiConverterTypeNdefRecord_lower(_ value: NdefRecord) -> RustBuffer {
     return FfiConverterTypeNdefRecord.lower(value)
-}
-
-public struct NfcReader {
-    public var state: ParserState
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(state: ParserState) {
-        self.state = state
-    }
-}
-
-extension NfcReader: Equatable, Hashable {
-    public static func == (lhs: NfcReader, rhs: NfcReader) -> Bool {
-        if lhs.state != rhs.state {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(state)
-    }
-}
-
-public struct FfiConverterTypeNfcReader: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcReader {
-        return
-            try NfcReader(
-                state: FfiConverterTypeParserState.read(from: &buf)
-            )
-    }
-
-    public static func write(_ value: NfcReader, into buf: inout [UInt8]) {
-        FfiConverterTypeParserState.write(value.state, into: &buf)
-    }
-}
-
-public func FfiConverterTypeNfcReader_lift(_ buf: RustBuffer) throws -> NfcReader {
-    return try FfiConverterTypeNfcReader.lift(buf)
-}
-
-public func FfiConverterTypeNfcReader_lower(_ value: NfcReader) -> RustBuffer {
-    return FfiConverterTypeNfcReader.lower(value)
 }
 
 public struct Node {
@@ -7970,7 +7973,7 @@ public enum HotWalletRoute {
     case select
     case create(NumberOfBip39Words
     )
-    case `import`(NumberOfBip39Words, Bool)
+    case `import`(NumberOfBip39Words, ImportType)
     case verifyWords(WalletId
     )
 }
@@ -7986,7 +7989,7 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
         case 2: return try .create(FfiConverterTypeNumberOfBip39Words.read(from: &buf)
             )
 
-        case 3: return try .import(FfiConverterTypeNumberOfBip39Words.read(from: &buf), FfiConverterBool.read(from: &buf))
+        case 3: return try .import(FfiConverterTypeNumberOfBip39Words.read(from: &buf), FfiConverterTypeImportType.read(from: &buf))
 
         case 4: return try .verifyWords(FfiConverterTypeWalletId.read(from: &buf)
             )
@@ -8007,7 +8010,7 @@ public struct FfiConverterTypeHotWalletRoute: FfiConverterRustBuffer {
         case let .import(v1, v2):
             writeInt(&buf, Int32(3))
             FfiConverterTypeNumberOfBip39Words.write(v1, into: &buf)
-            FfiConverterBool.write(v2, into: &buf)
+            FfiConverterTypeImportType.write(v2, into: &buf)
 
         case let .verifyWords(v1):
             writeInt(&buf, Int32(4))
@@ -8025,6 +8028,55 @@ public func FfiConverterTypeHotWalletRoute_lower(_ value: HotWalletRoute) -> Rus
 }
 
 extension HotWalletRoute: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ImportType {
+    case manual
+    case nfc
+    case qr
+}
+
+public struct FfiConverterTypeImportType: FfiConverterRustBuffer {
+    typealias SwiftType = ImportType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .manual
+
+        case 2: return .nfc
+
+        case 3: return .qr
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ImportType, into buf: inout [UInt8]) {
+        switch value {
+        case .manual:
+            writeInt(&buf, Int32(1))
+
+        case .nfc:
+            writeInt(&buf, Int32(2))
+
+        case .qr:
+            writeInt(&buf, Int32(3))
+        }
+    }
+}
+
+public func FfiConverterTypeImportType_lift(_ buf: RustBuffer) throws -> ImportType {
+    return try FfiConverterTypeImportType.lift(buf)
+}
+
+public func FfiConverterTypeImportType_lower(_ value: ImportType) -> RustBuffer {
+    return FfiConverterTypeImportType.lower(value)
+}
+
+extension ImportType: Equatable, Hashable {}
 
 public enum ImportWalletError {
     case WalletImportError(String
@@ -8284,6 +8336,43 @@ public struct FfiConverterTypeMnemonicError: FfiConverterRustBuffer {
 extension MnemonicError: Equatable, Hashable {}
 
 extension MnemonicError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+public enum MnemonicParseError {
+    case InvalidMnemonic(String, String)
+}
+
+public struct FfiConverterTypeMnemonicParseError: FfiConverterRustBuffer {
+    typealias SwiftType = MnemonicParseError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MnemonicParseError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .InvalidMnemonic(
+                FfiConverterString.read(from: &buf),
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MnemonicParseError, into buf: inout [UInt8]) {
+        switch value {
+        case let .InvalidMnemonic(v1, v2):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            FfiConverterString.write(v2, into: &buf)
+        }
+    }
+}
+
+extension MnemonicParseError: Equatable, Hashable {}
+
+extension MnemonicParseError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -11506,6 +11595,15 @@ public func defaultNodeSelection() -> NodeSelection {
     })
 }
 
+public func groupedPlainWordsOf(mnemonic: String, groups: UInt8) throws -> [[String]] {
+    return try FfiConverterSequenceSequenceString.lift(rustCallWithError(FfiConverterTypeMnemonicParseError.lift) {
+        uniffi_cove_fn_func_grouped_plain_words_of(
+            FfiConverterString.lower(mnemonic),
+            FfiConverterUInt8.lower(groups), $0
+        )
+    })
+}
+
 public func hashRoute(route: Route) -> UInt64 {
     return try! FfiConverterUInt64.lift(try! rustCall {
         uniffi_cove_fn_func_hash_route(
@@ -11635,6 +11733,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_default_node_selection() != 14665 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_grouped_plain_words_of() != 45802 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_hash_route() != 32817 {
@@ -11808,7 +11909,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffinfcreader_parse() != 39581 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_ffinfcreader_string_from_record() != 18298 {
+    if uniffi_cove_checksum_method_ffinfcreader_string_from_record() != 60818 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_fingerprint_to_lowercase() != 27643 {
@@ -12036,6 +12137,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_seedqr_get_words() != 64188 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_seedqr_grouped_plain_words() != 35569 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_sentandreceived_amount() != 29581 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -12220,6 +12324,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_rustwalletviewmodel_try_new_from_xpub() != 6171 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_seedqr_new_from_data() != 13640 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_seedqr_new_from_str() != 6520 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_received() != 6979 {

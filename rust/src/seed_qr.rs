@@ -1,6 +1,8 @@
 use bip39::{Language, Mnemonic};
 use derive_more::Display;
 
+use crate::mnemonic::WordAccess as _;
+
 #[derive(Debug, Clone, uniffi::Object)]
 pub enum SeedQr {
     Standard(Mnemonic),
@@ -76,8 +78,24 @@ impl SeedQr {
 
 #[uniffi::export]
 impl SeedQr {
+    #[uniffi::constructor]
+    pub fn new_from_data(data: Vec<u8>) -> Result<Self, Error> {
+        Self::try_from_data(data)
+    }
+
+    #[uniffi::constructor]
+    pub fn new_from_str(qr: &str) -> Result<Self, Error> {
+        Self::try_from_str(qr)
+    }
+
+    #[uniffi::method]
     pub fn get_words(&self) -> Vec<String> {
         self.words().map(|word| word.to_string()).collect()
+    }
+
+    #[uniffi::method]
+    pub fn grouped_plain_words(&self) -> Vec<Vec<String>> {
+        self.mnemonic().grouped_plain_words_of(6)
     }
 }
 

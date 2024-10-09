@@ -11,12 +11,13 @@ struct HotWalletImportScreen: View {
     // public
     let autocomplete = Bip39AutoComplete()
     @State var numberOfWords: NumberOfBip39Words
-    @State var isPresentingScanner = false
+    @State var importType: ImportType = .manual
 
     // private
     @Environment(\.navigate) private var navigate
     @Environment(MainViewModel.self) private var app
 
+    @State private var isPresentingScanner = false
     @State private var tabIndex: Int = 0
 
     @State private var showErrorAlert = false
@@ -39,7 +40,28 @@ struct HotWalletImportScreen: View {
     @State private var scanComplete: Bool = false
     @State private var scanError: IdentifiableString?
 
+    // nfc scanning
+    @State private var nfcReader: NFCReader = .init()
+    @State private var tasks: [Task<Void, any Error>] = []
+
     func initOnAppear() {
+        nfcReader = NFCReader()
+
+        switch importType {
+        case .manual: ()
+        case .qr: isPresentingScanner = true
+        case .nfc:
+            let task = Task {
+                try await Task.sleep(for: .milliseconds(200))
+                await MainActor.run {
+                    nfcReader.scan()
+                }
+            }
+
+            tasks.append(task)
+        }
+
+        importType = .manual
         enteredWords = numberOfWords.inGroups()
     }
 
@@ -97,24 +119,7 @@ struct HotWalletImportScreen: View {
 
             // see if its single qr or seed qr
             if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(6)) {
-                let numberOfWords = words.compactMap(\.count).reduce(0, +)
-                switch numberOfWords {
-                case 12: self.numberOfWords = .twelve
-                case 24: self.numberOfWords = .twentyFour
-                default:
-                    Log.warn("Invalid number of words: \(numberOfWords)")
-                    scanError = IdentifiableString(
-                        "Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
-                    isPresentingScanner = false
-                    return
-                }
-
-                // reset multiqr on succesful scan
-                self.multiQr = nil
-
-                enteredWords = words
-                isPresentingScanner = false
-                tabIndex = lastIndex
+                setWords(words)
             }
 
             // might be a part of a bbqr, keep scanning
@@ -265,30 +270,59 @@ struct HotWalletImportScreen: View {
 
             NextOrImportButton.padding(.bottom, 24)
 
-            Button(action: {
-                isPresentingScanner = true
-            }) {
-                HStack {
-                    Image(systemName: "qrcode.viewfinder")
-                        .font(.system(size: 20))
-                    Text("Scan QR Code")
-                        .font(.headline)
-                }
-                .padding()
-                .foregroundColor(.white)
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            .black.opacity(0.7), .black, .black.opacity(0.8),
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
+            HStack {
+                Button(action: {
+                    isPresentingScanner = true
+                }) {
+                    HStack {
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.system(size: 20))
+
+                        Text("QR")
+                    }
+                    .padding()
+                    .frame(minWidth: 60)
+                    .foregroundColor(.white)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                .black.opacity(0.7), .black, .black.opacity(0.8),
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
                     )
-                )
-                .cornerRadius(10)
-                .shadow(color: .gray.opacity(0.5), radius: 5, x: 0, y: 2)
+                    .cornerRadius(10)
+                    .shadow(color: .gray.opacity(0.5), radius: 5, x: 0, y: 2)
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                Button(action: {
+                    nfcReader.scan()
+                }) {
+                    HStack {
+                        Image(systemName: "wave.3.right")
+                            .font(.system(size: 18))
+
+                        Text("NFC")
+                    }
+                    .padding()
+                    .frame(minWidth: 60)
+                    .foregroundColor(.white)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                .black.opacity(0.7), .black, .black.opacity(0.8),
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(10)
+                    .shadow(color: .gray.opacity(0.5), radius: 5, x: 0, y: 2)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
-            .buttonStyle(PlainButtonStyle())
 
             Spacer()
         }
@@ -342,6 +376,58 @@ struct HotWalletImportScreen: View {
                 }
             }
         }
+        .onChange(of: nfcReader.scannedMessage) { _, msg in
+            guard let msg = msg else { return }
+            do {
+                let words = try groupedPlainWordsOf(mnemonic: msg, groups: 6)
+                setWords(words)
+            } catch {
+                Log.error("Error NFC word parsing: \(error)")
+            }
+        }
+
+        .onChange(of: nfcReader.scannedMessageData) { _, data in
+            // received data, probably a SeedQR in NFC
+            guard let data = data else { return }
+            do {
+                let seedQR = try SeedQr.newFromData(data: data)
+                let words = seedQR.groupedPlainWords()
+                setWords(words)
+            } catch {
+                Log.error("Error NFC word parsing from data: \(error)")
+            }
+        }
+        .onDisappear {
+            self.nfcReader.resetReader()
+            self.nfcReader.session = nil
+
+            for task in tasks {
+                task.cancel()
+            }
+        }
+    }
+
+    func setWords(_ words: [[String]]) {
+        let numberOfWords = words.compactMap(\.count).reduce(0, +)
+        switch numberOfWords {
+        case 12: self.numberOfWords = .twelve
+        case 24: self.numberOfWords = .twentyFour
+        default:
+            Log.warn("Invalid number of words: \(numberOfWords)")
+            scanError = IdentifiableString(
+                "Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
+            isPresentingScanner = false
+            return
+        }
+
+        // reset multiqr and nfc reader on succesful scan
+        multiQr = nil
+        nfcReader.resetReader()
+        nfcReader.session = nil
+
+        enteredWords = words
+        isPresentingScanner = false
+        tabIndex = lastIndex
     }
 }
 

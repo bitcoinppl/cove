@@ -27,7 +27,7 @@ pub fn parse_ndef_message(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
 
 pub fn parse_ndef_records(input: &mut Stream<'_>, info: &MessageInfo) -> PResult<Vec<NdefRecord>> {
     let mut records = Vec::new();
-    let payload_length = info.total_payload_length as usize;
+    let payload_length = info.full_message_length as usize;
     let mut total_parsed_bytes = 0;
 
     loop {
@@ -72,9 +72,7 @@ pub fn parse_message_info(input: &mut Stream<'_>) -> PResult<MessageInfo> {
         length_indicator as u16
     };
 
-    Ok(MessageInfo {
-        total_payload_length,
-    })
+    Ok(MessageInfo::new(total_payload_length))
 }
 
 // private
@@ -240,6 +238,19 @@ mod tests {
         owned_stream(bytes)
     });
 
+    static SEED_WORDS_BYTES: LazyLock<Stream<'static>> = LazyLock::new(|| {
+        let file_contents = include_bytes!("../../test/data/seed_words_bytes.txt");
+        let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
+
+        let bytes: Vec<u8> = file_string
+            .split(',')
+            .map(|s| s.trim())
+            .map(|s| s.parse::<u8>().unwrap())
+            .collect();
+
+        owned_stream(bytes)
+    });
+
     fn export_bytes() -> Stream<'static> {
         let mut data = *EXPORT;
         let _payload_length = parse_message_info(&mut data).unwrap();
@@ -276,8 +287,8 @@ mod tests {
 
         let message_info = parse_message_info(&mut data).unwrap();
 
-        assert_eq!(message_info.total_payload_length, 3031);
-        assert_eq!(export.len(), message_info.total_payload_length as usize);
+        assert_eq!(message_info.full_message_length, 3043);
+        assert_eq!(export.len(), message_info.full_message_length as usize);
 
         let header = parse_header(&mut data).unwrap();
         assert!(header.message_begin);
@@ -292,7 +303,7 @@ mod tests {
         // descriptor
         let mut data = *DESCRIPTOR;
         let message_info = parse_message_info(&mut data).unwrap();
-        assert_eq!(message_info.total_payload_length, 161);
+        assert_eq!(message_info.full_message_length, 171);
 
         let header = parse_header(&mut data).unwrap();
         assert!(header.message_begin);
@@ -483,5 +494,41 @@ mod tests {
         });
 
         assert_eq!(chunks_processed, 30);
+    }
+
+    #[test]
+    fn test_message_info_payload_length_accuracy() {
+        // seed
+        let mut data = *SEED_WORDS_BYTES;
+        let info = parse_message_info(&mut data).unwrap();
+        let payload_length = info.full_message_length as usize;
+
+        let export_vec = SEED_WORDS_BYTES.to_vec();
+        let mut data_trunc = stream::new(&export_vec[..payload_length]);
+        let info = parse_message_info(&mut data_trunc).unwrap();
+        let parsed = parse_ndef_records(&mut data_trunc, &info);
+        assert!(parsed.is_ok());
+
+        // export
+        let mut data = *EXPORT;
+        let info = parse_message_info(&mut data).unwrap();
+        let payload_length = info.full_message_length as usize;
+
+        let export_vec = EXPORT.to_vec();
+        let mut data_trunc = stream::new(&export_vec[..payload_length]);
+        let info = parse_message_info(&mut data_trunc).unwrap();
+        let parsed = parse_ndef_records(&mut data_trunc, &info);
+        assert!(parsed.is_ok());
+
+        // descriptor
+        let mut data = *DESCRIPTOR;
+        let info = parse_message_info(&mut data).unwrap();
+        let payload_length = info.full_message_length as usize;
+
+        let export_vec = DESCRIPTOR.to_vec();
+        let mut data_trunc = stream::new(&export_vec[..payload_length]);
+        let info = parse_message_info(&mut data_trunc).unwrap();
+        let parsed = parse_ndef_records(&mut data_trunc, &info);
+        assert!(parsed.is_ok());
     }
 }

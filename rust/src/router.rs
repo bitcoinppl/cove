@@ -34,7 +34,7 @@ pub enum HotWalletRoute {
     #[default]
     Select,
     Create(NumberOfBip39Words),
-    Import(NumberOfBip39Words, bool),
+    Import(NumberOfBip39Words, ImportType),
     VerifyWords(WalletId),
 }
 
@@ -43,6 +43,14 @@ pub enum ColdWalletRoute {
     QrCode,
     File,
     Nfc,
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
+pub enum ImportType {
+    // user has to manually enter the mnemonic
+    Manual,
+    Nfc,
+    Qr,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -131,7 +139,7 @@ mod ffi {
         pub fn hot_wallet_import_from_scan(&self) -> Route {
             Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::Import(
                 NumberOfBip39Words::Twelve,
-                true,
+                ImportType::Manual,
             )))
         }
 
