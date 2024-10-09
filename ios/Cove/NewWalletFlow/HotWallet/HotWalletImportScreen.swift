@@ -42,21 +42,24 @@ struct HotWalletImportScreen: View {
 
     // nfc scanning
     @State private var nfcReader: NFCReader = .init()
+    @State private var tasks: [Task<Void, any Error>] = []
 
     func initOnAppear() {
         Log.info("initOnAppear: \(importType), routes: \(app.router.routes) || \(app.router.default)")
         nfcReader = NFCReader()
 
         switch importType {
-        case .manual: ()
         case .qr: isPresentingScanner = true
+        case .manual: ()
         case .nfc:
-            Task {
-                try? await Task.sleep(for: .milliseconds(50))
+            let task = Task {
+                try await Task.sleep(for: .milliseconds(200))
                 await MainActor.run {
                     nfcReader.scan()
                 }
             }
+
+            tasks.append(task)
         }
 
         importType = .manual
@@ -397,6 +400,10 @@ struct HotWalletImportScreen: View {
         .onDisappear {
             self.nfcReader.resetReader()
             self.nfcReader.session = nil
+
+            for task in tasks {
+                task.cancel()
+            }
         }
     }
 
