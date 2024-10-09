@@ -14,6 +14,7 @@ struct RouteView: View {
         ZStack {
             if model.asyncRuntimeReady {
                 routeToView(model: model, route: route)
+                    .id(model.routeId)
             } else {
                 VStack {
                     ActivityIndicatorView(isVisible: Binding.constant(true), type: .growingArc(.orange, lineWidth: 4))
@@ -26,9 +27,7 @@ struct RouteView: View {
         .onChange(of: model.router.default) { _, newRoute in
             self.route = newRoute
         }
-
     }
-
 }
 
 @MainActor @ViewBuilder

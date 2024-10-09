@@ -12,6 +12,9 @@ import SwiftUI
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
 
+    // changed when route is reset, to clear lifecycle view state
+    var routeId = UUID()
+
     @ObservationIgnored
     weak var walletViewModel: WalletViewModel?
 
@@ -85,6 +88,7 @@ import SwiftUI
         router.routes = routes
     }
 
+    @MainActor
     func resetRoute(to route: Route) {
         rust.resetDefaultRouteTo(route: route)
     }
@@ -111,6 +115,7 @@ import SwiftUI
                     // default changes, means root changes, set routes to []
                     self.router.routes = []
                     self.router.default = route
+                    self.routeId = UUID()
                 }
             }
         }
