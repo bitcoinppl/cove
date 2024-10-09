@@ -48,8 +48,8 @@ struct HotWalletImportScreen: View {
         nfcReader = NFCReader()
 
         switch importType {
-        case .qr: isPresentingScanner = true
         case .manual: ()
+        case .qr: isPresentingScanner = true
         case .nfc:
             let task = Task {
                 try await Task.sleep(for: .milliseconds(200))
