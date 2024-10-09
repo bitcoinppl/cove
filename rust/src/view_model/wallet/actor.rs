@@ -127,9 +127,6 @@ impl WalletActor {
         use WalletViewModelReconcileMessage as Msg;
         debug!("wallet_scan_and_notify");
 
-        // notify the frontend that the wallet is starting to scan
-        self.send(Msg::StartedWalletScan);
-
         // get the initial balance and transactions
         {
             let initial_balance = self
@@ -163,8 +160,8 @@ impl WalletActor {
         debug!("start_wallet_scan");
 
         if let Some(last_scan) = self.last_scan_finished() {
-            if elapsed_secs_since(last_scan) < 10 {
-                info!("skipping wallet scan, last scan was less than 10 seconds ago");
+            if elapsed_secs_since(last_scan) < 60 {
+                info!("skipping wallet scan, last scan was less than 60 seconds ago");
                 return Produces::ok(());
             }
         }

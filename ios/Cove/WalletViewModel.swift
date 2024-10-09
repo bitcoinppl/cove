@@ -57,7 +57,9 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
                     self.loadState = .loading
 
                 case let .availableTransactions(txns):
-                    self.loadState = .scanning(txns)
+                    if self.loadState == .loading {
+                        self.loadState = .scanning(txns)
+                    }
 
                 case let .scanComplete(txns):
                     self.loadState = .loaded(txns)
