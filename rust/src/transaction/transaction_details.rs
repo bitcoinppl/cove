@@ -243,7 +243,7 @@ mod ffi {
 
         #[uniffi::method]
         pub fn transaction_url(&self) -> String {
-            format!("https://mempool.space/tx/{}", self.tx_id.0)
+            format!("https://mempool.guide/tx/{}", self.tx_id.0)
         }
 
         #[uniffi::method]
