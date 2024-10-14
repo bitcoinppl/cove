@@ -61,7 +61,7 @@ struct SidebarView: View {
                     Spacer()
 
                     Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
-                        Label("New Wallet", systemImage: "wallet.pass.fill")
+                        Label("Add Wallet", systemImage: "wallet.pass.fill")
                             .foregroundStyle(.white)
                             .font(.headline)
                             .frame(minWidth: screenWidth * 0.55, minHeight: 45)
@@ -82,22 +82,26 @@ struct SidebarView: View {
 
                     Spacer()
                     HStack(alignment: .center) {
-                        Button(action: { goTo(.settings) }, label: {
-                            HStack {
-                                Image(systemName: "gear")
-                                    .foregroundStyle(Color.white.gradient.opacity(0.5))
+                        Button(
+                            action: { goTo(.settings) },
+                            label: {
+                                HStack {
+                                    Image(systemName: "gear")
+                                        .foregroundStyle(Color.white.gradient.opacity(0.5))
 
-                                Text("Settings")
-                                    .foregroundStyle(Color.white.gradient)
+                                    Text("Settings")
+                                        .foregroundStyle(Color.white.gradient)
+                                }
                             }
-                        })
+                        )
                         .frame(maxWidth: screenWidth * 0.75)
                     }
                 }
                 .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
                 .background(
-                    LinearGradient(gradient:
-                        Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
+                    LinearGradient(
+                        gradient:
+                            Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
                         startPoint: .bottomTrailing, endPoint: .topLeading)
                 )
                 Spacer()
@@ -114,7 +118,9 @@ struct SidebarView: View {
                     let draggedRatio = -gesture.translation.width / screenWidth
 
                     withAnimation(.spring()) {
-                        if draggedRatio > 0.5 || gesture.predictedEndTranslation.width < -dragThreshold {
+                        if draggedRatio > 0.5
+                            || gesture.predictedEndTranslation.width < -dragThreshold
+                        {
                             sidebarOffset = -screenWidth
                             isShowing = false
                         } else {
@@ -135,7 +141,6 @@ struct SidebarView: View {
             }
         }
         .offset(x: sidebarOffset)
-
     }
 
     func goTo(_ route: Route) {
