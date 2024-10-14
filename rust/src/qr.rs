@@ -261,7 +261,7 @@ impl BbqrJoined {
             .parse_mnemonic()
             .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
 
-        Ok(mnemonic.word_iter().map(ToString::to_string).collect())
+        Ok(mnemonic.words().map(ToString::to_string).collect())
     }
 
     pub fn get_grouped_words(&self, chunks: u8) -> Result<Vec<Vec<String>>, Error> {

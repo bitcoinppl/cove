@@ -183,7 +183,7 @@ mod test {
         let random_bytes = rand::thread_rng().gen::<[u8; 16]>();
         let words = Mnemonic::from_entropy(&random_bytes)
             .expect("failed to create mnemonic")
-            .word_iter()
+            .words()
             .collect::<Vec<&'static str>>();
 
         let first_11 = words[..11].join(" ");
@@ -201,7 +201,7 @@ mod test {
         let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
         let words = Mnemonic::from_entropy(&random_bytes)
             .expect("failed to create mnemonic")
-            .word_iter()
+            .words()
             .collect::<Vec<&'static str>>();
 
         assert_eq!(words.len(), 24);

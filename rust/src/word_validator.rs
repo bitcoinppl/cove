@@ -40,7 +40,7 @@ impl WordValidator {
     pub fn is_all_words_valid(&self, entered_words: Vec<Vec<String>>) -> bool {
         let entered_words = entered_words.iter().flat_map(|words| words.iter());
 
-        for (actual_word, entered_word) in self.mnemonic.word_iter().zip(entered_words) {
+        for (actual_word, entered_word) in self.mnemonic.words().zip(entered_words) {
             if !entered_word.trim().eq_ignore_ascii_case(actual_word) {
                 return false;
             }
@@ -56,7 +56,7 @@ impl WordValidator {
 
         let mut invalid_words = Vec::new();
         for (index, (actual_word, entered_word)) in
-            self.mnemonic.word_iter().zip(entered_words).enumerate()
+            self.mnemonic.words().zip(entered_words).enumerate()
         {
             if !entered_word.trim().eq_ignore_ascii_case(actual_word) {
                 invalid_words.push((index + 1).to_string());
