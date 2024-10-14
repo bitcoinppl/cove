@@ -31,6 +31,7 @@ pub mod unblock;
 pub mod util;
 pub mod view_model;
 pub mod wallet;
+pub mod wallet_scanner;
 pub mod word_validator;
 pub mod xpub;
 
