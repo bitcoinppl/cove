@@ -44,8 +44,5 @@ jobs:
           toolchain: stable
           components: clippy
           override: true
-      - uses: clechasseur/rs-clippy-check@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: cd rust && cargo clippy -- -D warnings
