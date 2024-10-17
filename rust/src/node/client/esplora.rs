@@ -14,19 +14,19 @@ use tracing::debug;
 
 use crate::node::Node;
 
-use super::{ClientOptions, Error, ESPLORA_BATCH_SIZE, STOP_GAP};
+use super::{Error, NodeClientOptions, ESPLORA_BATCH_SIZE, STOP_GAP};
 
 #[derive(Debug, Clone)]
 pub struct EsploraClient {
     client: Arc<AsyncClient>,
-    options: ClientOptions,
+    options: NodeClientOptions,
 }
 
 impl EsploraClient {
     pub fn new(client: Arc<AsyncClient>) -> Self {
         Self {
             client,
-            options: ClientOptions {
+            options: NodeClientOptions {
                 batch_size: ESPLORA_BATCH_SIZE,
                 stop_gap: STOP_GAP,
             },
@@ -42,7 +42,10 @@ impl EsploraClient {
         Ok(Self::new(client))
     }
 
-    pub fn new_from_node_and_options(node: &Node, options: ClientOptions) -> Result<Self, Error> {
+    pub fn new_from_node_and_options(
+        node: &Node,
+        options: NodeClientOptions,
+    ) -> Result<Self, Error> {
         let client = esplora_client::Builder::new(&node.url)
             .build_async()
             .map_err(Error::CreateEsploraClientError)?
@@ -51,7 +54,7 @@ impl EsploraClient {
         Ok(Self::new_with_options(client, options))
     }
 
-    pub fn new_with_options(client: Arc<AsyncClient>, options: ClientOptions) -> Self {
+    pub fn new_with_options(client: Arc<AsyncClient>, options: NodeClientOptions) -> Self {
         Self { client, options }
     }
 

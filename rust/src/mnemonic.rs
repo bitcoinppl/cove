@@ -5,7 +5,7 @@ pub mod number_of_bip39_words;
 pub mod parse;
 pub mod word_access;
 
-use crate::{keys::Descriptors, seed_qr::SeedQr};
+use crate::{keys::Descriptors, seed_qr::SeedQr, wallet::WalletAddressType};
 
 use bdk_chain::bitcoin::{bip32::Xpub, Network};
 use bip39::Mnemonic;
@@ -28,6 +28,7 @@ pub trait MnemonicExt {
         self,
         passphrase: Option<String>,
         network: impl Into<crate::network::Network>,
+        wallet_address_type: WalletAddressType,
     ) -> Descriptors;
 
     fn xpub(&self, network: Network) -> Xpub;

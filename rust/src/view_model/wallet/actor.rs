@@ -108,7 +108,7 @@ impl WalletActor {
             Some(node_client) => node_client,
             None => {
                 let node = Database::global().global_config.selected_node();
-                let node_client = NodeClient::new_from_node(&node).await?;
+                let node_client = NodeClient::new(&node).await?;
                 self.node_client = Some(node_client);
 
                 self.node_client.as_ref().expect("just checked")
@@ -174,7 +174,7 @@ impl WalletActor {
         let reconciler = self.reconciler.clone();
 
         // save the node client
-        match NodeClient::new_from_node(&node).await {
+        match NodeClient::new(&node).await {
             Ok(client) => {
                 self.node_client = Some(client);
             }

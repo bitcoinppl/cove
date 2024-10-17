@@ -67,13 +67,13 @@ pub enum Error {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct ClientOptions {
+pub struct NodeClientOptions {
     pub batch_size: usize,
     pub stop_gap: usize,
 }
 
 impl NodeClient {
-    pub async fn new_from_node(node: &Node) -> Result<Self, Error> {
+    pub async fn new(node: &Node) -> Result<Self, Error> {
         match node.api_type {
             ApiType::Esplora => {
                 let client = esplora::EsploraClient::new_from_node(node)?;
@@ -82,6 +82,28 @@ impl NodeClient {
 
             ApiType::Electrum => {
                 let client = electrum::ElectrumClient::new_from_node(node)?;
+                Ok(Self::Electrum(client))
+            }
+
+            ApiType::Rpc => {
+                // TODO: implement rpc check, with auth
+                todo!()
+            }
+        }
+    }
+
+    pub async fn new_with_options(
+        node: &Node,
+        options: NodeClientOptions,
+    ) -> Result<Self, crate::node::client::Error> {
+        match node.api_type {
+            ApiType::Esplora => {
+                let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;
+                Ok(Self::Esplora(client))
+            }
+
+            ApiType::Electrum => {
+                let client = electrum::ElectrumClient::new_from_node_and_options(node, options)?;
                 Ok(Self::Electrum(client))
             }
 

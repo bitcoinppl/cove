@@ -1797,8 +1797,8 @@ dependencies = [
 
 [[package]]
 name = "pubport"
-version = "0.1.0"
-source = "git+https://github.com/bitcoinppl/pubport.git#382cd3dc86d0ebcffb5c5f0cf9f3565773892b92"
+version = "0.2.0"
+source = "git+https://github.com/bitcoinppl/pubport.git#8e858154ceeb46da45b834d610402ba940fa9112"
 dependencies = [
  "bitcoin",
  "derive_more",
@@ -1808,6 +1808,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "uniffi",
 ]
 
 [[package]]
@@ -2050,9 +2051,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e696e35370c65c9c541198af4543ccd580cf17fc25d8e05c5a242b202488c55"
+checksum = "16f1201b3c9a7ee8039bcadc17b7e605e2945b27eee7631788c1bd2b0643674b"
 
 [[package]]
 name = "rustls-webpki"
@@ -2077,9 +2078,9 @@ dependencies = [
 
 [[package]]
 name = "rustversion"
-version = "1.0.17"
+version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "955d28af4278de8121b7ebeb796b6a45735dc01436d898801014aced2773a3d6"
+checksum = "0e819f2bc632f285be6d7cd36e25940d45b2391dd6d9b939e79de557f7014248"
 
 [[package]]
 name = "ryu"
@@ -2138,7 +2139,7 @@ version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
 dependencies = [
- "bitcoin_hashes 0.14.0",
+ "bitcoin_hashes 0.13.0",
  "rand",
  "secp256k1-sys",
  "serde",

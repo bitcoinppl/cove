@@ -26,7 +26,7 @@ use bdk_wallet::{
     KeychainKind,
 };
 use bip39::Mnemonic;
-use metadata::{WalletId, WalletMetadata};
+use metadata::{DiscoveryState, WalletId, WalletMetadata};
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
 
@@ -73,6 +73,13 @@ pub struct Wallet {
     pub metadata: WalletMetadata,
 
     db: Store<bdk_wallet::ChangeSet>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Copy, uniffi::Enum, strum::EnumIter)]
+pub enum WalletAddressType {
+    NativeSegwit,
+    WrappedSegwit,
+    Legacy,
 }
 
 impl Wallet {
@@ -172,6 +179,8 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = WalletId::new();
+        let mut metadata = WalletMetadata::new_with_id(id.clone(), "");
+
         let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
             id.to_string().as_bytes(),
             data_path(&id),
@@ -185,10 +194,13 @@ impl Wallet {
         let descriptors = match format {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
-                json.bip84
-                    .ok_or(WalletError::ParseXpubError(xpub::XpubError::MissingXpub(
-                        "No BIP84 xpub found".to_string(),
-                    )))?
+                let descriptors = json.bip84.clone().ok_or(WalletError::ParseXpubError(
+                    xpub::XpubError::MissingXpub("No BIP84 xpub found".to_string()),
+                ))?;
+
+                metadata.internal.discovery_state = DiscoveryState::StartedJson(json.into());
+
+                descriptors
             }
             Format::Wasabi(descriptors) => descriptors,
             Format::Electrum(descriptors) => descriptors,
@@ -204,12 +216,11 @@ impl Wallet {
             .map_err(Into::into)
             .map_err(WalletError::ParseXpubError)?;
 
-        let wallet_name = match fingerprint {
+        metadata.name = match fingerprint {
             Some(fingerprint) => format!("HWW Import ({})", fingerprint.to_ascii_uppercase()),
             None => "HWW Import".to_string(),
         };
 
-        let metadata = WalletMetadata::new_with_id(id.clone(), wallet_name);
         let descriptors: Descriptors = descriptors.into();
 
         let wallet = descriptors
@@ -247,7 +258,8 @@ impl Wallet {
         )
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
-        let descriptors = mnemonic.into_descriptors(passphrase, network);
+        let descriptors =
+            mnemonic.into_descriptors(passphrase, network, WalletAddressType::NativeSegwit);
         let wallet = descriptors
             .to_create_params()
             .network(network.into())

@@ -1,4 +1,4 @@
-use std::{hash::Hash, time::Duration};
+use std::{hash::Hash, sync::Arc, time::Duration};
 
 use crate::transaction::Unit;
 use macros::{impl_default_for, new_type};
@@ -53,6 +53,7 @@ pub struct InternalOnlyMetadata {
     pub address_index: Option<AddressIndex>,
     pub last_scan_finished: Option<Duration>,
     pub last_height_fetched: Option<BlockSizeLast>,
+    pub discovery_state: DiscoveryState,
 }
 
 #[derive(
@@ -67,6 +68,15 @@ pub struct BlockSizeLast {
 pub struct AddressIndex {
     pub last_seen_index: u8,
     pub address_list_hash: u64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum DiscoveryState {
+    #[default]
+    NotStarted,
+    StartedJson(Arc<pubport::formats::Json>),
+    StartedMnemonic,
+    Completed,
 }
 
 #[derive(

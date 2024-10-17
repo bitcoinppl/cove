@@ -23,6 +23,7 @@ use crate::{
         metadata::{WalletColor, WalletId, WalletMetadata},
         AddressInfo, Wallet, WalletError,
     },
+    wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
 };
 
@@ -38,6 +39,8 @@ pub enum WalletViewModelReconcileMessage {
 
     WalletError(WalletViewModelError),
     UnknownError(String),
+
+    WalletScannerResponse(ScannerResponse),
 }
 
 #[uniffi::export(callback_interface)]
@@ -53,6 +56,7 @@ pub struct RustWalletViewModel {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+    pub scanner: Option<WalletScanner>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -134,6 +138,7 @@ impl RustWalletViewModel {
         let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone()).ok();
 
         Ok(Self {
             id,
@@ -141,6 +146,7 @@ impl RustWalletViewModel {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
+            scanner,
         })
     }
 
@@ -152,6 +158,7 @@ impl RustWalletViewModel {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
+        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone()).ok();
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Ok(Self {
@@ -160,6 +167,7 @@ impl RustWalletViewModel {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
+            scanner,
         })
     }
 
@@ -436,6 +444,7 @@ impl RustWalletViewModel {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
+            scanner: None,
         }
     }
 }
