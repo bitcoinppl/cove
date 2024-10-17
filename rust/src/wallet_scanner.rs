@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use act_zero::*;
 use bdk_chain::bitcoin::Network;
@@ -24,8 +24,6 @@ use crate::{
         WalletAddressType, WalletError,
     },
 };
-
-const DEFAULT_SCAN_TIMEOUT: u8 = 30;
 
 #[derive(
     Debug, Default, derive_more::From, derive_more::Into, derive_more::Deref, derive_more::DerefMut,
@@ -76,7 +74,6 @@ pub enum WalletScannerError {
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum ScannerResponse {
-    TimeoutExpired(Vec<WalletAddressType>),
     FoundAddresses(Vec<WalletAddressType>),
     NoneFound,
 }
@@ -94,9 +91,6 @@ pub struct WalletScanner {
     pub started_at: Instant,
     pub node_client_builder: NodeClientBuilder,
     pub responder: Sender<WalletViewModelReconcileMessage>,
-
-    // in seconds
-    scan_timeout: u8,
 }
 
 #[async_trait::async_trait]
@@ -104,18 +98,6 @@ impl Actor for WalletScanner {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
         self.started_at = Instant::now();
-
-        let timeout = self.scan_timeout.into();
-
-        // run timeout_expired function after timeout
-        let addr_clone = self.addr.clone();
-        addr.send_fut(async move {
-            tokio::time::sleep(Duration::from_secs(timeout)).await;
-
-            if let Err(error) = call!(addr_clone.timeout_expired()).await {
-                error!("timeout expired error: {error}");
-            }
-        });
 
         // start workers
         self.start_workers().await?;
@@ -199,7 +181,6 @@ impl WalletScanner {
             started_at: Instant::now(),
             node_client_builder,
             responder: reconciler,
-            scan_timeout: DEFAULT_SCAN_TIMEOUT,
         }
     }
 
@@ -246,37 +227,6 @@ impl WalletScanner {
 
             return Produces::ok(());
         }
-
-        // some workers are still running, check if timeout has expired
-        if self.started_at.elapsed().as_secs() > self.scan_timeout as u64 {
-            self.responder.send(ScannerResponse::NoneFound.into())?;
-        }
-
-        Produces::ok(())
-    }
-
-    // timeout expired, check and send response
-    pub async fn timeout_expired(&mut self) -> ActorResult<()> {
-        debug!("timeout expired");
-
-        let found_addresses = self
-            .workers
-            .iter()
-            .filter_map(|worker| {
-                worker
-                    .as_ref()
-                    .filter(|worker| worker.state == WorkerState::FoundAddress)
-                    .map(|worker| worker.wallet_type)
-            })
-            .collect::<Vec<WalletAddressType>>();
-
-        if found_addresses.is_empty() {
-            // self.responder.send(ScannerResponse::NoneFound).await?;
-            return Produces::ok(());
-        }
-
-        self.responder
-            .send(ScannerResponse::TimeoutExpired(found_addresses).into())?;
 
         Produces::ok(())
     }

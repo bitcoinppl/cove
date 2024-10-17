@@ -75,7 +75,17 @@ pub struct Wallet {
     db: Store<bdk_wallet::ChangeSet>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Copy, uniffi::Enum, strum::EnumIter)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Copy,
+    serde::Serialize,
+    serde::Deserialize,
+    uniffi::Enum,
+    strum::EnumIter,
+)]
 pub enum WalletAddressType {
     NativeSegwit,
     WrappedSegwit,

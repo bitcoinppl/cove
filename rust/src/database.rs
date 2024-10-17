@@ -5,12 +5,13 @@ pub mod error;
 pub mod global_config;
 pub mod global_flag;
 pub mod wallet;
+pub mod wallet_data;
 
 use std::{path::PathBuf, sync::Arc};
 
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
-use wallet::WalletTable;
+use wallet::WalletsTable;
 
 use once_cell::sync::OnceCell;
 use tracing::{error, info};
@@ -26,7 +27,7 @@ pub struct Database {
     pub db: Arc<redb::Database>,
     pub global_flag: GlobalFlagTable,
     pub global_config: GlobalConfigTable,
-    pub wallets: WalletTable,
+    pub wallets: WalletsTable,
 }
 
 impl Default for Database {
@@ -42,7 +43,7 @@ impl Database {
         Self::global().clone()
     }
 
-    pub fn wallets(&self) -> WalletTable {
+    pub fn wallets(&self) -> WalletsTable {
         self.wallets.clone()
     }
 
@@ -57,10 +58,9 @@ impl Database {
             let db = get_or_create_database();
 
             let write_txn = db.begin_write().expect("failed to begin write transaction");
-
             let db = Arc::new(db);
 
-            let wallets = WalletTable::new(db.clone(), &write_txn);
+            let wallets = WalletsTable::new(db.clone(), &write_txn);
             let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
             let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
 

@@ -92,10 +92,7 @@ impl NodeClient {
         }
     }
 
-    pub async fn new_with_options(
-        node: &Node,
-        options: NodeClientOptions,
-    ) -> Result<Self, crate::node::client::Error> {
+    pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
         match node.api_type {
             ApiType::Esplora => {
                 let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;
