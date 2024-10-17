@@ -23,10 +23,10 @@ impl PendingWallet {
     }
 
     pub fn words(&self) -> Vec<String> {
-        self.words_iter().map(ToString::to_string).collect()
+        self.mnemonic.words().map(Into::into).collect()
     }
 
     pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.mnemonic.word_iter()
+        self.mnemonic.words()
     }
 }

@@ -8,7 +8,7 @@ use bdk_wallet::keys::{
 };
 use bdk_wallet::keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap};
 use bdk_wallet::miniscript::descriptor::{DescriptorXKey, Wildcard};
-use bdk_wallet::template::{Bip84, Bip84Public, DescriptorTemplate as _};
+use bdk_wallet::template::{Bip44, Bip49, Bip84, Bip84Public, DescriptorTemplate as _};
 use bdk_wallet::{CreateParams, KeychainKind};
 
 use crate::network::Network;
@@ -105,6 +105,62 @@ impl Descriptor {
             }
 
             BdkDescriptorPublicKey::Single(_) => {
+                unreachable!()
+            }
+        }
+    }
+
+    /// BIP49 for P2WPKH-nested-in-P2SH (Wrapped Segwit)
+    pub(crate) fn new_bip49(
+        secret_key: &DescriptorSecretKey,
+        keychain_kind: KeychainKind,
+        network: Network,
+    ) -> Self {
+        let derivable_key = &secret_key.0;
+
+        match derivable_key {
+            BdkDescriptorSecretKey::Single(_) => {
+                unreachable!()
+            }
+            BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
+                let derivable_key = descriptor_x_key.xkey;
+                let (extended_descriptor, key_map, _) = Bip49(derivable_key, keychain_kind)
+                    .build(network.into())
+                    .unwrap();
+                Self {
+                    extended_descriptor,
+                    key_map,
+                }
+            }
+            BdkDescriptorSecretKey::MultiXPrv(_) => {
+                unreachable!()
+            }
+        }
+    }
+
+    /// BIP44 for P2PKH (Legacy)
+    pub(crate) fn new_bip44(
+        secret_key: &DescriptorSecretKey,
+        keychain_kind: KeychainKind,
+        network: Network,
+    ) -> Self {
+        let derivable_key = &secret_key.0;
+
+        match derivable_key {
+            BdkDescriptorSecretKey::Single(_) => {
+                unreachable!()
+            }
+            BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
+                let derivable_key = descriptor_x_key.xkey;
+                let (extended_descriptor, key_map, _) = Bip44(derivable_key, keychain_kind)
+                    .build(network.into())
+                    .unwrap();
+                Self {
+                    extended_descriptor,
+                    key_map,
+                }
+            }
+            BdkDescriptorSecretKey::MultiXPrv(_) => {
                 unreachable!()
             }
         }

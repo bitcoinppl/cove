@@ -86,7 +86,7 @@ impl Node {
     }
 
     pub async fn check_url(&self) -> Result<(), Error> {
-        let client = NodeClient::new_from_node(self).await?;
+        let client = NodeClient::new(self).await?;
         client.check_url().await?;
 
         Ok(())
