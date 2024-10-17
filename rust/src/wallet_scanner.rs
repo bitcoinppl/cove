@@ -363,7 +363,7 @@ impl WalletScanWorker {
 
             let address = self
                 .wallet
-                .peek_address(KeychainKind::External, current_address as u32);
+                .peek_address(KeychainKind::External, current_address);
 
             // found address
             if client.check_address_for_txn(address.address).await? {
