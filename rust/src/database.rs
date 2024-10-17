@@ -106,4 +106,5 @@ fn database_location() -> PathBuf {
 #[cfg(test)]
 pub fn delete_database() {
     let _ = std::fs::remove_file(database_location());
+    let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("wallet_data"));
 }
