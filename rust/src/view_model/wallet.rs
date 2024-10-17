@@ -15,12 +15,12 @@ use crate::{
     format::NumberFormatter as _,
     keychain::{Keychain, KeychainError},
     router::Route,
-    task,
+    task::{self, spawn_actor},
     transaction::{Amount, SentAndReceived, Transaction, TransactionDetails, TxId, Unit},
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{WalletColor, WalletId, WalletMetadata},
+        metadata::{DiscoveryState, WalletColor, WalletId, WalletMetadata},
         AddressInfo, Wallet, WalletError,
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
@@ -56,7 +56,7 @@ pub struct RustWalletViewModel {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
-    pub scanner: Option<WalletScanner>,
+    pub scanner: Option<Addr<WalletScanner>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -138,7 +138,18 @@ impl RustWalletViewModel {
         let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
-        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone()).ok();
+
+        let scanner = match metadata.internal.discovery_state {
+            DiscoveryState::NotStarted
+            | DiscoveryState::StartedJson(_)
+            | DiscoveryState::StartedMnemonic => {
+                WalletScanner::try_new(metadata.clone(), sender.clone())
+                    .tap_err(|error| error!("unable to start wallet scanner: {error:?}"))
+                    .ok()
+                    .map(spawn_actor)
+            }
+            DiscoveryState::Completed => None,
+        };
 
         Ok(Self {
             id,
@@ -158,7 +169,10 @@ impl RustWalletViewModel {
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone()).ok();
+        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone())
+            .ok()
+            .map(spawn_actor);
+
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Ok(Self {

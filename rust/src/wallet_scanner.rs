@@ -123,6 +123,8 @@ impl WalletScanner {
         metadata: WalletMetadata,
         reconciler: Sender<WalletViewModelReconcileMessage>,
     ) -> Result<Self, WalletScannerError> {
+        debug!("starting wallet scanner for {}", metadata.id);
+
         let db = Database::global();
         let network = db.global_config().selected_network().into();
 
@@ -325,6 +327,7 @@ impl Actor for WalletScanWorker {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
         self.started_at = Instant::now();
+
         Produces::ok(())
     }
 
@@ -341,6 +344,7 @@ impl WalletScanWorker {
         wallet: BdkWallet,
         client_builder: NodeClientBuilder,
     ) -> Self {
+        debug!("creating wallet scanner for {id}, type: {wallet_type}");
         let db = WalletDataDb::new(id.clone());
 
         let scan_info = db
