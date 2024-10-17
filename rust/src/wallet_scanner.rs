@@ -237,6 +237,9 @@ impl WalletScanner {
             self.responder
                 .send(ScannerResponse::FoundAddresses(found_addresses).into())?;
 
+            // update wallet metadata
+            self.mark_metadata_scan_complete()?;
+
             return Produces::ok(());
         }
 
@@ -277,8 +280,26 @@ impl WalletScanner {
                     .send(ScannerResponse::FoundAddresses(found_addresses).into())?;
             }
 
+            // update wallet metadata
+            self.mark_metadata_scan_complete()?;
+
             return Produces::ok(());
         }
+
+        Produces::ok(())
+    }
+
+    fn mark_metadata_scan_complete(&mut self) -> ActorResult<()> {
+        let network = Database::global().global_config.selected_network();
+        let db = Database::global().wallets();
+
+        let Ok(Some(mut metadata)) = db.get(&self.id, network) else {
+            error!("wallet metadata not found");
+            return Produces::ok(());
+        };
+
+        metadata.internal.discovery_state = DiscoveryState::Completed;
+        db.save_wallet(metadata)?;
 
         Produces::ok(())
     }
