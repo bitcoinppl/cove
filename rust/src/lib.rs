@@ -36,3 +36,4 @@ pub mod word_validator;
 pub mod xpub;
 
 uniffi::setup_scaffolding!();
+pubport::uniffi_reexport_scaffolding!();

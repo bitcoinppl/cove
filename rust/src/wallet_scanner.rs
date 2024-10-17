@@ -129,8 +129,8 @@ impl WalletScanner {
         let network = db.global_config().selected_network().into();
 
         let id = metadata.id.clone();
-        let wallets = match metadata.internal.discovery_state {
-            DiscoveryState::StartedJson(json) => Wallets::try_from_json(json.as_ref(), network)?,
+        let wallets = match metadata.internal.discovery_state.as_ref() {
+            DiscoveryState::StartedJson(json) => Wallets::try_from_json(json, network)?,
             DiscoveryState::StartedMnemonic => {
                 let mnemonic = Keychain::global()
                     .get_wallet_key(&id)
@@ -300,7 +300,7 @@ impl WalletScanner {
             return Produces::ok(());
         };
 
-        metadata.internal.discovery_state = DiscoveryState::Completed;
+        metadata.internal.discovery_state = DiscoveryState::Completed.into();
         db.save_wallet(metadata)?;
 
         Produces::ok(())

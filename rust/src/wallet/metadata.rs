@@ -53,7 +53,7 @@ pub struct InternalOnlyMetadata {
     pub address_index: Option<AddressIndex>,
     pub last_scan_finished: Option<Duration>,
     pub last_height_fetched: Option<BlockSizeLast>,
-    pub discovery_state: DiscoveryState,
+    pub discovery_state: Arc<DiscoveryState>,
 }
 
 #[derive(
@@ -70,11 +70,11 @@ pub struct AddressIndex {
     pub address_list_hash: u64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Object)]
 pub enum DiscoveryState {
     #[default]
     NotStarted,
-    StartedJson(Arc<pubport::formats::Json>),
+    StartedJson(pubport::formats::Json),
     StartedMnemonic,
     Completed,
 }

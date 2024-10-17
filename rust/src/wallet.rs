@@ -209,7 +209,7 @@ impl Wallet {
                     xpub::XpubError::MissingXpub("No BIP84 xpub found".to_string()),
                 ))?;
 
-                metadata.internal.discovery_state = DiscoveryState::StartedJson(json.into());
+                metadata.internal.discovery_state = DiscoveryState::StartedJson(json).into();
 
                 descriptors
             }

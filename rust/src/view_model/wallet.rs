@@ -139,7 +139,7 @@ impl RustWalletViewModel {
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
-        let scanner = match metadata.internal.discovery_state {
+        let scanner = match metadata.internal.discovery_state.as_ref() {
             DiscoveryState::NotStarted
             | DiscoveryState::StartedJson(_)
             | DiscoveryState::StartedMnemonic => {
