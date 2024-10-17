@@ -85,6 +85,7 @@ pub struct Wallet {
     serde::Deserialize,
     uniffi::Enum,
     strum::EnumIter,
+    derive_more::Display,
 )]
 pub enum WalletAddressType {
     NativeSegwit,

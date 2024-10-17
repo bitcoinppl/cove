@@ -9,8 +9,14 @@ use pubport::formats::Json;
 use strum::IntoEnumIterator as _;
 use tracing::{debug, error, info};
 
+/// Default number of addresses to scan
+const DEFAULT_SCAN_LIMIT: u32 = 50;
+
 use crate::{
-    database::Database,
+    database::{
+        wallet_data::{ScanState, ScanningInfo, WalletDataDb},
+        Database,
+    },
     keychain::Keychain,
     mnemonic::MnemonicExt,
     node::{
@@ -33,22 +39,22 @@ pub struct Wallets([Option<(WalletAddressType, BdkWallet)>; 3]);
 #[derive(
     Debug,
     Clone,
-    Eq,
-    PartialEq,
     Default,
     derive_more::From,
     derive_more::Into,
     derive_more::Deref,
     derive_more::DerefMut,
 )]
-pub struct Workers([Option<Worker>; 3]);
+pub struct Workers([Option<WorkerHandle>; 3]);
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Worker {
+#[derive(Debug, Clone)]
+pub struct WorkerHandle {
+    pub id: WalletId,
     pub addr: Addr<WalletScanWorker>,
     pub wallet_type: WalletAddressType,
     pub started_at: Instant,
     pub state: WorkerState,
+    pub db: WalletDataDb,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Copy, Default)]
@@ -86,6 +92,7 @@ pub struct NodeClientBuilder {
 
 #[derive(Debug, Clone)]
 pub struct WalletScanner {
+    pub id: WalletId,
     pub addr: WeakAddr<Self>,
     pub workers: Workers,
     pub started_at: Instant,
@@ -147,10 +154,11 @@ impl WalletScanner {
         };
 
         let client_builder = NodeClientBuilder { node, options };
-        Ok(Self::new(client_builder, wallets, reconciler))
+        Ok(Self::new(metadata.id, client_builder, wallets, reconciler))
     }
 
     pub fn new(
+        id: WalletId,
         node_client_builder: NodeClientBuilder,
         wallets: Wallets,
         reconciler: Sender<WalletViewModelReconcileMessage>,
@@ -160,14 +168,17 @@ impl WalletScanner {
 
         // create workers
         for (wallet_type, wallet) in wallets.0.into_iter().flatten() {
-            let worker = WalletScanWorker::new(wallet_type, wallet, node_client_builder.clone());
+            let worker =
+                WalletScanWorker::new(id.clone(), wallet_type, wallet, node_client_builder.clone());
 
             let addr = spawn_actor(worker);
-            workers[wallet_type.index()].replace(Worker {
+            workers[wallet_type.index()].replace(WorkerHandle {
+                id: id.clone(),
                 addr,
                 wallet_type,
                 started_at: Instant::now(),
                 state: WorkerState::Created,
+                db: WalletDataDb::new(id.clone()),
             });
 
             started_workers += 1;
@@ -176,6 +187,7 @@ impl WalletScanner {
         info!("started {started_workers} workers");
 
         Self {
+            id,
             addr: Default::default(),
             workers,
             started_at: Instant::now(),
@@ -196,7 +208,7 @@ impl WalletScanner {
     }
 
     pub async fn mark_found_txn(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
-        debug!("marked worker {wallet_type:?} as found");
+        info!("marked worker {wallet_type:?} as found");
 
         self.workers[wallet_type.index()]
             .as_mut()
@@ -230,6 +242,46 @@ impl WalletScanner {
 
         Produces::ok(())
     }
+
+    pub async fn mark_limit_reached(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
+        info!("marked worker {wallet_type:?} limit reached");
+
+        self.workers[wallet_type.index()]
+            .as_mut()
+            .expect("worker started")
+            .state = WorkerState::NoneFound;
+
+        let any_still_running = self.workers.iter().any(|worker| {
+            worker
+                .as_ref()
+                .map_or(false, |worker| worker.state == WorkerState::Started)
+        });
+
+        // all workers are done, send the response
+        if !any_still_running {
+            let found_addresses = self
+                .workers
+                .iter()
+                .filter_map(|worker| {
+                    worker
+                        .as_ref()
+                        .filter(|worker| worker.state == WorkerState::FoundAddress)
+                        .map(|worker| worker.wallet_type)
+                })
+                .collect::<Vec<WalletAddressType>>();
+
+            if found_addresses.is_empty() {
+                self.responder.send(ScannerResponse::NoneFound.into())?;
+            } else {
+                self.responder
+                    .send(ScannerResponse::FoundAddresses(found_addresses).into())?;
+            }
+
+            return Produces::ok(());
+        }
+
+        Produces::ok(())
+    }
 }
 
 // WORKER
@@ -242,6 +294,9 @@ pub struct WalletScanWorker {
     wallet_type: WalletAddressType,
     wallet: BdkWallet,
     started_at: Instant,
+    scan_info: ScanningInfo,
+    db: WalletDataDb,
+    scan_limit: u32,
 }
 
 #[async_trait::async_trait]
@@ -260,10 +315,23 @@ impl Actor for WalletScanWorker {
 
 impl WalletScanWorker {
     pub fn new(
+        id: WalletId,
         wallet_type: WalletAddressType,
         wallet: BdkWallet,
         client_builder: NodeClientBuilder,
     ) -> Self {
+        let db = WalletDataDb::new(id.clone());
+
+        let scan_info = db
+            .get_scan_state(wallet_type)
+            .ok()
+            .flatten()
+            .map(|scan_state| match scan_state {
+                ScanState::Scanning(info) => info,
+                _ => ScanningInfo::new(wallet_type),
+            })
+            .unwrap_or_else(|| ScanningInfo::new(wallet_type));
+
         Self {
             parent: Default::default(),
             addr: Default::default(),
@@ -271,32 +339,59 @@ impl WalletScanWorker {
             client_builder,
             wallet_type,
             started_at: Instant::now(),
+            scan_info,
+            db,
+            scan_limit: DEFAULT_SCAN_LIMIT,
         }
     }
 
-    pub async fn start(&mut self, parent: WeakAddr<WalletScanner>) -> ActorResult<()> {
+    pub async fn start(&mut self, parent: WeakAddr<WalletScanner>) {
         self.parent = parent;
-        self.start_scan().await
+
+        let addr = self.addr.clone();
+
+        // start the scan and return immediately
+        send!(addr.start_scan());
     }
 
     async fn start_scan(&mut self) -> ActorResult<()> {
-        let mut addresses_checked = 0;
+        let mut current_address = self.scan_info.count;
         let client = self.client_builder.build().await?;
 
         loop {
-            let address = self.wallet.reveal_next_address(KeychainKind::External);
+            let wallet_type = self.wallet_type;
+
+            let address = self
+                .wallet
+                .peek_address(KeychainKind::External, current_address as u32);
 
             // found address
             if client.check_address_for_txn(address.address).await? {
-                call!(self.parent.mark_found_txn(self.wallet_type));
+                call!(self.parent.mark_found_txn(wallet_type));
+
+                // save the scan state
+                self.db.set_scan_state(wallet_type, ScanState::Completed)?;
+
                 return Produces::ok(());
             }
 
-            addresses_checked += 1;
-            debug!(
-                "checked {addresses_checked} addresses for {:?}",
-                self.wallet_type
-            );
+            current_address += 1;
+            debug!("checked {current_address} addresses for {wallet_type}");
+
+            // every 5 addresses, save the scan state
+            if current_address % 5 == 0 {
+                let scan_state = ScanningInfo {
+                    address_type: wallet_type,
+                    count: current_address,
+                };
+
+                self.db.set_scan_state(wallet_type, scan_state)?;
+            }
+
+            if current_address >= self.scan_limit {
+                self.db.set_scan_state(wallet_type, ScanState::Completed)?;
+                call!(self.parent.mark_limit_reached(wallet_type));
+            }
         }
     }
 }

@@ -20,12 +20,25 @@ const TABLE: TableDefinition<&'static str, Json<WalletData>> =
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WalletData {
     /// number of addresses scanned
-    ScanState(WalletAddressType, u8),
+    ScanState(ScanState),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, uniffi::Enum)]
 pub enum WalletDataKey {
     ScanState(WalletAddressType),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, uniffi::Enum)]
+pub enum ScanState {
+    NotStarted,
+    Scanning(ScanningInfo),
+    Completed,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, uniffi::Record)]
+pub struct ScanningInfo {
+    pub address_type: WalletAddressType,
+    pub count: u32,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -44,6 +57,9 @@ pub enum WalletDataError {
 
     /// Unable to read: {0}
     ReadError(String),
+
+    /// Unable to save: {0}
+    SaveError(String),
 }
 
 pub type Error = WalletDataError;
@@ -61,7 +77,30 @@ impl WalletDataDb {
         Self { id, db }
     }
 
-    pub fn get(&self, key: WalletDataKey) -> Result<Option<WalletData>> {
+    pub fn get_scan_state(&self, address_type: WalletAddressType) -> Result<Option<ScanState>> {
+        let key = WalletDataKey::ScanState(address_type);
+        let value = self.get(key)?;
+
+        let Some(WalletData::ScanState(scan_state)) = value else {
+            return Ok(None);
+        };
+
+        Ok(Some(scan_state))
+    }
+
+    pub fn set_scan_state(
+        &self,
+        type_: WalletAddressType,
+        scan_state: impl Into<ScanState>,
+    ) -> Result<()> {
+        let scan_state = scan_state.into();
+        let key = WalletDataKey::ScanState(type_);
+        let value = WalletData::ScanState(scan_state);
+
+        self.set(key, value)
+    }
+
+    fn get(&self, key: WalletDataKey) -> Result<Option<WalletData>> {
         let table = self.read_table()?;
 
         let value = table
@@ -70,6 +109,39 @@ impl WalletDataDb {
             .map(|value| value.value());
 
         Ok(value)
+    }
+
+    fn set(&self, key: WalletDataKey, value: WalletData) -> Result<()> {
+        let write_txn = self
+            .db
+            .begin_write()
+            .map_err(|error| Error::DatabaseAccessError {
+                id: self.id.clone(),
+                error: error.to_string(),
+            })?;
+
+        {
+            let mut table =
+                write_txn
+                    .open_table(TABLE)
+                    .map_err(|error| Error::TableAccessError {
+                        id: self.id.clone(),
+                        error: error.to_string(),
+                    })?;
+
+            table
+                .insert(key.as_str(), value)
+                .map_err(|error| Error::SaveError(error.to_string()))?;
+        }
+
+        write_txn
+            .commit()
+            .map_err(|error| Error::DatabaseAccessError {
+                id: self.id.clone(),
+                error: error.to_string(),
+            })?;
+
+        Ok(())
     }
 
     fn read_table<'a>(&self) -> Result<ReadOnlyTable<&'a str, Json<WalletData>>, Error> {
@@ -128,5 +200,20 @@ impl WalletDataKey {
             }
             WalletDataKey::ScanState(WalletAddressType::Legacy) => "scan_state_legacy",
         }
+    }
+}
+
+impl ScanningInfo {
+    pub fn new(address_type: WalletAddressType) -> Self {
+        Self {
+            address_type,
+            count: 0,
+        }
+    }
+}
+
+impl From<ScanningInfo> for ScanState {
+    fn from(info: ScanningInfo) -> Self {
+        Self::Scanning(info)
     }
 }
