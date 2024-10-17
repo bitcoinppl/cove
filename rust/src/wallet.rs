@@ -81,11 +81,11 @@ pub struct Wallet {
     Eq,
     PartialEq,
     Copy,
+    derive_more::Display,
     serde::Serialize,
     serde::Deserialize,
     uniffi::Enum,
     strum::EnumIter,
-    derive_more::Display,
 )]
 pub enum WalletAddressType {
     NativeSegwit,
@@ -424,6 +424,9 @@ impl DerefMut for Wallet {
 pub fn delete_data_path(wallet_id: &WalletId) -> Result<(), std::io::Error> {
     let path = data_path(wallet_id);
     std::fs::remove_file(path)?;
+
+    crate::database::wallet_data::delete_database(wallet_id)?;
+
     Ok(())
 }
 

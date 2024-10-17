@@ -388,6 +388,7 @@ impl WalletScanWorker {
                 self.db.set_scan_state(wallet_type, scan_state)?;
             }
 
+            // scanning is done, no adddress found
             if current_address >= self.scan_limit {
                 self.db.set_scan_state(wallet_type, ScanState::Completed)?;
                 call!(self.parent.mark_limit_reached(wallet_type));

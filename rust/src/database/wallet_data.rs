@@ -185,10 +185,8 @@ pub fn get_or_create_database(id: &WalletId) -> redb::Database {
     redb::Database::create(&database_location).expect("failed to create database")
 }
 
-pub fn delete_database(id: &WalletId) {
-    if let Err(error) = std::fs::remove_file(database_location(id)) {
-        error!("Unable to delete wallet data: {error:?}")
-    }
+pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
+    std::fs::remove_file(database_location(id))
 }
 
 impl WalletDataKey {
