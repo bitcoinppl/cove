@@ -24,7 +24,7 @@ clean:
     rm -rf rust/target
 
 fmt:
-    cd rust && cargo fmt
+    cd rust && cargo fmt --all
 
 clippy:
     cd rust && cargo clippy
@@ -35,6 +35,13 @@ update pkg="":
 xcode-clean:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     cd ios && xcodebuild clean
+
+ci: 
+    just fmt
+    just clippy
+    just test
+    cd rust && cargo clippy --all-targets --all-features -- -D warnings
+    cd rust && cargo fmt --check
 
 xcode-reset:
     killAll Xcode || true
@@ -77,8 +84,3 @@ btest test="":
 
 watch-test test="":
     watchexec --exts rs just test {{test}}
-
-ci:
-    cd rust && cargo fmt --check
-    cd rust && cargo clippy --all-targets --all-features -- -D warnings
-
