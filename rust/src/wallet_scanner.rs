@@ -34,7 +34,7 @@ use crate::{
 #[derive(
     Debug, Default, derive_more::From, derive_more::Into, derive_more::Deref, derive_more::DerefMut,
 )]
-pub struct Wallets([Option<(WalletAddressType, BdkWallet)>; 3]);
+pub struct Wallets([Option<(WalletAddressType, BdkWallet)>; 2]);
 
 #[derive(
     Debug,
@@ -45,7 +45,7 @@ pub struct Wallets([Option<(WalletAddressType, BdkWallet)>; 3]);
     derive_more::Deref,
     derive_more::DerefMut,
 )]
-pub struct Workers([Option<WorkerHandle>; 3]);
+pub struct Workers([Option<WorkerHandle>; 2]);
 
 #[derive(Debug, Clone)]
 pub struct WorkerHandle {
@@ -431,7 +431,7 @@ impl WalletScanWorker {
 impl WalletAddressType {
     pub fn index(&self) -> usize {
         match self {
-            WalletAddressType::NativeSegwit => 0_usize,
+            WalletAddressType::NativeSegwit => panic!("Not scanning the default one NativeSegwit"),
             WalletAddressType::WrappedSegwit => 1,
             WalletAddressType::Legacy => 2,
         }
@@ -443,7 +443,6 @@ impl Wallets {
         let mut wallets = Self::default();
 
         for (json, type_) in [
-            (&json.bip84, WalletAddressType::NativeSegwit),
             (&json.bip49, WalletAddressType::WrappedSegwit),
             (&json.bip44, WalletAddressType::Legacy),
         ] {
@@ -464,7 +463,7 @@ impl Wallets {
     pub fn try_from_mnemonic(mnemonic: &Mnemonic, network: Network) -> Result<Self, WalletError> {
         let mut wallets = Wallets::default();
 
-        for type_ in WalletAddressType::iter() {
+        for type_ in [WalletAddressType::WrappedSegwit, WalletAddressType::Legacy] {
             let descriptor = mnemonic.clone().into_descriptors(None, network, type_);
             let wallet = BdkWallet::create(
                 descriptor.external.to_tuple(),
