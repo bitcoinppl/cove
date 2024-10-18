@@ -172,7 +172,7 @@ struct SelectedWalletScreenInner: View {
             }
         }
         .onAppear {
-            Log.debug("TODO: WALLET METADATA HANDLE IF FOUND ADDRESSES BUT NOT HANDLED \(model.walletMetadata)")
+            Log.debug("TODO: WALLET METADATA HANDLE IF FOUND ADDRESSES BUT NOT HANDLED \(model.walletMetadata.discoveryState)")
         }
         .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
     }

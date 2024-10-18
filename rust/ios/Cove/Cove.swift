@@ -1839,87 +1839,6 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRa
     return FfiConverterTypeDatabase.lower(value)
 }
 
-public protocol DiscoveryStateProtocol: AnyObject {}
-
-open class DiscoveryState:
-    DiscoveryStateProtocol
-{
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    /// This constructor can be used to instantiate a fake object.
-    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    ///
-    /// - Warning:
-    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-    public init(noPointer _: NoPointer) {
-        pointer = nil
-    }
-
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_fn_clone_discoverystate(self.pointer, $0) }
-    }
-
-    // No primary constructor declared for this class.
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_discoverystate(pointer, $0) }
-    }
-}
-
-public struct FfiConverterTypeDiscoveryState: FfiConverter {
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = DiscoveryState
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DiscoveryState {
-        return DiscoveryState(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: DiscoveryState) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoveryState {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if ptr == nil {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: DiscoveryState, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-public func FfiConverterTypeDiscoveryState_lift(_ pointer: UnsafeMutableRawPointer) throws -> DiscoveryState {
-    return try FfiConverterTypeDiscoveryState.lift(pointer)
-}
-
-public func FfiConverterTypeDiscoveryState_lower(_ value: DiscoveryState) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeDiscoveryState.lower(value)
-}
-
 public protocol FeeRateProtocol: AnyObject {}
 
 open class FeeRate:
@@ -2544,6 +2463,87 @@ public func FfiConverterTypeFingerprint_lift(_ pointer: UnsafeMutableRawPointer)
 
 public func FfiConverterTypeFingerprint_lower(_ value: Fingerprint) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFingerprint.lower(value)
+}
+
+public protocol FoundJsonProtocol: AnyObject {}
+
+open class FoundJson:
+    FoundJsonProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_foundjson(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_foundjson(pointer, $0) }
+    }
+}
+
+public struct FfiConverterTypeFoundJson: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = FoundJson
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FoundJson {
+        return FoundJson(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: FoundJson) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FoundJson {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: FoundJson, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeFoundJson_lift(_ pointer: UnsafeMutableRawPointer) throws -> FoundJson {
+    return try FfiConverterTypeFoundJson.lift(pointer)
+}
+
+public func FfiConverterTypeFoundJson_lower(_ value: FoundJson) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFoundJson.lower(value)
 }
 
 public protocol GlobalConfigTableProtocol: AnyObject {
@@ -6290,15 +6290,34 @@ public struct InternalOnlyMetadata {
     public var addressIndex: AddressIndex?
     public var lastScanFinished: TimeInterval?
     public var lastHeightFetched: BlockSizeLast?
-    public var discoveryState: DiscoveryState
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(addressIndex: AddressIndex?, lastScanFinished: TimeInterval?, lastHeightFetched: BlockSizeLast?, discoveryState: DiscoveryState) {
+    public init(addressIndex: AddressIndex?, lastScanFinished: TimeInterval?, lastHeightFetched: BlockSizeLast?) {
         self.addressIndex = addressIndex
         self.lastScanFinished = lastScanFinished
         self.lastHeightFetched = lastHeightFetched
-        self.discoveryState = discoveryState
+    }
+}
+
+extension InternalOnlyMetadata: Equatable, Hashable {
+    public static func == (lhs: InternalOnlyMetadata, rhs: InternalOnlyMetadata) -> Bool {
+        if lhs.addressIndex != rhs.addressIndex {
+            return false
+        }
+        if lhs.lastScanFinished != rhs.lastScanFinished {
+            return false
+        }
+        if lhs.lastHeightFetched != rhs.lastHeightFetched {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(addressIndex)
+        hasher.combine(lastScanFinished)
+        hasher.combine(lastHeightFetched)
     }
 }
 
@@ -6308,8 +6327,7 @@ public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
             try InternalOnlyMetadata(
                 addressIndex: FfiConverterOptionTypeAddressIndex.read(from: &buf),
                 lastScanFinished: FfiConverterOptionDuration.read(from: &buf),
-                lastHeightFetched: FfiConverterOptionTypeBlockSizeLast.read(from: &buf),
-                discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf)
+                lastHeightFetched: FfiConverterOptionTypeBlockSizeLast.read(from: &buf)
             )
     }
 
@@ -6317,7 +6335,6 @@ public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
         FfiConverterOptionTypeAddressIndex.write(value.addressIndex, into: &buf)
         FfiConverterOptionDuration.write(value.lastScanFinished, into: &buf)
         FfiConverterOptionTypeBlockSizeLast.write(value.lastHeightFetched, into: &buf)
-        FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
     }
 }
 
@@ -7054,11 +7071,12 @@ public struct WalletMetadata {
     public var sensitiveVisible: Bool
     public var detailsExpanded: Bool
     public var walletType: WalletType
+    public var discoveryState: DiscoveryState
     public var `internal`: InternalOnlyMetadata
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -7070,6 +7088,7 @@ public struct WalletMetadata {
         self.sensitiveVisible = sensitiveVisible
         self.detailsExpanded = detailsExpanded
         self.walletType = walletType
+        self.discoveryState = discoveryState
         self.internal = `internal`
     }
 }
@@ -7089,6 +7108,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 sensitiveVisible: FfiConverterBool.read(from: &buf),
                 detailsExpanded: FfiConverterBool.read(from: &buf),
                 walletType: FfiConverterTypeWalletType.read(from: &buf),
+                discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf),
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
             )
     }
@@ -7105,6 +7125,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
         FfiConverterBool.write(value.detailsExpanded, into: &buf)
         FfiConverterTypeWalletType.write(value.walletType, into: &buf)
+        FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.internal, into: &buf)
     }
 }
@@ -7711,6 +7732,77 @@ extension DescriptorError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum DiscoveryState {
+    case single
+    case startedJson(FoundJson
+    )
+    case startedMnemonic
+    case foundAddresses([WalletAddressType]
+    )
+    case noneFound
+    case choseAdressType
+}
+
+public struct FfiConverterTypeDiscoveryState: FfiConverterRustBuffer {
+    typealias SwiftType = DiscoveryState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoveryState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .single
+
+        case 2: return try .startedJson(FfiConverterTypeFoundJson.read(from: &buf)
+            )
+
+        case 3: return .startedMnemonic
+
+        case 4: return try .foundAddresses(FfiConverterSequenceTypeWalletAddressType.read(from: &buf)
+            )
+
+        case 5: return .noneFound
+
+        case 6: return .choseAdressType
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DiscoveryState, into buf: inout [UInt8]) {
+        switch value {
+        case .single:
+            writeInt(&buf, Int32(1))
+
+        case let .startedJson(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeFoundJson.write(v1, into: &buf)
+
+        case .startedMnemonic:
+            writeInt(&buf, Int32(3))
+
+        case let .foundAddresses(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterSequenceTypeWalletAddressType.write(v1, into: &buf)
+
+        case .noneFound:
+            writeInt(&buf, Int32(5))
+
+        case .choseAdressType:
+            writeInt(&buf, Int32(6))
+        }
+    }
+}
+
+public func FfiConverterTypeDiscoveryState_lift(_ buf: RustBuffer) throws -> DiscoveryState {
+    return try FfiConverterTypeDiscoveryState.lift(buf)
+}
+
+public func FfiConverterTypeDiscoveryState_lower(_ value: DiscoveryState) -> RustBuffer {
+    return FfiConverterTypeDiscoveryState.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.

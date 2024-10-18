@@ -6,7 +6,6 @@ use bdk_wallet::{KeychainKind, Wallet as BdkWallet};
 use bip39::Mnemonic;
 use crossbeam::channel::Sender;
 use pubport::formats::Json;
-use strum::IntoEnumIterator as _;
 use tracing::{debug, error, info};
 
 /// Default number of addresses to scan
@@ -307,7 +306,12 @@ impl WalletScanner {
         };
 
         metadata.discovery_state = discovery_state.into();
-        db.save_wallet(metadata)?;
+        db.save_wallet(metadata.clone())?;
+
+        self.responder
+            .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                metadata,
+            ))?;
 
         Produces::ok(())
     }
@@ -431,9 +435,9 @@ impl WalletScanWorker {
 impl WalletAddressType {
     pub fn index(&self) -> usize {
         match self {
+            WalletAddressType::WrappedSegwit => 0,
+            WalletAddressType::Legacy => 1,
             WalletAddressType::NativeSegwit => panic!("Not scanning the default one NativeSegwit"),
-            WalletAddressType::WrappedSegwit => 1,
-            WalletAddressType::Legacy => 2,
         }
     }
 }
