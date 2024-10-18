@@ -155,6 +155,7 @@ impl Wallet {
         Ok(me)
     }
 
+    /// Try to load an existing wallet from the persisted bdk wallet filestore
     pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
@@ -182,6 +183,7 @@ impl Wallet {
         })
     }
 
+    /// Create a new watch-only wallet from the given xpub
     pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
@@ -254,7 +256,7 @@ impl Wallet {
     }
 
     fn try_new_persisted_from_mnemonic(
-        mut metadata: WalletMetadata,
+        metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
     ) -> Result<Self, WalletError> {
@@ -275,8 +277,6 @@ impl Wallet {
             .network(network.into())
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
-
-        metadata.internal.discovery_state = DiscoveryState::StartedMnemonic.into();
 
         Ok(Self {
             id,
