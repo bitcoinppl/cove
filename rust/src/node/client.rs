@@ -134,7 +134,7 @@ impl NodeClient {
 
             NodeClient::Electrum(client) => {
                 let height = client.get_height().await?;
-                Ok(height as usize)
+                Ok(height)
             }
         }
     }
