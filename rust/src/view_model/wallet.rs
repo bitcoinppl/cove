@@ -20,7 +20,7 @@ use crate::{
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{DiscoveryState, WalletColor, WalletId, WalletMetadata},
+        metadata::{WalletColor, WalletId, WalletMetadata},
         AddressInfo, Wallet, WalletError,
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
@@ -139,17 +139,10 @@ impl RustWalletViewModel {
         let wallet = Wallet::try_load_persisted(id.clone())?;
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
-        let scanner = match metadata.internal.discovery_state.as_ref() {
-            DiscoveryState::NotStarted
-            | DiscoveryState::StartedJson(_)
-            | DiscoveryState::StartedMnemonic => {
-                WalletScanner::try_new(metadata.clone(), sender.clone())
-                    .tap_err(|error| error!("unable to start wallet scanner: {error:?}"))
-                    .ok()
-                    .map(spawn_actor)
-            }
-            DiscoveryState::Completed => None,
-        };
+        // only creates the scanner if its not already complet
+        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone())
+            .ok()
+            .map(spawn_actor);
 
         Ok(Self {
             id,
