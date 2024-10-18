@@ -166,6 +166,14 @@ struct SelectedWalletScreenInner: View {
                 let _ = try? await model.rust.forceUpdateHeight()
             }
         }
+        .onChange(of: model.foundAddresses) { _, foundAddresses in
+            if foundAddresses.count > 0 {
+                Log.debug("TODO: FOUND ADDRESSES: \(foundAddresses) LET USER KNOW AND SELECT")
+            }
+        }
+        .onAppear {
+            Log.debug("TODO: WALLET METADATA HANDLE IF FOUND ADDRESSES BUT NOT HANDLED \(model.walletMetadata)")
+        }
         .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
     }
 }
