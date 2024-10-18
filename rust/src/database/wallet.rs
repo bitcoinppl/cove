@@ -45,12 +45,12 @@ impl From<Network> for WalletKey {
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct WalletTable {
+pub struct WalletsTable {
     db: Arc<redb::Database>,
 }
 
 #[uniffi::export]
-impl WalletTable {
+impl WalletsTable {
     pub fn is_empty(&self) -> Result<bool, Error> {
         let network = Database::global().global_config.selected_network();
 
@@ -77,7 +77,7 @@ impl WalletTable {
     }
 }
 
-impl WalletTable {
+impl WalletsTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create table if it doesn't exist
         write_txn.open_table(TABLE).expect("failed to create table");

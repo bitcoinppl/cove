@@ -17,6 +17,12 @@ default:
 bacon:
     cd rust && bacon clippy
 
+bcheck:
+    cd rust && bacon check
+
+check:
+    cd rust && cargo check
+
 clean:
     cd rust && cargo clean && \
     rm -rf ios/Cove.xcframework && \

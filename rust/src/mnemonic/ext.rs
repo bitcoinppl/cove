@@ -6,20 +6,27 @@ use bdk_wallet::{
 use bip39::Mnemonic;
 
 use super::MnemonicExt;
-use crate::keys::Descriptors;
+use crate::{keys::Descriptors, wallet::WalletAddressType};
 
 impl MnemonicExt for Mnemonic {
     fn into_descriptors(
         self,
         passphrase: Option<String>,
         network: impl Into<crate::network::Network>,
+        address_type: WalletAddressType,
     ) -> Descriptors {
         use crate::keys::{Descriptor, DescriptorSecretKey};
 
         let network = network.into();
         let descriptor_secret_key = DescriptorSecretKey::new(network, self, passphrase);
 
-        let descriptor = Descriptor::new_bip84(
+        let new_descriptor = match address_type {
+            WalletAddressType::NativeSegwit => Descriptor::new_bip84,
+            WalletAddressType::WrappedSegwit => Descriptor::new_bip49,
+            WalletAddressType::Legacy => Descriptor::new_bip44,
+        };
+
+        let descriptor = new_descriptor(
             &descriptor_secret_key,
             bdk_wallet::KeychainKind::External,
             network,

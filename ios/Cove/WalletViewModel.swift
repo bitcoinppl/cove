@@ -11,6 +11,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     var loadState: WalletLoadState = .loading
     var balance: Balance = .init()
     var errorAlert: WalletErrorAlert? = nil
+    var foundAddresses: [WalletAddressType] = []
 
     public init(id: WalletId) throws {
         self.id = id
@@ -75,6 +76,12 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
                 case let .walletMetadataChanged(metadata):
                     withAnimation {
                         self.walletMetadata = metadata
+                    }
+
+                case let .walletScannerResponse(scannerResponse):
+                    self.logger.debug("walletScannerResponse: \(scannerResponse)")
+                    if case let .foundAddresses(addressTypes) = scannerResponse {
+                        self.foundAddresses = addressTypes
                     }
 
                 case let .nodeConnectionFailed(error):

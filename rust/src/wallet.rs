@@ -8,6 +8,7 @@ use std::{
     ops::{Deref, DerefMut},
     path::PathBuf,
     str::FromStr as _,
+    sync::Arc,
 };
 
 use crate::{
@@ -26,7 +27,7 @@ use bdk_wallet::{
     KeychainKind,
 };
 use bip39::Mnemonic;
-use metadata::{WalletId, WalletMetadata};
+use metadata::{DiscoveryState, WalletId, WalletMetadata};
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
 
@@ -75,10 +76,27 @@ pub struct Wallet {
     db: Store<bdk_wallet::ChangeSet>,
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Copy,
+    Hash,
+    derive_more::Display,
+    serde::Serialize,
+    serde::Deserialize,
+    uniffi::Enum,
+    strum::EnumIter,
+)]
+pub enum WalletAddressType {
+    NativeSegwit,
+    WrappedSegwit,
+    Legacy,
+}
+
 impl Wallet {
-    /// Create a new wallet from the given mnemonic
-    /// save the bdk wallet filestore,
-    /// save in our database and select it
+    /// Create a new wallet from the given mnemonic save the bdk wallet filestore, save in our database and select it
     pub fn try_new_persisted_and_selected(
         metadata: WalletMetadata,
         mnemonic: Mnemonic,
@@ -103,7 +121,7 @@ impl Wallet {
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
             // save wallet_metadata to database
-            database.wallets.save_wallet(metadata.clone())?;
+            database.wallets.save_wallet(me.metadata.clone())?;
 
             // set this wallet as the selected wallet
             database.global_config.select_wallet(me.id.clone())?;
@@ -139,6 +157,7 @@ impl Wallet {
         Ok(me)
     }
 
+    /// Try to load an existing wallet from the persisted bdk wallet filestore
     pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
@@ -166,12 +185,15 @@ impl Wallet {
         })
     }
 
+    /// Create a new watch-only wallet from the given xpub
     pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
         let network = Database::global().global_config.selected_network();
 
         let id = WalletId::new();
+        let mut metadata = WalletMetadata::new_with_id(id.clone(), "");
+
         let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
             id.to_string().as_bytes(),
             data_path(&id),
@@ -185,10 +207,13 @@ impl Wallet {
         let descriptors = match format {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
-                json.bip84
-                    .ok_or(WalletError::ParseXpubError(xpub::XpubError::MissingXpub(
-                        "No BIP84 xpub found".to_string(),
-                    )))?
+                let descriptors = json.bip84.clone().ok_or(WalletError::ParseXpubError(
+                    xpub::XpubError::MissingXpub("No BIP84 xpub found".to_string()),
+                ))?;
+
+                metadata.discovery_state = DiscoveryState::StartedJson(Arc::new(json.into()));
+
+                descriptors
             }
             Format::Wasabi(descriptors) => descriptors,
             Format::Electrum(descriptors) => descriptors,
@@ -204,12 +229,11 @@ impl Wallet {
             .map_err(Into::into)
             .map_err(WalletError::ParseXpubError)?;
 
-        let wallet_name = match fingerprint {
+        metadata.name = match fingerprint {
             Some(fingerprint) => format!("HWW Import ({})", fingerprint.to_ascii_uppercase()),
             None => "HWW Import".to_string(),
         };
 
-        let metadata = WalletMetadata::new_with_id(id.clone(), wallet_name);
         let descriptors: Descriptors = descriptors.into();
 
         let wallet = descriptors
@@ -247,7 +271,9 @@ impl Wallet {
         )
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
-        let descriptors = mnemonic.into_descriptors(passphrase, network);
+        let descriptors =
+            mnemonic.into_descriptors(passphrase, network, WalletAddressType::NativeSegwit);
+
         let wallet = descriptors
             .to_create_params()
             .network(network.into())
@@ -401,6 +427,9 @@ impl DerefMut for Wallet {
 pub fn delete_data_path(wallet_id: &WalletId) -> Result<(), std::io::Error> {
     let path = data_path(wallet_id);
     std::fs::remove_file(path)?;
+
+    crate::database::wallet_data::delete_database(wallet_id)?;
+
     Ok(())
 }
 
@@ -421,11 +450,12 @@ mod tests {
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
 
         let metadata = WalletMetadata::preview_new();
+
         let wallet =
             Wallet::try_new_persisted_from_mnemonic(metadata.clone(), mnemonic, None).unwrap();
-        let fingerprint = wallet.master_fingerprint();
 
-        delete_data_path(&metadata.id).unwrap();
+        let fingerprint = wallet.master_fingerprint();
+        let _ = delete_data_path(&metadata.id);
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }

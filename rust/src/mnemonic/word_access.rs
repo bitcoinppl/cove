@@ -5,7 +5,7 @@ use super::{GroupedWord, WordAccess};
 
 impl WordAccess for Mnemonic {
     fn grouped_words_of(&self, groups: usize) -> Vec<Vec<GroupedWord>> {
-        self.word_iter()
+        self.words()
             .chunks(groups)
             .into_iter()
             .enumerate()
@@ -23,7 +23,7 @@ impl WordAccess for Mnemonic {
     }
 
     fn grouped_plain_words_of(&self, groups: usize) -> Vec<Vec<String>> {
-        self.word_iter()
+        self.words()
             .chunks(groups)
             .into_iter()
             .map(|chunk| chunk.map(ToString::to_string).collect())

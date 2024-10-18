@@ -72,7 +72,7 @@ impl SeedQr {
 
     fn words(&self) -> impl Iterator<Item = &'static str> + '_ {
         let mnemonic = self.mnemonic();
-        mnemonic.word_iter()
+        mnemonic.words()
     }
 }
 
