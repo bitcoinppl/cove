@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, network::Network};
 
-use super::AddressInfo;
+use super::{AddressInfo, WalletAddressType};
 
 new_type!(WalletId, String);
 impl_default_for!(WalletId);
@@ -41,6 +41,8 @@ pub struct WalletMetadata {
     pub details_expanded: bool,
     #[serde(default)]
     pub wallet_type: WalletType,
+    #[serde(default)]
+    pub discovery_state: DiscoveryState,
 
     // internal only metadata, don't use in the UI
     // note: maybe better to use a separate table for this
@@ -54,7 +56,6 @@ pub struct InternalOnlyMetadata {
     pub address_index: Option<AddressIndex>,
     pub last_scan_finished: Option<Duration>,
     pub last_height_fetched: Option<BlockSizeLast>,
-    pub discovery_state: Arc<DiscoveryState>,
 }
 
 #[derive(
@@ -71,14 +72,32 @@ pub struct AddressIndex {
     pub address_list_hash: u64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Object)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum DiscoveryState {
     #[default]
-    NoInfoToScan,
-    StartedJson(pubport::formats::Json),
+    Single,
+    StartedJson(Arc<FoundJson>),
     StartedMnemonic,
-    Completed,
+    FoundAddresses(Vec<WalletAddressType>),
+    NoneFound,
+    ChoseAdressType,
 }
+
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Hash,
+    Eq,
+    PartialEq,
+    uniffi::Object,
+    derive_more::Into,
+    derive_more::From,
+    derive_more::Deref,
+    derive_more::AsRef,
+)]
+pub struct FoundJson(pub pubport::formats::Json);
 
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum,
@@ -115,6 +134,7 @@ impl WalletMetadata {
             details_expanded: false,
             wallet_type: WalletType::Hot,
             internal: InternalOnlyMetadata::default(),
+            discovery_state: DiscoveryState::default(),
         }
     }
 
@@ -131,7 +151,7 @@ impl WalletMetadata {
 
     pub fn new_imported_from_mnemonic(name: impl Into<String>, network: Network) -> Self {
         let mut me = Self::new(name);
-        me.internal.discovery_state = DiscoveryState::StartedMnemonic.into();
+        me.discovery_state = DiscoveryState::StartedMnemonic.into();
 
         Self {
             network,
@@ -154,6 +174,7 @@ impl WalletMetadata {
             details_expanded: false,
             wallet_type: WalletType::Hot,
             internal: InternalOnlyMetadata::default(),
+            discovery_state: DiscoveryState::default(),
         }
     }
 

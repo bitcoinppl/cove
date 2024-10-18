@@ -132,8 +132,8 @@ impl WalletScanner {
         let network = db.global_config().selected_network().into();
 
         let id = metadata.id.clone();
-        let wallets = match metadata.internal.discovery_state.as_ref() {
-            DiscoveryState::StartedJson(json) => Wallets::try_from_json(json, network)?,
+        let wallets = match metadata.discovery_state {
+            DiscoveryState::StartedJson(json) => Wallets::try_from_json(&json, network)?,
             DiscoveryState::StartedMnemonic => {
                 let mnemonic = Keychain::global()
                     .get_wallet_key(&id)
@@ -143,9 +143,10 @@ impl WalletScanner {
 
                 Wallets::try_from_mnemonic(&mnemonic, network)?
             }
-            DiscoveryState::NoInfoToScan | DiscoveryState::Completed => {
-                return Err(WalletScannerError::NoAddressTypes)
-            }
+            DiscoveryState::Single
+            | DiscoveryState::NoneFound
+            | DiscoveryState::ChoseAdressType
+            | DiscoveryState::FoundAddresses(_) => return Err(WalletScannerError::NoAddressTypes),
         };
 
         if wallets.iter().all(Option::is_none) {
@@ -240,10 +241,10 @@ impl WalletScanner {
                 .collect::<Vec<WalletAddressType>>();
 
             self.responder
-                .send(ScannerResponse::FoundAddresses(found_addresses).into())?;
+                .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
 
             // update wallet metadata
-            self.mark_metadata_scan_complete()?;
+            self.set_metadata(DiscoveryState::FoundAddresses(found_addresses))?;
 
             return Produces::ok(());
         }
@@ -280,13 +281,14 @@ impl WalletScanner {
 
             if found_addresses.is_empty() {
                 self.responder.send(ScannerResponse::NoneFound.into())?;
+
+                self.set_metadata(DiscoveryState::NoneFound)?;
             } else {
                 self.responder
-                    .send(ScannerResponse::FoundAddresses(found_addresses).into())?;
-            }
+                    .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
 
-            // update wallet metadata
-            self.mark_metadata_scan_complete()?;
+                self.set_metadata(DiscoveryState::FoundAddresses(found_addresses))?;
+            }
 
             return Produces::ok(());
         }
@@ -294,7 +296,8 @@ impl WalletScanner {
         Produces::ok(())
     }
 
-    fn mark_metadata_scan_complete(&mut self) -> ActorResult<()> {
+    fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
+        debug!("setting wallet metadata: {discovery_state:?}");
         let network = Database::global().global_config.selected_network();
         let db = Database::global().wallets();
 
@@ -303,7 +306,7 @@ impl WalletScanner {
             return Produces::ok(());
         };
 
-        metadata.internal.discovery_state = DiscoveryState::Completed.into();
+        metadata.discovery_state = discovery_state.into();
         db.save_wallet(metadata)?;
 
         Produces::ok(())

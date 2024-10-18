@@ -8,6 +8,7 @@ use std::{
     ops::{Deref, DerefMut},
     path::PathBuf,
     str::FromStr as _,
+    sync::Arc,
 };
 
 use crate::{
@@ -81,6 +82,7 @@ pub struct Wallet {
     Eq,
     PartialEq,
     Copy,
+    Hash,
     derive_more::Display,
     serde::Serialize,
     serde::Deserialize,
@@ -209,7 +211,7 @@ impl Wallet {
                     xpub::XpubError::MissingXpub("No BIP84 xpub found".to_string()),
                 ))?;
 
-                metadata.internal.discovery_state = DiscoveryState::StartedJson(json).into();
+                metadata.discovery_state = DiscoveryState::StartedJson(Arc::new(json.into()));
 
                 descriptors
             }
