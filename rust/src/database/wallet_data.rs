@@ -1,17 +1,30 @@
 use std::{path::PathBuf, sync::Arc};
 
+use once_cell::sync::Lazy;
+use parking_lot::RwLock;
 use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::{
-    consts::ROOT_DATA_DIR,
+    consts::WALLET_DATA_DIR,
     redb::Json,
     wallet::{metadata::WalletId, WalletAddressType},
 };
 
+use ahash::AHashMap as HashMap;
+
+pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Database>>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+
 fn database_location(id: &WalletId) -> PathBuf {
-    ROOT_DATA_DIR.join("wallet_data").join(id.as_str())
+    let dir = WALLET_DATA_DIR.join(id.as_str());
+
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir).expect("always work to create dir");
+    }
+
+    dir.join("wallet_data.json")
 }
 
 const TABLE: TableDefinition<&'static str, Json<WalletData>> =
@@ -69,7 +82,6 @@ impl WalletDataDb {
     pub fn new(id: WalletId) -> Self {
         let db = get_or_create_database(&id);
         let write_txn = db.begin_write().expect("failed to begin write transaction");
-        let db = Arc::new(db);
 
         // create table if it doesn't exist
         write_txn.open_table(TABLE).expect("failed to create table");
@@ -164,13 +176,27 @@ impl WalletDataDb {
     }
 }
 
-pub fn get_or_create_database(id: &WalletId) -> redb::Database {
+pub fn get_or_create_database(id: &WalletId) -> Arc<redb::Database> {
     let database_location = database_location(id);
+
+    // check if we already have a database connection for this id and return it
+    {
+        let db_connections = DATABASE_CONNECTIONS.read();
+        if let Some(db) = db_connections.get(id) {
+            return db.clone();
+        }
+    }
 
     if database_location.exists() {
         let db = redb::Database::open(&database_location);
         match db {
-            Ok(db) => return db,
+            Ok(db) => {
+                let mut db_connections = DATABASE_CONNECTIONS.write();
+                let db = Arc::new(db);
+                db_connections.insert(id.clone(), db.clone());
+
+                return db;
+            }
             Err(error) => {
                 error!("failed to open database for {id}, error: {error:?}, creating a new one");
             }
@@ -182,10 +208,20 @@ pub fn get_or_create_database(id: &WalletId) -> redb::Database {
         database_location.display()
     );
 
-    redb::Database::create(&database_location).expect("failed to create database")
+    let db = redb::Database::create(&database_location).expect("failed to create database");
+    let mut db_connections = DATABASE_CONNECTIONS.write();
+    let db = Arc::new(db);
+    db_connections.insert(id.clone(), db.clone());
+
+    db
 }
 
 pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
+    {
+        let mut db_connections = DATABASE_CONNECTIONS.write();
+        db_connections.remove(id);
+    }
+
     std::fs::remove_file(database_location(id))
 }
 
