@@ -13,7 +13,7 @@ use bdk_wallet::KeychainKind;
 use tap::TapFallible as _;
 use tracing::debug;
 
-use super::{NodeClientOptions, Error, ELECTRUM_BATCH_SIZE, STOP_GAP};
+use super::{Error, NodeClientOptions, ELECTRUM_BATCH_SIZE, STOP_GAP};
 use crate::node::Node;
 
 type ElectrumClientInner = BdkElectrumClient<Client>;
@@ -37,7 +37,10 @@ impl ElectrumClient {
         Self::new_from_node_and_options(node, Self::default_options())
     }
 
-    pub fn new_from_node_and_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
+    pub fn new_from_node_and_options(
+        node: &Node,
+        options: NodeClientOptions,
+    ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url);
         let inner_client = Client::new(url).map_err(Error::CreateElectrumClientError)?;
         let bdk_client = BdkElectrumClient::new(inner_client);
