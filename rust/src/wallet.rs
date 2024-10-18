@@ -94,9 +94,7 @@ pub enum WalletAddressType {
 }
 
 impl Wallet {
-    /// Create a new wallet from the given mnemonic
-    /// save the bdk wallet filestore,
-    /// save in our database and select it
+    /// Create a new wallet from the given mnemonic save the bdk wallet filestore, save in our database and select it
     pub fn try_new_persisted_and_selected(
         metadata: WalletMetadata,
         mnemonic: Mnemonic,
@@ -121,7 +119,7 @@ impl Wallet {
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
             // save wallet_metadata to database
-            database.wallets.save_wallet(metadata.clone())?;
+            database.wallets.save_wallet(me.metadata.clone())?;
 
             // set this wallet as the selected wallet
             database.global_config.select_wallet(me.id.clone())?;
@@ -256,7 +254,7 @@ impl Wallet {
     }
 
     fn try_new_persisted_from_mnemonic(
-        metadata: WalletMetadata,
+        mut metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
     ) -> Result<Self, WalletError> {
@@ -271,11 +269,14 @@ impl Wallet {
 
         let descriptors =
             mnemonic.into_descriptors(passphrase, network, WalletAddressType::NativeSegwit);
+
         let wallet = descriptors
             .to_create_params()
             .network(network.into())
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
+
+        metadata.internal.discovery_state = DiscoveryState::StartedMnemonic.into();
 
         Ok(Self {
             id,
@@ -447,11 +448,12 @@ mod tests {
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
 
         let metadata = WalletMetadata::preview_new();
+
         let wallet =
             Wallet::try_new_persisted_from_mnemonic(metadata.clone(), mnemonic, None).unwrap();
-        let fingerprint = wallet.master_fingerprint();
 
-        delete_data_path(&metadata.id).unwrap();
+        let fingerprint = wallet.master_fingerprint();
+        let _ = delete_data_path(&metadata.id);
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }
