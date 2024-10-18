@@ -49,6 +49,7 @@ pub struct WalletMetadata {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
+#[serde(default)]
 pub struct InternalOnlyMetadata {
     pub address_index: Option<AddressIndex>,
     pub last_scan_finished: Option<Duration>,
@@ -73,7 +74,7 @@ pub struct AddressIndex {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Object)]
 pub enum DiscoveryState {
     #[default]
-    NotStarted,
+    NoInfoToScan,
     StartedJson(pubport::formats::Json),
     StartedMnemonic,
     Completed,

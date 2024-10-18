@@ -119,6 +119,9 @@ impl Actor for WalletScanner {
 }
 
 impl WalletScanner {
+    /// Create a new scanner based on the DiscoveryState of the wallet metadata
+    /// Only create a scanner if the discovery state is not already completed, and if
+    /// have the required information to start a scan.
     pub fn try_new(
         metadata: WalletMetadata,
         reconciler: Sender<WalletViewModelReconcileMessage>,
@@ -140,7 +143,7 @@ impl WalletScanner {
 
                 Wallets::try_from_mnemonic(&mnemonic, network)?
             }
-            DiscoveryState::NotStarted | DiscoveryState::Completed => {
+            DiscoveryState::NoInfoToScan | DiscoveryState::Completed => {
                 return Err(WalletScannerError::NoAddressTypes)
             }
         };
