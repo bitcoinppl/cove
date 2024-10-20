@@ -5,6 +5,7 @@ use bdk_chain::bitcoin::{Address, Network};
 use bdk_wallet::{KeychainKind, Wallet as BdkWallet};
 use bip39::Mnemonic;
 use crossbeam::channel::Sender;
+use eyre::Context;
 use pubport::formats::Json;
 use tracing::{debug, error, info};
 
@@ -412,51 +413,57 @@ impl WalletScanWorker {
         let db = self.db.clone();
 
         self.addr.send_fut(async move {
-            let mut current_address = current_address;
+            let run_with_error = || async move {
+                let mut current_address = current_address;
 
-            loop {
-                let address = call!(addr.address_at(current_address))
-                    .await
-                    .expect("address");
+                loop {
+                    let address = call!(addr.address_at(current_address)).await?;
 
-                // found address
-                if client
-                    .check_address_for_txn(address)
-                    .await
-                    .expect("check success")
-                {
-                    call!(parent.mark_found_txn(wallet_type))
+                    // found address
+                    if client
+                        .check_address_for_txn(address)
                         .await
-                        .expect("mark found");
+                        .context("could not check address")?
+                    {
+                        call!(parent.mark_found_txn(wallet_type)).await?;
 
-                    // save the scan state
-                    db.set_scan_state(wallet_type, ScanState::Completed)
-                        .expect("save scan state");
+                        // save the scan state
+                        db.set_scan_state(wallet_type, ScanState::Completed)
+                            .context("save scan state")?;
 
-                    return;
-                }
+                        break;
+                    }
 
-                current_address += 1;
-                debug!("checked {current_address} addresses for {wallet_type}");
+                    current_address += 1;
+                    debug!("checked {current_address} addresses for {wallet_type}");
 
-                // every 5 addresses, save the scan state
-                if current_address % 5 == 0 {
-                    let scan_state = ScanningInfo {
-                        address_type: wallet_type,
-                        count: current_address,
+                    // every 5 addresses, save the scan state
+                    if current_address % 5 == 0 {
+                        let scan_state = ScanningInfo {
+                            address_type: wallet_type,
+                            count: current_address,
+                        };
+
+                        if let Err(error) = db.set_scan_state(wallet_type, scan_state) {
+                            error!("unable to update scan state: {error}");
+                        };
                     };
 
-                    db.set_scan_state(wallet_type, scan_state)
-                        .expect("save scan state");
-                };
+                    if current_address >= scan_limit {
+                        db.set_scan_state(wallet_type, ScanState::Completed)
+                            .expect("save scan state");
 
-                if current_address >= scan_limit {
-                    db.set_scan_state(wallet_type, ScanState::Completed)
-                        .expect("save scan state");
-
-                    call!(parent.mark_limit_reached(wallet_type));
-                    return;
+                        call!(parent.mark_limit_reached(wallet_type));
+                        break;
+                    }
                 }
+
+                Ok::<(), eyre::Error>(())
+            };
+
+            if let Err(error) = run_with_error().await {
+                error!("wallet scan failed: {error}");
+                // todo: maybe send the error back to the parent? the scanner or the view model?
             }
         });
 
