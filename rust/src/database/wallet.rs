@@ -156,7 +156,7 @@ impl WalletsTable {
         let network = wallet.network;
         let mut wallets = self.get_all(network)?;
 
-        if wallets.iter().any(|wallet| wallet.id == wallet.id) {
+        if wallets.iter().any(|w| w.id == wallet.id) {
             return Err(WalletTableError::WalletAlreadyExists.into());
         }
 

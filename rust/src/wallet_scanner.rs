@@ -316,7 +316,7 @@ impl WalletScanner {
             return Produces::ok(());
         };
 
-        metadata.discovery_state = discovery_state.into();
+        metadata.discovery_state = discovery_state;
         db.update_wallet_metadata(metadata.clone())?;
 
         self.responder

@@ -157,7 +157,7 @@ impl WalletMetadata {
 
     pub fn new_imported_from_mnemonic(name: impl Into<String>, network: Network) -> Self {
         let mut me = Self::new(name);
-        me.discovery_state = DiscoveryState::StartedMnemonic.into();
+        me.discovery_state = DiscoveryState::StartedMnemonic;
 
         Self {
             network,
