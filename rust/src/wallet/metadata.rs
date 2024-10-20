@@ -78,9 +78,15 @@ pub enum DiscoveryState {
     Single,
     StartedJson(Arc<FoundJson>),
     StartedMnemonic,
-    FoundAddresses(Vec<WalletAddressType>),
+    FoundAddresses(Vec<FoundAddress>),
     NoneFound,
     ChoseAdressType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct FoundAddress {
+    pub type_: WalletAddressType,
+    pub first_address: String,
 }
 
 #[derive(

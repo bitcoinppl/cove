@@ -9,7 +9,7 @@ use pubport::formats::Json;
 use tracing::{debug, error, info};
 
 /// Default number of addresses to scan
-const DEFAULT_SCAN_LIMIT: u32 = 50;
+const DEFAULT_SCAN_LIMIT: u32 = 100;
 
 use crate::{
     database::{
@@ -25,7 +25,7 @@ use crate::{
     task::spawn_actor,
     view_model::wallet::WalletViewModelReconcileMessage,
     wallet::{
-        metadata::{DiscoveryState, WalletId, WalletMetadata},
+        metadata::{DiscoveryState, FoundAddress, WalletId, WalletMetadata},
         WalletAddressType, WalletError,
     },
 };
@@ -56,12 +56,12 @@ pub struct WorkerHandle {
     pub db: WalletDataDb,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Copy, Default)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub enum WorkerState {
     #[default]
     Created,
     Started,
-    FoundAddress,
+    FoundAddress(String),
     NoneFound,
 }
 
@@ -79,7 +79,7 @@ pub enum WalletScannerError {
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum ScannerResponse {
-    FoundAddresses(Vec<WalletAddressType>),
+    FoundAddresses(Vec<FoundAddress>),
     NoneFound,
 }
 
@@ -215,10 +215,14 @@ impl WalletScanner {
     pub async fn mark_found_txn(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
         info!("marked worker {wallet_type:?} as found");
 
-        self.workers[wallet_type.index()]
+        //  mark as found and stop the worker
+        let worker = self.workers[wallet_type.index()]
             .as_mut()
-            .expect("worker started")
-            .state = WorkerState::FoundAddress;
+            .expect("worker started");
+
+        let address = call!(worker.addr.first_address()).await?;
+        worker.state = WorkerState::FoundAddress(address);
+        worker.addr = Default::default();
 
         let any_still_running = self.workers.iter().any(|worker| {
             worker
@@ -228,16 +232,7 @@ impl WalletScanner {
 
         // all workers are done, send the response
         if !any_still_running {
-            let found_addresses = self
-                .workers
-                .iter()
-                .filter_map(|worker| {
-                    worker
-                        .as_ref()
-                        .filter(|worker| worker.state == WorkerState::FoundAddress)
-                        .map(|worker| worker.wallet_type)
-                })
-                .collect::<Vec<WalletAddressType>>();
+            let found_addresses = self.found_addresses();
 
             self.responder
                 .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
@@ -267,16 +262,7 @@ impl WalletScanner {
 
         // all workers are done, send the response
         if !any_still_running {
-            let found_addresses = self
-                .workers
-                .iter()
-                .filter_map(|worker| {
-                    worker
-                        .as_ref()
-                        .filter(|worker| worker.state == WorkerState::FoundAddress)
-                        .map(|worker| worker.wallet_type)
-                })
-                .collect::<Vec<WalletAddressType>>();
+            let found_addresses = self.found_addresses();
 
             if found_addresses.is_empty() {
                 self.responder.send(ScannerResponse::NoneFound.into())?;
@@ -293,6 +279,27 @@ impl WalletScanner {
         }
 
         Produces::ok(())
+    }
+
+    fn found_addresses(&self) -> Vec<FoundAddress> {
+        self.workers
+            .iter()
+            .filter_map(|worker| {
+                worker
+                    .as_ref()
+                    .filter(|worker| matches!(worker.state, WorkerState::FoundAddress(_)))
+                    .map(|worker| {
+                        let WorkerState::FoundAddress(first_address) = worker.state.clone() else {
+                            panic!("impossible")
+                        };
+
+                        FoundAddress {
+                            type_: worker.wallet_type,
+                            first_address,
+                        }
+                    })
+            })
+            .collect::<Vec<FoundAddress>>()
     }
 
     fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
@@ -429,6 +436,15 @@ impl WalletScanWorker {
                 call!(self.parent.mark_limit_reached(wallet_type));
             }
         }
+    }
+
+    pub async fn first_address(&self) -> ActorResult<String> {
+        let address = self
+            .wallet
+            .peek_address(KeychainKind::External, 0)
+            .to_string();
+
+        Produces::ok(address)
     }
 }
 
