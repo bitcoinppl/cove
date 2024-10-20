@@ -401,7 +401,7 @@ impl WalletActor {
         let mut metadata = wallets.get(&self.wallet.id, self.wallet.network).ok()??;
         metadata.internal_mut().last_scan_finished = Some(now);
 
-        wallets.save_wallet(metadata).ok()
+        wallets.create_wallet(metadata).ok()
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -437,7 +437,7 @@ impl WalletActor {
             last_seen: now,
         });
 
-        wallets.save_wallet(metadata).ok()
+        wallets.create_wallet(metadata).ok()
     }
 }
 

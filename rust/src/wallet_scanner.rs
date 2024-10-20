@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use act_zero::*;
-use bdk_chain::bitcoin::Network;
+use bdk_chain::bitcoin::{Address, Network};
 use bdk_wallet::{KeychainKind, Wallet as BdkWallet};
 use bip39::Mnemonic;
 use crossbeam::channel::Sender;
@@ -9,7 +9,7 @@ use pubport::formats::Json;
 use tracing::{debug, error, info};
 
 /// Default number of addresses to scan
-const DEFAULT_SCAN_LIMIT: u32 = 100;
+const DEFAULT_SCAN_LIMIT: u32 = 125;
 
 use crate::{
     database::{
@@ -125,7 +125,10 @@ impl WalletScanner {
         metadata: WalletMetadata,
         reconciler: Sender<WalletViewModelReconcileMessage>,
     ) -> Result<Self, WalletScannerError> {
-        debug!("starting wallet scanner for {}", metadata.id);
+        debug!(
+            "starting wallet scanner for {}, metadata: {metadata:?}",
+            metadata.id
+        );
 
         let db = Database::global();
         let network = db.global_config().selected_network().into();
@@ -249,10 +252,12 @@ impl WalletScanner {
     pub async fn mark_limit_reached(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
         info!("marked worker {wallet_type:?} limit reached");
 
-        self.workers[wallet_type.index()]
+        let worker = self.workers[wallet_type.index()]
             .as_mut()
-            .expect("worker started")
-            .state = WorkerState::NoneFound;
+            .expect("worker started");
+
+        worker.state = WorkerState::NoneFound;
+        worker.addr = Default::default();
 
         let any_still_running = self.workers.iter().any(|worker| {
             worker
@@ -266,12 +271,10 @@ impl WalletScanner {
 
             if found_addresses.is_empty() {
                 self.responder.send(ScannerResponse::NoneFound.into())?;
-
                 self.set_metadata(DiscoveryState::NoneFound)?;
             } else {
                 self.responder
                     .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
-
                 self.set_metadata(DiscoveryState::FoundAddresses(found_addresses))?;
             }
 
@@ -313,7 +316,7 @@ impl WalletScanner {
         };
 
         metadata.discovery_state = discovery_state.into();
-        db.save_wallet(metadata.clone())?;
+        db.update_wallet_metadata(metadata.clone())?;
 
         self.responder
             .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
@@ -370,10 +373,12 @@ impl WalletScanWorker {
             .flatten()
             .map(|scan_state| match scan_state {
                 ScanState::Scanning(info) => info,
+                ScanState::Completed => panic!("trying to scan completed wallet"),
                 _ => ScanningInfo::new(wallet_type),
             })
             .unwrap_or_else(|| ScanningInfo::new(wallet_type));
 
+        debug!("wallet scan info: {scan_info:?}");
         Self {
             parent: Default::default(),
             addr: Default::default(),
@@ -397,52 +402,80 @@ impl WalletScanWorker {
     }
 
     async fn start_scan(&mut self) -> ActorResult<()> {
-        let mut current_address = self.scan_info.count;
         let client = self.client_builder.build().await?;
+        let wallet_type = self.wallet_type;
 
-        loop {
-            let wallet_type = self.wallet_type;
+        let addr = self.addr.clone();
+        let scan_limit = self.scan_limit;
+        let current_address = self.scan_info.count;
+        let parent = self.parent.clone();
+        let db = self.db.clone();
 
-            let address = self
-                .wallet
-                .peek_address(KeychainKind::External, current_address);
+        self.addr.send_fut(async move {
+            let mut current_address = current_address;
 
-            // found address
-            if client.check_address_for_txn(address.address).await? {
-                call!(self.parent.mark_found_txn(wallet_type));
+            loop {
+                let address = call!(addr.address_at(current_address))
+                    .await
+                    .expect("address");
 
-                // save the scan state
-                self.db.set_scan_state(wallet_type, ScanState::Completed)?;
+                // found address
+                if client
+                    .check_address_for_txn(address)
+                    .await
+                    .expect("check success")
+                {
+                    call!(parent.mark_found_txn(wallet_type))
+                        .await
+                        .expect("mark found");
 
-                return Produces::ok(());
-            }
+                    // save the scan state
+                    db.set_scan_state(wallet_type, ScanState::Completed)
+                        .expect("save scan state");
 
-            current_address += 1;
-            debug!("checked {current_address} addresses for {wallet_type}");
+                    return;
+                }
 
-            // every 5 addresses, save the scan state
-            if current_address % 5 == 0 {
-                let scan_state = ScanningInfo {
-                    address_type: wallet_type,
-                    count: current_address,
+                current_address += 1;
+                debug!("checked {current_address} addresses for {wallet_type}");
+
+                // every 5 addresses, save the scan state
+                if current_address % 5 == 0 {
+                    let scan_state = ScanningInfo {
+                        address_type: wallet_type,
+                        count: current_address,
+                    };
+
+                    db.set_scan_state(wallet_type, scan_state)
+                        .expect("save scan state");
                 };
 
-                self.db.set_scan_state(wallet_type, scan_state)?;
-            }
+                if current_address >= scan_limit {
+                    db.set_scan_state(wallet_type, ScanState::Completed)
+                        .expect("save scan state");
 
-            // scanning is done, no adddress found
-            if current_address >= self.scan_limit {
-                self.db.set_scan_state(wallet_type, ScanState::Completed)?;
-                call!(self.parent.mark_limit_reached(wallet_type));
+                    call!(parent.mark_limit_reached(wallet_type));
+                    return;
+                }
             }
-        }
+        });
+
+        Produces::ok(())
     }
 
     pub async fn first_address(&self) -> ActorResult<String> {
+        let Produces::Value(address) = self.address_at(0).await? else {
+            panic!("impossible");
+        };
+
+        Produces::ok(address.to_string())
+    }
+
+    async fn address_at(&self, index: u32) -> ActorResult<Address> {
         let address = self
             .wallet
-            .peek_address(KeychainKind::External, 0)
-            .to_string();
+            .peek_address(KeychainKind::External, index)
+            .address;
 
         Produces::ok(address)
     }

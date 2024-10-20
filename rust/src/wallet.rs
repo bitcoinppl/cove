@@ -121,7 +121,7 @@ impl Wallet {
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
             // save wallet_metadata to database
-            database.wallets.save_wallet(me.metadata.clone())?;
+            database.wallets.create_wallet(me.metadata.clone())?;
 
             // set this wallet as the selected wallet
             database.global_config.select_wallet(me.id.clone())?;
@@ -246,7 +246,7 @@ impl Wallet {
         keychain.save_wallet_xpub(&id, xpub)?;
 
         // save wallet_metadata to database
-        database.wallets.save_wallet(metadata.clone())?;
+        database.wallets.create_wallet(metadata.clone())?;
 
         Ok(Self {
             id,

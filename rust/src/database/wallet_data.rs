@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::{
     consts::WALLET_DATA_DIR,
@@ -106,6 +106,8 @@ impl WalletDataDb {
         scan_state: impl Into<ScanState>,
     ) -> Result<()> {
         let scan_state = scan_state.into();
+        debug!("setting scan state for {type_:?}, scan_state: {scan_state:?}");
+
         let key = WalletDataKey::ScanState(type_);
         let value = WalletData::ScanState(scan_state);
 

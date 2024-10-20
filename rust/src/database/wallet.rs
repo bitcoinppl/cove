@@ -27,6 +27,9 @@ pub enum WalletTableError {
 
     #[error("failed to get wallets: {0}")]
     ReadError(String),
+
+    #[error("wallet already exists")]
+    WalletAlreadyExists,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Object)]
@@ -149,9 +152,13 @@ impl WalletsTable {
         Ok(())
     }
 
-    pub fn save_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
+    pub fn create_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
         let network = wallet.network;
         let mut wallets = self.get_all(network)?;
+
+        if wallets.iter().any(|wallet| wallet.id == wallet.id) {
+            return Err(WalletTableError::WalletAlreadyExists.into());
+        }
 
         wallets.push(wallet);
         self.save_all_wallets(network, wallets)?;
