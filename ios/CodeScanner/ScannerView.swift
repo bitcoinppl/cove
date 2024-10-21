@@ -43,6 +43,14 @@ struct ScannerView: View {
         }
     }
 
+    func toggleZoom() {
+        if codeSize == startingCodeSize {
+            codeSize = codeSize - tapDownBy
+        } else {
+            codeSize = startingCodeSize
+        }
+    }
+
     func completeScan(_ result: Result<ScanResult, ScanError>) {
         if !showAlert {
             return completion(result)
@@ -108,11 +116,7 @@ struct ScannerView: View {
                         Spacer()
                         Button(action: {
                             withAnimation {
-                                if codeSize == startingCodeSize {
-                                    codeSize = codeSize - tapDownBy
-                                } else {
-                                    codeSize = startingCodeSize
-                                }
+                                toggleZoom()
                             }
                         }) {
                             Text(zoomLevel)
@@ -130,6 +134,7 @@ struct ScannerView: View {
                 containerHeight = geo.size.height
                 viewLoaded = true
             }
+            .onTapGesture(perform: toggleZoom)
             .alert(isPresented: $showingPermissionAlert) {
                 Alert(
                     title: Text("Camera Access Required"),
