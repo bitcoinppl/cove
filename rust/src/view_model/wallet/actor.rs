@@ -3,7 +3,7 @@ use crate::{
     node::client::NodeClient,
     transaction::{Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
-    wallet::{balance::Balance, metadata::BlockSizeLast, AddressInfo, Wallet},
+    wallet::{balance::Balance, metadata::BlockSizeLast, AddressInfo, Wallet, WalletAddressType},
 };
 use act_zero::*;
 use bdk_chain::spk_client::{FullScanResult, SyncResult};
@@ -96,6 +96,11 @@ impl WalletActor {
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
 
         Produces::ok(transactions)
+    }
+
+    pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
+        let address = self.wallet.peek_address(KeychainKind::External, index);
+        Produces::ok(address.into())
     }
 
     pub async fn next_address(&mut self) -> ActorResult<AddressInfo> {
@@ -220,6 +225,31 @@ impl WalletActor {
 
         let block_height = self.update_height().await?.await?;
         Produces::ok(block_height)
+    }
+
+    pub async fn switch_mnemonic_to_new_address_type(
+        &mut self,
+        address_type: WalletAddressType,
+    ) -> ActorResult<()> {
+        debug!("actor switch mnemonic wallet");
+
+        self.wallet
+            .switch_mnemonic_to_new_address_type(address_type)?;
+
+        Produces::ok(())
+    }
+
+    pub async fn switch_descriptor_to_new_address_type(
+        &mut self,
+        descriptors: pubport::descriptor::Descriptors,
+        address_type: WalletAddressType,
+    ) -> ActorResult<()> {
+        debug!("actor switch pubkey descriptor wallet");
+
+        self.wallet
+            .switch_descriptor_to_new_address_type(descriptors, address_type)?;
+
+        Produces::ok(())
     }
 
     async fn update_height(&mut self) -> ActorResult<usize> {

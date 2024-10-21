@@ -43,6 +43,8 @@ pub struct WalletMetadata {
     pub wallet_type: WalletType,
     #[serde(default)]
     pub discovery_state: DiscoveryState,
+    #[serde(default = "default_address_type")]
+    pub address_type: WalletAddressType,
 
     // internal only metadata, don't use in the UI
     // note: maybe better to use a separate table for this
@@ -78,7 +80,8 @@ pub enum DiscoveryState {
     Single,
     StartedJson(Arc<FoundJson>),
     StartedMnemonic,
-    FoundAddresses(Vec<FoundAddress>),
+    FoundAddressesFromJson(Vec<FoundAddress>, Arc<FoundJson>),
+    FoundAddressesFromMnemonic(Vec<FoundAddress>),
     NoneFound,
     ChoseAdressType,
 }
@@ -138,6 +141,7 @@ impl WalletMetadata {
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
             details_expanded: false,
+            address_type: WalletAddressType::default(),
             wallet_type: WalletType::Hot,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
@@ -174,6 +178,7 @@ impl WalletMetadata {
             verified: false,
             network: Network::Bitcoin,
             performed_full_scan: false,
+            address_type: WalletAddressType::default(),
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
@@ -255,4 +260,8 @@ fn default_true() -> bool {
 
 fn default_false() -> bool {
     true
+}
+
+fn default_address_type() -> WalletAddressType {
+    Default::default()
 }

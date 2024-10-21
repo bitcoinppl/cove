@@ -20,8 +20,8 @@ use crate::{
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{WalletColor, WalletId, WalletMetadata},
-        AddressInfo, Wallet, WalletError,
+        metadata::{DiscoveryState, WalletColor, WalletId, WalletMetadata},
+        AddressInfo, Wallet, WalletAddressType, WalletError,
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -53,6 +53,10 @@ pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
 pub struct RustWalletViewModel {
     pub id: WalletId,
     pub actor: Addr<WalletActor>,
+
+    // cache, metadata already exists in the database and in the actor state,  this cache makes it
+    // faster to access, but adds complexity to the code because we have to make sure its updated
+    // in all the places
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
@@ -67,6 +71,8 @@ pub enum WalletViewModelAction {
     UpdateFiatCurrency(String),
     ToggleSensitiveVisibility,
     ToggleDetailsExpanded,
+    SelectCurrentWalletAddressType,
+    SelectDifferentWalletAddressType(WalletAddressType),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -119,6 +125,12 @@ pub enum WalletViewModelError {
 
     #[error("unable to get transaction details: {0}")]
     TransactionDetailsError(String),
+
+    #[error("actor error, not found")]
+    ActorNotFound,
+
+    #[error("unable to switch wallet to address type {0}, error: {1}")]
+    UnableToSwitch(WalletAddressType, String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -268,6 +280,16 @@ impl RustWalletViewModel {
         Ok(address)
     }
 
+    /// Get address at the given index
+    #[uniffi::method]
+    pub async fn address_at(&self, index: u32) -> Result<AddressInfo, Error> {
+        let address = call!(self.actor.address_at(index))
+            .await
+            .map_err(|_| Error::ActorNotFound)?;
+
+        Ok(address)
+    }
+
     #[uniffi::method]
     pub fn delete_wallet(&self) -> Result<(), Error> {
         let wallet_id = self.metadata.read().id.clone();
@@ -351,6 +373,13 @@ impl RustWalletViewModel {
         self.metadata.read().clone()
     }
 
+    // only called from the frontend, to make sure all metadata places are up to date,
+    // this would not be needed if we didn't keep a metadata cache in the view model
+    #[uniffi::method]
+    fn set_wallet_metadata(&self, metadata: WalletMetadata) {
+        self.metadata.write().clone_from(&metadata);
+    }
+
     #[uniffi::method]
     pub fn fingerprint(&self) -> String {
         let wallet_id = &self.metadata.read().id;
@@ -383,6 +412,69 @@ impl RustWalletViewModel {
         });
     }
 
+    #[uniffi::method]
+    pub async fn switch_to_different_wallet_address_type(
+        &self,
+        wallet_address_type: WalletAddressType,
+    ) -> Result<(), Error> {
+        let discovery_state = self.metadata.read().discovery_state.clone();
+        match discovery_state {
+            DiscoveryState::FoundAddressesFromJson(_vec, json) => {
+                let descriptors = match wallet_address_type {
+                    WalletAddressType::WrappedSegwit => json.bip49.clone(),
+                    WalletAddressType::Legacy => json.bip44.clone(),
+                    _ => {
+                        error!("trying to swtich to native segwit, but already segwit");
+                        return Ok(());
+                    }
+                };
+
+                let descriptors = descriptors.ok_or(Error::UnableToSwitch(
+                    wallet_address_type,
+                    "No descriptors found for address type".to_string(),
+                ))?;
+
+                let id = self.id.clone();
+                let actor = self.actor.clone();
+                call!(actor.switch_descriptor_to_new_address_type(
+                            descriptors,
+                            wallet_address_type
+                        ))
+                        .await
+                        .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
+
+                // reset route so it reloads the wallet with new txns
+                FfiApp::global().reset_default_route_to(Route::SelectedWallet(id));
+            }
+
+            DiscoveryState::FoundAddressesFromMnemonic(_) => {
+                let id = self.id.clone();
+                let actor = self.actor.clone();
+                call!(actor.switch_mnemonic_to_new_address_type(wallet_address_type))
+                    .await
+                    .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
+
+                debug!("switch done");
+
+                // reset route so it reloads the wallet with new txns
+                FfiApp::global().reset_default_route_to(Route::SelectedWallet(id));
+            }
+
+            DiscoveryState::Single
+            | DiscoveryState::StartedMnemonic
+            | DiscoveryState::NoneFound
+            | DiscoveryState::ChoseAdressType
+            | DiscoveryState::StartedJson(_) => {
+                return Err(Error::UnableToSwitch(
+                    wallet_address_type,
+                    format!("wallet in unexpected discovery state: {discovery_state:?}"),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
@@ -391,6 +483,7 @@ impl RustWalletViewModel {
                 let mut metadata = self.metadata.write();
                 metadata.name = name;
             }
+
             WalletViewModelAction::UpdateColor(color) => {
                 let mut metadata = self.metadata.write();
                 metadata.color = color;
@@ -415,15 +508,37 @@ impl RustWalletViewModel {
                 let mut metadata = self.metadata.write();
                 metadata.details_expanded = !metadata.details_expanded;
             }
+
+            WalletViewModelAction::SelectCurrentWalletAddressType => {
+                let mut metadata = self.metadata.write();
+                metadata.discovery_state = DiscoveryState::ChoseAdressType;
+            }
+
+            WalletViewModelAction::SelectDifferentWalletAddressType(wallet_address_type) => {
+                {
+                    let mut metadata = self.metadata.write();
+                    metadata.address_type = wallet_address_type;
+                    metadata.discovery_state = DiscoveryState::ChoseAdressType;
+
+                    self.reconciler
+                        .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                            metadata.clone(),
+                        ))
+                        .unwrap();
+
+                    // update wallet_metadata in the database
+                    let _ = Database::global()
+                        .wallets
+                        .update_wallet_metadata(metadata.clone());
+                }
+            }
         }
 
         let metadata = self.metadata.read();
+        let metdata_changed_msg =
+            WalletViewModelReconcileMessage::WalletMetadataChanged(metadata.clone());
 
-        self.reconciler
-            .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
-                metadata.clone(),
-            ))
-            .unwrap();
+        self.reconciler.send(metdata_changed_msg).unwrap();
 
         // update wallet_metadata in the database
         if let Err(error) = Database::global()

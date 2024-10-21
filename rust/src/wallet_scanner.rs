@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use act_zero::*;
 use bdk_chain::bitcoin::{Address, Network};
@@ -7,7 +7,7 @@ use bip39::Mnemonic;
 use crossbeam::channel::Sender;
 use eyre::Context;
 use pubport::formats::Json;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Default number of addresses to scan
 const DEFAULT_SCAN_LIMIT: u32 = 125;
@@ -26,7 +26,7 @@ use crate::{
     task::spawn_actor,
     view_model::wallet::WalletViewModelReconcileMessage,
     wallet::{
-        metadata::{DiscoveryState, FoundAddress, WalletId, WalletMetadata},
+        metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
         WalletAddressType, WalletError,
     },
 };
@@ -97,7 +97,14 @@ pub struct WalletScanner {
     pub workers: Workers,
     pub started_at: Instant,
     pub node_client_builder: NodeClientBuilder,
+    pub scan_source: ScanSource,
     pub responder: Sender<WalletViewModelReconcileMessage>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ScanSource {
+    Json(Arc<FoundJson>),
+    Mnemonic,
 }
 
 #[async_trait::async_trait]
@@ -135,8 +142,11 @@ impl WalletScanner {
         let network = db.global_config().selected_network().into();
 
         let id = metadata.id.clone();
-        let wallets = match metadata.discovery_state {
-            DiscoveryState::StartedJson(json) => Wallets::try_from_json(&json, network)?,
+        let (wallets, scan_source) = match metadata.discovery_state {
+            DiscoveryState::StartedJson(json) => (
+                Wallets::try_from_json(&json, network)?,
+                ScanSource::Json(json),
+            ),
             DiscoveryState::StartedMnemonic => {
                 let mnemonic = Keychain::global()
                     .get_wallet_key(&id)
@@ -144,12 +154,18 @@ impl WalletScanner {
                     .flatten()
                     .ok_or_else(|| WalletScannerError::NoMnemonicAvailable(id.clone()))?;
 
-                Wallets::try_from_mnemonic(&mnemonic, network)?
+                (
+                    Wallets::try_from_mnemonic(&mnemonic, network)?,
+                    ScanSource::Mnemonic,
+                )
             }
             DiscoveryState::Single
             | DiscoveryState::NoneFound
             | DiscoveryState::ChoseAdressType
-            | DiscoveryState::FoundAddresses(_) => return Err(WalletScannerError::NoAddressTypes),
+            | DiscoveryState::FoundAddressesFromJson(_, _)
+            | DiscoveryState::FoundAddressesFromMnemonic(_) => {
+                return Err(WalletScannerError::NoAddressTypes)
+            }
         };
 
         if wallets.iter().all(Option::is_none) {
@@ -163,13 +179,20 @@ impl WalletScanner {
         };
 
         let client_builder = NodeClientBuilder { node, options };
-        Ok(Self::new(metadata.id, client_builder, wallets, reconciler))
+        Ok(Self::new(
+            metadata.id,
+            client_builder,
+            wallets,
+            scan_source,
+            reconciler,
+        ))
     }
 
     pub fn new(
         id: WalletId,
         node_client_builder: NodeClientBuilder,
         wallets: Wallets,
+        scan_source: ScanSource,
         reconciler: Sender<WalletViewModelReconcileMessage>,
     ) -> Self {
         let mut started_workers = 0;
@@ -181,7 +204,7 @@ impl WalletScanner {
                 WalletScanWorker::new(id.clone(), wallet_type, wallet, node_client_builder.clone());
 
             let addr = spawn_actor(worker);
-            workers[wallet_type.index()].replace(WorkerHandle {
+            workers[index(wallet_type)].replace(WorkerHandle {
                 id: id.clone(),
                 addr,
                 wallet_type,
@@ -201,6 +224,7 @@ impl WalletScanner {
             workers,
             started_at: Instant::now(),
             node_client_builder,
+            scan_source,
             responder: reconciler,
         }
     }
@@ -220,7 +244,7 @@ impl WalletScanner {
         info!("marked worker {wallet_type:?} as found");
 
         //  mark as found and stop the worker
-        let worker = self.workers[wallet_type.index()]
+        let worker = self.workers[index(wallet_type)]
             .as_mut()
             .expect("worker started");
 
@@ -242,7 +266,7 @@ impl WalletScanner {
                 .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
 
             // update wallet metadata
-            self.set_metadata(DiscoveryState::FoundAddresses(found_addresses))?;
+            self.set_metadata_address_found()?;
 
             return Produces::ok(());
         }
@@ -253,7 +277,7 @@ impl WalletScanner {
     pub async fn mark_limit_reached(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
         info!("marked worker {wallet_type:?} limit reached");
 
-        let worker = self.workers[wallet_type.index()]
+        let worker = self.workers[index(wallet_type)]
             .as_mut()
             .expect("worker started");
 
@@ -276,7 +300,8 @@ impl WalletScanner {
             } else {
                 self.responder
                     .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
-                self.set_metadata(DiscoveryState::FoundAddresses(found_addresses))?;
+
+                self.set_metadata_address_found()?;
             }
 
             return Produces::ok(());
@@ -304,6 +329,25 @@ impl WalletScanner {
                     })
             })
             .collect::<Vec<FoundAddress>>()
+    }
+
+    fn set_metadata_address_found(&mut self) -> ActorResult<()> {
+        match &self.scan_source {
+            ScanSource::Json(json) => {
+                self.set_metadata(DiscoveryState::FoundAddressesFromJson(
+                    self.found_addresses(),
+                    json.clone(),
+                ))?;
+            }
+
+            ScanSource::Mnemonic => {
+                self.set_metadata(DiscoveryState::FoundAddressesFromMnemonic(
+                    self.found_addresses(),
+                ))?;
+            }
+        }
+
+        Produces::ok(())
     }
 
     fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
@@ -374,7 +418,10 @@ impl WalletScanWorker {
             .flatten()
             .map(|scan_state| match scan_state {
                 ScanState::Scanning(info) => info,
-                ScanState::Completed => panic!("trying to scan completed wallet"),
+                ScanState::Completed => {
+                    warn!("trying to scan completed wallet");
+                    ScanningInfo::new(wallet_type)
+                }
                 _ => ScanningInfo::new(wallet_type),
             })
             .unwrap_or_else(|| ScanningInfo::new(wallet_type));
@@ -488,13 +535,11 @@ impl WalletScanWorker {
     }
 }
 
-impl WalletAddressType {
-    pub fn index(&self) -> usize {
-        match self {
-            WalletAddressType::WrappedSegwit => 0,
-            WalletAddressType::Legacy => 1,
-            WalletAddressType::NativeSegwit => panic!("Not scanning the default one NativeSegwit"),
-        }
+fn index(type_: WalletAddressType) -> usize {
+    match type_ {
+        WalletAddressType::WrappedSegwit => 0,
+        WalletAddressType::Legacy => 1,
+        WalletAddressType::NativeSegwit => panic!("Not scanning the default one NativeSegwit"),
     }
 }
 
@@ -513,7 +558,7 @@ impl Wallets {
                 let wallet = BdkWallet::create_with_params(params)
                     .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
-                wallets[type_.index()] = Some((type_, wallet));
+                wallets[index(type_)] = Some((type_, wallet));
             }
         }
 
@@ -533,7 +578,7 @@ impl Wallets {
             .create_wallet_no_persist()
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
-            wallets[type_.index()] = Some((type_, wallet));
+            wallets[index(type_)] = Some((type_, wallet));
         }
 
         Ok(wallets)

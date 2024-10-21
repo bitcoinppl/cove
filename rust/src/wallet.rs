@@ -79,10 +79,13 @@ pub struct Wallet {
 #[derive(
     Debug,
     Clone,
+    Default,
     Eq,
     PartialEq,
     Copy,
     Hash,
+    Ord,
+    PartialOrd,
     derive_more::Display,
     serde::Serialize,
     serde::Deserialize,
@@ -90,6 +93,7 @@ pub struct Wallet {
     strum::EnumIter,
 )]
 pub enum WalletAddressType {
+    #[default]
     NativeSegwit,
     WrappedSegwit,
     Legacy,
@@ -107,7 +111,7 @@ impl Wallet {
 
         let create_wallet = || -> Result<Self, WalletError> {
             // create bdk wallet filestore, set id to metadata id
-            let me = Self::try_new_persisted_from_mnemonic(
+            let me = Self::try_new_persisted_from_mnemonic_segwit(
                 metadata.clone(),
                 mnemonic.clone(),
                 passphrase,
@@ -257,10 +261,94 @@ impl Wallet {
         })
     }
 
+    /// The user imported a hww and wants to switch from native segwit to a different address type
+    pub fn switch_descriptor_to_new_address_type(
+        &mut self,
+        descriptors: pubport::descriptor::Descriptors,
+        address_type: WalletAddressType,
+    ) -> Result<(), WalletError> {
+        debug!("switching public descriptor wallet to new address type");
+
+        let id = self.id.clone();
+
+        // delete the bdk wallet filestore
+        std::fs::remove_file(data_path(&self.id)).map_err(|error| {
+            WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
+        })?;
+
+        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
+            id.to_string().as_bytes(),
+            data_path(&id),
+        )
+        .map_err(|error| WalletError::PersistError(error.to_string()))?;
+
+        let descriptors: Descriptors = descriptors.into();
+        let wallet = descriptors
+            .to_create_params()
+            .network(self.network.into())
+            .create_wallet(&mut db)
+            .map_err(|error| WalletError::BdkError(error.to_string()))?;
+
+        // switch db and wallet
+        self.db = db;
+        self.bdk = wallet;
+        self.metadata.address_type = address_type;
+        self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
+
+        Ok(())
+    }
+
+    /// The user imported a hot wallet and wants to switch from native segwit to a different address type
+    pub fn switch_mnemonic_to_new_address_type(
+        &mut self,
+        address_type: WalletAddressType,
+    ) -> Result<(), WalletError> {
+        debug!("switching mnemonic wallet to new address type");
+
+        // delete the bdk wallet filestore
+        std::fs::remove_file(data_path(&self.id)).map_err(|error| {
+            WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
+        })?;
+
+        let mnemonic = Keychain::global()
+            .get_wallet_key(&self.id)
+            .ok()
+            .flatten()
+            .ok_or(WalletError::WalletNotFound)?;
+
+        let mut me = Self::try_new_persisted_from_mnemonic(
+            self.metadata.clone(),
+            mnemonic,
+            None,
+            address_type,
+        )?;
+
+        // swap th wallet to the new one
+        std::mem::swap(&mut me, self);
+        self.metadata.address_type = address_type;
+        self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
+
+        Ok(())
+    }
+
+    fn try_new_persisted_from_mnemonic_segwit(
+        metadata: WalletMetadata,
+        mnemonic: Mnemonic,
+        passphrase: Option<String>,
+    ) -> Result<Self, WalletError> {
+        Self::try_new_persisted_from_mnemonic(
+            metadata,
+            mnemonic,
+            passphrase,
+            WalletAddressType::NativeSegwit,
+        )
+    }
+
     fn try_new_persisted_from_mnemonic(
         metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
+        address_type: WalletAddressType,
     ) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
 
@@ -271,8 +359,7 @@ impl Wallet {
         )
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
-        let descriptors =
-            mnemonic.into_descriptors(passphrase, network, WalletAddressType::NativeSegwit);
+        let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
 
         let wallet = descriptors
             .to_create_params()
@@ -402,7 +489,7 @@ impl Wallet {
             debug!("clean up failed, failed to delete wallet: {error}");
         }
 
-        Self::try_new_persisted_from_mnemonic(metadata, mnemonic, passphrase).unwrap()
+        Self::try_new_persisted_from_mnemonic_segwit(metadata, mnemonic, passphrase).unwrap()
     }
 
     pub fn id(&self) -> WalletId {
@@ -421,6 +508,16 @@ impl Deref for Wallet {
 impl DerefMut for Wallet {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.bdk
+    }
+}
+
+impl WalletAddressType {
+    pub fn index(&self) -> usize {
+        match self {
+            WalletAddressType::NativeSegwit => 0,
+            WalletAddressType::WrappedSegwit => 1,
+            WalletAddressType::Legacy => 2,
+        }
     }
 }
 
@@ -452,7 +549,8 @@ mod tests {
         let metadata = WalletMetadata::preview_new();
 
         let wallet =
-            Wallet::try_new_persisted_from_mnemonic(metadata.clone(), mnemonic, None).unwrap();
+            Wallet::try_new_persisted_from_mnemonic_segwit(metadata.clone(), mnemonic, None)
+                .unwrap();
 
         let fingerprint = wallet.master_fingerprint();
         let _ = delete_data_path(&metadata.id);
