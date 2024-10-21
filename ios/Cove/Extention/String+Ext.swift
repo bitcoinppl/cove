@@ -11,4 +11,8 @@ extension String {
     init(_ unit: Unit) {
         self = unitToString(unit: unit)
     }
+
+    init(_ walletAddressType: WalletAddressType) {
+        self = walletAddressTypeToString(walletAddressType: walletAddressType)
+    }
 }

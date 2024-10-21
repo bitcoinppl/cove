@@ -3,7 +3,7 @@ use crate::{
     node::client::NodeClient,
     transaction::{Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
-    wallet::{balance::Balance, metadata::BlockSizeLast, AddressInfo, Wallet},
+    wallet::{balance::Balance, metadata::BlockSizeLast, AddressInfo, Wallet, WalletAddressType},
 };
 use act_zero::*;
 use bdk_chain::spk_client::{FullScanResult, SyncResult};
@@ -98,6 +98,11 @@ impl WalletActor {
         Produces::ok(transactions)
     }
 
+    pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
+        let address = self.wallet.peek_address(KeychainKind::External, index);
+        Produces::ok(address.into())
+    }
+
     pub async fn next_address(&mut self) -> ActorResult<AddressInfo> {
         let address = self.wallet.get_next_address()?;
         Produces::ok(address)
@@ -108,7 +113,7 @@ impl WalletActor {
             Some(node_client) => node_client,
             None => {
                 let node = Database::global().global_config.selected_node();
-                let node_client = NodeClient::new_from_node(&node).await?;
+                let node_client = NodeClient::new(&node).await?;
                 self.node_client = Some(node_client);
 
                 self.node_client.as_ref().expect("just checked")
@@ -174,7 +179,7 @@ impl WalletActor {
         let reconciler = self.reconciler.clone();
 
         // save the node client
-        match NodeClient::new_from_node(&node).await {
+        match NodeClient::new(&node).await {
             Ok(client) => {
                 self.node_client = Some(client);
             }
@@ -220,6 +225,31 @@ impl WalletActor {
 
         let block_height = self.update_height().await?.await?;
         Produces::ok(block_height)
+    }
+
+    pub async fn switch_mnemonic_to_new_address_type(
+        &mut self,
+        address_type: WalletAddressType,
+    ) -> ActorResult<()> {
+        debug!("actor switch mnemonic wallet");
+
+        self.wallet
+            .switch_mnemonic_to_new_address_type(address_type)?;
+
+        Produces::ok(())
+    }
+
+    pub async fn switch_descriptor_to_new_address_type(
+        &mut self,
+        descriptors: pubport::descriptor::Descriptors,
+        address_type: WalletAddressType,
+    ) -> ActorResult<()> {
+        debug!("actor switch pubkey descriptor wallet");
+
+        self.wallet
+            .switch_descriptor_to_new_address_type(descriptors, address_type)?;
+
+        Produces::ok(())
     }
 
     async fn update_height(&mut self) -> ActorResult<usize> {
@@ -401,7 +431,7 @@ impl WalletActor {
         let mut metadata = wallets.get(&self.wallet.id, self.wallet.network).ok()??;
         metadata.internal_mut().last_scan_finished = Some(now);
 
-        wallets.save_wallet(metadata).ok()
+        wallets.create_wallet(metadata).ok()
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -437,7 +467,7 @@ impl WalletActor {
             last_seen: now,
         });
 
-        wallets.save_wallet(metadata).ok()
+        wallets.create_wallet(metadata).ok()
     }
 }
 

@@ -205,6 +205,18 @@ impl FfiApp {
         Database::global().wallets().len(network).unwrap_or(0)
     }
 
+    /// Load and reset the default route after 800ms delay
+    pub fn load_and_reset_default_route(&self, route: Route) {
+        self.load_and_reset_default_route_after(route, 800);
+    }
+
+    /// Load and reset the default route
+    /// Shows a laoding screen, and then resets the default route
+    pub fn load_and_reset_default_route_after(&self, route: Route, after_millis: u32) {
+        let loading_route = route.load_and_reset_after(after_millis);
+        self.reset_default_route_to(loading_route);
+    }
+
     /// Change the default route, and reset the routes
     pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);

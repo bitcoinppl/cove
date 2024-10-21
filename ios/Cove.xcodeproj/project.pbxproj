@@ -44,6 +44,10 @@
 		AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
+		AC6F4CD92CC554FE008D26C0 /* ChooseWalletTypeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CD82CC554F1008D26C0 /* ChooseWalletTypeView.swift */; };
+		AC6F4CDB2CC55981008D26C0 /* General+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */; };
+		AC6F4CE12CC5DAAB008D26C0 /* PresentableItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */; };
+		AC6F4CE32CC6BC30008D26C0 /* LoadAndResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */; };
 		AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */; };
 		AC6F511E2CA36C7600D4D27A /* BinaryDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */; };
 		AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */; };
@@ -136,6 +140,10 @@
 		AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiColorScheme.swift; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
+		AC6F4CD82CC554F1008D26C0 /* ChooseWalletTypeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChooseWalletTypeView.swift; sourceTree = "<group>"; };
+		AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "General+Ext.swift"; sourceTree = "<group>"; };
+		AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentableItem.swift; sourceTree = "<group>"; };
+		AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadAndResetView.swift; sourceTree = "<group>"; };
 		AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiScanResultData.swift; sourceTree = "<group>"; };
 		AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinaryDecoder.swift; sourceTree = "<group>"; };
 		AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeImportScreen.swift; sourceTree = "<group>"; };
@@ -280,6 +288,7 @@
 		ACB17FBB2C5ABD6C0079A96A /* SelectedWalletScreen */ = {
 			isa = PBXGroup;
 			children = (
+				AC6F4CD82CC554F1008D26C0 /* ChooseWalletTypeView.swift */,
 				ACB17FBC2C5ABDD20079A96A /* WalletBalanceHeaderView.swift */,
 				AC2D59242C5B213500B67277 /* TransactionsCardView.swift */,
 				AC757CBA2C6D277400F3F41C /* ReceiveView.swift */,
@@ -299,6 +308,7 @@
 		ACC301662C20C11D006790DF /* Extention */ = {
 			isa = PBXGroup;
 			children = (
+				AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */,
 				ACC301692C20C9D4006790DF /* Routes+Ext.swift */,
 				ACF44D0C2C26131A008C5034 /* Color+Ext.swift */,
 				ACCAAAAC2C29CABC00FA642E /* Trait+Ext.swift */,
@@ -400,11 +410,13 @@
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				AC8459C02CA5ED7700A3083F /* NFCReader.swift */,
 				ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */,
+				AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */,
 				AC2B13522CA1EC0200C5C708 /* IdentifiableString.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
 				048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */,
+				AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
 				AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */,
@@ -522,6 +534,7 @@
 				AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */,
 				ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */,
 				ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */,
+				AC6F4CE12CC5DAAB008D26C0 /* PresentableItem.swift in Sources */,
 				AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */,
 				AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */,
 				AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */,
@@ -557,10 +570,12 @@
 				52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */,
 				AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */,
 				AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */,
+				AC6F4CE32CC6BC30008D26C0 /* LoadAndResetView.swift in Sources */,
 				AC2D59252C5B213500B67277 /* TransactionsCardView.swift in Sources */,
 				4B7D31B349728B3C573472DD /* Network+Ext.swift in Sources */,
 				AC6F511E2CA36C7600D4D27A /* BinaryDecoder.swift in Sources */,
 				2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */,
+				AC6F4CDB2CC55981008D26C0 /* General+Ext.swift in Sources */,
 				AC5F3CDD2C99E99800469EBA /* HeaderIcon.swift in Sources */,
 				4998F4A296FA2217EC2BD80F /* WalletSettingsSheet.swift in Sources */,
 				1BE5607DDD79FE6FA8A6B6F0 /* ImportWalletViewModel.swift in Sources */,
@@ -577,6 +592,7 @@
 				2344E4672757BE424B888B58 /* HotWalletImportScreen.swift in Sources */,
 				1C025A7627543FBFC072E0D1 /* VerifyWordsScreen.swift in Sources */,
 				240A3B1A16A45C43F8991A9E /* NodeSelectionView.swift in Sources */,
+				AC6F4CD92CC554FE008D26C0 /* ChooseWalletTypeView.swift in Sources */,
 				9BEA921FB93FC209CF7A8CA2 /* NewWalletContainer.swift in Sources */,
 				69455D17216AD109B6EE2F25 /* WalletMetadata+Ext.swift in Sources */,
 			);

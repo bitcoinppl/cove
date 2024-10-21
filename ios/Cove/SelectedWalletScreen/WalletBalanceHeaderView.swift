@@ -13,7 +13,7 @@ struct WalletBalanceHeaderView: View {
     let metadata: WalletMetadata
     let updater: (WalletViewModelAction) -> Void
 
-    @Binding var receiveSheetShowing: Bool
+    let showReceiveSheet: () -> Void
 
     var accentColor: Color {
         metadata.swiftColor
@@ -87,9 +87,7 @@ struct WalletBalanceHeaderView: View {
                 .padding(.bottom, 32)
 
             HStack(spacing: 16) {
-                Button(action: {
-                    receiveSheetShowing = true
-                }) {
+                Button(action: showReceiveSheet) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.down.left")
                         Text("Receive")
@@ -131,11 +129,12 @@ struct WalletBalanceHeaderView: View {
     metadata.sensitiveVisible = true
 
     return
-        WalletBalanceHeaderView(balance:
-            Amount.fromSat(sats: 1_000_738),
+        WalletBalanceHeaderView(
+            balance: Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
             updater: { _ in () },
-            receiveSheetShowing: Binding.constant(true))
+            showReceiveSheet: {}
+        )
         .padding()
 }
 
@@ -146,11 +145,12 @@ struct WalletBalanceHeaderView: View {
     metadata.color = .blue
 
     return
-        WalletBalanceHeaderView(balance:
-            Amount.fromSat(sats: 1_000_738),
+        WalletBalanceHeaderView(
+            balance: Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
             updater: { _ in () },
-            receiveSheetShowing: Binding.constant(false))
+            showReceiveSheet: {}
+        )
         .padding()
 }
 
@@ -164,7 +164,7 @@ struct WalletBalanceHeaderView: View {
             Amount.fromSat(sats: 1_000_738),
             metadata: metadata,
             updater: { _ in () },
-            receiveSheetShowing: Binding.constant(false))
+            showReceiveSheet: {})
         .padding()
 }
 
@@ -178,6 +178,6 @@ struct WalletBalanceHeaderView: View {
             Amount.fromSat(sats: 10_000_000_738),
             metadata: metadata,
             updater: { _ in () },
-            receiveSheetShowing: Binding.constant(false))
+            showReceiveSheet: {})
         .padding()
 }

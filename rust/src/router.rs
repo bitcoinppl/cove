@@ -10,6 +10,10 @@ use macros::impl_default_for;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
+    LoadAndReset {
+        reset_to: Arc<BoxedRoute>,
+        after_millis: u32,
+    },
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
@@ -90,9 +94,50 @@ impl Router {
     }
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Hash,
+    Eq,
+    PartialEq,
+    uniffi::Object,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::Deref,
+    derive_more::DerefMut,
+    derive_more::AsRef,
+)]
+pub struct BoxedRoute(pub Box<Route>);
+
+#[uniffi::export]
+impl BoxedRoute {
+    #[uniffi::constructor]
+    pub fn new(route: Route) -> Self {
+        Self(Box::new(route))
+    }
+
+    #[uniffi::method]
+    pub fn route(&self) -> Route {
+        *self.0.clone()
+    }
+}
+
 impl From<ColdWalletRoute> for Route {
     fn from(cold_wallet_route: ColdWalletRoute) -> Self {
         Route::NewWallet(NewWalletRoute::ColdWallet(cold_wallet_route))
+    }
+}
+
+impl Route {
+    pub fn load_and_reset(self) -> Self {
+        self.load_and_reset_after(800)
+    }
+
+    pub fn load_and_reset_after(self, time: u32) -> Self {
+        Self::LoadAndReset {
+            reset_to: BoxedRoute::new(self).into(),
+            after_millis: time,
+        }
     }
 }
 
@@ -161,6 +206,14 @@ mod ffi {
 
         pub fn nfc_import(&self) -> Route {
             ColdWalletRoute::Nfc.into()
+        }
+
+        pub fn load_and_reset_to(&self, reset_to: Route) -> Route {
+            Self::load_and_reset_to_after(self, reset_to, 500)
+        }
+
+        pub fn load_and_reset_to_after(&self, reset_to: Route, time: u32) -> Route {
+            reset_to.load_and_reset_after(time)
         }
     }
 

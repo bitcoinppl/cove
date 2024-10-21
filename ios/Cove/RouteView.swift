@@ -33,6 +33,8 @@ struct RouteView: View {
 @MainActor @ViewBuilder
 func routeToView(model: MainViewModel, route: Route) -> some View {
     switch route {
+    case let .loadAndReset(resetTo: route, afterMillis: time):
+        LoadAndResetView(nextRoute: route.route(), loadingTimeMs: Int(time))
     case .settings:
         SettingsScreen()
     case .listWallets:

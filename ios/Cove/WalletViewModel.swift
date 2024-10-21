@@ -11,6 +11,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     var loadState: WalletLoadState = .loading
     var balance: Balance = .init()
     var errorAlert: WalletErrorAlert? = nil
+    var foundAddresses: [FoundAddress] = []
 
     public init(id: WalletId) throws {
         self.id = id
@@ -39,6 +40,10 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
 
     var accentColor: Color {
         walletMetadata.swiftColor
+    }
+
+    func firstAddress() async throws -> AddressInfo {
+        return try await rust.addressAt(index: 0)
     }
 
     func reconcile(message: WalletViewModelReconcileMessage) {
@@ -75,6 +80,13 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
                 case let .walletMetadataChanged(metadata):
                     withAnimation {
                         self.walletMetadata = metadata
+                        self.rust.setWalletMetadata(metadata: metadata)
+                    }
+
+                case let .walletScannerResponse(scannerResponse):
+                    self.logger.debug("walletScannerResponse: \(scannerResponse)")
+                    if case let .foundAddresses(addressTypes) = scannerResponse {
+                        self.foundAddresses = addressTypes
                     }
 
                 case let .nodeConnectionFailed(error):

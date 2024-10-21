@@ -27,6 +27,9 @@ pub enum WalletTableError {
 
     #[error("failed to get wallets: {0}")]
     ReadError(String),
+
+    #[error("wallet already exists")]
+    WalletAlreadyExists,
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Object)]
@@ -45,12 +48,12 @@ impl From<Network> for WalletKey {
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct WalletTable {
+pub struct WalletsTable {
     db: Arc<redb::Database>,
 }
 
 #[uniffi::export]
-impl WalletTable {
+impl WalletsTable {
     pub fn is_empty(&self) -> Result<bool, Error> {
         let network = Database::global().global_config.selected_network();
 
@@ -77,7 +80,7 @@ impl WalletTable {
     }
 }
 
-impl WalletTable {
+impl WalletsTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create table if it doesn't exist
         write_txn.open_table(TABLE).expect("failed to create table");
@@ -149,9 +152,13 @@ impl WalletTable {
         Ok(())
     }
 
-    pub fn save_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
+    pub fn create_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
         let network = wallet.network;
         let mut wallets = self.get_all(network)?;
+
+        if wallets.iter().any(|w| w.id == wallet.id) {
+            return Err(WalletTableError::WalletAlreadyExists.into());
+        }
 
         wallets.push(wallet);
         self.save_all_wallets(network, wallets)?;
