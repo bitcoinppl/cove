@@ -60,6 +60,12 @@ struct SelectedWalletScreen: View {
     }
 }
 
+private enum SheetState {
+    case receive
+    case settings
+    case chooseAddressType([FoundAddress])
+}
+
 struct SelectedWalletScreenInner: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
@@ -70,8 +76,7 @@ struct SelectedWalletScreenInner: View {
     var model: WalletViewModel
 
     // private
-    @State private var showSettings = false
-    @State private var receiveSheetShowing = false
+    @State private var sheetState: PresentableItem<SheetState>? = nil
     @State private var showingCopiedPopup = true
 
     func updater(_ action: WalletViewModelAction) {
@@ -124,18 +129,48 @@ struct SelectedWalletScreenInner: View {
         }
     }
 
+    @ViewBuilder
+    private func SheetContent(_ state: PresentableItem<SheetState>) -> some View {
+        switch state.item {
+        case .receive:
+            ReceiveView(model: model)
+        case .settings:
+            WalletSettingsSheet(model: model)
+        case let .chooseAddressType(foundAddresses):
+            ChooseWalletTypeView(model: model, foundAddresses: foundAddresses)
+        }
+    }
+
+    private func setSheetState(_ discoveryState: DiscoveryState) {
+        Log.debug("discoveryState: \(discoveryState)")
+
+        switch discoveryState {
+        case let .foundAddressesFromMnemonic(foundAddresses):
+            sheetState = PresentableItem(.chooseAddressType(foundAddresses))
+        case let .foundAddressesFromJson(foundAddress, _):
+            sheetState = PresentableItem(.chooseAddressType(foundAddress))
+        default: ()
+        }
+    }
+
+    func showReceiveSheet() {
+        sheetState = PresentableItem(.receive)
+    }
+
     var body: some View {
         VStack {
             VerifyReminder(walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified)
 
             ScrollView {
                 VStack {
-                    WalletBalanceHeaderView(balance: model.balance.confirmed,
-                                            metadata: model.walletMetadata,
-                                            updater: updater,
-                                            receiveSheetShowing: $receiveSheetShowing)
-                        .cornerRadius(16)
-                        .padding()
+                    WalletBalanceHeaderView(
+                        balance: model.balance.confirmed,
+                        metadata: model.walletMetadata,
+                        updater: updater,
+                        showReceiveSheet: showReceiveSheet
+                    )
+                    .cornerRadius(16)
+                    .padding()
 
                     Transactions
                         .environment(model)
@@ -143,7 +178,7 @@ struct SelectedWalletScreenInner: View {
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: {
-                            showSettings = true
+                            sheetState = PresentableItem(.settings)
                         }) {
                             Image(systemName: "gear")
                                 .foregroundColor(.primary.opacity(0.8))
@@ -154,26 +189,15 @@ struct SelectedWalletScreenInner: View {
                 .toolbarColorScheme(.dark, for: .navigationBar)
                 .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
-                .sheet(isPresented: $receiveSheetShowing) {
-                    ReceiveView(model: model)
-                }
-                .sheet(isPresented: $showSettings) {
-                    WalletSettingsSheet(model: model)
-                }
+                .sheet(item: $sheetState, content: SheetContent)
             }
             .refreshable {
                 try? await model.rust.forceWalletScan()
                 let _ = try? await model.rust.forceUpdateHeight()
             }
         }
-        .onChange(of: model.foundAddresses) { _, foundAddresses in
-            if foundAddresses.count > 0 {
-                Log.debug("TODO: FOUND ADDRESSES: \(foundAddresses) LET USER KNOW AND SELECT")
-            }
-        }
-        .onAppear {
-            Log.debug("TODO: WALLET METADATA HANDLE IF FOUND ADDRESSES BUT NOT HANDLED \(model.walletMetadata.discoveryState)")
-        }
+        .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue) }
+        .onAppear { setSheetState(self.model.walletMetadata.discoveryState) }
         .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
     }
 }

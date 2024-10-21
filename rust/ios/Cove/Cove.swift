@@ -4221,6 +4221,11 @@ public func FfiConverterTypeRustPendingWalletViewModel_lower(_ value: RustPendin
 }
 
 public protocol RustWalletViewModelProtocol: AnyObject {
+    /**
+     * Get address at the given index
+     */
+    func addressAt(index: UInt32) async throws -> AddressInfo
+
     func balance() async -> Balance
 
     func currentBlockHeight() async throws -> UInt32
@@ -4255,7 +4260,11 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func numberOfConfirmationsFmt(blockHeight: UInt32) async throws -> String
 
+    func setWalletMetadata(metadata: WalletMetadata)
+
     func startWalletScan() async throws
+
+    func switchToDifferentWalletAddressType(walletAddressType: WalletAddressType) async throws
 
     func transactionDetails(txId: TxId) async throws -> TransactionDetails
 
@@ -4325,6 +4334,26 @@ open class RustWalletViewModel:
                 FfiConverterString.lower(xpub), $0
             )
         })
+    }
+
+    /**
+     * Get address at the given index
+     */
+    open func addressAt(index: UInt32) async throws -> AddressInfo {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_address_at(
+                        self.uniffiClonePointer(),
+                        FfiConverterUInt32.lower(index)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeAddressInfo.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
     }
 
     open func balance() async -> Balance {
@@ -4489,12 +4518,35 @@ open class RustWalletViewModel:
             )
     }
 
+    open func setWalletMetadata(metadata: WalletMetadata) { try! rustCall {
+        uniffi_cove_fn_method_rustwalletviewmodel_set_wallet_metadata(self.uniffiClonePointer(),
+                                                                      FfiConverterTypeWalletMetadata.lower(metadata), $0)
+    }
+    }
+
     open func startWalletScan() async throws {
         return
             try await uniffiRustCallAsync(
                 rustFutureFunc: {
                     uniffi_cove_fn_method_rustwalletviewmodel_start_wallet_scan(
                         self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_void,
+                completeFunc: ffi_cove_rust_future_complete_void,
+                freeFunc: ffi_cove_rust_future_free_void,
+                liftFunc: { $0 },
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func switchToDifferentWalletAddressType(walletAddressType: WalletAddressType) async throws {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_switch_to_different_wallet_address_type(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeWalletAddressType.lower(walletAddressType)
                     )
                 },
                 pollFunc: ffi_cove_rust_future_poll_void,
@@ -6203,6 +6255,58 @@ public func FfiConverterTypeConfirmedDetails_lower(_ value: ConfirmedDetails) ->
     return FfiConverterTypeConfirmedDetails.lower(value)
 }
 
+public struct FoundAddress {
+    public var type: WalletAddressType
+    public var firstAddress: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(type: WalletAddressType, firstAddress: String) {
+        self.type = type
+        self.firstAddress = firstAddress
+    }
+}
+
+extension FoundAddress: Equatable, Hashable {
+    public static func == (lhs: FoundAddress, rhs: FoundAddress) -> Bool {
+        if lhs.type != rhs.type {
+            return false
+        }
+        if lhs.firstAddress != rhs.firstAddress {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(type)
+        hasher.combine(firstAddress)
+    }
+}
+
+public struct FfiConverterTypeFoundAddress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FoundAddress {
+        return
+            try FoundAddress(
+                type: FfiConverterTypeWalletAddressType.read(from: &buf),
+                firstAddress: FfiConverterString.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: FoundAddress, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletAddressType.write(value.type, into: &buf)
+        FfiConverterString.write(value.firstAddress, into: &buf)
+    }
+}
+
+public func FfiConverterTypeFoundAddress_lift(_ buf: RustBuffer) throws -> FoundAddress {
+    return try FfiConverterTypeFoundAddress.lift(buf)
+}
+
+public func FfiConverterTypeFoundAddress_lower(_ value: FoundAddress) -> RustBuffer {
+    return FfiConverterTypeFoundAddress.lower(value)
+}
+
 public struct GroupedWord {
     public var number: UInt8
     public var word: String
@@ -7072,11 +7176,12 @@ public struct WalletMetadata {
     public var detailsExpanded: Bool
     public var walletType: WalletType
     public var discoveryState: DiscoveryState
+    public var addressType: WalletAddressType
     public var `internal`: InternalOnlyMetadata
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -7089,6 +7194,7 @@ public struct WalletMetadata {
         self.detailsExpanded = detailsExpanded
         self.walletType = walletType
         self.discoveryState = discoveryState
+        self.addressType = addressType
         self.internal = `internal`
     }
 }
@@ -7109,6 +7215,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 detailsExpanded: FfiConverterBool.read(from: &buf),
                 walletType: FfiConverterTypeWalletType.read(from: &buf),
                 discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf),
+                addressType: FfiConverterTypeWalletAddressType.read(from: &buf),
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
             )
     }
@@ -7126,6 +7233,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.detailsExpanded, into: &buf)
         FfiConverterTypeWalletType.write(value.walletType, into: &buf)
         FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
+        FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.internal, into: &buf)
     }
 }
@@ -7742,7 +7850,8 @@ public enum DiscoveryState {
     case startedJson(FoundJson
     )
     case startedMnemonic
-    case foundAddresses([WalletAddressType]
+    case foundAddressesFromJson([FoundAddress], FoundJson)
+    case foundAddressesFromMnemonic([FoundAddress]
     )
     case noneFound
     case choseAdressType
@@ -7761,12 +7870,14 @@ public struct FfiConverterTypeDiscoveryState: FfiConverterRustBuffer {
 
         case 3: return .startedMnemonic
 
-        case 4: return try .foundAddresses(FfiConverterSequenceTypeWalletAddressType.read(from: &buf)
+        case 4: return try .foundAddressesFromJson(FfiConverterSequenceTypeFoundAddress.read(from: &buf), FfiConverterTypeFoundJson.read(from: &buf))
+
+        case 5: return try .foundAddressesFromMnemonic(FfiConverterSequenceTypeFoundAddress.read(from: &buf)
             )
 
-        case 5: return .noneFound
+        case 6: return .noneFound
 
-        case 6: return .choseAdressType
+        case 7: return .choseAdressType
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -7784,15 +7895,20 @@ public struct FfiConverterTypeDiscoveryState: FfiConverterRustBuffer {
         case .startedMnemonic:
             writeInt(&buf, Int32(3))
 
-        case let .foundAddresses(v1):
+        case let .foundAddressesFromJson(v1, v2):
             writeInt(&buf, Int32(4))
-            FfiConverterSequenceTypeWalletAddressType.write(v1, into: &buf)
+            FfiConverterSequenceTypeFoundAddress.write(v1, into: &buf)
+            FfiConverterTypeFoundJson.write(v2, into: &buf)
+
+        case let .foundAddressesFromMnemonic(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeFoundAddress.write(v1, into: &buf)
 
         case .noneFound:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
 
         case .choseAdressType:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
         }
     }
 }
@@ -9818,7 +9934,7 @@ extension ScanState: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ScannerResponse {
-    case foundAddresses([WalletAddressType]
+    case foundAddresses([FoundAddress]
     )
     case noneFound
 }
@@ -9829,7 +9945,7 @@ public struct FfiConverterTypeScannerResponse: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScannerResponse {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .foundAddresses(FfiConverterSequenceTypeWalletAddressType.read(from: &buf)
+        case 1: return try .foundAddresses(FfiConverterSequenceTypeFoundAddress.read(from: &buf)
             )
 
         case 2: return .noneFound
@@ -9842,7 +9958,7 @@ public struct FfiConverterTypeScannerResponse: FfiConverterRustBuffer {
         switch value {
         case let .foundAddresses(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterSequenceTypeWalletAddressType.write(v1, into: &buf)
+            FfiConverterSequenceTypeFoundAddress.write(v1, into: &buf)
 
         case .noneFound:
             writeInt(&buf, Int32(2))
@@ -10812,6 +10928,7 @@ public enum WalletTableError {
     )
     case ReadError(String
     )
+    case WalletAlreadyExists
 }
 
 public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
@@ -10823,11 +10940,10 @@ public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
         case 1: return try .SaveError(
                 FfiConverterString.read(from: &buf)
             )
-
         case 2: return try .ReadError(
                 FfiConverterString.read(from: &buf)
             )
-
+        case 3: return .WalletAlreadyExists
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -10841,6 +10957,9 @@ public struct FfiConverterTypeWalletTableError: FfiConverterRustBuffer {
         case let .ReadError(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
+
+        case .WalletAlreadyExists:
+            writeInt(&buf, Int32(3))
         }
     }
 }
@@ -10910,6 +11029,9 @@ public enum WalletViewModelAction {
     )
     case toggleSensitiveVisibility
     case toggleDetailsExpanded
+    case selectCurrentWalletAddressType
+    case selectDifferentWalletAddressType(WalletAddressType
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
@@ -10933,6 +11055,11 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
         case 5: return .toggleSensitiveVisibility
 
         case 6: return .toggleDetailsExpanded
+
+        case 7: return .selectCurrentWalletAddressType
+
+        case 8: return try .selectDifferentWalletAddressType(FfiConverterTypeWalletAddressType.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -10961,6 +11088,13 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
 
         case .toggleDetailsExpanded:
             writeInt(&buf, Int32(6))
+
+        case .selectCurrentWalletAddressType:
+            writeInt(&buf, Int32(7))
+
+        case let .selectDifferentWalletAddressType(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeWalletAddressType.write(v1, into: &buf)
         }
     }
 }
@@ -10998,6 +11132,8 @@ public enum WalletViewModelError {
     case GetHeightError
     case TransactionDetailsError(String
     )
+    case ActorNotFound
+    case UnableToSwitch(WalletAddressType, String)
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -11036,6 +11172,11 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
             )
         case 11: return .GetHeightError
         case 12: return try .TransactionDetailsError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 13: return .ActorNotFound
+        case 14: return try .UnableToSwitch(
+                FfiConverterTypeWalletAddressType.read(from: &buf),
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -11089,6 +11230,14 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
         case let .TransactionDetailsError(v1):
             writeInt(&buf, Int32(12))
             FfiConverterString.write(v1, into: &buf)
+
+        case .ActorNotFound:
+            writeInt(&buf, Int32(13))
+
+        case let .UnableToSwitch(v1, v2):
+            writeInt(&buf, Int32(14))
+            FfiConverterTypeWalletAddressType.write(v1, into: &buf)
+            FfiConverterString.write(v2, into: &buf)
         }
     }
 }
@@ -11928,6 +12077,28 @@ private struct FfiConverterSequenceString: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterSequenceTypeFoundAddress: FfiConverterRustBuffer {
+    typealias SwiftType = [FoundAddress]
+
+    public static func write(_ value: [FoundAddress], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFoundAddress.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FoundAddress] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FoundAddress]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            try seq.append(FfiConverterTypeFoundAddress.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 private struct FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer {
     typealias SwiftType = [GroupedWord]
 
@@ -12121,28 +12292,6 @@ private struct FfiConverterSequenceTypeUnit: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             try seq.append(FfiConverterTypeUnit.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-private struct FfiConverterSequenceTypeWalletAddressType: FfiConverterRustBuffer {
-    typealias SwiftType = [WalletAddressType]
-
-    public static func write(_ value: [WalletAddressType], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeWalletAddressType.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WalletAddressType] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [WalletAddressType]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            try seq.append(FfiConverterTypeWalletAddressType.read(from: &buf))
         }
         return seq
     }
@@ -12344,6 +12493,15 @@ public func defaultNodeSelection() -> NodeSelection {
     })
 }
 
+public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> Bool {
+    return try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_fn_func_discovery_state_is_equal(
+            FfiConverterTypeDiscoveryState.lower(lhs),
+            FfiConverterTypeDiscoveryState.lower(rhs), $0
+        )
+    })
+}
+
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8) throws -> [[String]] {
     return try FfiConverterSequenceSequenceString.lift(rustCallWithError(FfiConverterTypeMnemonicParseError.lift) {
         uniffi_cove_fn_func_grouped_plain_words_of(
@@ -12403,6 +12561,20 @@ public func numberOfWordsToWordCount(me: NumberOfBip39Words) -> UInt8 {
     })
 }
 
+public func previewNewLegacyFoundAddress() -> FoundAddress {
+    return try! FfiConverterTypeFoundAddress.lift(try! rustCall {
+        uniffi_cove_fn_func_preview_new_legacy_found_address($0
+        )
+    })
+}
+
+public func previewNewWrappedFoundAddress() -> FoundAddress {
+    return try! FfiConverterTypeFoundAddress.lift(try! rustCall {
+        uniffi_cove_fn_func_preview_new_wrapped_found_address($0
+        )
+    })
+}
+
 public func transactionPreviewConfirmedNew() -> Transaction {
     return try! FfiConverterTypeTransaction.lift(try! rustCall {
         uniffi_cove_fn_func_transaction_preview_confirmed_new($0
@@ -12430,6 +12602,23 @@ public func unitToString(unit: Unit) -> String {
     return try! FfiConverterString.lift(try! rustCall {
         uniffi_cove_fn_func_unit_to_string(
             FfiConverterTypeUnit.lower(unit), $0
+        )
+    })
+}
+
+public func walletAddressTypeLessThan(lhs: WalletAddressType, rhs: WalletAddressType) -> Bool {
+    return try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_fn_func_wallet_address_type_less_than(
+            FfiConverterTypeWalletAddressType.lower(lhs),
+            FfiConverterTypeWalletAddressType.lower(rhs), $0
+        )
+    })
+}
+
+public func walletAddressTypeToString(walletAddressType: WalletAddressType) -> String {
+    return try! FfiConverterString.lift(try! rustCall {
+        uniffi_cove_fn_func_wallet_address_type_to_string(
+            FfiConverterTypeWalletAddressType.lower(walletAddressType), $0
         )
     })
 }
@@ -12484,6 +12673,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_default_node_selection() != 14665 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_func_discovery_state_is_equal() != 12390 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_func_grouped_plain_words_of() != 45802 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -12505,6 +12697,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_number_of_words_to_word_count() != 24846 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_func_preview_new_legacy_found_address() != 36773 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 57500 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 43706 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -12515,6 +12713,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_unit_to_string() != 63080 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_wallet_address_type_less_than() != 14566 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_wallet_metadata_preview() != 1229 {
@@ -12835,6 +13039,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustpendingwalletviewmodel_save_wallet() != 45300 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_address_at() != 38561 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_balance() != 10059 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -12877,7 +13084,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations_fmt() != 20695 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_set_wallet_metadata() != 16289 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_start_wallet_scan() != 46525 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_switch_to_different_wallet_address_type() != 46868 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_transaction_details() != 62006 {
