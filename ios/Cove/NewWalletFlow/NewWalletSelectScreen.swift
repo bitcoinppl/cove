@@ -17,11 +17,22 @@ struct NewWalletSelectScreen: View {
 
     // private
     @State private var nfcReader = NFCReader()
+    @State private var nfcCalled: Bool = false
     let routeFactory: RouteFactory = .init()
 
     // file import
     @State private var alert: AlertItem? = nil
     @State private var isImporting = false
+
+    // sheets
+    @State private var sheetState: PresentableItem<SheetState>? = nil
+
+    @ViewBuilder
+    private func SheetContent(_ state: PresentableItem<SheetState>) -> some View {
+        switch state.item {
+        case .nfcHelp: NfcHelpView()
+        }
+    }
 
     var body: some View {
         VStack(spacing: 30) {
@@ -69,10 +80,28 @@ struct NewWalletSelectScreen: View {
                 }
                 Button("NFC") {
                     self.nfcReader.scan()
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        withAnimation {
+                            self.nfcCalled = true
+                        }
+                    }
                 }
             }
 
             Spacer()
+
+            if self.nfcCalled {
+                Button(action: {
+                    self.sheetState = PresentableItem(.nfcHelp)
+                }) {
+                    HStack {
+                        Image(systemName: "wave.3.right")
+                        Text("NFC Help")
+                    }
+                }
+            }
+
             Spacer()
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -101,6 +130,7 @@ struct NewWalletSelectScreen: View {
         .onChange(of: self.nfcReader.scannedMessage) { _, message in
             if let message = message { self.newWalletFromXpub(message) }
         }
+        .sheet(item: self.$sheetState, content: self.SheetContent)
     }
 
     private func newWalletFromXpub(_ xpub: String) {
@@ -170,6 +200,10 @@ private enum AlertType: Equatable {
         case .error: return "Error"
         }
     }
+}
+
+private enum SheetState {
+    case nfcHelp
 }
 
 #Preview {
