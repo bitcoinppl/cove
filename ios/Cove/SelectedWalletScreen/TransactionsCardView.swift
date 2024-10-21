@@ -95,7 +95,15 @@ struct ConfirmedTransactionView: View {
     @State var loading: Bool = false
 
     var amount: String {
-        model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+        privateShow(model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived()))
+    }
+
+    func privateShow(_ text: String, placeholder: String = "*******") -> String {
+        if !metadata.sensitiveVisible {
+            placeholder
+        } else {
+            text
+        }
     }
 
     var body: some View {
@@ -107,7 +115,7 @@ struct ConfirmedTransactionView: View {
                     .fontWeight(.medium)
                     .foregroundColor(.primary.opacity(0.65))
 
-                Text(txn.confirmedAtFmt())
+                Text(privateShow(txn.confirmedAtFmt()))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -115,7 +123,7 @@ struct ConfirmedTransactionView: View {
             VStack(alignment: .trailing) {
                 Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()))
-                Text(txn.blockHeightFmt())
+                Text(privateShow(txn.blockHeightFmt()))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -146,8 +154,16 @@ struct UnconfirmedTransactionView: View {
     let txn: UnconfirmedTransaction
     let metadata: WalletMetadata
 
+    func privateShow(_ text: String, placeholder: String = "*******") -> String {
+        if !metadata.sensitiveVisible {
+            placeholder
+        } else {
+            text
+        }
+    }
+
     var amount: String {
-        model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+        privateShow(model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived()))
     }
 
     var body: some View {
@@ -260,6 +276,21 @@ private struct TxnIcon: View {
         )
         .environment(WalletViewModel(preview: "preview_only"))
     }
+}
+
+#Preview("Sensitive Hidden") {
+    var metadata = walletMetadataPreview()
+    metadata.sensitiveVisible = false
+
+    return
+        AsyncPreview {
+            TransactionsCardView(
+                transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
+                scanComplete: true,
+                metadata: metadata
+            )
+            .environment(WalletViewModel(preview: "preview_only"))
+        }
 }
 
 #Preview("Empty") {
