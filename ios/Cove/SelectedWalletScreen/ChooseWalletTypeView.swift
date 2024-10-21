@@ -26,7 +26,6 @@ public struct ChooseWalletTypeView: View {
             Task {
                 // switch the wallet
                 do {
-                    Log.debug("switching")
                     try await model.rust.switchToDifferentWalletAddressType(walletAddressType: foundAddress.type)
                 } catch {
                     Log.error(error.localizedDescription)

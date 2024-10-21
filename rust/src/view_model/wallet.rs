@@ -326,7 +326,7 @@ impl RustWalletViewModel {
         }
 
         // reset the default route to list wallets
-        FfiApp::global().reset_default_route_to(Route::ListWallets);
+        FfiApp::global().load_and_reset_default_route(Route::ListWallets);
 
         Ok(())
     }
@@ -444,7 +444,7 @@ impl RustWalletViewModel {
                         .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
 
                 // reset route so it reloads the wallet with new txns
-                FfiApp::global().reset_default_route_to(Route::SelectedWallet(id));
+                FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
             }
 
             DiscoveryState::FoundAddressesFromMnemonic(_) => {
@@ -457,7 +457,7 @@ impl RustWalletViewModel {
                 debug!("switch done");
 
                 // reset route so it reloads the wallet with new txns
-                FfiApp::global().reset_default_route_to(Route::SelectedWallet(id));
+                FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
             }
 
             DiscoveryState::Single

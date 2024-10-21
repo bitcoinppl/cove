@@ -1509,6 +1509,103 @@ public func FfiConverterTypeBip39WordSpecificAutocomplete_lower(_ value: Bip39Wo
     return FfiConverterTypeBip39WordSpecificAutocomplete.lower(value)
 }
 
+public protocol BoxedRouteProtocol: AnyObject {
+    func route() -> Route
+}
+
+open class BoxedRoute:
+    BoxedRouteProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_boxedroute(self.pointer, $0) }
+    }
+
+    public convenience init(route: Route) {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_boxedroute_new(
+                    FfiConverterTypeRoute.lower(route), $0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_boxedroute(pointer, $0) }
+    }
+
+    open func route() -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_boxedroute_route(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeBoxedRoute: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = BoxedRoute
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> BoxedRoute {
+        return BoxedRoute(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: BoxedRoute) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BoxedRoute {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: BoxedRoute, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeBoxedRoute_lift(_ pointer: UnsafeMutableRawPointer) throws -> BoxedRoute {
+    return try FfiConverterTypeBoxedRoute.lift(pointer)
+}
+
+public func FfiConverterTypeBoxedRoute_lower(_ value: BoxedRoute) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBoxedRoute.lower(value)
+}
+
 public protocol ChainPositionProtocol: AnyObject {}
 
 open class ChainPosition:
@@ -1946,6 +2043,17 @@ public protocol FfiAppProtocol: AnyObject {
 
     func listenForUpdates(updater: FfiReconcile)
 
+    /**
+     * Load and reset the default route after 800ms delay
+     */
+    func loadAndResetDefaultRoute(route: Route)
+
+    /**
+     * Load and reset the default route
+     * Shows a laoding screen, and then resets the default route
+     */
+    func loadAndResetDefaultRouteAfter(route: Route, afterMillis: UInt32)
+
     func network() -> Network
 
     /**
@@ -2068,6 +2176,26 @@ open class FfiApp:
     open func listenForUpdates(updater: FfiReconcile) { try! rustCall {
         uniffi_cove_fn_method_ffiapp_listen_for_updates(self.uniffiClonePointer(),
                                                         FfiConverterCallbackInterfaceFfiReconcile.lower(updater), $0)
+    }
+    }
+
+    /**
+     * Load and reset the default route after 800ms delay
+     */
+    open func loadAndResetDefaultRoute(route: Route) { try! rustCall {
+        uniffi_cove_fn_method_ffiapp_load_and_reset_default_route(self.uniffiClonePointer(),
+                                                                  FfiConverterTypeRoute.lower(route), $0)
+    }
+    }
+
+    /**
+     * Load and reset the default route
+     * Shows a laoding screen, and then resets the default route
+     */
+    open func loadAndResetDefaultRouteAfter(route: Route, afterMillis: UInt32) { try! rustCall {
+        uniffi_cove_fn_method_ffiapp_load_and_reset_default_route_after(self.uniffiClonePointer(),
+                                                                        FfiConverterTypeRoute.lower(route),
+                                                                        FfiConverterUInt32.lower(afterMillis), $0)
     }
     }
 
@@ -3774,6 +3902,10 @@ public protocol RouteFactoryProtocol: AnyObject {
 
     func isSameParentRoute(route: Route, routeToCheck: Route) -> Bool
 
+    func loadAndResetTo(resetTo: Route) -> Route
+
+    func loadAndResetToAfter(resetTo: Route, time: UInt32) -> Route
+
     func newHotWallet() -> Route
 
     func newWalletSelect() -> Route
@@ -3863,6 +3995,21 @@ open class RouteFactory:
             uniffi_cove_fn_method_routefactory_is_same_parent_route(self.uniffiClonePointer(),
                                                                     FfiConverterTypeRoute.lower(route),
                                                                     FfiConverterTypeRoute.lower(routeToCheck), $0)
+        })
+    }
+
+    open func loadAndResetTo(resetTo: Route) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_load_and_reset_to(self.uniffiClonePointer(),
+                                                                 FfiConverterTypeRoute.lower(resetTo), $0)
+        })
+    }
+
+    open func loadAndResetToAfter(resetTo: Route, time: UInt32) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_load_and_reset_to_after(self.uniffiClonePointer(),
+                                                                       FfiConverterTypeRoute.lower(resetTo),
+                                                                       FfiConverterUInt32.lower(time), $0)
         })
     }
 
@@ -9806,6 +9953,7 @@ extension ResumeError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Route {
+    case loadAndReset(resetTo: BoxedRoute, afterMillis: UInt32)
     case listWallets
     case selectedWallet(WalletId
     )
@@ -9823,20 +9971,22 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Route {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .listWallets
+        case 1: return try .loadAndReset(resetTo: FfiConverterTypeBoxedRoute.read(from: &buf), afterMillis: FfiConverterUInt32.read(from: &buf))
 
-        case 2: return try .selectedWallet(FfiConverterTypeWalletId.read(from: &buf)
+        case 2: return .listWallets
+
+        case 3: return try .selectedWallet(FfiConverterTypeWalletId.read(from: &buf)
             )
 
-        case 3: return try .newWallet(FfiConverterTypeNewWalletRoute.read(from: &buf)
+        case 4: return try .newWallet(FfiConverterTypeNewWalletRoute.read(from: &buf)
             )
 
-        case 4: return .settings
+        case 5: return .settings
 
-        case 5: return try .secretWords(FfiConverterTypeWalletId.read(from: &buf)
+        case 6: return try .secretWords(FfiConverterTypeWalletId.read(from: &buf)
             )
 
-        case 6: return try .transactionDetails(id: FfiConverterTypeWalletId.read(from: &buf), details: FfiConverterTypeTransactionDetails.read(from: &buf))
+        case 7: return try .transactionDetails(id: FfiConverterTypeWalletId.read(from: &buf), details: FfiConverterTypeTransactionDetails.read(from: &buf))
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -9844,26 +9994,31 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
 
     public static func write(_ value: Route, into buf: inout [UInt8]) {
         switch value {
-        case .listWallets:
+        case let .loadAndReset(resetTo, afterMillis):
             writeInt(&buf, Int32(1))
+            FfiConverterTypeBoxedRoute.write(resetTo, into: &buf)
+            FfiConverterUInt32.write(afterMillis, into: &buf)
+
+        case .listWallets:
+            writeInt(&buf, Int32(2))
 
         case let .selectedWallet(v1):
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
         case let .newWallet(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeNewWalletRoute.write(v1, into: &buf)
 
         case .settings:
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
 
         case let .secretWords(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
         case let .transactionDetails(id, details):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeTransactionDetails.write(details, into: &buf)
         }
@@ -12790,6 +12945,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 4400 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_boxedroute_route() != 26050 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_confirmedtransaction_block_height() != 62845 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -12833,6 +12991,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 48795 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route() != 16043 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffiapp_load_and_reset_default_route_after() != 14335 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_network() != 26747 {
@@ -12989,6 +13153,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_is_same_parent_route() != 43168 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_load_and_reset_to() != 41201 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_load_and_reset_to_after() != 39743 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_routefactory_new_hot_wallet() != 51032 {
@@ -13235,6 +13405,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_bip39wordspecificautocomplete_new() != 49814 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_boxedroute_new() != 62486 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_database_new() != 41458 {
