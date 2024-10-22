@@ -45,6 +45,8 @@ pub struct WalletMetadata {
     pub discovery_state: DiscoveryState,
     #[serde(default = "default_address_type")]
     pub address_type: WalletAddressType,
+    #[serde(default)]
+    pub fiat_or_btc: FiatOrBtc,
 
     // internal only metadata, don't use in the UI
     // note: maybe better to use a separate table for this
@@ -117,6 +119,16 @@ pub enum WalletType {
     Cold,
 }
 
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum,
+)]
+pub enum FiatOrBtc {
+    #[default]
+    Btc,
+
+    Fiat,
+}
+
 mod ffi {
     use super::*;
 
@@ -137,6 +149,7 @@ impl WalletMetadata {
             verified: false,
             network,
             performed_full_scan: false,
+            fiat_or_btc: FiatOrBtc::Btc,
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
@@ -178,6 +191,7 @@ impl WalletMetadata {
             verified: false,
             network: Network::Bitcoin,
             performed_full_scan: false,
+            fiat_or_btc: FiatOrBtc::Btc,
             address_type: WalletAddressType::default(),
             selected_unit: Unit::default(),
             selected_fiat_currency: default_fiat_currency(),

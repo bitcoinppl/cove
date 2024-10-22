@@ -4375,6 +4375,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func balance() async -> Balance
 
+    func balanceInFiat(currency: FiatCurrency) async throws -> Double
+
     func currentBlockHeight() async throws -> UInt32
 
     func deleteWallet() throws
@@ -4516,6 +4518,23 @@ open class RustWalletViewModel:
                 freeFunc: ffi_cove_rust_future_free_rust_buffer,
                 liftFunc: FfiConverterTypeBalance.lift,
                 errorHandler: nil
+            )
+    }
+
+    open func balanceInFiat(currency: FiatCurrency) async throws -> Double {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_balance_in_fiat(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeFiatCurrency.lower(currency)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_f64,
+                completeFunc: ffi_cove_rust_future_complete_f64,
+                freeFunc: ffi_cove_rust_future_free_f64,
+                liftFunc: FfiConverterDouble.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
 
@@ -7324,11 +7343,12 @@ public struct WalletMetadata {
     public var walletType: WalletType
     public var discoveryState: DiscoveryState
     public var addressType: WalletAddressType
+    public var fiatOrBtc: FiatOrBtc
     public var `internal`: InternalOnlyMetadata
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -7342,6 +7362,7 @@ public struct WalletMetadata {
         self.walletType = walletType
         self.discoveryState = discoveryState
         self.addressType = addressType
+        self.fiatOrBtc = fiatOrBtc
         self.internal = `internal`
     }
 }
@@ -7363,6 +7384,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 walletType: FfiConverterTypeWalletType.read(from: &buf),
                 discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf),
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf),
+                fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf),
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
             )
     }
@@ -7381,6 +7403,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletType.write(value.walletType, into: &buf)
         FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
+        FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.internal, into: &buf)
     }
 }
@@ -8370,6 +8393,49 @@ public func FfiConverterTypeFiatCurrency_lower(_ value: FiatCurrency) -> RustBuf
 }
 
 extension FiatCurrency: Equatable, Hashable {}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum FiatOrBtc {
+    case btc
+    case fiat
+}
+
+public struct FfiConverterTypeFiatOrBtc: FfiConverterRustBuffer {
+    typealias SwiftType = FiatOrBtc
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatOrBtc {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .btc
+
+        case 2: return .fiat
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FiatOrBtc, into buf: inout [UInt8]) {
+        switch value {
+        case .btc:
+            writeInt(&buf, Int32(1))
+
+        case .fiat:
+            writeInt(&buf, Int32(2))
+        }
+    }
+}
+
+public func FfiConverterTypeFiatOrBtc_lift(_ buf: RustBuffer) throws -> FiatOrBtc {
+    return try FfiConverterTypeFiatOrBtc.lift(buf)
+}
+
+public func FfiConverterTypeFiatOrBtc_lower(_ value: FiatOrBtc) -> RustBuffer {
+    return FfiConverterTypeFiatOrBtc.lower(value)
+}
+
+extension FiatOrBtc: Equatable, Hashable {}
 
 public enum FingerprintError {
     case WalletNotFound
@@ -11184,6 +11250,7 @@ public enum WalletViewModelAction {
     )
     case toggleSensitiveVisibility
     case toggleDetailsExpanded
+    case toggleFiatOrBtc
     case selectCurrentWalletAddressType
     case selectDifferentWalletAddressType(WalletAddressType
     )
@@ -11211,9 +11278,11 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
 
         case 6: return .toggleDetailsExpanded
 
-        case 7: return .selectCurrentWalletAddressType
+        case 7: return .toggleFiatOrBtc
 
-        case 8: return try .selectDifferentWalletAddressType(FfiConverterTypeWalletAddressType.read(from: &buf)
+        case 8: return .selectCurrentWalletAddressType
+
+        case 9: return try .selectDifferentWalletAddressType(FfiConverterTypeWalletAddressType.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -11244,11 +11313,14 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
         case .toggleDetailsExpanded:
             writeInt(&buf, Int32(6))
 
-        case .selectCurrentWalletAddressType:
+        case .toggleFiatOrBtc:
             writeInt(&buf, Int32(7))
 
-        case let .selectDifferentWalletAddressType(v1):
+        case .selectCurrentWalletAddressType:
             writeInt(&buf, Int32(8))
+
+        case let .selectDifferentWalletAddressType(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
         }
     }
@@ -11289,6 +11361,8 @@ public enum WalletViewModelError {
     )
     case ActorNotFound
     case UnableToSwitch(WalletAddressType, String)
+    case FiatError(String
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -11332,6 +11406,9 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
         case 13: return .ActorNotFound
         case 14: return try .UnableToSwitch(
                 FfiConverterTypeWalletAddressType.read(from: &buf),
+                FfiConverterString.read(from: &buf)
+            )
+        case 15: return try .FiatError(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -11393,6 +11470,10 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(14))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
             FfiConverterString.write(v2, into: &buf)
+
+        case let .FiatError(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterString.write(v1, into: &buf)
         }
     }
 }
@@ -13213,6 +13294,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_balance() != 10059 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_balance_in_fiat() != 13427 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_current_block_height() != 59265 {
