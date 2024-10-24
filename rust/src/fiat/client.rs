@@ -9,6 +9,8 @@ use macros::impl_default_for;
 
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 
+const FIVE_MINS: u64 = 300;
+
 // Global client for getting prices
 pub static FIAT_CLIENT: LazyLock<FiatClient> = LazyLock::new(FiatClient::new);
 
@@ -17,6 +19,7 @@ pub struct FiatClient {
     url: String,
     client: reqwest::Client,
     last_prices: Arc<RwLock<Option<PriceResponse>>>,
+    wait_before_new_prices: u64,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -41,6 +44,7 @@ impl FiatClient {
             url: CURRENCY_URL.to_string(),
             client: reqwest::Client::new(),
             last_prices: RwLock::new(None).into(),
+            wait_before_new_prices: FIVE_MINS,
         }
     }
 
@@ -49,6 +53,7 @@ impl FiatClient {
             url,
             client: reqwest::Client::new(),
             last_prices: RwLock::new(None).into(),
+            wait_before_new_prices: FIVE_MINS,
         }
     }
 
@@ -87,7 +92,7 @@ impl FiatClient {
     async fn get_prices(&self) -> Result<PriceResponse, reqwest::Error> {
         if let Some(prices) = self.last_prices.read().await.as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
-            if now_secs - prices.time < 60 {
+            if now_secs - prices.time < self.wait_before_new_prices {
                 return Ok(*prices);
             }
         }

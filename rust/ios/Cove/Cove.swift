@@ -4373,9 +4373,11 @@ public protocol RustWalletViewModelProtocol: AnyObject {
      */
     func addressAt(index: UInt32) async throws -> AddressInfo
 
+    func amountInFiat(amount: Amount, currency: FiatCurrency) async throws -> Double
+
     func balance() async -> Balance
 
-    func balanceInFiat(currency: FiatCurrency) async throws -> Double
+    func balanceInFiat() async throws -> Double
 
     func currentBlockHeight() async throws -> UInt32
 
@@ -4387,6 +4389,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
     func dispatch(action: WalletViewModelAction)
 
     func displayAmount(amount: Amount) -> String
+
+    func displayFiatAmount(amount: Double) -> String
 
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> String
 
@@ -4408,6 +4412,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
     func numberOfConfirmations(blockHeight: UInt32) async throws -> UInt32
 
     func numberOfConfirmationsFmt(blockHeight: UInt32) async throws -> String
+
+    func sentAndReceivedFiat(sentAndReceived: SentAndReceived) async throws -> Double
 
     func setWalletMetadata(metadata: WalletMetadata)
 
@@ -4505,6 +4511,23 @@ open class RustWalletViewModel:
             )
     }
 
+    open func amountInFiat(amount: Amount, currency: FiatCurrency) async throws -> Double {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_amount_in_fiat(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeAmount.lower(amount), FfiConverterTypeFiatCurrency.lower(currency)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_f64,
+                completeFunc: ffi_cove_rust_future_complete_f64,
+                freeFunc: ffi_cove_rust_future_free_f64,
+                liftFunc: FfiConverterDouble.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
     open func balance() async -> Balance {
         return
             try! await uniffiRustCallAsync(
@@ -4521,13 +4544,12 @@ open class RustWalletViewModel:
             )
     }
 
-    open func balanceInFiat(currency: FiatCurrency) async throws -> Double {
+    open func balanceInFiat() async throws -> Double {
         return
             try await uniffiRustCallAsync(
                 rustFutureFunc: {
                     uniffi_cove_fn_method_rustwalletviewmodel_balance_in_fiat(
-                        self.uniffiClonePointer(),
-                        FfiConverterTypeFiatCurrency.lower(currency)
+                        self.uniffiClonePointer()
                     )
                 },
                 pollFunc: ffi_cove_rust_future_poll_f64,
@@ -4572,6 +4594,13 @@ open class RustWalletViewModel:
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_display_amount(self.uniffiClonePointer(),
                                                                      FfiConverterTypeAmount.lower(amount), $0)
+        })
+    }
+
+    open func displayFiatAmount(amount: Double) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_display_fiat_amount(self.uniffiClonePointer(),
+                                                                          FfiConverterDouble.lower(amount), $0)
         })
     }
 
@@ -4680,6 +4709,23 @@ open class RustWalletViewModel:
                 completeFunc: ffi_cove_rust_future_complete_rust_buffer,
                 freeFunc: ffi_cove_rust_future_free_rust_buffer,
                 liftFunc: FfiConverterString.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func sentAndReceivedFiat(sentAndReceived: SentAndReceived) async throws -> Double {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_sent_and_received_fiat(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeSentAndReceived.lower(sentAndReceived)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_f64,
+                completeFunc: ffi_cove_rust_future_complete_f64,
+                freeFunc: ffi_cove_rust_future_free_f64,
+                liftFunc: FfiConverterDouble.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
@@ -7337,7 +7383,7 @@ public struct WalletMetadata {
     public var network: Network
     public var performedFullScan: Bool
     public var selectedUnit: Unit
-    public var selectedFiatCurrency: String
+    public var selectedFiatCurrency: FiatCurrency
     public var sensitiveVisible: Bool
     public var detailsExpanded: Bool
     public var walletType: WalletType
@@ -7348,7 +7394,7 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: String, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: FiatCurrency, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -7378,7 +7424,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 network: FfiConverterTypeNetwork.read(from: &buf),
                 performedFullScan: FfiConverterBool.read(from: &buf),
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf),
-                selectedFiatCurrency: FfiConverterString.read(from: &buf),
+                selectedFiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf),
                 sensitiveVisible: FfiConverterBool.read(from: &buf),
                 detailsExpanded: FfiConverterBool.read(from: &buf),
                 walletType: FfiConverterTypeWalletType.read(from: &buf),
@@ -7397,7 +7443,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterBool.write(value.performedFullScan, into: &buf)
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
-        FfiConverterString.write(value.selectedFiatCurrency, into: &buf)
+        FfiConverterTypeFiatCurrency.write(value.selectedFiatCurrency, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
         FfiConverterBool.write(value.detailsExpanded, into: &buf)
         FfiConverterTypeWalletType.write(value.walletType, into: &buf)
@@ -11246,7 +11292,7 @@ public enum WalletViewModelAction {
     )
     case updateUnit(Unit
     )
-    case updateFiatCurrency(String
+    case updateFiatCurrency(FiatCurrency
     )
     case toggleSensitiveVisibility
     case toggleDetailsExpanded
@@ -11271,7 +11317,7 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
         case 3: return try .updateUnit(FfiConverterTypeUnit.read(from: &buf)
             )
 
-        case 4: return try .updateFiatCurrency(FfiConverterString.read(from: &buf)
+        case 4: return try .updateFiatCurrency(FfiConverterTypeFiatCurrency.read(from: &buf)
             )
 
         case 5: return .toggleSensitiveVisibility
@@ -11305,7 +11351,7 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
 
         case let .updateFiatCurrency(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterTypeFiatCurrency.write(v1, into: &buf)
 
         case .toggleSensitiveVisibility:
             writeInt(&buf, Int32(5))
@@ -13293,10 +13339,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_address_at() != 38561 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_amount_in_fiat() != 53684 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_balance() != 10059 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_balance_in_fiat() != 13427 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_balance_in_fiat() != 18683 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_current_block_height() != 59265 {
@@ -13309,6 +13358,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_display_amount() != 59974 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_display_fiat_amount() != 40818 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_display_sent_and_received_amount() != 30788 {
@@ -13336,6 +13388,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_number_of_confirmations_fmt() != 20695 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_sent_and_received_fiat() != 25413 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_set_wallet_metadata() != 16289 {

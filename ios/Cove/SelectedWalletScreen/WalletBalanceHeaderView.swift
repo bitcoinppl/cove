@@ -19,19 +19,19 @@ struct WalletBalanceHeaderView: View {
     // private
     @State var fiatAmount: Float64? = nil
 
-    var accentColor: Color {
+    private var accentColor: Color {
         metadata.swiftColor
     }
 
-    func getFiatBalance() async {
+    private func getFiatBalance() async {
         do {
-            fiatAmount = try await model.rust.balanceInFiat(currency: FiatCurrency.usd)
+            fiatAmount = try await model.rust.balanceInFiat()
         } catch {
             Log.error("error getting fiat balance: \(error)")
         }
     }
 
-    var balanceString: String {
+    private var balanceString: String {
         if !metadata.sensitiveVisible {
             return "************"
         }
@@ -39,7 +39,7 @@ struct WalletBalanceHeaderView: View {
         // fiat
         if metadata.fiatOrBtc == .fiat {
             if let fiatAmount = fiatAmount {
-                return "$\(fiatAmount) USD"
+                return model.rust.displayFiatAmount(amount: fiatAmount)
             } else {
                 return ""
             }
@@ -209,6 +209,24 @@ struct WalletBalanceHeaderView: View {
     var metadata = walletMetadataPreview()
     metadata.sensitiveVisible = true
     metadata.color = .purple
+
+    return
+        AsyncPreview {
+            WalletBalanceHeaderView(balance:
+                Amount.fromSat(sats: 10_000_000_738),
+                metadata: metadata,
+                updater: { _ in () },
+                showReceiveSheet: {})
+                .padding()
+                .environment(WalletViewModel(preview: "preview_only"))
+        }
+}
+
+#Preview("in fiat") {
+    var metadata = walletMetadataPreview()
+    metadata.sensitiveVisible = true
+    metadata.color = .purple
+    metadata.fiatOrBtc = .fiat
 
     return
         AsyncPreview {

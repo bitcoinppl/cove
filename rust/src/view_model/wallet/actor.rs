@@ -1,6 +1,5 @@
 use crate::{
     database::Database,
-    fiat::{client::FIAT_CLIENT, FiatCurrency},
     node::client::NodeClient,
     transaction::{Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
@@ -85,15 +84,6 @@ impl WalletActor {
     pub async fn balance(&mut self) -> ActorResult<Balance> {
         let balance = self.wallet.balance();
         Produces::ok(balance)
-    }
-
-    pub async fn balance_in_fiat(&mut self, currency: FiatCurrency) -> ActorResult<f64> {
-        let balance = self.wallet.balance();
-        let fiat_balance = FIAT_CLIENT
-            .value_in_currency(*balance.confirmed, currency)
-            .await?;
-
-        Produces::ok(fiat_balance)
     }
 
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {

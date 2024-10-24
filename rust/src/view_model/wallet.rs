@@ -12,8 +12,8 @@ use tracing::{debug, error};
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
-    fiat::FiatCurrency,
-    format::NumberFormatter as _,
+    fiat::{client::FIAT_CLIENT, FiatCurrency},
+    format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     router::Route,
     task::{self, spawn_actor},
@@ -69,7 +69,7 @@ pub enum WalletViewModelAction {
     UpdateName(String),
     UpdateColor(WalletColor),
     UpdateUnit(Unit),
-    UpdateFiatCurrency(String),
+    UpdateFiatCurrency(FiatCurrency),
     ToggleSensitiveVisibility,
     ToggleDetailsExpanded,
     ToggleFiatOrBtc,
@@ -201,10 +201,27 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub async fn balance_in_fiat(&self, currency: FiatCurrency) -> Result<f64, Error> {
-        call!(self.actor.balance_in_fiat(currency))
+    pub async fn balance_in_fiat(&self) -> Result<f64, Error> {
+        let currency = self.metadata.read().selected_fiat_currency;
+        let balance = call!(self.actor.balance())
             .await
-            .map_err(|error| Error::FiatError(error.to_string()))
+            .map_err(|_| Error::WalletBalanceError(format!("unable to get balance")))?;
+
+        self.amount_in_fiat(balance.confirmed, currency).await
+    }
+
+    #[uniffi::method]
+    pub async fn amount_in_fiat(
+        &self,
+        amount: Arc<Amount>,
+        currency: FiatCurrency,
+    ) -> Result<f64, Error> {
+        FIAT_CLIENT
+            .value_in_currency(*amount, currency)
+            .await
+            .map_err(|error| {
+                Error::FiatError(format!("unable to get fiat value for amount: {error}"))
+            })
     }
 
     #[uniffi::method]
@@ -234,6 +251,37 @@ impl RustWalletViewModel {
 
         let unit = self.metadata.read().selected_unit;
         sent_and_received.amount_fmt(unit)
+    }
+
+    #[uniffi::method]
+    pub fn display_fiat_amount(&self, amount: f64) -> String {
+        {
+            let sensitive_visible = self.metadata.read().sensitive_visible;
+            if !sensitive_visible {
+                return "**************".to_string();
+            }
+        }
+
+        let fiat = amount.thousands_fiat();
+        format!("${fiat} {}", self.metadata.read().selected_fiat_currency)
+    }
+
+    #[uniffi::method]
+    pub async fn sent_and_received_fiat(
+        &self,
+        sent_and_received: Arc<SentAndReceived>,
+    ) -> Result<f64, Error> {
+        let amount = sent_and_received.amount();
+        let currency = self.metadata.read().selected_fiat_currency.clone();
+
+        let fiat = FIAT_CLIENT
+            .value_in_currency(amount.into(), currency)
+            .await
+            .map_err(|error| {
+                Error::FiatError(format!("unable to get fiat value for amount: {error}"))
+            })?;
+
+        Ok(fiat)
     }
 
     #[uniffi::method]
