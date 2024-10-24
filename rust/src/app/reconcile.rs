@@ -28,14 +28,20 @@ impl Updater {
     }
 
     pub fn global() -> &'static Self {
+        #[cfg(test)]
+        {
+            let (sender, receiver) = crossbeam::channel::bounded(1000);
+            Box::leak(Box::new(receiver));
+            Self::init(sender);
+        }
+
         UPDATER.get().expect("updater is not initialized")
     }
 
-    /// Send the updated value to the frontend
-    pub fn send_update(update: AppStateReconcileMessage) {
+    pub fn send_update(message: AppStateReconcileMessage) {
         Self::global()
             .0
-            .send(update)
+            .send(message)
             .expect("failed to send update");
     }
 }

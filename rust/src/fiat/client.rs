@@ -213,22 +213,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_prices() {
-        let fiat_client = FiatClient::new();
+        crate::database::delete_database();
+        let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_prices().await.unwrap();
         assert!(fiat.usd > 0);
     }
 
     #[tokio::test]
     async fn test_get_price_for() {
-        let fiat_client = FiatClient::new();
+        crate::database::delete_database();
+        let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_price_for(FiatCurrency::Usd).await.unwrap();
         assert!(fiat > 0);
     }
 
     #[tokio::test]
     async fn test_get_value_in_usd() {
-        let fiat_client = FiatClient::new();
-
+        crate::database::delete_database();
+        let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_prices().await.unwrap();
         let value_in_usd = fiat_client.value_in_usd(Amount::one_btc()).await.unwrap();
 
@@ -238,8 +240,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_value_in_usd_with_currency() {
-        let fiat_client = FiatClient::new();
-
+        crate::database::delete_database();
+        let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_prices().await.unwrap();
 
         let half_a_btc = Amount::from_sat(50_000_000);

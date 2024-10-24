@@ -103,12 +103,28 @@ fn get_or_create_database() -> redb::Database {
     redb::Database::create(&database_location).expect("failed to create database")
 }
 
+#[cfg(not(test))]
 fn database_location() -> PathBuf {
     ROOT_DATA_DIR.join("cove.db")
 }
 
 #[cfg(test)]
+fn database_location() -> PathBuf {
+    use rand::distributions::Alphanumeric;
+    use rand::prelude::*;
+
+    let mut rng = rand::thread_rng();
+    let random_string: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
+    let cove_db = format!("cove_{}.db", random_string);
+
+    let test_dir = ROOT_DATA_DIR.join("test");
+    std::fs::create_dir_all(&test_dir).expect("failed to create test dir");
+
+    ROOT_DATA_DIR.join(test_dir).join(cove_db)
+}
+
+#[cfg(test)]
 pub fn delete_database() {
-    let _ = std::fs::remove_file(database_location());
+    let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("test"));
     let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("wallet_data"));
 }
