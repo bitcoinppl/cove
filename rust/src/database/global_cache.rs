@@ -2,23 +2,36 @@ use std::sync::Arc;
 
 use redb::TableDefinition;
 
-use crate::app::reconcile::{Update, Updater};
+use crate::{
+    app::reconcile::{Update, Updater},
+    fiat::client::PriceResponse,
+    redb::Json,
+};
 
 use super::Error;
 
-pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("global_flag");
+pub const TABLE: TableDefinition<&'static str, Json<GlobalCacheData>> =
+    TableDefinition::new("global_cache");
 
-#[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
-pub enum GlobalFlagKey {
-    CompletedOnboarding,
+#[derive(Debug, Clone, Copy, strum::IntoStaticStr)]
+pub enum GlobalCacheKey {
+    Prices(PricesKey),
 }
 
-#[derive(Debug, Clone, uniffi::Object)]
-pub struct GlobalFlagTable {
+#[derive(Debug, Clone, Copy)]
+pub struct PricesKey;
+
+#[derive(Debug, Clone, derive_more::From, serde::Serialize, serde::Deserialize)]
+pub enum GlobalCacheData {
+    Prices(PriceResponse),
+}
+
+#[derive(Debug, Clone)]
+pub struct GlobalCacheTable {
     db: Arc<redb::Database>,
 }
 
-impl GlobalFlagTable {
+impl GlobalCacheTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create table if it doesn't exist
         write_txn.open_table(TABLE).expect("failed to create table");
@@ -28,7 +41,7 @@ impl GlobalFlagTable {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum GlobalFlagTableError {
+pub enum GlobalCacheTableError {
     #[error("failed to save global flag: {0}")]
     Save(String),
 
@@ -36,9 +49,24 @@ pub enum GlobalFlagTableError {
     Read(String),
 }
 
-#[uniffi::export]
-impl GlobalFlagTable {
-    pub fn get(&self, key: GlobalFlagKey) -> Result<bool, Error> {
+impl GlobalCacheTable {
+    pub fn get_prices(&self) -> Result<Option<PriceResponse>, Error> {
+        let key = GlobalCacheKey::Prices(PricesKey);
+        if let Some(GlobalCacheData::Prices(prices)) = self.get(key)? {
+            return Ok(Some(prices));
+        }
+
+        Ok(None)
+    }
+
+    pub fn set_prices(&self, prices: PriceResponse) -> Result<(), Error> {
+        let key = GlobalCacheKey::Prices(PricesKey);
+        self.set(key, prices.into())
+    }
+}
+
+impl GlobalCacheTable {
+    pub fn get(&self, key: GlobalCacheKey) -> Result<Option<GlobalCacheData>, Error> {
         let read_txn = self
             .db
             .begin_read()
@@ -51,14 +79,13 @@ impl GlobalFlagTable {
         let key: &'static str = key.into();
         let value = table
             .get(key)
-            .map_err(|error| GlobalFlagTableError::Read(error.to_string()))?
-            .map(|value| value.value())
-            .unwrap_or(false);
+            .map_err(|error| GlobalCacheTableError::Read(error.to_string()))?
+            .map(|value| value.value());
 
         Ok(value)
     }
 
-    pub fn set(&self, key: GlobalFlagKey, value: bool) -> Result<(), Error> {
+    pub fn set(&self, key: GlobalCacheKey, value: GlobalCacheData) -> Result<(), Error> {
         let write_txn = self
             .db
             .begin_write()
@@ -72,7 +99,7 @@ impl GlobalFlagTable {
             let key: &'static str = key.into();
             table
                 .insert(key, value)
-                .map_err(|error| GlobalFlagTableError::Save(error.to_string()))?;
+                .map_err(|error| GlobalCacheTableError::Save(error.to_string()))?;
         }
 
         write_txn
@@ -80,15 +107,6 @@ impl GlobalFlagTable {
             .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Updater::send_update(Update::DatabaseUpdated);
-
-        Ok(())
-    }
-
-    pub fn toggle_bool_config(&self, key: GlobalFlagKey) -> Result<(), Error> {
-        let value = self.get(key)?;
-
-        let new_value = !value;
-        self.set(key, new_value)?;
 
         Ok(())
     }

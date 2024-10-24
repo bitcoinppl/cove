@@ -28,12 +28,6 @@ pub enum PendingWalletViewModelReconcileMessage {
     Words(NumberOfBip39Words),
 }
 
-#[derive(Debug)]
-pub enum WalletState {
-    Empty,
-    Created(bdk_wallet::Wallet),
-}
-
 #[uniffi::export(callback_interface)]
 pub trait PendingWalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the view model changes
@@ -62,19 +56,19 @@ pub enum PendingWalletViewModelAction {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum WalletCreationError {
     #[error("failed to create wallet: {0}")]
-    BdkError(String),
+    Bdk(String),
 
     #[error("failed to save wallet to keychain: {0}")]
-    KeychainError(#[from] KeychainError),
+    Keychain(#[from] KeychainError),
 
     #[error("failed to save wallet: {0}")]
-    DatabaseError(#[from] database::Error),
+    Database(#[from] database::Error),
 
     #[error("persist error: {0}")]
-    PersisError(String),
+    Persist(String),
 
     #[error("failed to import hardware wallet: {0}")]
-    ImportError(String),
+    Import(String),
 }
 
 #[uniffi::export]
@@ -190,11 +184,11 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
         use crate::wallet::WalletError;
 
         match error {
-            WalletError::KeychainError(error) => Self::KeychainError(error),
-            WalletError::DatabaseError(error) => Self::DatabaseError(error),
-            WalletError::BdkError(error) => Self::BdkError(error),
-            WalletError::PersistError(error) => Self::PersisError(error),
-            WalletError::ParseXpubError(error) => Self::ImportError(error.to_string()),
+            WalletError::KeychainError(error) => Self::Keychain(error),
+            WalletError::DatabaseError(error) => Self::Database(error),
+            WalletError::BdkError(error) => Self::Bdk(error),
+            WalletError::PersistError(error) => Self::Persist(error),
+            WalletError::ParseXpubError(error) => Self::Import(error.to_string()),
 
             WalletError::WalletNotFound => unreachable!("no wallet found in creation"),
             WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),

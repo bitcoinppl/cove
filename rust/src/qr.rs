@@ -16,6 +16,7 @@ use crate::{
 };
 
 #[derive(uniffi::Object)]
+#[allow(dead_code)]
 pub enum MultiQr {
     SeedQr(SeedQr),
     Single(String),

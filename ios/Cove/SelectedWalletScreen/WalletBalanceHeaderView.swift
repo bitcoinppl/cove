@@ -8,22 +8,44 @@
 import SwiftUI
 
 struct WalletBalanceHeaderView: View {
+    @Environment(WalletViewModel.self) var model;
+
     // confirmed balance
     let balance: Amount
     let metadata: WalletMetadata
     let updater: (WalletViewModelAction) -> Void
-
     let showReceiveSheet: () -> Void
 
-    var accentColor: Color {
+    // private
+    @State var fiatAmount: Float64? = nil
+
+    private var accentColor: Color {
         metadata.swiftColor
     }
 
-    var balanceString: String {
+    private func getFiatBalance() async {
+        do {
+            fiatAmount = try await model.rust.balanceInFiat()
+        } catch {
+            Log.error("error getting fiat balance: \(error)")
+        }
+    }
+
+    private var balanceString: String {
         if !metadata.sensitiveVisible {
             return "************"
         }
 
+        // fiat
+        if metadata.fiatOrBtc == .fiat {
+            if let fiatAmount = fiatAmount {
+                return model.rust.displayFiatAmount(amount: fiatAmount)
+            } else {
+                return ""
+            }
+        }
+
+        // btc or sats
         return switch metadata.selectedUnit {
         case .btc: balance.btcString()
         case .sat: balance.satsString()
@@ -121,6 +143,12 @@ struct WalletBalanceHeaderView: View {
         }
         .padding()
         .background(Color(UIColor.systemGray6))
+        .onTapGesture {
+            model.dispatch(action: .toggleFiatOrBtc)
+        }
+        .task {
+            await getFiatBalance()
+        }
     }
 }
 
@@ -129,13 +157,16 @@ struct WalletBalanceHeaderView: View {
     metadata.sensitiveVisible = true
 
     return
-        WalletBalanceHeaderView(
-            balance: Amount.fromSat(sats: 1_000_738),
-            metadata: metadata,
-            updater: { _ in () },
-            showReceiveSheet: {}
-        )
-        .padding()
+        AsyncPreview {
+            WalletBalanceHeaderView(
+                balance: Amount.fromSat(sats: 1_000_738),
+                metadata: metadata,
+                updater: { _ in () },
+                showReceiveSheet: {}
+            )
+            .padding()
+            .environment(WalletViewModel(preview: "preview_only"))
+        }
 }
 
 #Preview("sats") {
@@ -145,13 +176,16 @@ struct WalletBalanceHeaderView: View {
     metadata.color = .blue
 
     return
-        WalletBalanceHeaderView(
-            balance: Amount.fromSat(sats: 1_000_738),
-            metadata: metadata,
-            updater: { _ in () },
-            showReceiveSheet: {}
-        )
-        .padding()
+        AsyncPreview {
+            WalletBalanceHeaderView(
+                balance: Amount.fromSat(sats: 1_000_738),
+                metadata: metadata,
+                updater: { _ in () },
+                showReceiveSheet: {}
+            )
+            .padding()
+            .environment(WalletViewModel(preview: "preview_only"))
+        }
 }
 
 #Preview("hidden") {
@@ -160,12 +194,15 @@ struct WalletBalanceHeaderView: View {
     metadata.color = .green
 
     return
-        WalletBalanceHeaderView(balance:
-            Amount.fromSat(sats: 1_000_738),
-            metadata: metadata,
-            updater: { _ in () },
-            showReceiveSheet: {})
-        .padding()
+        AsyncPreview {
+            WalletBalanceHeaderView(balance:
+                Amount.fromSat(sats: 1_000_738),
+                metadata: metadata,
+                updater: { _ in () },
+                showReceiveSheet: {})
+                .padding()
+                .environment(WalletViewModel(preview: "preview_only"))
+        }
 }
 
 #Preview("lots of btc") {
@@ -174,10 +211,31 @@ struct WalletBalanceHeaderView: View {
     metadata.color = .purple
 
     return
-        WalletBalanceHeaderView(balance:
-            Amount.fromSat(sats: 10_000_000_738),
-            metadata: metadata,
-            updater: { _ in () },
-            showReceiveSheet: {})
-        .padding()
+        AsyncPreview {
+            WalletBalanceHeaderView(balance:
+                Amount.fromSat(sats: 10_000_000_738),
+                metadata: metadata,
+                updater: { _ in () },
+                showReceiveSheet: {})
+                .padding()
+                .environment(WalletViewModel(preview: "preview_only"))
+        }
+}
+
+#Preview("in fiat") {
+    var metadata = walletMetadataPreview()
+    metadata.sensitiveVisible = true
+    metadata.color = .purple
+    metadata.fiatOrBtc = .fiat
+
+    return
+        AsyncPreview {
+            WalletBalanceHeaderView(balance:
+                Amount.fromSat(sats: 10_000_000_738),
+                metadata: metadata,
+                updater: { _ in () },
+                showReceiveSheet: {})
+                .padding()
+                .environment(WalletViewModel(preview: "preview_only"))
+        }
 }

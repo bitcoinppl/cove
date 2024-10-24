@@ -36,7 +36,7 @@ impl EsploraClient {
     pub fn new_from_node(node: &Node) -> Result<Self, Error> {
         let client = esplora_client::Builder::new(&node.url)
             .build_async()
-            .map_err(Error::CreateEsploraClientError)?
+            .map_err(Error::CreateEsploraClient)?
             .into();
 
         Ok(Self::new(client))
@@ -48,7 +48,7 @@ impl EsploraClient {
     ) -> Result<Self, Error> {
         let client = esplora_client::Builder::new(&node.url)
             .build_async()
-            .map_err(Error::CreateEsploraClientError)?
+            .map_err(Error::CreateEsploraClient)?
             .into();
 
         Ok(Self::new_with_options(client, options))
@@ -63,7 +63,7 @@ impl EsploraClient {
             .get_height()
             .await
             .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
-            .map_err(Error::EsploraConnectError)
+            .map_err(Error::EsploraConnect)
     }
 
     pub async fn full_scan(
@@ -73,7 +73,7 @@ impl EsploraClient {
         self.client
             .full_scan(request, self.options.stop_gap, self.options.batch_size)
             .await
-            .map_err(Error::EsploraScanError)
+            .map_err(Error::EsploraScan)
     }
 
     pub async fn sync(
@@ -88,7 +88,7 @@ impl EsploraClient {
         self.client
             .sync(request, self.options.batch_size)
             .await
-            .map_err(Error::EsploraScanError)
+            .map_err(Error::EsploraScan)
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
@@ -96,7 +96,7 @@ impl EsploraClient {
             .client
             .get_address_stats(&address)
             .await
-            .map_err(Error::EsploraAddressError)?;
+            .map_err(Error::EsploraAddress)?;
 
         Ok(stats.chain_stats.tx_count > 0)
     }

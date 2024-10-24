@@ -571,8 +571,8 @@ impl Wallets {
         for type_ in [WalletAddressType::WrappedSegwit, WalletAddressType::Legacy] {
             let descriptor = mnemonic.clone().into_descriptors(None, network, type_);
             let wallet = BdkWallet::create(
-                descriptor.external.to_tuple(),
-                descriptor.internal.to_tuple(),
+                descriptor.external.into_tuple(),
+                descriptor.internal.into_tuple(),
             )
             .network(network)
             .create_wallet_no_persist()

@@ -63,16 +63,16 @@ pub struct WalletDataDb {
 #[derive(Debug, thiserror::Error, uniffi::Error, derive_more::Display)]
 pub enum WalletDataError {
     #[display("Unable to access database for wallet {id}, error: {error}")]
-    DatabaseAccessError { id: WalletId, error: String },
+    DatabaseAccess { id: WalletId, error: String },
 
     #[display("Unable to access table for wallet {id}, error: {error}")]
-    TableAccessError { id: WalletId, error: String },
+    TableAccess { id: WalletId, error: String },
 
     /// Unable to read: {0}
-    ReadError(String),
+    Read(String),
 
     /// Unable to save: {0}
-    SaveError(String),
+    Save(String),
 }
 
 pub type Error = WalletDataError;
@@ -119,7 +119,7 @@ impl WalletDataDb {
 
         let value = table
             .get(key.as_str())
-            .map_err(|error| Error::ReadError(error.to_string()))?
+            .map_err(|error| Error::Read(error.to_string()))?
             .map(|value| value.value());
 
         Ok(value)
@@ -129,31 +129,28 @@ impl WalletDataDb {
         let write_txn = self
             .db
             .begin_write()
-            .map_err(|error| Error::DatabaseAccessError {
+            .map_err(|error| Error::DatabaseAccess {
                 id: self.id.clone(),
                 error: error.to_string(),
             })?;
 
         {
-            let mut table =
-                write_txn
-                    .open_table(TABLE)
-                    .map_err(|error| Error::TableAccessError {
-                        id: self.id.clone(),
-                        error: error.to_string(),
-                    })?;
+            let mut table = write_txn
+                .open_table(TABLE)
+                .map_err(|error| Error::TableAccess {
+                    id: self.id.clone(),
+                    error: error.to_string(),
+                })?;
 
             table
                 .insert(key.as_str(), value)
-                .map_err(|error| Error::SaveError(error.to_string()))?;
+                .map_err(|error| Error::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccessError {
-                id: self.id.clone(),
-                error: error.to_string(),
-            })?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess {
+            id: self.id.clone(),
+            error: error.to_string(),
+        })?;
 
         Ok(())
     }
@@ -162,14 +159,14 @@ impl WalletDataDb {
         let read_txn = self
             .db
             .begin_read()
-            .map_err(|error| Error::DatabaseAccessError {
+            .map_err(|error| Error::DatabaseAccess {
                 id: self.id.clone(),
                 error: error.to_string(),
             })?;
 
         let table = read_txn
             .open_table(TABLE)
-            .map_err(|error| Error::TableAccessError {
+            .map_err(|error| Error::TableAccess {
                 id: self.id.clone(),
                 error: error.to_string(),
             })?;

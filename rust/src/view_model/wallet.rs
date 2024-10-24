@@ -12,7 +12,8 @@ use tracing::{debug, error};
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
-    format::NumberFormatter as _,
+    fiat::{client::FIAT_CLIENT, FiatCurrency},
+    format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     router::Route,
     task::{self, spawn_actor},
@@ -20,7 +21,7 @@ use crate::{
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
-        metadata::{DiscoveryState, WalletColor, WalletId, WalletMetadata},
+        metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
         AddressInfo, Wallet, WalletAddressType, WalletError,
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
@@ -60,6 +61,7 @@ pub struct RustWalletViewModel {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+    #[allow(dead_code)]
     pub scanner: Option<Addr<WalletScanner>>,
 }
 
@@ -68,9 +70,10 @@ pub enum WalletViewModelAction {
     UpdateName(String),
     UpdateColor(WalletColor),
     UpdateUnit(Unit),
-    UpdateFiatCurrency(String),
+    UpdateFiatCurrency(FiatCurrency),
     ToggleSensitiveVisibility,
     ToggleDetailsExpanded,
+    ToggleFiatOrBtc,
     SelectCurrentWalletAddressType,
     SelectDifferentWalletAddressType(WalletAddressType),
 }
@@ -131,6 +134,9 @@ pub enum WalletViewModelError {
 
     #[error("unable to switch wallet to address type {0}, error: {1}")]
     UnableToSwitch(WalletAddressType, String),
+
+    #[error("unable to get balance in fiat")]
+    FiatError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -196,6 +202,30 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub async fn balance_in_fiat(&self) -> Result<f64, Error> {
+        let currency = self.metadata.read().selected_fiat_currency;
+        let balance = call!(self.actor.balance())
+            .await
+            .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
+
+        self.amount_in_fiat(balance.confirmed, currency).await
+    }
+
+    #[uniffi::method]
+    pub async fn amount_in_fiat(
+        &self,
+        amount: Arc<Amount>,
+        currency: FiatCurrency,
+    ) -> Result<f64, Error> {
+        FIAT_CLIENT
+            .value_in_currency(*amount, currency)
+            .await
+            .map_err(|error| {
+                Error::FiatError(format!("unable to get fiat value for amount: {error}"))
+            })
+    }
+
+    #[uniffi::method]
     pub fn display_amount(&self, amount: Arc<Amount>) -> String {
         {
             let sensitive_visible = self.metadata.read().sensitive_visible;
@@ -222,6 +252,37 @@ impl RustWalletViewModel {
 
         let unit = self.metadata.read().selected_unit;
         sent_and_received.amount_fmt(unit)
+    }
+
+    #[uniffi::method]
+    pub fn display_fiat_amount(&self, amount: f64) -> String {
+        {
+            let sensitive_visible = self.metadata.read().sensitive_visible;
+            if !sensitive_visible {
+                return "**************".to_string();
+            }
+        }
+
+        let fiat = amount.thousands_fiat();
+        format!("${fiat} {}", self.metadata.read().selected_fiat_currency)
+    }
+
+    #[uniffi::method]
+    pub async fn sent_and_received_fiat(
+        &self,
+        sent_and_received: Arc<SentAndReceived>,
+    ) -> Result<f64, Error> {
+        let amount = sent_and_received.amount();
+        let currency = self.metadata.read().selected_fiat_currency;
+
+        let fiat = FIAT_CLIENT
+            .value_in_currency(amount, currency)
+            .await
+            .map_err(|error| {
+                Error::FiatError(format!("unable to get fiat value for amount: {error}"))
+            })?;
+
+        Ok(fiat)
     }
 
     #[uniffi::method]
@@ -502,6 +563,14 @@ impl RustWalletViewModel {
             WalletViewModelAction::ToggleSensitiveVisibility => {
                 let mut metadata = self.metadata.write();
                 metadata.sensitive_visible = !metadata.sensitive_visible;
+            }
+
+            WalletViewModelAction::ToggleFiatOrBtc => {
+                let mut metadata = self.metadata.write();
+                metadata.fiat_or_btc = match metadata.fiat_or_btc {
+                    FiatOrBtc::Btc => FiatOrBtc::Fiat,
+                    FiatOrBtc::Fiat => FiatOrBtc::Btc,
+                };
             }
 
             WalletViewModelAction::ToggleDetailsExpanded => {

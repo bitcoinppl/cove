@@ -26,7 +26,7 @@ struct AsyncPreview<Content: View>: View {
             }
         }
         .task {
-            await model.rust.initAsyncRuntime()
+            await model.rust.initOnStart()
             contentView = await content()
         }
     }

@@ -15,23 +15,6 @@ struct TransactionsCardView: View {
 
     private let screenHeight = UIScreen.main.bounds.height
 
-    @ViewBuilder
-    func TransactionRow(_ txn: Transaction) -> some View {
-        VStack(alignment: .leading) {
-            Group {
-                switch txn {
-                case let .confirmed(txn):
-                    ConfirmedTransactionView(txn: txn, metadata: metadata)
-                case let .unconfirmed(txn):
-                    UnconfirmedTransactionView(txn: txn, metadata: metadata)
-                }
-            }
-            .padding(.vertical, 6)
-
-            Divider().opacity(0.7)
-        }
-    }
-
     var body: some View {
         VStack {
             VStack {
@@ -51,7 +34,9 @@ struct TransactionsCardView: View {
                 }
 
                 LazyVStack(alignment: .leading) {
-                    ForEach(transactions, content: TransactionRow)
+                    ForEach(transactions) { txn in
+                        TransactionRow(txn: txn, metadata: metadata)
+                    }
                 }
 
                 if transactions.isEmpty {
@@ -83,6 +68,28 @@ private func amountColor(_ direction: TransactionDirection) -> Color {
     }
 }
 
+struct TransactionRow: View {
+    @Environment(WalletViewModel.self) var model
+    var txn: Transaction
+    var metadata: WalletMetadata
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            Group {
+                switch txn {
+                case let .confirmed(txn):
+                    ConfirmedTransactionView(txn: txn, metadata: metadata)
+                case let .unconfirmed(txn):
+                    UnconfirmedTransactionView(txn: txn, metadata: metadata)
+                }
+            }
+            .padding(.vertical, 6)
+
+            Divider().opacity(0.7)
+        }
+    }
+}
+
 struct ConfirmedTransactionView: View {
     @Environment(\.navigate) private var navigate
     @Environment(WalletViewModel.self) var model
@@ -91,14 +98,25 @@ struct ConfirmedTransactionView: View {
     let metadata: WalletMetadata
 
     // private
-    @State var transactionDetails: TransactionDetails? = nil
-    @State var loading: Bool = false
+    @State private var transactionDetails: TransactionDetails? = nil
+    @State private var loading: Bool = false
 
-    var amount: String {
-        privateShow(model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived()))
+    private var amount: String {
+        if case .btc = metadata.fiatOrBtc {
+            return privateShow(
+                model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+            )
+        }
+
+        // fiat
+        if let fiatAmount = txn.fiatAmount() {
+            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
+        } else {
+            return privateShow("---")
+        }
     }
 
-    func privateShow(_ text: String, placeholder: String = "*******") -> String {
+    private func privateShow(_ text: String, placeholder: String = "*******") -> String {
         if !metadata.sensitiveVisible {
             placeholder
         } else {
@@ -127,7 +145,8 @@ struct ConfirmedTransactionView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-        }.onTapGesture {
+        }
+        .onTapGesture {
             MiddlePopup(state: .loading).showAndStack()
             Task {
                 do {
@@ -162,8 +181,19 @@ struct UnconfirmedTransactionView: View {
         }
     }
 
-    var amount: String {
-        privateShow(model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived()))
+    private var amount: String {
+        if case .btc = metadata.fiatOrBtc {
+            return privateShow(
+                model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+            )
+        }
+
+        // fiat
+        if let fiatAmount = txn.fiatAmount() {
+            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
+        } else {
+            return privateShow("---")
+        }
     }
 
     var body: some View {
@@ -273,6 +303,20 @@ private struct TxnIcon: View {
             transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
             scanComplete: true,
             metadata: walletMetadataPreview()
+        )
+        .environment(WalletViewModel(preview: "preview_only"))
+    }
+}
+
+#Preview("Amounts in Fiat") {
+    var metadata = walletMetadataPreview()
+    metadata.fiatOrBtc = .fiat
+
+    return AsyncPreview {
+        TransactionsCardView(
+            transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
+            scanComplete: true,
+            metadata: metadata
         )
         .environment(WalletViewModel(preview: "preview_only"))
     }

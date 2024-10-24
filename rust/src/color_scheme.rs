@@ -20,7 +20,7 @@ impl Default for ColorSchemeSelection {
 }
 
 impl ColorSchemeSelection {
-    pub fn to_capitalized_string(&self) -> &'static str {
+    pub fn as_capitalized_string(&self) -> &'static str {
         match self {
             ColorSchemeSelection::Light => "Light",
             ColorSchemeSelection::Dark => "Dark",
@@ -79,6 +79,6 @@ mod ffi {
 
     #[uniffi::export]
     pub fn color_scheme_selection_capitalized_string(color_scheme: ColorSchemeSelection) -> String {
-        color_scheme.to_capitalized_string().to_string()
+        color_scheme.as_capitalized_string().to_string()
     }
 }

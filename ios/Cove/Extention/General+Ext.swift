@@ -18,3 +18,4 @@ extension DiscoveryState: Equatable {
         discoveryStateIsEqual(lhs: lhs, rhs: rhs)
     }
 }
+

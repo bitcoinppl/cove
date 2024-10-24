@@ -15,12 +15,6 @@ use crate::network::Network;
 
 pub type Seed = [u8; 64];
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("failed to parse descriptor secret key: {0}")]
-    ParseDescriptorSecretKey(String),
-}
-
 #[derive(Debug, Clone, derive_more::Display, derive_more::From, derive_more::FromStr)]
 pub struct DescriptorSecretKey(pub(crate) BdkDescriptorSecretKey);
 
@@ -39,8 +33,8 @@ pub struct Descriptor {
 }
 
 impl Descriptors {
-    pub fn to_create_params(self) -> CreateParams {
-        bdk_wallet::Wallet::create(self.external.to_tuple(), self.internal.to_tuple())
+    pub fn into_create_params(self) -> CreateParams {
+        bdk_wallet::Wallet::create(self.external.into_tuple(), self.internal.into_tuple())
     }
 }
 
@@ -166,7 +160,7 @@ impl Descriptor {
         }
     }
 
-    pub fn to_tuple(self) -> (ExtendedDescriptor, KeyMap) {
+    pub fn into_tuple(self) -> (ExtendedDescriptor, KeyMap) {
         (self.extended_descriptor, self.key_map)
     }
 }

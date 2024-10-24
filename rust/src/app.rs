@@ -2,7 +2,7 @@
 
 pub mod reconcile;
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::{
     color_scheme::ColorSchemeSelection,
@@ -17,7 +17,7 @@ use macros::impl_default_for;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage, FfiReconcile, Updater};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 pub static APP: OnceCell<App> = OnceCell::new();
 
@@ -258,9 +258,34 @@ impl FfiApp {
         self.inner().listen_for_updates(updater);
     }
 
-    /// call an async function on app load so it initializes the async runtime
-    pub async fn init_async_runtime(&self) {
+    /// run all initialization tasks here, only called once
+    pub async fn init_on_start(&self) {
         crate::task::init_tokio();
+
+        // get / update prices
+        crate::task::spawn(async {
+            if crate::fiat::client::init_prices().await.is_ok() {
+                return;
+            }
+
+            // failed to get prices, retry 5 times
+            let mut retries = 0;
+            loop {
+                retries += 1;
+                if retries > 5 {
+                    error!("unable to get prices, giving up");
+                    break;
+                }
+
+                tokio::time::sleep(Duration::from_secs(120)).await;
+                match crate::fiat::client::init_prices().await {
+                    Ok(_) => break,
+                    Err(error) => {
+                        warn!("unable to init prices: {error}, trying again");
+                    }
+                }
+            }
+        });
     }
 }
 

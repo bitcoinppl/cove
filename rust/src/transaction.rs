@@ -1,9 +1,10 @@
 mod amount;
-pub mod fee_rate;
 mod ffi;
 mod sent_and_received;
-pub mod transaction_details;
 mod unit;
+
+pub mod fee_rate;
+pub mod transaction_details;
 
 use std::{cmp::Ordering, sync::Arc};
 
@@ -19,7 +20,7 @@ use bdk_wallet::bitcoin::{
 use bitcoin_units::Amount as BdkAmount;
 use rand::Rng as _;
 
-use crate::wallet::Wallet;
+use crate::{fiat::FiatAmount, wallet::Wallet};
 
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
@@ -57,13 +58,15 @@ pub struct ConfirmedTransaction {
     pub block_height: u32,
     pub confirmed_at: jiff::Timestamp,
     pub sent_and_received: SentAndReceived,
+    pub fiat: Option<FiatAmount>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
 pub struct UnconfirmedTransaction {
     pub txid: TxId,
     pub sent_and_received: SentAndReceived,
     pub last_seen: u64,
+    pub fiat: Option<FiatAmount>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, uniffi::Object)]
@@ -111,13 +114,18 @@ impl Transaction {
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
     ) -> Self {
         let txid = tx.tx_node.txid.into();
+        let fiat_currency = wallet.metadata.selected_fiat_currency;
+
+        let sent_and_received = wallet.sent_and_received(&tx.tx_node.tx).into();
+        let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
         match tx.chain_position {
             BdkChainPosition::Unconfirmed(last_seen) => {
                 let unconfirmed = UnconfirmedTransaction {
                     txid,
-                    sent_and_received: wallet.sent_and_received(&tx.tx_node.tx).into(),
+                    sent_and_received,
                     last_seen,
+                    fiat,
                 };
 
                 Self::Unconfirmed(Arc::new(unconfirmed))
@@ -131,7 +139,8 @@ impl Transaction {
                     txid,
                     block_height: block_time.block_id.height,
                     confirmed_at,
-                    sent_and_received: wallet.sent_and_received(&tx.tx_node.tx).into(),
+                    sent_and_received,
+                    fiat,
                 };
 
                 Self::Confirmed(Arc::new(confirmed))

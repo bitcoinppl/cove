@@ -7,7 +7,7 @@ use super::*;
 #[uniffi::export]
 impl TxId {
     #[uniffi::method]
-    pub fn to_hash_string(&self) -> String {
+    pub fn as_hash_string(&self) -> String {
         self.0.to_raw_hash().to_string()
     }
 
@@ -68,6 +68,11 @@ impl ConfirmedTransaction {
     pub fn sent_and_received(&self) -> SentAndReceived {
         self.sent_and_received
     }
+
+    #[uniffi::method]
+    pub fn fiat_amount(&self) -> Option<FiatAmount> {
+        self.fiat
+    }
 }
 
 #[uniffi::export]
@@ -94,6 +99,11 @@ impl UnconfirmedTransaction {
             TransactionDirection::Outgoing => "Sending",
         }
         .to_string()
+    }
+
+    #[uniffi::method]
+    pub fn fiat_amount(&self) -> Option<FiatAmount> {
+        self.fiat
     }
 }
 
@@ -129,6 +139,7 @@ fn transaction_preview_confirmed_new() -> Transaction {
         block_height,
         confirmed_at: jiff::Timestamp::now(),
         sent_and_received: SentAndReceived::preview_new(),
+        fiat: Some(FiatAmount::preview_new()),
     };
 
     Transaction::Confirmed(Arc::new(txn))
@@ -193,5 +204,6 @@ fn transaction_preview_unconfirmed_new() -> Transaction {
         txid: TxId::preview_new(),
         sent_and_received: SentAndReceived::preview_new(),
         last_seen,
+        fiat: None,
     }))
 }

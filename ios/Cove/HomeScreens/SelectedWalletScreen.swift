@@ -42,7 +42,7 @@ struct SelectedWalletScreen: View {
             // small delay and then start scanning wallet
             if let model = self.model {
                 do {
-                    try? await Task.sleep(for: .milliseconds(200))
+                    try? await Task.sleep(for: .milliseconds(400))
                     try await model.rust.startWalletScan()
                 } catch {
                     Log.error("Wallet Scan Failed \(error.localizedDescription)")
@@ -199,6 +199,7 @@ struct SelectedWalletScreenInner: View {
         .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue) }
         .onAppear { setSheetState(self.model.walletMetadata.discoveryState) }
         .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
+        .environment(model)
     }
 }
 
