@@ -1,9 +1,11 @@
+pub mod amount;
 pub mod client;
-pub mod transaction;
 
 use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
+
+pub type FiatAmount = amount::FiatAmount;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]

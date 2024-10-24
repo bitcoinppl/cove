@@ -43,6 +43,7 @@ tokio = { version = "1.38", features = ["rt"] }
 act-zero = {version = "0.4.0", features = ["default-tokio"]}
 async-trait = "0.1.81"
 futures = "0.3.30"
+tryhard = "0.5"
 
 # crypto
 rand = "0.8.5"
@@ -120,6 +121,9 @@ hex = "0.4.3"
 
 # parsing
 winnow = "0.6.0"
+
+# sync
+arc-swap = "1.7"
 
 [build-dependencies]
 uniffi = { version = "=0.28.1", features = ["build"] }

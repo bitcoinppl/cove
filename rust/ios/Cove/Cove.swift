@@ -1698,6 +1698,8 @@ public protocol ConfirmedTransactionProtocol: AnyObject {
 
     func confirmedAtFmtWithTime() -> String
 
+    func fiatAmount() -> FiatAmount?
+
     func id() -> TxId
 
     func label() -> String
@@ -1772,6 +1774,12 @@ open class ConfirmedTransaction:
     open func confirmedAtFmtWithTime() -> String {
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_confirmedtransaction_confirmed_at_fmt_with_time(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func fiatAmount() -> FiatAmount? {
+        return try! FfiConverterOptionTypeFiatAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmedtransaction_fiat_amount(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -2037,9 +2045,9 @@ public protocol FfiAppProtocol: AnyObject {
     func hasWallets() -> Bool
 
     /**
-     * call an async function on app load so it initializes the async runtime
+     * run all initialization tasks here, only called once
      */
-    func initAsyncRuntime() async
+    func initOnStart() async
 
     func listenForUpdates(updater: FfiReconcile)
 
@@ -2155,13 +2163,13 @@ open class FfiApp:
     }
 
     /**
-     * call an async function on app load so it initializes the async runtime
+     * run all initialization tasks here, only called once
      */
-    open func initAsyncRuntime() async {
+    open func initOnStart() async {
         return
             try! await uniffiRustCallAsync(
                 rustFutureFunc: {
-                    uniffi_cove_fn_method_ffiapp_init_async_runtime(
+                    uniffi_cove_fn_method_ffiapp_init_on_start(
                         self.uniffiClonePointer()
                     )
                 },
@@ -5376,9 +5384,9 @@ public func FfiConverterTypeTransactionDetails_lower(_ value: TransactionDetails
 }
 
 public protocol TxIdProtocol: AnyObject {
-    func isEqual(other: TxId) -> Bool
+    func asHashString() -> String
 
-    func toHashString() -> String
+    func isEqual(other: TxId) -> Bool
 }
 
 open class TxId:
@@ -5421,16 +5429,16 @@ open class TxId:
         try! rustCall { uniffi_cove_fn_free_txid(pointer, $0) }
     }
 
+    open func asHashString() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_txid_as_hash_string(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func isEqual(other: TxId) -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_txid_is_equal(self.uniffiClonePointer(),
                                                 FfiConverterTypeTxId.lower(other), $0)
-        })
-    }
-
-    open func toHashString() -> String {
-        return try! FfiConverterString.lift(try! rustCall {
-            uniffi_cove_fn_method_txid_to_hash_string(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -5636,6 +5644,8 @@ public func FfiConverterTypeTxOut_lower(_ value: TxOut) -> UnsafeMutableRawPoint
 }
 
 public protocol UnconfirmedTransactionProtocol: AnyObject {
+    func fiatAmount() -> FiatAmount?
+
     func id() -> TxId
 
     func label() -> String
@@ -5683,6 +5693,12 @@ open class UnconfirmedTransaction:
         }
 
         try! rustCall { uniffi_cove_fn_free_unconfirmedtransaction(pointer, $0) }
+    }
+
+    open func fiatAmount() -> FiatAmount? {
+        return try! FfiConverterOptionTypeFiatAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_unconfirmedtransaction_fiat_amount(self.uniffiClonePointer(), $0)
+        })
     }
 
     open func id() -> TxId {
@@ -6465,6 +6481,58 @@ public func FfiConverterTypeConfirmedDetails_lift(_ buf: RustBuffer) throws -> C
 
 public func FfiConverterTypeConfirmedDetails_lower(_ value: ConfirmedDetails) -> RustBuffer {
     return FfiConverterTypeConfirmedDetails.lower(value)
+}
+
+public struct FiatAmount {
+    public var amount: Double
+    public var currency: FiatCurrency
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(amount: Double, currency: FiatCurrency) {
+        self.amount = amount
+        self.currency = currency
+    }
+}
+
+extension FiatAmount: Equatable, Hashable {
+    public static func == (lhs: FiatAmount, rhs: FiatAmount) -> Bool {
+        if lhs.amount != rhs.amount {
+            return false
+        }
+        if lhs.currency != rhs.currency {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(amount)
+        hasher.combine(currency)
+    }
+}
+
+public struct FfiConverterTypeFiatAmount: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatAmount {
+        return
+            try FiatAmount(
+                amount: FfiConverterDouble.read(from: &buf),
+                currency: FfiConverterTypeFiatCurrency.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: FiatAmount, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.amount, into: &buf)
+        FfiConverterTypeFiatCurrency.write(value.currency, into: &buf)
+    }
+}
+
+public func FfiConverterTypeFiatAmount_lift(_ buf: RustBuffer) throws -> FiatAmount {
+    return try FfiConverterTypeFiatAmount.lift(buf)
+}
+
+public func FfiConverterTypeFiatAmount_lower(_ value: FiatAmount) -> RustBuffer {
+    return FfiConverterTypeFiatAmount.lower(value)
 }
 
 public struct FoundAddress {
@@ -7868,17 +7936,19 @@ public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelec
 extension ColorSchemeSelection: Equatable, Hashable {}
 
 public enum DatabaseError {
-    case DatabaseAccessError(String
+    case DatabaseAccess(String
     )
-    case TableAccessError(String
+    case TableAccess(String
     )
-    case WalletsError(WalletTableError
+    case Wallets(WalletTableError
     )
-    case GlobalFlagError(GlobalFlagTableError
+    case GlobalFlag(GlobalFlagTableError
     )
-    case GlobalConfigError(GlobalConfigTableError
+    case GlobalConfig(GlobalConfigTableError
     )
-    case SerializationError(SerdeError
+    case GlobalCache(GlobalCacheTableError
+    )
+    case Serialization(SerdeError
     )
 }
 
@@ -7888,22 +7958,25 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DatabaseError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .DatabaseAccessError(
+        case 1: return try .DatabaseAccess(
                 FfiConverterString.read(from: &buf)
             )
-        case 2: return try .TableAccessError(
+        case 2: return try .TableAccess(
                 FfiConverterString.read(from: &buf)
             )
-        case 3: return try .WalletsError(
+        case 3: return try .Wallets(
                 FfiConverterTypeWalletTableError.read(from: &buf)
             )
-        case 4: return try .GlobalFlagError(
+        case 4: return try .GlobalFlag(
                 FfiConverterTypeGlobalFlagTableError.read(from: &buf)
             )
-        case 5: return try .GlobalConfigError(
+        case 5: return try .GlobalConfig(
                 FfiConverterTypeGlobalConfigTableError.read(from: &buf)
             )
-        case 6: return try .SerializationError(
+        case 6: return try .GlobalCache(
+                FfiConverterTypeGlobalCacheTableError.read(from: &buf)
+            )
+        case 7: return try .Serialization(
                 FfiConverterTypeSerdeError.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -7912,28 +7985,32 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
 
     public static func write(_ value: DatabaseError, into buf: inout [UInt8]) {
         switch value {
-        case let .DatabaseAccessError(v1):
+        case let .DatabaseAccess(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .TableAccessError(v1):
+        case let .TableAccess(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .WalletsError(v1):
+        case let .Wallets(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeWalletTableError.write(v1, into: &buf)
 
-        case let .GlobalFlagError(v1):
+        case let .GlobalFlag(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeGlobalFlagTableError.write(v1, into: &buf)
 
-        case let .GlobalConfigError(v1):
+        case let .GlobalConfig(v1):
             writeInt(&buf, Int32(5))
             FfiConverterTypeGlobalConfigTableError.write(v1, into: &buf)
 
-        case let .SerializationError(v1):
+        case let .GlobalCache(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterTypeGlobalCacheTableError.write(v1, into: &buf)
+
+        case let .Serialization(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeSerdeError.write(v1, into: &buf)
         }
     }
@@ -8367,6 +8444,45 @@ public func FfiConverterTypeFfiScanResultData_lower(_ value: FfiScanResultData) 
 
 extension FfiScanResultData: Equatable, Hashable {}
 
+public enum FiatAmountError {
+    /**
+     * Unable to convert to fiat amount, prices client unavailable {0}
+     */
+    case PricesUnavailable(String
+    )
+}
+
+public struct FfiConverterTypeFiatAmountError: FfiConverterRustBuffer {
+    typealias SwiftType = FiatAmountError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatAmountError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .PricesUnavailable(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FiatAmountError, into buf: inout [UInt8]) {
+        switch value {
+        case let .PricesUnavailable(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension FiatAmountError: Equatable, Hashable {}
+
+extension FiatAmountError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -8515,6 +8631,52 @@ extension FingerprintError: Foundation.LocalizedError {
     }
 }
 
+public enum GlobalCacheTableError {
+    case Save(String
+    )
+    case Read(String
+    )
+}
+
+public struct FfiConverterTypeGlobalCacheTableError: FfiConverterRustBuffer {
+    typealias SwiftType = GlobalCacheTableError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GlobalCacheTableError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .Save(
+                FfiConverterString.read(from: &buf)
+            )
+
+        case 2: return try .Read(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: GlobalCacheTableError, into buf: inout [UInt8]) {
+        switch value {
+        case let .Save(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .Read(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension GlobalCacheTableError: Equatable, Hashable {}
+
+extension GlobalCacheTableError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -8574,9 +8736,9 @@ public func FfiConverterTypeGlobalConfigKey_lower(_ value: GlobalConfigKey) -> R
 extension GlobalConfigKey: Equatable, Hashable {}
 
 public enum GlobalConfigTableError {
-    case SaveError(String
+    case Save(String
     )
-    case ReadError(String
+    case Read(String
     )
 }
 
@@ -8586,11 +8748,11 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GlobalConfigTableError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .SaveError(
+        case 1: return try .Save(
                 FfiConverterString.read(from: &buf)
             )
 
-        case 2: return try .ReadError(
+        case 2: return try .Read(
                 FfiConverterString.read(from: &buf)
             )
 
@@ -8600,11 +8762,11 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
 
     public static func write(_ value: GlobalConfigTableError, into buf: inout [UInt8]) {
         switch value {
-        case let .SaveError(v1):
+        case let .Save(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .ReadError(v1):
+        case let .Read(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
         }
@@ -8657,9 +8819,9 @@ public func FfiConverterTypeGlobalFlagKey_lower(_ value: GlobalFlagKey) -> RustB
 extension GlobalFlagKey: Equatable, Hashable {}
 
 public enum GlobalFlagTableError {
-    case SaveError(String
+    case Save(String
     )
-    case ReadError(String
+    case Read(String
     )
 }
 
@@ -8669,11 +8831,11 @@ public struct FfiConverterTypeGlobalFlagTableError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GlobalFlagTableError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .SaveError(
+        case 1: return try .Save(
                 FfiConverterString.read(from: &buf)
             )
 
-        case 2: return try .ReadError(
+        case 2: return try .Read(
                 FfiConverterString.read(from: &buf)
             )
 
@@ -8683,11 +8845,11 @@ public struct FfiConverterTypeGlobalFlagTableError: FfiConverterRustBuffer {
 
     public static func write(_ value: GlobalFlagTableError, into buf: inout [UInt8]) {
         switch value {
-        case let .SaveError(v1):
+        case let .Save(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .ReadError(v1):
+        case let .Read(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
         }
@@ -8969,13 +9131,13 @@ public func FfiConverterTypeImportWalletViewModelReconcileMessage_lower(_ value:
 extension ImportWalletViewModelReconcileMessage: Equatable, Hashable {}
 
 public enum KeychainError {
-    case UnableToSave
-    case UnableToDelete
-    case UnableToParseSavedValue(String
+    case Save
+    case Delete
+    case ParseSavedValue(String
     )
-    case UnableToEncrypt(String
+    case Encrypt(String
     )
-    case UnableToDecrypt(String
+    case Decrypt(String
     )
 }
 
@@ -8985,15 +9147,15 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeychainError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return .UnableToSave
-        case 2: return .UnableToDelete
-        case 3: return try .UnableToParseSavedValue(
+        case 1: return .Save
+        case 2: return .Delete
+        case 3: return try .ParseSavedValue(
                 FfiConverterString.read(from: &buf)
             )
-        case 4: return try .UnableToEncrypt(
+        case 4: return try .Encrypt(
                 FfiConverterString.read(from: &buf)
             )
-        case 5: return try .UnableToDecrypt(
+        case 5: return try .Decrypt(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -9002,21 +9164,21 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
 
     public static func write(_ value: KeychainError, into buf: inout [UInt8]) {
         switch value {
-        case .UnableToSave:
+        case .Save:
             writeInt(&buf, Int32(1))
 
-        case .UnableToDelete:
+        case .Delete:
             writeInt(&buf, Int32(2))
 
-        case let .UnableToParseSavedValue(v1):
+        case let .ParseSavedValue(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .UnableToEncrypt(v1):
+        case let .Encrypt(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .UnableToDecrypt(v1):
+        case let .Decrypt(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
         }
@@ -10438,13 +10600,13 @@ public func FfiConverterTypeTransaction_lower(_ value: Transaction) -> RustBuffe
 }
 
 public enum TransactionDetailError {
-    case FeeError(String
+    case Fee(String
     )
-    case FeeRateError(String
+    case FeeRate(String
     )
-    case AddressError(AddressError
+    case Address(AddressError
     )
-    case FiatAmountError(String
+    case FiatAmount(String
     )
 }
 
@@ -10454,16 +10616,16 @@ public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransactionDetailError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .FeeError(
+        case 1: return try .Fee(
                 FfiConverterString.read(from: &buf)
             )
-        case 2: return try .FeeRateError(
+        case 2: return try .FeeRate(
                 FfiConverterString.read(from: &buf)
             )
-        case 3: return try .AddressError(
+        case 3: return try .Address(
                 FfiConverterTypeAddressError.read(from: &buf)
             )
-        case 4: return try .FiatAmountError(
+        case 4: return try .FiatAmount(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -10472,19 +10634,19 @@ public struct FfiConverterTypeTransactionDetailError: FfiConverterRustBuffer {
 
     public static func write(_ value: TransactionDetailError, into buf: inout [UInt8]) {
         switch value {
-        case let .FeeError(v1):
+        case let .Fee(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .FeeRateError(v1):
+        case let .FeeRate(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .AddressError(v1):
+        case let .Address(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeAddressError.write(v1, into: &buf)
 
-        case let .FiatAmountError(v1):
+        case let .FiatAmount(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
         }
@@ -10760,15 +10922,15 @@ public func FfiConverterTypeWalletColor_lower(_ value: WalletColor) -> RustBuffe
 extension WalletColor: Equatable, Hashable {}
 
 public enum WalletCreationError {
-    case BdkError(String
+    case Bdk(String
     )
-    case KeychainError(KeychainError
+    case Keychain(KeychainError
     )
-    case DatabaseError(DatabaseError
+    case Database(DatabaseError
     )
-    case PersisError(String
+    case Persist(String
     )
-    case ImportError(String
+    case Import(String
     )
 }
 
@@ -10778,19 +10940,19 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletCreationError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .BdkError(
+        case 1: return try .Bdk(
                 FfiConverterString.read(from: &buf)
             )
-        case 2: return try .KeychainError(
+        case 2: return try .Keychain(
                 FfiConverterTypeKeychainError.read(from: &buf)
             )
-        case 3: return try .DatabaseError(
+        case 3: return try .Database(
                 FfiConverterTypeDatabaseError.read(from: &buf)
             )
-        case 4: return try .PersisError(
+        case 4: return try .Persist(
                 FfiConverterString.read(from: &buf)
             )
-        case 5: return try .ImportError(
+        case 5: return try .Import(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -10799,23 +10961,23 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
 
     public static func write(_ value: WalletCreationError, into buf: inout [UInt8]) {
         switch value {
-        case let .BdkError(v1):
+        case let .Bdk(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .KeychainError(v1):
+        case let .Keychain(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeKeychainError.write(v1, into: &buf)
 
-        case let .DatabaseError(v1):
+        case let .Database(v1):
             writeInt(&buf, Int32(3))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
 
-        case let .PersisError(v1):
+        case let .Persist(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .ImportError(v1):
+        case let .Import(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
         }
@@ -10831,17 +10993,17 @@ extension WalletCreationError: Foundation.LocalizedError {
 }
 
 public enum WalletDataError {
-    case DatabaseAccessError(id: WalletId, error: String)
-    case TableAccessError(id: WalletId, error: String)
+    case DatabaseAccess(id: WalletId, error: String)
+    case TableAccess(id: WalletId, error: String)
     /**
      * Unable to read: {0}
      */
-    case ReadError(String
+    case Read(String
     )
     /**
      * Unable to save: {0}
      */
-    case SaveError(String
+    case Save(String
     )
 }
 
@@ -10851,18 +11013,18 @@ public struct FfiConverterTypeWalletDataError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletDataError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .DatabaseAccessError(
+        case 1: return try .DatabaseAccess(
                 id: FfiConverterTypeWalletId.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
             )
-        case 2: return try .TableAccessError(
+        case 2: return try .TableAccess(
                 id: FfiConverterTypeWalletId.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
             )
-        case 3: return try .ReadError(
+        case 3: return try .Read(
                 FfiConverterString.read(from: &buf)
             )
-        case 4: return try .SaveError(
+        case 4: return try .Save(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -10871,21 +11033,21 @@ public struct FfiConverterTypeWalletDataError: FfiConverterRustBuffer {
 
     public static func write(_ value: WalletDataError, into buf: inout [UInt8]) {
         switch value {
-        case let .DatabaseAccessError(id, error):
+        case let .DatabaseAccess(id, error):
             writeInt(&buf, Int32(1))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
-        case let .TableAccessError(id, error):
+        case let .TableAccess(id, error):
             writeInt(&buf, Int32(2))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterString.write(error, into: &buf)
 
-        case let .ReadError(v1):
+        case let .Read(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
 
-        case let .SaveError(v1):
+        case let .Save(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
         }
@@ -12274,6 +12436,27 @@ private struct FfiConverterOptionTypeBlockSizeLast: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionTypeFiatAmount: FfiConverterRustBuffer {
+    typealias SwiftType = FiatAmount?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFiatAmount.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFiatAmount.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
     typealias SwiftType = MessageInfo?
 
@@ -12784,6 +12967,13 @@ public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> B
     })
 }
 
+public func fiatAmountPreviewNew() -> FiatAmount {
+    return try! FfiConverterTypeFiatAmount.lift(try! rustCall {
+        uniffi_cove_fn_func_fiat_amount_preview_new($0
+        )
+    })
+}
+
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8) throws -> [[String]] {
     return try FfiConverterSequenceSequenceString.lift(rustCallWithError(FfiConverterTypeMnemonicParseError.lift) {
         uniffi_cove_fn_func_grouped_plain_words_of(
@@ -12888,6 +13078,21 @@ public func unitToString(unit: Unit) -> String {
     })
 }
 
+public func updatePricesIfNeeded() async {
+    return
+        try! await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_update_prices_if_needed(
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+        )
+}
+
 public func walletAddressTypeLessThan(lhs: WalletAddressType, rhs: WalletAddressType) -> Bool {
     return try! FfiConverterBool.lift(try! rustCall {
         uniffi_cove_fn_func_wallet_address_type_less_than(
@@ -12958,6 +13163,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_discovery_state_is_equal() != 12390 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_func_fiat_amount_preview_new() != 6422 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_func_grouped_plain_words_of() != 45802 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -12995,6 +13203,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_unit_to_string() != 63080 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_update_prices_if_needed() != 27986 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_wallet_address_type_less_than() != 14566 {
@@ -13090,6 +13301,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_confirmedtransaction_confirmed_at_fmt_with_time() != 36703 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_confirmedtransaction_fiat_amount() != 31522 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_confirmedtransaction_id() != 63537 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13114,7 +13328,7 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_ffiapp_has_wallets() != 3792 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_ffiapp_init_async_runtime() != 45507 {
+    if uniffi_cove_checksum_method_ffiapp_init_on_start() != 44630 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_listen_for_updates() != 48795 {
@@ -13486,10 +13700,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_transactiondetails_transaction_url() != 12235 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_txid_as_hash_string() != 50846 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_txid_is_equal() != 5460 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_txid_to_hash_string() != 24069 {
+    if uniffi_cove_checksum_method_unconfirmedtransaction_fiat_amount() != 59016 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_unconfirmedtransaction_id() != 59175 {

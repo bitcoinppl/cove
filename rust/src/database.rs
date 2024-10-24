@@ -2,6 +2,7 @@
 //! That will be available across the app, and will be persisted across app launches.
 
 pub mod error;
+pub mod global_cache;
 pub mod global_config;
 pub mod global_flag;
 pub mod wallet;
@@ -9,6 +10,7 @@ pub mod wallet_data;
 
 use std::{path::PathBuf, sync::Arc};
 
+use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
 use wallet::WalletsTable;
@@ -27,6 +29,7 @@ pub struct Database {
     #[allow(dead_code)]
     pub global_flag: GlobalFlagTable,
     pub global_config: GlobalConfigTable,
+    pub global_cache: GlobalCacheTable,
     pub wallets: WalletsTable,
 }
 
@@ -63,6 +66,7 @@ impl Database {
             let wallets = WalletsTable::new(db.clone(), &write_txn);
             let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
             let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
+            let global_cache = GlobalCacheTable::new(db.clone(), &write_txn);
 
             write_txn
                 .commit()
@@ -72,6 +76,7 @@ impl Database {
                 wallets,
                 global_flag,
                 global_config,
+                global_cache,
             }
         })
     }

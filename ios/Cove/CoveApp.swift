@@ -107,7 +107,7 @@ struct CoveApp: App {
                     } : nil
             )
             .task {
-                await model.rust.initAsyncRuntime()
+                await model.rust.initOnStart()
                 await MainActor.run {
                     model.asyncRuntimeReady = true
                 }

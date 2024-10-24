@@ -73,34 +73,19 @@ struct TransactionRow: View {
     var txn: Transaction
     var metadata: WalletMetadata
 
-    // private
-    @State private var fiatAmount: Float64? = nil
-
-    func getFiatBalance() async {
-        do {
-            let btc = txn.sentAndReceived().amount()
-            fiatAmount = try await model.rust.amountInFiat(amount: btc, currency: metadata.selectedFiatCurrency)
-        } catch {
-            Log.error("error getting fiat balance: \(error)")
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading) {
             Group {
                 switch txn {
                 case let .confirmed(txn):
-                    ConfirmedTransactionView(txn: txn, metadata: metadata, fiatAmount: fiatAmount)
+                    ConfirmedTransactionView(txn: txn, metadata: metadata)
                 case let .unconfirmed(txn):
-                    UnconfirmedTransactionView(txn: txn, metadata: metadata, fiatAmount: fiatAmount)
+                    UnconfirmedTransactionView(txn: txn, metadata: metadata)
                 }
             }
             .padding(.vertical, 6)
 
             Divider().opacity(0.7)
-        }
-        .task {
-            await getFiatBalance()
         }
     }
 }
@@ -111,7 +96,6 @@ struct ConfirmedTransactionView: View {
 
     let txn: ConfirmedTransaction
     let metadata: WalletMetadata
-    @State var fiatAmount: Float64? = nil
 
     // private
     @State private var transactionDetails: TransactionDetails? = nil
@@ -125,8 +109,8 @@ struct ConfirmedTransactionView: View {
         }
 
         // fiat
-        if let fiatAmount = fiatAmount {
-            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount))
+        if let fiatAmount = txn.fiatAmount() {
+            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
         } else {
             return privateShow("")
         }
@@ -188,7 +172,6 @@ struct UnconfirmedTransactionView: View {
 
     let txn: UnconfirmedTransaction
     let metadata: WalletMetadata
-    let fiatAmount: Float64?
 
     func privateShow(_ text: String, placeholder: String = "*******") -> String {
         if !metadata.sensitiveVisible {
@@ -206,8 +189,8 @@ struct UnconfirmedTransactionView: View {
         }
 
         // fiat
-        if let fiatAmount = fiatAmount {
-            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount))
+        if let fiatAmount = txn.fiatAmount() {
+            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
         } else {
             return privateShow("")
         }

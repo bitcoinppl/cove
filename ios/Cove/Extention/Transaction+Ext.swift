@@ -33,6 +33,6 @@ extension TxId: Hashable, Equatable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(self.toHashString())
+        hasher.combine(self.asHashString())
     }
 }

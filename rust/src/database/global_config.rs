@@ -51,10 +51,10 @@ impl GlobalConfigTable {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum GlobalConfigTableError {
     #[error("failed to save global config: {0}")]
-    SaveError(String),
+    Save(String),
 
     #[error("failed to get global config: {0}")]
-    ReadError(String),
+    Read(String),
 }
 
 #[uniffi::export]
@@ -160,7 +160,7 @@ impl GlobalConfigTable {
         let key: &'static str = key.into();
         let value = table
             .get(key)
-            .map_err(|error| GlobalConfigTableError::ReadError(error.to_string()))?
+            .map_err(|error| GlobalConfigTableError::Read(error.to_string()))?
             .map(|value| value.value());
 
         Ok(value)
@@ -180,7 +180,7 @@ impl GlobalConfigTable {
             let key: &'static str = key.into();
             table
                 .insert(key, value)
-                .map_err(|error| GlobalConfigTableError::SaveError(error.to_string()))?;
+                .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
         }
 
         write_txn
@@ -206,7 +206,7 @@ impl GlobalConfigTable {
             let key: &'static str = key.into();
             table
                 .remove(key)
-                .map_err(|error| GlobalConfigTableError::SaveError(error.to_string()))?;
+                .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
         }
 
         write_txn
