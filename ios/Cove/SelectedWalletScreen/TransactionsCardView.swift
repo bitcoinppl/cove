@@ -112,7 +112,7 @@ struct ConfirmedTransactionView: View {
         if let fiatAmount = txn.fiatAmount() {
             return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
         } else {
-            return privateShow("")
+            return privateShow("---")
         }
     }
 
@@ -192,7 +192,7 @@ struct UnconfirmedTransactionView: View {
         if let fiatAmount = txn.fiatAmount() {
             return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
         } else {
-            return privateShow("")
+            return privateShow("---")
         }
     }
 
