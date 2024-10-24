@@ -19,13 +19,3 @@ extension DiscoveryState: Equatable {
     }
 }
 
-public extension Transaction {
-    func sentAndReceived() -> SentAndReceived {
-        switch self {
-            case .confirmed(let transaction):
-                return transaction.sentAndReceived()
-            case .unconfirmed(let transaction):
-                return transaction.sentAndReceived()
-        }
-    }
-}

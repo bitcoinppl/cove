@@ -16,6 +16,15 @@ extension Transaction: Identifiable {
             unconfirmedTransaction.id()
         }
     }
+
+    func sentAndReceived() -> SentAndReceived {
+        switch self {
+        case .confirmed(let transaction):
+            return transaction.sentAndReceived()
+        case .unconfirmed(let transaction):
+            return transaction.sentAndReceived()
+        }
+    }
 }
 
 extension TxId: Hashable, Equatable {
