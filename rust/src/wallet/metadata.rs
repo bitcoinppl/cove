@@ -1,6 +1,6 @@
 use std::{hash::Hash, sync::Arc, time::Duration};
 
-use crate::transaction::Unit;
+use crate::{fiat::FiatCurrency, transaction::Unit};
 use macros::{impl_default_for, new_type};
 use nid::Nanoid;
 use rand::Rng as _;
@@ -34,7 +34,7 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub selected_unit: Unit,
     #[serde(default = "default_fiat_currency")]
-    pub selected_fiat_currency: String,
+    pub selected_fiat_currency: FiatCurrency,
     #[serde(default = "default_true")]
     pub sensitive_visible: bool,
     #[serde(default = "default_false")]
@@ -264,8 +264,8 @@ impl WalletColor {
     }
 }
 
-fn default_fiat_currency() -> String {
-    "USD".to_string()
+fn default_fiat_currency() -> FiatCurrency {
+    FiatCurrency::Usd
 }
 
 fn default_true() -> bool {
