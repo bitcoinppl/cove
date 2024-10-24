@@ -24,7 +24,7 @@ pub type Error = error::DatabaseError;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
-    pub db: Arc<redb::Database>,
+    #[allow(dead_code)]
     pub global_flag: GlobalFlagTable,
     pub global_config: GlobalConfigTable,
     pub wallets: WalletsTable,
@@ -69,7 +69,6 @@ impl Database {
                 .expect("failed to commit write transaction");
 
             Database {
-                db,
                 wallets,
                 global_flag,
                 global_config,

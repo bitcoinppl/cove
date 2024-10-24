@@ -2,7 +2,7 @@ use crate::transaction::{Amount, TxId};
 
 use super::FiatCurrency;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Object)]
 pub struct FiatTransaction {
     id: TxId,
     amount: Amount,

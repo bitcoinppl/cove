@@ -31,7 +31,7 @@ pub enum Error {
     UnableToDecrypt(chacha20poly1305::Error),
 
     #[error("base64 decode error: {0}")]
-    Base64DecodeError(data_encoding::DecodeError),
+    Base64Decode(data_encoding::DecodeError),
 
     #[error("invalid utf8 string")]
     InvalidUtf8(std::string::FromUtf8Error),
@@ -103,7 +103,7 @@ impl Cryptor {
     pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<String, Error> {
         let ciphertext_bytes = BASE64
             .decode(ciphertext.as_bytes())
-            .map_err(Error::Base64DecodeError)?;
+            .map_err(Error::Base64Decode)?;
 
         let decrypted = self.decrypt(&ciphertext_bytes)?;
 

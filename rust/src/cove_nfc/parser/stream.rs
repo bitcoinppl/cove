@@ -9,9 +9,6 @@ pub trait StreamExt {
     fn len(&self) -> usize;
     fn to_stream(&self) -> Stream;
     fn to_vec(self) -> Vec<u8>;
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
 }
 
 impl<'a> StreamExt for Stream<'a> {

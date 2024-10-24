@@ -11,16 +11,16 @@ use super::{Amount, FeeRate, SentAndReceived, TxId};
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum TransactionDetailError {
     #[error("Unable to determine fee: {0}")]
-    FeeError(String),
+    Fee(String),
 
     #[error("Unable to determine fee rate: {0}")]
-    FeeRateError(String),
+    FeeRate(String),
 
     #[error("Unable to determine address: {0}")]
-    AddressError(#[from] address::AddressError),
+    Address(#[from] address::AddressError),
 
     #[error("Unable to get fiat amount: {0}")]
-    FiatAmountError(String),
+    FiatAmount(String),
 }
 
 type Error = TransactionDetailError;
@@ -145,7 +145,7 @@ mod ffi {
                 FIAT_CLIENT
                     .value_in_usd(amount)
                     .await
-                    .map_err(|e| Error::FiatAmountError(e.to_string()))
+                    .map_err(|e| Error::FiatAmount(e.to_string()))
             })
             .await
             .unwrap()
@@ -167,12 +167,12 @@ mod ffi {
 
         #[uniffi::method]
         pub async fn fee_fiat_fmt(&self) -> Result<String, Error> {
-            let fee = self.fee.ok_or(Error::FeeError("No fee".to_string()))?;
+            let fee = self.fee.ok_or(Error::Fee("No fee".to_string()))?;
             let fiat = task::spawn(async move {
                 FIAT_CLIENT
                     .value_in_usd(fee)
                     .await
-                    .map_err(|e| Error::FiatAmountError(e.to_string()))
+                    .map_err(|e| Error::FiatAmount(e.to_string()))
             })
             .await
             .unwrap()?;
@@ -205,13 +205,13 @@ mod ffi {
         pub async fn sent_sans_fee_fiat_fmt(&self) -> Result<String, Error> {
             let amount = self
                 .sent_sans_fee()
-                .ok_or(Error::FeeError("No fee".to_string()))?;
+                .ok_or(Error::Fee("No fee".to_string()))?;
 
             let fiat = task::spawn(async move {
                 FIAT_CLIENT
                     .value_in_usd(amount)
                     .await
-                    .map_err(|e| Error::FiatAmountError(e.to_string()))
+                    .map_err(|e| Error::FiatAmount(e.to_string()))
             })
             .await
             .unwrap()?;

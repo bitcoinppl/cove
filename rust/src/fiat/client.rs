@@ -48,6 +48,7 @@ impl FiatClient {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_with_url(url: String) -> Self {
         Self {
             url,

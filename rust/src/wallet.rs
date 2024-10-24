@@ -34,8 +34,6 @@ use tracing::{debug, error, warn};
 pub type Address = address::Address;
 pub type AddressInfo = address::AddressInfo;
 
-pub type Error = WalletError;
-
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum WalletError {
     #[error("failed to create wallet: {0}")]
@@ -241,7 +239,7 @@ impl Wallet {
         let descriptors: Descriptors = descriptors.into();
 
         let wallet = descriptors
-            .to_create_params()
+            .into_create_params()
             .network(network.into())
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
@@ -284,7 +282,7 @@ impl Wallet {
 
         let descriptors: Descriptors = descriptors.into();
         let wallet = descriptors
-            .to_create_params()
+            .into_create_params()
             .network(self.network.into())
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
@@ -362,7 +360,7 @@ impl Wallet {
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
 
         let wallet = descriptors
-            .to_create_params()
+            .into_create_params()
             .network(network.into())
             .create_wallet(&mut db)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;

@@ -42,28 +42,28 @@ impl core::fmt::Debug for NodeClient {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to create node client: {0}")]
-    CreateEsploraClientError(esplora_client::Error),
+    CreateEsploraClient(esplora_client::Error),
 
     #[error("failed to create node client: {0}")]
-    CreateElectrumClientError(electrum_client::Error),
+    CreateElectrumClient(electrum_client::Error),
 
     #[error("failed to connect to node: {0}")]
-    EsploraConnectError(esplora_client::Error),
+    EsploraConnect(esplora_client::Error),
 
     #[error("failed to connect to node: {0}")]
-    ElectrumConnectError(electrum_client::Error),
+    ElectrumConnect(electrum_client::Error),
 
     #[error("failed to complete wallet scan: {0}")]
-    ElectrumScanError(electrum_client::Error),
+    ElectrumScan(electrum_client::Error),
 
     #[error("failed to complete wallet scan: {0}")]
-    EsploraScanError(Box<esplora_client::Error>),
+    EsploraScan(Box<esplora_client::Error>),
 
     #[error("failed to get a address: {0}")]
-    EsploraAddressError(esplora_client::Error),
+    EsploraAddress(esplora_client::Error),
 
     #[error("failed to get a address: {0}")]
-    ElectrumAddressError(electrum_client::Error),
+    ElectrumAddress(electrum_client::Error),
 }
 
 #[derive(Debug, Clone, Copy)]

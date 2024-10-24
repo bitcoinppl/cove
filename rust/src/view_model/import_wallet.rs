@@ -29,6 +29,7 @@ pub trait ImportWalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'stat
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
+#[allow(dead_code)]
 pub struct RustImportWalletViewModel {
     pub state: Arc<RwLock<ImportWalletViewModelState>>,
     pub reconciler: Sender<ImportWalletViewModelReconcileMessage>,

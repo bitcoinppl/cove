@@ -6,6 +6,7 @@ use crate::{database::Database, mnemonic::NumberOfBip39Words, network::Network};
 pub struct PendingWallet {
     pub mnemonic: Mnemonic,
     pub network: Network,
+    #[allow(dead_code)]
     pub passphrase: Option<String>,
 }
 
@@ -24,9 +25,5 @@ impl PendingWallet {
 
     pub fn words(&self) -> Vec<String> {
         self.mnemonic.words().map(Into::into).collect()
-    }
-
-    pub fn words_iter(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.mnemonic.words()
     }
 }

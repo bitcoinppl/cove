@@ -42,7 +42,7 @@ impl ElectrumClient {
         options: NodeClientOptions,
     ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url);
-        let inner_client = Client::new(url).map_err(Error::CreateElectrumClientError)?;
+        let inner_client = Client::new(url).map_err(Error::CreateElectrumClient)?;
         let bdk_client = BdkElectrumClient::new(inner_client);
         let client = Arc::new(bdk_client);
 
@@ -58,7 +58,7 @@ impl ElectrumClient {
                 .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
         })
         .await
-        .map_err(Error::ElectrumConnectError)?;
+        .map_err(Error::ElectrumConnect)?;
 
         Ok(header.height)
     }
@@ -84,7 +84,7 @@ impl ElectrumClient {
         let result = crate::unblock::run_blocking(move || {
             client
                 .full_scan(request, stop_gap, batch_size, false)
-                .map_err(Error::ElectrumScanError)
+                .map_err(Error::ElectrumScan)
         })
         .await?;
 
@@ -112,7 +112,7 @@ impl ElectrumClient {
 
         let result = crate::unblock::run_blocking(move || client.sync(request, batch_size, false))
             .await
-            .map_err(Error::ElectrumScanError)?;
+            .map_err(Error::ElectrumScan)?;
 
         Ok(result)
     }
@@ -124,7 +124,7 @@ impl ElectrumClient {
             client.inner.script_get_history(&script)
         })
         .await
-        .map_err(Error::ElectrumAddressError)?;
+        .map_err(Error::ElectrumAddress)?;
 
         Ok(!txns.is_empty())
     }

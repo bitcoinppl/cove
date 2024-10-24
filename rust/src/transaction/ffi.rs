@@ -7,7 +7,7 @@ use super::*;
 #[uniffi::export]
 impl TxId {
     #[uniffi::method]
-    pub fn to_hash_string(&self) -> String {
+    pub fn as_hash_string(&self) -> String {
         self.0.to_raw_hash().to_string()
     }
 

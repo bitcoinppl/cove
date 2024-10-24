@@ -61,6 +61,7 @@ pub struct RustWalletViewModel {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletViewModelReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+    #[allow(dead_code)]
     pub scanner: Option<Addr<WalletScanner>>,
 }
 
@@ -205,7 +206,7 @@ impl RustWalletViewModel {
         let currency = self.metadata.read().selected_fiat_currency;
         let balance = call!(self.actor.balance())
             .await
-            .map_err(|_| Error::WalletBalanceError(format!("unable to get balance")))?;
+            .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
         self.amount_in_fiat(balance.confirmed, currency).await
     }
@@ -272,10 +273,10 @@ impl RustWalletViewModel {
         sent_and_received: Arc<SentAndReceived>,
     ) -> Result<f64, Error> {
         let amount = sent_and_received.amount();
-        let currency = self.metadata.read().selected_fiat_currency.clone();
+        let currency = self.metadata.read().selected_fiat_currency;
 
         let fiat = FIAT_CLIENT
-            .value_in_currency(amount.into(), currency)
+            .value_in_currency(amount, currency)
             .await
             .map_err(|error| {
                 Error::FiatError(format!("unable to get fiat value for amount: {error}"))

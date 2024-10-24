@@ -20,11 +20,6 @@ use crate::cove_nfc::{
     record::NdefRecord,
 };
 
-pub fn parse_ndef_message(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
-    let info = parse_message_info.parse_next(input)?;
-    parse_ndef_records(input, &info)
-}
-
 pub fn parse_ndef_records(input: &mut Stream<'_>, info: &MessageInfo) -> PResult<Vec<NdefRecord>> {
     let mut records = Vec::new();
     let payload_length = info.payload_length as usize;
@@ -210,6 +205,11 @@ mod tests {
     fn owned_stream(bytes: Vec<u8>) -> Stream<'static> {
         let bytes = Box::leak(bytes.into_boxed_slice());
         Stream::new(Bytes::new(bytes))
+    }
+
+    fn parse_ndef_message(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
+        let info = parse_message_info.parse_next(input)?;
+        parse_ndef_records(input, &info)
     }
 
     static EXPORT: LazyLock<Stream<'static>> = LazyLock::new(|| {

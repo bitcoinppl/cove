@@ -195,11 +195,11 @@ impl WalletsTable {
         let read_txn = self
             .db
             .begin_read()
-            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         let table = read_txn
             .open_table(TABLE)
-            .map_err(|error| Error::TableAccessError(error.to_string()))?;
+            .map_err(|error| Error::TableAccess(error.to_string()))?;
 
         Ok(table)
     }

@@ -13,19 +13,19 @@ use crate::wallet::metadata::WalletId;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum KeychainError {
     #[error("unable to save")]
-    UnableToSave,
+    Save,
 
     #[error("unable to delete")]
-    UnableToDelete,
+    Delete,
 
     #[error("unable to parse saved value")]
-    UnableToParseSavedValue(String),
+    ParseSavedValue(String),
 
     #[error("unable to encrypt: {0}")]
-    UnableToEncrypt(String),
+    Encrypt(String),
 
     #[error("unable to decrypt: {0}")]
-    UnableToDecrypt(String),
+    Decrypt(String),
 }
 
 #[uniffi::export(callback_interface)]
@@ -72,7 +72,7 @@ impl Keychain {
         let key = wallet_mnemonic_key_name(id);
         let encrypted_secret_key = cryptor
             .encrypt_to_string(secret_key.to_string())
-            .map_err(|error| KeychainError::UnableToEncrypt(error.to_string()))?;
+            .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
 
         let encryption_key = cryptor.serialize_to_string();
 
@@ -97,14 +97,14 @@ impl Keychain {
         };
 
         let cryptor = Cryptor::try_from_string(encryption_key)
-            .map_err(|error| KeychainError::UnableToDecrypt(error.to_string()))?;
+            .map_err(|error| KeychainError::Decrypt(error.to_string()))?;
 
         let secret_key = cryptor
             .decrypt_from_string(&encrypted_secret_key)
-            .map_err(|error| KeychainError::UnableToDecrypt(error.to_string()))?;
+            .map_err(|error| KeychainError::Decrypt(error.to_string()))?;
 
         let mnemonic = Mnemonic::from_str(&secret_key)
-            .map_err(|error| KeychainError::UnableToParseSavedValue(error.to_string()))?;
+            .map_err(|error| KeychainError::ParseSavedValue(error.to_string()))?;
 
         Ok(Some(mnemonic))
     }
@@ -138,7 +138,7 @@ impl Keychain {
                     with saving, this should not happen {error}"
             );
 
-            KeychainError::UnableToParseSavedValue(error)
+            KeychainError::ParseSavedValue(error)
         })?;
 
         Ok(Some(xpub))

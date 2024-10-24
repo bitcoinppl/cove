@@ -17,38 +17,38 @@ pub enum SerdeError {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum DatabaseError {
     #[error("failed to open database: {0}")]
-    DatabaseAccessError(String),
+    DatabaseAccess(String),
 
     #[error("failed to open table: {0}")]
-    TableAccessError(String),
+    TableAccess(String),
 
     #[error(transparent)]
-    WalletsError(#[from] WalletTableError),
+    Wallets(#[from] WalletTableError),
 
     #[error(transparent)]
-    GlobalFlagError(#[from] GlobalFlagTableError),
+    GlobalFlag(#[from] GlobalFlagTableError),
 
     #[error(transparent)]
-    GlobalConfigError(#[from] GlobalConfigTableError),
+    GlobalConfig(#[from] GlobalConfigTableError),
 
     #[error("unable to serialize or deserialize: {0}")]
-    SerializationError(#[from] SerdeError),
+    Serialization(#[from] SerdeError),
 }
 
 impl From<redb::TransactionError> for Error {
     fn from(error: redb::TransactionError) -> Self {
-        Self::DatabaseAccessError(error.to_string())
+        Self::DatabaseAccess(error.to_string())
     }
 }
 
 impl From<redb::TableError> for Error {
     fn from(error: redb::TableError) -> Self {
-        Self::TableAccessError(error.to_string())
+        Self::TableAccess(error.to_string())
     }
 }
 
 impl From<redb::StorageError> for Error {
     fn from(error: redb::StorageError) -> Self {
-        Self::TableAccessError(error.to_string())
+        Self::TableAccess(error.to_string())
     }
 }

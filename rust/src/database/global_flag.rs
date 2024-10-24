@@ -42,11 +42,11 @@ impl GlobalFlagTable {
         let read_txn = self
             .db
             .begin_read()
-            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         let table = read_txn
             .open_table(TABLE)
-            .map_err(|error| Error::TableAccessError(error.to_string()))?;
+            .map_err(|error| Error::TableAccess(error.to_string()))?;
 
         let key: &'static str = key.into();
         let value = table
@@ -62,12 +62,12 @@ impl GlobalFlagTable {
         let write_txn = self
             .db
             .begin_write()
-            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
                 .open_table(TABLE)
-                .map_err(|error| Error::TableAccessError(error.to_string()))?;
+                .map_err(|error| Error::TableAccess(error.to_string()))?;
 
             let key: &'static str = key.into();
             table
@@ -77,7 +77,7 @@ impl GlobalFlagTable {
 
         write_txn
             .commit()
-            .map_err(|error| Error::DatabaseAccessError(error.to_string()))?;
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Updater::send_update(Update::DatabaseUpdated);
 

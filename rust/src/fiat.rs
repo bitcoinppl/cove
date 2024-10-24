@@ -1,4 +1,5 @@
 pub mod client;
+pub mod transaction;
 
 use std::fmt::Display;
 
@@ -23,9 +24,9 @@ impl Display for FiatCurrency {
     }
 }
 
-impl Into<&'static str> for FiatCurrency {
-    fn into(self) -> &'static str {
-        match self {
+impl From<FiatCurrency> for &'static str {
+    fn from(val: FiatCurrency) -> Self {
+        match val {
             FiatCurrency::Usd => "USD",
             FiatCurrency::Eur => "EUR",
             FiatCurrency::Gbp => "GBP",
@@ -62,9 +63,9 @@ impl TryFrom<String> for FiatCurrency {
     }
 }
 
-impl Into<&'static str> for &FiatCurrency {
-    fn into(self) -> &'static str {
-        let me: FiatCurrency = *self;
+impl From<&FiatCurrency> for &'static str {
+    fn from(val: &FiatCurrency) -> Self {
+        let me: FiatCurrency = *val;
         me.into()
     }
 }
