@@ -112,6 +112,9 @@ struct CoveApp: App {
                     model.asyncRuntimeReady = true
                 }
             }
+            .onOpenURL { url in
+                print("Received file: \(url.absoluteString)")
+            }
         }
     }
 }

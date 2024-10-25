@@ -10,8 +10,8 @@ use bip39::{Language, Mnemonic};
 use parking_lot::Mutex;
 
 use crate::{
-    ffi::scan_result_data::FfiScanResultData,
     mnemonic::{ParseMnemonic as _, WordAccess as _},
+    multi_format::StringOrData,
     seed_qr::{SeedQr, SeedQrError},
 };
 
@@ -72,8 +72,8 @@ pub enum MultiQrScanResult {
 #[uniffi::export]
 impl MultiQr {
     #[uniffi::constructor]
-    pub fn try_new(qr: FfiScanResultData) -> Result<Self, Error> {
-        type R = FfiScanResultData;
+    pub fn try_new(qr: StringOrData) -> Result<Self, Error> {
+        type R = StringOrData;
         match qr {
             R::String(qr) => Ok(Self::new_from_string(qr)),
             R::Data(data) => Self::try_new_from_data(data),
@@ -109,11 +109,8 @@ impl MultiQr {
     }
 
     #[uniffi::method]
-    pub fn handle_scan_result(
-        &self,
-        qr: FfiScanResultData,
-    ) -> Result<MultiQrScanResult, MultiQrError> {
-        type R = FfiScanResultData;
+    pub fn handle_scan_result(&self, qr: StringOrData) -> Result<MultiQrScanResult, MultiQrError> {
+        type R = StringOrData;
 
         let result = match (self, qr) {
             (Self::SeedQr(seed_qr), _) => MultiQrScanResult::SeedQr(Arc::new(seed_qr.clone())),
@@ -138,7 +135,7 @@ impl MultiQr {
             }
 
             // errors
-            (Self::Bbqr(_, _), FfiScanResultData::Data(_vec)) => {
+            (Self::Bbqr(_, _), StringOrData::Data(_vec)) => {
                 return Err(MultiQrError::CannotAddBinaryDataToBbqr)
             }
 
@@ -151,7 +148,7 @@ impl MultiQr {
     #[uniffi::method]
     pub fn get_grouped_words(
         &self,
-        qr: FfiScanResultData,
+        qr: StringOrData,
         groups_of: u8,
     ) -> Result<Option<Vec<Vec<String>>>, MultiQrError> {
         let words: Option<Vec<Vec<String>>> = match self.handle_scan_result(qr)? {
