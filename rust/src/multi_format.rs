@@ -17,7 +17,6 @@ pub enum MultiFormat {
     Address(Arc<AddressWithNetwork>),
     HardwareExport(Arc<HardwareExport>),
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
-    SeedQr(Arc<crate::seed_qr::SeedQr>),
 }
 
 #[derive(Debug, uniffi::Error, thiserror::Error, derive_more::Display)]
@@ -37,7 +36,8 @@ type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
 impl MultiFormat {
     pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
         let seed_qr = crate::seed_qr::SeedQr::try_from_data(data)?;
-        Ok(Self::SeedQr(Arc::new(seed_qr)))
+        let mnemonic = seed_qr.into_mnemonic();
+        Ok(Self::Mnemonic(Arc::new(mnemonic.into())))
     }
 
     pub fn try_from_string(string: String) -> Result<Self> {
@@ -60,7 +60,8 @@ impl MultiFormat {
 
         // try to parse seed qr
         if let Ok(seed_qr) = crate::seed_qr::SeedQr::try_from_str(&string) {
-            return Ok(Self::SeedQr(Arc::new(seed_qr)));
+            let mnemonic = seed_qr.into_mnemonic();
+            return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
         }
 
         if let Ok(mnemonic) = string.as_str().parse_mnemonic() {
