@@ -45,6 +45,48 @@ struct CoveApp: App {
         }
     }
 
+    func handleFileOpen(_ url: URL) {
+        let fileHandler = FileHandler(filePath: url.absoluteString)
+
+        do {
+            let readResult = try fileHandler.read()
+            switch readResult {
+            case .mnemonic(let mnemonic):
+                // TODO:
+                // create new wallet & send to wallet (check hot wallet import screen)
+                ()
+            case .hardwareExport(let export):
+                // TODO:
+                // create new wallet & send to wallet (check hardware wallet import screen)
+                ()
+            case .address(let addressWithNetwork):
+                // TODO:
+                // check if network is current network, if not display error
+                // if current route is a wallet, pop up a sheet that shows the address, shows mine or external and has link to "Send"
+                ()
+            }
+        }
+        catch {
+            switch error {
+            case FileHandlerError.NotRecognizedFormat(let multiFormatError):
+                // TODO: Show this error to the user ignore all other errors?, just log for now
+                ()
+
+            case FileHandlerError.OpenFile(let error):
+                Log.error("File handler error: \(error)")
+
+            case FileHandlerError.ReadFile(let error):
+                Log.error("Unable to read file: \(error)")
+
+            case FileHandlerError.FileNotFound:
+                Log.error("File not found")
+
+            default:
+                ()
+            }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -112,9 +154,7 @@ struct CoveApp: App {
                     model.asyncRuntimeReady = true
                 }
             }
-            .onOpenURL { url in
-                print("Received file: \(url.absoluteString)")
-            }
+            .onOpenURL(perform: handleFileOpen)
         }
     }
 }

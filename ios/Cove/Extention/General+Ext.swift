@@ -6,6 +6,8 @@
 //
 
 // General extention for types from rust
+import Foundation
+import SwiftUI
 
 extension WalletAddressType: Comparable {
     public static func < (lhs: WalletAddressType, rhs: WalletAddressType) -> Bool {
