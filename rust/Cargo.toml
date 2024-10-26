@@ -33,7 +33,7 @@ bdk_file_store = { version =  "0.17.0", git = "http://github.com/bitcoinppl/bdk"
 bdk_chain = { version = "0.20.0", git = "https://github.com/bitcoinppl/bdk"}
 
 # import / export hardware wallet public keys
-pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = ["uniffi"]}
+pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = []}
 
 bitcoin-units = "0.1"
 bitcoin_hashes = "0.14.0"

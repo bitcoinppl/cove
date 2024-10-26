@@ -1,4 +1,4 @@
-use super::*;
+use super::{GroupedWord, Mnemonic, NumberOfBip39Words, WordAccess as _};
 use crate::{
     keychain::{Keychain, KeychainError},
     wallet::metadata::WalletId,
@@ -24,9 +24,6 @@ pub fn number_of_words_in_groups(me: NumberOfBip39Words, of: u8) -> Vec<Vec<Stri
 pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
     me.to_word_count() as u8
 }
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, derive_more::Into)]
-pub struct Mnemonic(bip39::Mnemonic);
 
 #[uniffi::export]
 impl Mnemonic {

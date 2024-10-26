@@ -2,6 +2,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::sync::Arc;
 
+use bdk_chain::bitcoin::address::NetworkUnchecked;
 use bdk_chain::bitcoin::params::Params;
 use bdk_chain::bitcoin::Address as BdkAddress;
 use bdk_chain::tx_graph::CanonicalTx;
@@ -36,6 +37,12 @@ pub struct Address(BdkAddress);
 )]
 pub struct AddressInfo(BdkAddressInfo);
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+pub struct AddressWithNetwork {
+    pub address: Address,
+    pub network: Network,
+}
+
 type Error = AddressError;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
@@ -45,6 +52,12 @@ pub enum AddressError {
 
     #[error("unable to create address from script: {0}")]
     ScriptError(String),
+
+    #[error("invalid not a valid address for any network")]
+    InvalidAddress,
+
+    #[error("valid address, but for an unsupported network")]
+    UnsupportedNetwork,
 }
 
 impl Clone for AddressInfo {
@@ -97,6 +110,31 @@ impl Address {
             .map_err(|e| Error::ScriptError(e.to_string()))?;
 
         Ok(Self::new(address))
+    }
+}
+
+impl AddressWithNetwork {
+    pub fn try_new(str: &str) -> Result<Self, Error> {
+        let address: BdkAddress<NetworkUnchecked> =
+            str.parse().map_err(|_| Error::InvalidAddress)?;
+
+        let network = Network::Bitcoin;
+        if let Ok(address) = address.clone().require_network(network.into()) {
+            return Ok(Self {
+                address: address.into(),
+                network,
+            });
+        }
+
+        let network = Network::Testnet;
+        if let Ok(address) = address.require_network(network.into()) {
+            return Ok(Self {
+                address: address.into(),
+                network,
+            });
+        }
+
+        Err(Error::UnsupportedNetwork)
     }
 }
 

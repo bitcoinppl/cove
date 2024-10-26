@@ -32,6 +32,7 @@ use pubport::formats::Format;
 use tracing::{debug, error, warn};
 
 pub type Address = address::Address;
+pub type AddressWithNetwork = address::AddressWithNetwork;
 pub type AddressInfo = address::AddressInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]

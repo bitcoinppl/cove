@@ -7,7 +7,7 @@ pub struct FileHandler {
     file_path: PathBuf,
 }
 
-#[derive(Debug, Clone, uniffi::Error, thiserror::Error, derive_more::Display)]
+#[derive(Debug, uniffi::Error, thiserror::Error, derive_more::Display)]
 pub enum FileHandlerError {
     /// File not found
     FileNotFound,

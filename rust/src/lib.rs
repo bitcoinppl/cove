@@ -11,6 +11,7 @@ pub(crate) mod color_scheme;
 pub(crate) mod consts;
 pub(crate) mod cove_nfc;
 pub(crate) mod encryption;
+pub(crate) mod ffi;
 pub(crate) mod fiat;
 pub(crate) mod file_handler;
 pub(crate) mod format;
@@ -37,4 +38,3 @@ pub(crate) mod word_validator;
 pub(crate) mod xpub;
 
 uniffi::setup_scaffolding!();
-pubport::uniffi_reexport_scaffolding!();
