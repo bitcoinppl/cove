@@ -114,7 +114,7 @@ struct CoveApp: App {
             Button("OK") {
                 self.alert = .none
             }
-        case let .addressWrongNetwork(address: address, network: network, currentNetwork: currentNetwork):
+        case let .addressWrongNetwork(address: address, network: _, currentNetwork: _):
             Button("Copy Address") {
                 UIPasteboard.general.string = String(address)
             }
@@ -129,12 +129,15 @@ struct CoveApp: App {
             Button("Cancel") {
                 self.alert = .none
             }
-                
         case let .foundAddress(address):
             Button("Copy Address") {
                 UIPasteboard.general.string = String(address)
             }
 
+            Button("Send To Address") {
+                // TODO: Route to Send for the wallet
+                self.alert = .none
+            }
             Button("Cancel") {
                 self.alert = .none
             }
