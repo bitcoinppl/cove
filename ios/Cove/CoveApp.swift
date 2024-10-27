@@ -34,6 +34,7 @@ struct CoveApp: App {
         case importedSuccessfully
         case unableToSelectWallet
         case errorImportingHardwareWallet(String)
+        case invalidFileFormat(String)
     }
 
     public init() {
@@ -98,6 +99,15 @@ struct CoveApp: App {
         case let .errorImportingHardwareWallet(error):
             return Alert(
                 title: Text("Error Importing Hardware Wallet"),
+                message: Text(error),
+                dismissButton: .default(Text("OK")) {
+                    self.alert = .none
+                }
+            )
+
+        case let .invalidFileFormat(error):
+            return Alert(
+                title: Text("Invalid File Format"),
                 message: Text(error),
                 dismissButton: .default(Text("OK")) {
                     self.alert = .none
@@ -189,8 +199,8 @@ struct CoveApp: App {
         } catch {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
-                // TODO: Show this error to the user ignore all other errors?, just log for now
-                ()
+                Log.error("Unrecognized format mulit format error: \(multiFormatError)")
+                alert = PresentableItem(.invalidFileFormat(multiFormatError.localizedDescription))
 
             case let FileHandlerError.OpenFile(error):
                 Log.error("File handler error: \(error)")
