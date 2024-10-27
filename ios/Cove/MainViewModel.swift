@@ -13,11 +13,17 @@ import SwiftUI
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
 
+    var sheetState: PresentableItem<SheetState>? = .none
+
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
     @ObservationIgnored
     weak var walletViewModel: WalletViewModel?
+
+    enum SheetState {
+        case qr
+    }
 
     public var selectedNetwork: Network {
         rust.network()

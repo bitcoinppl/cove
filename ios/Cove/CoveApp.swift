@@ -273,6 +273,14 @@ struct CoveApp: App {
         }
     }
 
+    @ViewBuilder
+    func SheetContent(_ state: MainViewModel.SheetState) -> some View {
+        switch state {
+        case .qr:
+            Text("QR")
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -326,6 +334,7 @@ struct CoveApp: App {
                 actions: alertButtons,
                 message: alertMessage
             )
+            .sheet(item: $model.sheetState, content: SheetContent)
             .gesture(
                 model.router.routes.isEmpty
                     ? DragGesture()
