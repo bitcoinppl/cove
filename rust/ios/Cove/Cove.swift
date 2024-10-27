@@ -3442,6 +3442,8 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
 
 public protocol MnemonicProtocol: AnyObject {
     func allWords() -> [GroupedWord]
+
+    func words() -> [String]
 }
 
 open class Mnemonic:
@@ -3503,6 +3505,12 @@ open class Mnemonic:
     open func allWords() -> [GroupedWord] {
         return try! FfiConverterSequenceTypeGroupedWord.lift(try! rustCall {
             uniffi_cove_fn_method_mnemonic_all_words(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func words() -> [String] {
+        return try! FfiConverterSequenceString.lift(try! rustCall {
+            uniffi_cove_fn_method_mnemonic_words(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -13878,6 +13886,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_mnemonic_all_words() != 45039 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_mnemonic_words() != 35319 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_add_part() != 11179 {

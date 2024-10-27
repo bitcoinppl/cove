@@ -46,4 +46,9 @@ impl Mnemonic {
     pub fn all_words(&self) -> Vec<GroupedWord> {
         self.0.grouped_words_of(1).into_iter().flatten().collect()
     }
+
+    #[uniffi::method]
+    pub fn words(&self) -> Vec<String> {
+        self.0.words().map(|word| word.to_string()).collect()
+    }
 }
