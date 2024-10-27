@@ -761,7 +761,11 @@ public func FfiConverterTypeAddressInfo_lower(_ value: AddressInfo) -> UnsafeMut
     return FfiConverterTypeAddressInfo.lower(value)
 }
 
-public protocol AddressWithNetworkProtocol: AnyObject {}
+public protocol AddressWithNetworkProtocol: AnyObject {
+    func address() -> Address
+
+    func network() -> Network
+}
 
 open class AddressWithNetwork:
     AddressWithNetworkProtocol
@@ -801,6 +805,18 @@ open class AddressWithNetwork:
         }
 
         try! rustCall { uniffi_cove_fn_free_addresswithnetwork(pointer, $0) }
+    }
+
+    open func address() -> Address {
+        return try! FfiConverterTypeAddress.lift(try! rustCall {
+            uniffi_cove_fn_method_addresswithnetwork_address(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func network() -> Network {
+        return try! FfiConverterTypeNetwork.lift(try! rustCall {
+            uniffi_cove_fn_method_addresswithnetwork_network(self.uniffiClonePointer(), $0)
+        })
     }
 }
 
@@ -13699,6 +13715,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_addressinfo_index() != 45529 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_addresswithnetwork_address() != 33477 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_addresswithnetwork_network() != 64145 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_amount_as_btc() != 7531 {

@@ -223,11 +223,20 @@ struct CoveApp: App {
     }
 
     func handleAddress(_ addressWithNetwork: AddressWithNetwork) {
-        // TODO:
-        // check if network is current network, if not display error
-        // if current route is a wallet, pop up a sheet that shows the address, shows mine or external and has link to "Send"
-        let _ = addressWithNetwork
-        ()
+        let currentNetwork = Database().globalConfig().selectedNetwork()
+        let address = addressWithNetwork.address()
+        let network = addressWithNetwork.network()
+        let selectedWallet = Database().globalConfig().selectedWallet()
+
+        if selectedWallet == nil {
+            return alert = PresentableItem(AlertState.noWalletSelected(address))
+        }
+
+        if network != currentNetwork {
+            return alert = PresentableItem(AlertState.addressWrongNetwork(address: address, network: network, currentNetwork: currentNetwork))
+        }
+
+        return alert = PresentableItem(.foundAddress(address))
     }
 
     func handleFileOpen(_ url: URL) {

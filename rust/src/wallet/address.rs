@@ -146,6 +146,17 @@ mod ffi {
     use super::*;
 
     #[uniffi::export]
+    impl AddressWithNetwork {
+        fn address(&self) -> Address {
+            self.address.clone().into()
+        }
+
+        fn network(&self) -> Network {
+            self.network
+        }
+    }
+
+    #[uniffi::export]
     impl Address {
         #[uniffi::constructor(name = "preview_new")]
         pub fn preview_new() -> Self {
