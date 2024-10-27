@@ -35,6 +35,9 @@ struct CoveApp: App {
         case unableToSelectWallet
         case errorImportingHardwareWallet(String)
         case invalidFileFormat(String)
+        case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network)
+        case noWalletSelected(Address)
+        case foundAddress(Address)
     }
 
     public init() {
@@ -43,6 +46,17 @@ struct CoveApp: App {
 
         let model = MainViewModel()
         self.model = model
+    }
+
+    var showingAlert: Binding<Bool> {
+        Binding(
+            get: { self.alert != nil },
+            set: { newValue in
+                if !newValue {
+                    self.alert = .none
+                }
+            }
+        )
     }
 
     private func alertFrom(_ state: PresentableItem<AlertState>) -> Alert {
@@ -100,6 +114,7 @@ struct CoveApp: App {
             return Alert(
                 title: Text("Error Importing Hardware Wallet"),
                 message: Text(error),
+
                 dismissButton: .default(Text("OK")) {
                     self.alert = .none
                 }
@@ -110,6 +125,42 @@ struct CoveApp: App {
                 title: Text("Invalid File Format"),
                 message: Text(error),
                 dismissButton: .default(Text("OK")) {
+                    self.alert = .none
+                }
+            )
+
+        case let .addressWrongNetwork(address: address, network: network, currentNetwork: currentNetwork):
+            return Alert(
+                title: Text("Wrong Network"),
+                message: Text("The address is for \(network) but you are on \(currentNetwork)"),
+                primaryButton: .default(Text("Copy Address")) {
+                    UIPasteboard.general.string = String(address)
+                },
+                secondaryButton: .cancel(Text("Cancel")) {
+                    self.alert = .none
+                }
+            )
+
+        case let .noWalletSelected(address):
+            return Alert(
+                title: Text("No Wallet Selected"),
+                message: Text("Please select a wallet to view addresses"),
+                primaryButton: .default(Text("Copy Address")) {
+                    UIPasteboard.general.string = String(address)
+                },
+                secondaryButton: .cancel(Text("Cancel")) {
+                    self.alert = .none
+                }
+            )
+
+        case let .foundAddress(address):
+            return Alert(
+                title: Text("Found Address"),
+                message: Text("Found address \(address)"),
+                primaryButton: .default(Text("Copy Address")) {
+                    UIPasteboard.general.string = String(address)
+                },
+                secondaryButton: .cancel(Text("Cancel")) {
                     self.alert = .none
                 }
             )
