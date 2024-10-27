@@ -6,12 +6,15 @@ pub mod parse;
 pub mod word_access;
 
 use crate::{keys::Descriptors, seed_qr::SeedQr, wallet::WalletAddressType};
+use derive_more::{AsRef, Deref, From, Into};
 
 use bdk_chain::bitcoin::{bip32::Xpub, Network};
-use bip39::Mnemonic;
 
 pub type NumberOfBip39Words = number_of_bip39_words::NumberOfBip39Words;
 pub type GroupedWord = grouped_word::GroupedWord;
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, Into, From, AsRef, Deref)]
+pub struct Mnemonic(bip39::Mnemonic);
 
 // traits
 pub trait WordAccess {
@@ -20,7 +23,7 @@ pub trait WordAccess {
 }
 
 pub trait ParseMnemonic {
-    fn parse_mnemonic(&self) -> Result<Mnemonic, bip39::Error>;
+    fn parse_mnemonic(&self) -> Result<bip39::Mnemonic, bip39::Error>;
 }
 
 pub trait MnemonicExt {

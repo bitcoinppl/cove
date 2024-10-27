@@ -37,9 +37,13 @@ private enum AlertType: Equatable {
     var alert: Alert {
         switch self {
         case let .success(message):
-            return .init(title: Text("Success"), message: Text(message), dismissButton: .default(Text("OK")))
+            return .init(
+                title: Text("Success"), message: Text(message), dismissButton: .default(Text("OK"))
+            )
         case let .error(message):
-            return .init(title: Text("Error"), message: Text(message), dismissButton: .default(Text("OK")))
+            return .init(
+                title: Text("Error"), message: Text(message), dismissButton: .default(Text("OK"))
+            )
         case let .custom(alert):
             return alert.alert
         }
@@ -136,6 +140,11 @@ struct QrCodeImportScreen: View {
                 Log.debug("Imported Wallet: \(id)")
                 self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
                 try app.rust.selectWallet(id: id)
+            } catch let WalletError.WalletAlreadyExists(id) {
+                self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
+                if (try? app.rust.selectWallet(id: id)) == nil {
+                    self.alert = AlertItem(type: .error("Unable to select wallet"))
+                }
             } catch {
                 self.alert = AlertItem(type: .error(error.localizedDescription))
             }
@@ -182,7 +191,8 @@ struct QrCodeImportScreen: View {
                     let customAlert =
                         Alert(
                             title: Text("Camera Access Required"),
-                            message: Text("Please allow camera access in Settings to use this feature."),
+                            message: Text(
+                                "Please allow camera access in Settings to use this feature."),
                             primaryButton: Alert.Button.default(Text("Settings")) {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                                     app.popRoute()

@@ -15,4 +15,8 @@ extension String {
     init(_ walletAddressType: WalletAddressType) {
         self = walletAddressTypeToString(walletAddressType: walletAddressType)
     }
+
+    init(_ adress: Address) {
+        self = adress.string()
+    }
 }

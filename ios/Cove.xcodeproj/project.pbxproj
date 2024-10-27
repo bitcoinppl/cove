@@ -49,7 +49,7 @@
 		AC6F4CE12CC5DAAB008D26C0 /* PresentableItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */; };
 		AC6F4CE32CC6BC30008D26C0 /* LoadAndResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */; };
 		AC6F4CE52CC6F56F008D26C0 /* NfcHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE42CC6F569008D26C0 /* NfcHelpView.swift */; };
-		AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */; };
+		AC6F511C2CA205EE00D4D27A /* StringOrData+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */; };
 		AC6F511E2CA36C7600D4D27A /* BinaryDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */; };
 		AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
@@ -146,7 +146,7 @@
 		AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentableItem.swift; sourceTree = "<group>"; };
 		AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadAndResetView.swift; sourceTree = "<group>"; };
 		AC6F4CE42CC6F569008D26C0 /* NfcHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcHelpView.swift; sourceTree = "<group>"; };
-		AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiScanResultData.swift; sourceTree = "<group>"; };
+		AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StringOrData+Ext.swift"; sourceTree = "<group>"; };
 		AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinaryDecoder.swift; sourceTree = "<group>"; };
 		AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeImportScreen.swift; sourceTree = "<group>"; };
 		AC739D542CA09AD6006B5FF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -323,6 +323,7 @@
 				AC1290302C4EE8A500E72ECF /* Result+Ext.swift */,
 				C9EF236DBA6E27BF588A0776 /* Balance+Ext.swift */,
 				AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */,
+				AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */,
 				AC5977092C6987BA004A0C44 /* Transaction+Ext.swift */,
 				AA9163511856992204BBC8EC /* WalletMetadata+Ext.swift */,
 			);
@@ -366,7 +367,6 @@
 		ACF479F62C59D76E008A9362 /* FFI */ = {
 			isa = PBXGroup;
 			children = (
-				AC6F511B2CA205E900D4D27A /* FfiScanResultData.swift */,
 				ACF479F72C59D785008A9362 /* WeakReconciler.swift */,
 				AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */,
 				AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */,
@@ -571,7 +571,7 @@
 				AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */,
 				ACC1CD5A2C6D415400C7AD89 /* FloaterPopupView.swift in Sources */,
 				52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */,
-				AC6F511C2CA205EE00D4D27A /* FfiScanResultData.swift in Sources */,
+				AC6F511C2CA205EE00D4D27A /* StringOrData+Ext.swift in Sources */,
 				AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */,
 				AC6F4CE32CC6BC30008D26C0 /* LoadAndResetView.swift in Sources */,
 				AC6F4CE52CC6F56F008D26C0 /* NfcHelpView.swift in Sources */,
@@ -744,7 +744,7 @@
 				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read NFC from hardware wallet";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read info";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "We need access to your documents folder to read the wallet export file";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -789,7 +789,7 @@
 				INFOPLIST_FILE = Cove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
-				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read NFC from hardware wallet";
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read info";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "We need access to your documents folder to read the wallet export file";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
