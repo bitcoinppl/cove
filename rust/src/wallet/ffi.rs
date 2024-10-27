@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use crate::hardware_export::HardwareExport;
+
 use super::{
     metadata::{DiscoveryState, FoundAddress},
     Wallet, WalletAddressType, WalletError,
@@ -8,6 +12,12 @@ impl Wallet {
     #[uniffi::constructor]
     pub fn new_from_xpub(xpub: String) -> Result<Self, WalletError> {
         Wallet::try_new_persisted_from_xpub(xpub)
+    }
+
+    #[uniffi::constructor]
+    pub fn new_from_export(export: Arc<HardwareExport>) -> Result<Self, WalletError> {
+        let export = Arc::unwrap_or_clone(export);
+        Wallet::try_new_persisted_from_pubport(export.into_format())
     }
 }
 

@@ -6075,6 +6075,14 @@ open class Wallet:
         try! rustCall { uniffi_cove_fn_free_wallet(pointer, $0) }
     }
 
+    public static func newFromExport(export: HardwareExport) throws -> Wallet {
+        return try FfiConverterTypeWallet.lift(rustCallWithError(FfiConverterTypeWalletError.lift) {
+            uniffi_cove_fn_constructor_wallet_new_from_export(
+                FfiConverterTypeHardwareExport.lower(export), $0
+            )
+        })
+    }
+
     public static func newFromXpub(xpub: String) throws -> Wallet {
         return try FfiConverterTypeWallet.lift(rustCallWithError(FfiConverterTypeWalletError.lift) {
             uniffi_cove_fn_constructor_wallet_new_from_xpub(
@@ -11571,6 +11579,8 @@ public enum WalletError {
     case MetadataNotFound
     case ParseXpubError(XpubError
     )
+    case WalletAlreadyExists(WalletId
+    )
 }
 
 public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
@@ -11601,6 +11611,9 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
         case 8: return .MetadataNotFound
         case 9: return try .ParseXpubError(
                 FfiConverterTypeXpubError.read(from: &buf)
+            )
+        case 10: return try .WalletAlreadyExists(
+                FfiConverterTypeWalletId.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -11641,6 +11654,10 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
         case let .ParseXpubError(v1):
             writeInt(&buf, Int32(9))
             FfiConverterTypeXpubError.write(v1, into: &buf)
+
+        case let .WalletAlreadyExists(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
         }
     }
 }
@@ -14303,6 +14320,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_transactiondetails_preview_pending_sent() != 378 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_wallet_new_from_export() != 11192 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_wallet_new_from_xpub() != 31726 {

@@ -189,6 +189,9 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             WalletError::BdkError(error) => Self::Bdk(error),
             WalletError::PersistError(error) => Self::Persist(error),
             WalletError::ParseXpubError(error) => Self::Import(error.to_string()),
+            WalletError::WalletAlreadyExists(id) => {
+                Self::Import(format!("wallet already exists: {id}"))
+            }
 
             WalletError::WalletNotFound => unreachable!("no wallet found in creation"),
             WalletError::LoadError(error) => unreachable!("no loading in creation:{error}"),

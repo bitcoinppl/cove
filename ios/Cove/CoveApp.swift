@@ -25,12 +25,15 @@ struct CoveApp: App {
     @State var id = UUID()
 
     // PRIVATE
-    @State private var alertState: PresentableItem<AlertState>? = .none
+    @State private var alert: PresentableItem<AlertState>? = .none
 
     private enum AlertState {
         case invalidWordGroup
         case duplicateWallet(WalletId)
         case errorImportingHotWallet(String)
+        case importedSuccessfully
+        case unableToSelectWallet
+        case errorImportingHardwareWallet(String)
     }
 
     public init() {
@@ -50,7 +53,7 @@ struct CoveApp: App {
                     "The words from the file does not create a valid wallet. Please check the words and try again."
                 ),
                 dismissButton: .default(Text("OK")) {
-                    self.alertState = .none
+                    self.alert = .none
                 }
             )
 
@@ -59,7 +62,7 @@ struct CoveApp: App {
                 title: Text("Duplicate Wallet"),
                 message: Text("This wallet has already been imported!"),
                 dismissButton: .default(Text("OK")) {
-                    self.alertState = .none
+                    self.alert = .none
                     try? self.model.rust.selectWallet(id: walletId)
                     self.model.resetRoute(to: .selectedWallet(walletId))
                 }
@@ -70,7 +73,34 @@ struct CoveApp: App {
                 title: Text("Error Importing Wallet"),
                 message: Text(error),
                 dismissButton: .default(Text("OK")) {
-                    self.alertState = .none
+                    self.alert = .none
+                }
+            )
+
+        case .importedSuccessfully:
+            return Alert(
+                title: Text("Success"),
+                message: Text("Wallet Imported Successfully"),
+                dismissButton: .default(Text("OK")) {
+                    self.alert = .none
+                }
+            )
+
+        case .unableToSelectWallet:
+            return Alert(
+                title: Text("Error"),
+                message: Text("Unable to select wallet"),
+                dismissButton: .default(Text("OK")) {
+                    self.alert = .none
+                }
+            )
+
+        case let .errorImportingHardwareWallet(error):
+            return Alert(
+                title: Text("Error Importing Hardware Wallet"),
+                message: Text(error),
+                dismissButton: .default(Text("OK")) {
+                    self.alert = .none
                 }
             )
         }
@@ -91,7 +121,7 @@ struct CoveApp: App {
 
     func importHotWallet(_ words: [String]) {
         do {
-            let app = self.model
+            let app = model
             let model = ImportWalletViewModel()
             let walletMetadata = try model.rust.importWallet(enteredWords: [words])
             try app.rust.selectWallet(id: walletMetadata.id)
@@ -100,19 +130,47 @@ struct CoveApp: App {
             switch error {
             case let .InvalidWordGroup(error):
                 Log.debug("Invalid words: \(error)")
-                self.alertState = PresentableItem(.invalidWordGroup)
+                self.alert = PresentableItem(.invalidWordGroup)
             case let .WalletAlreadyExists(walletId):
-                self.alertState = PresentableItem(.duplicateWallet(walletId))
+                self.alert = PresentableItem(.duplicateWallet(walletId))
             default:
                 Log.error("Unable to import wallet: \(error)")
-                self.alertState = PresentableItem(
+                self.alert = PresentableItem(
                     .errorImportingHotWallet(error.localizedDescription))
             }
         } catch {
             Log.error("Unknown error \(error)")
-            alertState = PresentableItem(
+            alert = PresentableItem(
                 .errorImportingHotWallet(error.localizedDescription))
         }
+    }
+
+    func importColdWallet(_ export: HardwareExport) {
+        let app = model
+
+        do {
+            let wallet = try Wallet.newFromExport(export: export)
+            let id = wallet.id()
+            Log.debug("Imported Wallet: \(id)")
+            alert = PresentableItem(.importedSuccessfully)
+            try app.rust.selectWallet(id: id)
+        } catch let WalletError.WalletAlreadyExists(id) {
+            self.alert = PresentableItem(.duplicateWallet(id))
+
+            if (try? app.rust.selectWallet(id: id)) == nil {
+                self.alert = PresentableItem(.unableToSelectWallet)
+            }
+        } catch {
+            alert = PresentableItem(.errorImportingHardwareWallet(error.localizedDescription))
+        }
+    }
+
+    func handleAddress(_ addressWithNetwork: AddressWithNetwork) {
+        // TODO:
+        // check if network is current network, if not display error
+        // if current route is a wallet, pop up a sheet that shows the address, shows mine or external and has link to "Send"
+        let _ = addressWithNetwork
+        ()
     }
 
     func handleFileOpen(_ url: URL) {
@@ -124,14 +182,9 @@ struct CoveApp: App {
             case let .mnemonic(mnemonic):
                 importHotWallet(mnemonic.words())
             case let .hardwareExport(export):
-                // TODO:
-                // create new wallet & send to wallet (check hardware wallet import screen)
-                ()
+                importColdWallet(export)
             case let .address(addressWithNetwork):
-                // TODO:
-                // check if network is current network, if not display error
-                // if current route is a wallet, pop up a sheet that shows the address, shows mine or external and has link to "Send"
-                ()
+                handleAddress(addressWithNetwork)
             }
         } catch {
             switch error {
@@ -200,7 +253,7 @@ struct CoveApp: App {
             .onChange(of: model.selectedNetwork) {
                 id = UUID()
             }
-            .alert(item: $alertState, content: alertFrom)
+            .alert(item: $alert, content: alertFrom)
             .gesture(
                 model.router.routes.isEmpty
                     ? DragGesture()

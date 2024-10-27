@@ -63,6 +63,9 @@ pub enum WalletError {
 
     #[error("failed to parse xpub: {0}")]
     ParseXpubError(#[from] XpubError),
+
+    #[error("tryin to import a wallet that already exists")]
+    WalletAlreadyExists(WalletId),
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -190,6 +193,16 @@ impl Wallet {
 
     /// Create a new watch-only wallet from the given xpub
     pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
+        let hardware_export = pubport::Format::try_new_from_str(&xpub)
+            .map_err(Into::into)
+            .map_err(WalletError::ParseXpubError)?
+            .into();
+
+        Self::try_new_persisted_from_pubport(hardware_export)
+    }
+
+    /// Import from a hardware export
+    pub fn try_new_persisted_from_pubport(pubport: pubport::Format) -> Result<Self, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
         let network = Database::global().global_config.selected_network();
@@ -203,11 +216,7 @@ impl Wallet {
         )
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
-        let format = pubport::Format::try_new_from_str(&xpub)
-            .map_err(Into::into)
-            .map_err(WalletError::ParseXpubError)?;
-
-        let descriptors = match format {
+        let descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
                 let descriptors = json.bip84.clone().ok_or(WalletError::ParseXpubError(
@@ -222,11 +231,36 @@ impl Wallet {
             Format::Electrum(descriptors) => descriptors,
         };
 
-        let fingerprint = descriptors
-            .fingerprint()
-            .as_ref()
-            .map(Fingerprint::to_string);
+        let fingerprint = descriptors.fingerprint();
 
+        // make sure its not already imported
+        if let Some(fingerprint) = fingerprint.as_ref() {
+            let fingerprint = (*fingerprint).into();
+            let all_fingerprints: Vec<(WalletId, fingerprint::Fingerprint)> = Database::global()
+                .wallets
+                .get_all(network)
+                .map(|wallets| {
+                    wallets
+                        .into_iter()
+                        .filter_map(|wallet_metadata| {
+                            let fingerprint =
+                                fingerprint::Fingerprint::try_new(&wallet_metadata.id).ok()?;
+
+                            Some((wallet_metadata.id, fingerprint))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            if let Some((id, _)) = all_fingerprints
+                .into_iter()
+                .find(|(_, f)| f == &fingerprint)
+            {
+                return Err(WalletError::WalletAlreadyExists(id));
+            }
+        }
+
+        let fingerprint = fingerprint.map(|s| s.to_string());
         let xpub = descriptors
             .xpub()
             .map_err(Into::into)

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    ffi::HardwareExport,
+    hardware_export::HardwareExport,
     mnemonic::ParseMnemonic as _,
     wallet::{address::AddressError, AddressWithNetwork},
 };
