@@ -148,7 +148,7 @@ mod ffi {
     #[uniffi::export]
     impl AddressWithNetwork {
         fn address(&self) -> Address {
-            self.address.clone().into()
+            self.address.clone()
         }
 
         fn network(&self) -> Network {

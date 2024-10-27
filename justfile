@@ -33,7 +33,7 @@ fmt:
     cd rust && cargo fmt --all
 
 clippy:
-    cd rust && cargo clippy
+    cd rust && cargo clippy 
 
 update pkg="":
     cd rust && cargo update {{pkg}}
@@ -44,7 +44,7 @@ xcode-clean:
 
 ci: 
     just fmt
-    just clippy
+    cd rust && cargo clippy --all-targets --all-features
     just test
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check

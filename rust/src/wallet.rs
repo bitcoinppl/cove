@@ -195,8 +195,7 @@ impl Wallet {
     pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
         let hardware_export = pubport::Format::try_new_from_str(&xpub)
             .map_err(Into::into)
-            .map_err(WalletError::ParseXpubError)?
-            .into();
+            .map_err(WalletError::ParseXpubError)?;
 
         Self::try_new_persisted_from_pubport(hardware_export)
     }
