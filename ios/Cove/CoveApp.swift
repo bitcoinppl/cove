@@ -38,6 +38,107 @@ struct CoveApp: App {
         case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network)
         case noWalletSelected(Address)
         case foundAddress(Address)
+
+        func title() -> String {
+            switch self {
+            case .invalidWordGroup:
+                return "Words Not Valid"
+            case .duplicateWallet:
+                return "Duplicate Wallet"
+            case .errorImportingHotWallet:
+                return "Error"
+            case .importedSuccessfully:
+                return "Success"
+            case .unableToSelectWallet:
+                return "Error"
+            case .errorImportingHardwareWallet:
+                return "Error Importing Hardware Wallet"
+            case .invalidFileFormat:
+                return "Invalid File Format"
+            case .addressWrongNetwork:
+                return "Wrong Network"
+            case .noWalletSelected:
+                return "No Wallet Selected"
+            case .foundAddress:
+                return "Found Address"
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func alertMessage(alert: PresentableItem<AlertState>) -> some View {
+        let text = {
+            switch alert.item {
+            case .invalidWordGroup:
+                return
+                    "The words from the file does not create a valid wallet. Please check the words and try again."
+            case .duplicateWallet:
+                return "This wallet has already been imported!"
+            case .errorImportingHotWallet:
+                return "Error Importing Wallet"
+            case .importedSuccessfully:
+                return "Wallet Imported Successfully"
+            case .unableToSelectWallet:
+                return "Unable to select wallet"
+            case .errorImportingHardwareWallet:
+                return "Error Importing Hardware Wallet"
+            case .invalidFileFormat:
+                return "Invalid File Format"
+            case .addressWrongNetwork:
+                return "Wrong Network"
+            case .noWalletSelected:
+                return "No Wallet Selected"
+            case .foundAddress:
+                return "Found Address"
+            }
+        }()
+
+        Text(text)
+    }
+
+    @ViewBuilder
+    private func alertButtons(alert: PresentableItem<AlertState>) -> some View {
+        switch alert.item {
+        case let .duplicateWallet(walletId):
+            Button("OK") {
+                self.alert = .none
+                try? model.rust.selectWallet(id: walletId)
+                model.resetRoute(to: .selectedWallet(walletId))
+            }
+        case .invalidWordGroup,
+             .errorImportingHotWallet,
+             .importedSuccessfully,
+             .unableToSelectWallet,
+             .errorImportingHardwareWallet,
+             .invalidFileFormat:
+            Button("OK") {
+                self.alert = .none
+            }
+        case let .addressWrongNetwork(address: address, network: network, currentNetwork: currentNetwork):
+            Button("Copy Address") {
+                UIPasteboard.general.string = String(address)
+            }
+
+            Button("Cancel") {
+                self.alert = .none
+            }
+        case let .noWalletSelected(address):
+            Button("Copy Address") {
+                UIPasteboard.general.string = String(address)
+            }
+            Button("Cancel") {
+                self.alert = .none
+            }
+                
+        case let .foundAddress(address):
+            Button("Copy Address") {
+                UIPasteboard.general.string = String(address)
+            }
+
+            Button("Cancel") {
+                self.alert = .none
+            }
+        }
     }
 
     public init() {
@@ -57,114 +158,6 @@ struct CoveApp: App {
                 }
             }
         )
-    }
-
-    private func alertFrom(_ state: PresentableItem<AlertState>) -> Alert {
-        switch state.item {
-        case .invalidWordGroup:
-            return Alert(
-                title: Text("Words Not Valid"),
-                message: Text(
-                    "The words from the file does not create a valid wallet. Please check the words and try again."
-                ),
-                dismissButton: .default(Text("OK")) {
-                    self.alert = .none
-                }
-            )
-
-        case let .duplicateWallet(walletId):
-            return Alert(
-                title: Text("Duplicate Wallet"),
-                message: Text("This wallet has already been imported!"),
-                dismissButton: .default(Text("OK")) {
-                    self.alert = .none
-                    try? self.model.rust.selectWallet(id: walletId)
-                    self.model.resetRoute(to: .selectedWallet(walletId))
-                }
-            )
-
-        case let .errorImportingHotWallet(error):
-            return Alert(
-                title: Text("Error Importing Wallet"),
-                message: Text(error),
-                dismissButton: .default(Text("OK")) {
-                    self.alert = .none
-                }
-            )
-
-        case .importedSuccessfully:
-            return Alert(
-                title: Text("Success"),
-                message: Text("Wallet Imported Successfully"),
-                dismissButton: .default(Text("OK")) {
-                    self.alert = .none
-                }
-            )
-
-        case .unableToSelectWallet:
-            return Alert(
-                title: Text("Error"),
-                message: Text("Unable to select wallet"),
-                dismissButton: .default(Text("OK")) {
-                    self.alert = .none
-                }
-            )
-
-        case let .errorImportingHardwareWallet(error):
-            return Alert(
-                title: Text("Error Importing Hardware Wallet"),
-                message: Text(error),
-
-                dismissButton: .default(Text("OK")) {
-                    self.alert = .none
-                }
-            )
-
-        case let .invalidFileFormat(error):
-            return Alert(
-                title: Text("Invalid File Format"),
-                message: Text(error),
-                dismissButton: .default(Text("OK")) {
-                    self.alert = .none
-                }
-            )
-
-        case let .addressWrongNetwork(address: address, network: network, currentNetwork: currentNetwork):
-            return Alert(
-                title: Text("Wrong Network"),
-                message: Text("The address is for \(network) but you are on \(currentNetwork)"),
-                primaryButton: .default(Text("Copy Address")) {
-                    UIPasteboard.general.string = String(address)
-                },
-                secondaryButton: .cancel(Text("Cancel")) {
-                    self.alert = .none
-                }
-            )
-
-        case let .noWalletSelected(address):
-            return Alert(
-                title: Text("No Wallet Selected"),
-                message: Text("Please select a wallet to view addresses"),
-                primaryButton: .default(Text("Copy Address")) {
-                    UIPasteboard.general.string = String(address)
-                },
-                secondaryButton: .cancel(Text("Cancel")) {
-                    self.alert = .none
-                }
-            )
-
-        case let .foundAddress(address):
-            return Alert(
-                title: Text("Found Address"),
-                message: Text("Found address \(address)"),
-                primaryButton: .default(Text("Copy Address")) {
-                    UIPasteboard.general.string = String(address)
-                },
-                secondaryButton: .cancel(Text("Cancel")) {
-                    self.alert = .none
-                }
-            )
-        }
     }
 
     var navBarColor: Color {
@@ -314,24 +307,30 @@ struct CoveApp: App {
             .onChange(of: model.selectedNetwork) {
                 id = UUID()
             }
-            .alert(item: $alert, content: alertFrom)
+            .alert(
+                alert?.item.title() ?? "Alert",
+                isPresented: showingAlert,
+                presenting: alert,
+                actions: alertButtons,
+                message: alertMessage
+            )
             .gesture(
                 model.router.routes.isEmpty
                     ? DragGesture()
-                        .onChanged { gesture in
-                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                withAnimation(.spring()) {
-                                    model.isSidebarVisible = true
-                                }
+                    .onChanged { gesture in
+                        if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                            withAnimation(.spring()) {
+                                model.isSidebarVisible = true
                             }
                         }
-                        .onEnded { gesture in
-                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                withAnimation(.spring()) {
-                                    model.isSidebarVisible = true
-                                }
+                    }
+                    .onEnded { gesture in
+                        if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                            withAnimation(.spring()) {
+                                model.isSidebarVisible = true
                             }
-                        } : nil
+                        }
+                    } : nil
             )
             .task {
                 await model.rust.initOnStart()
