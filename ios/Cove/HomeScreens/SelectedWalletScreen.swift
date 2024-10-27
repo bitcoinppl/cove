@@ -176,6 +176,27 @@ struct SelectedWalletScreenInner: View {
                         .environment(model)
                 }
                 .toolbar {
+                    ToolbarItemGroup {
+                        Button(action: {
+                            sheetState = PresentableItem(.settings)
+                        }) {
+                            HStack {
+                                Image(systemName: "wave.3.right")
+                                    .foregroundColor(.primary.opacity(0.8))
+                                    .font(.system(size: 14.5))
+                            }
+                        }
+
+                        Button(action: {
+                            sheetState = PresentableItem(.settings)
+                        }) {
+                            HStack {
+                                Image(systemName: "qrcode")
+                                    .foregroundColor(.primary.opacity(0.8))
+                            }
+                        }
+                    }
+
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: {
                             sheetState = PresentableItem(.settings)
