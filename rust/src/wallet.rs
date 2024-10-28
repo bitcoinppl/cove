@@ -208,7 +208,7 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = WalletId::new();
-        let mut metadata = WalletMetadata::new_with_id(id.clone(), "", Fingerprint::default());
+        let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
 
         let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
             id.to_string().as_bytes(),
@@ -238,8 +238,7 @@ impl Wallet {
             let fingerprint = (*fingerprint).into();
 
             // update the fingerprint
-            metadata.master_fingerprint = Fingerprint::from(fingerprint).into();
-
+            metadata.master_fingerprint = Some(Fingerprint::from(fingerprint).into());
             let all_fingerprints: Vec<(WalletId, fingerprint::Fingerprint)> = Database::global()
                 .wallets
                 .get_all(network)

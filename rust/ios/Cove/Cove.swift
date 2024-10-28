@@ -7733,6 +7733,7 @@ public struct WalletMetadata {
     public var verified: Bool
     public var network: Network
     public var performedFullScan: Bool
+    public var masterFingerprint: Fingerprint?
     public var selectedUnit: Unit
     public var selectedFiatCurrency: FiatCurrency
     public var sensitiveVisible: Bool
@@ -7745,13 +7746,14 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: FiatCurrency, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, selectedFiatCurrency: FiatCurrency, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
         self.verified = verified
         self.network = network
         self.performedFullScan = performedFullScan
+        self.masterFingerprint = masterFingerprint
         self.selectedUnit = selectedUnit
         self.selectedFiatCurrency = selectedFiatCurrency
         self.sensitiveVisible = sensitiveVisible
@@ -7774,6 +7776,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 verified: FfiConverterBool.read(from: &buf),
                 network: FfiConverterTypeNetwork.read(from: &buf),
                 performedFullScan: FfiConverterBool.read(from: &buf),
+                masterFingerprint: FfiConverterOptionTypeFingerprint.read(from: &buf),
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf),
                 selectedFiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf),
                 sensitiveVisible: FfiConverterBool.read(from: &buf),
@@ -7793,6 +7796,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.verified, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterBool.write(value.performedFullScan, into: &buf)
+        FfiConverterOptionTypeFingerprint.write(value.masterFingerprint, into: &buf)
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
         FfiConverterTypeFiatCurrency.write(value.selectedFiatCurrency, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
@@ -12866,6 +12870,27 @@ private struct FfiConverterOptionDuration: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterDuration.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+private struct FfiConverterOptionTypeFingerprint: FfiConverterRustBuffer {
+    typealias SwiftType = Fingerprint?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFingerprint.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFingerprint.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

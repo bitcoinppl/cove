@@ -32,7 +32,7 @@ pub struct WalletMetadata {
     pub network: Network,
     pub performed_full_scan: bool,
     #[serde(default)]
-    pub master_fingerprint: Arc<Fingerprint>,
+    pub master_fingerprint: Option<Arc<Fingerprint>>,
     #[serde(default)]
     pub selected_unit: Unit,
     #[serde(default = "default_fiat_currency")]
@@ -148,7 +148,7 @@ impl WalletMetadata {
             id: WalletId::new(),
             name: name.into(),
             color: WalletColor::Blue,
-            master_fingerprint: fingerprint.into(),
+            master_fingerprint: Some(fingerprint.into()),
             verified: false,
             network,
             performed_full_scan: false,
@@ -167,9 +167,14 @@ impl WalletMetadata {
     pub fn new_with_id(
         id: WalletId,
         name: impl Into<String>,
-        fingerprint: impl Into<Arc<Fingerprint>>,
+        fingerprint: Option<Arc<Fingerprint>>,
     ) -> Self {
-        let me = Self::new(name, fingerprint);
+        let me = Self::new(
+            name,
+            fingerprint
+                .map(Into::into)
+                .unwrap_or_else(|| Arc::new(Fingerprint::default())),
+        );
 
         Self {
             id,
@@ -198,7 +203,7 @@ impl WalletMetadata {
         Self {
             id: WalletId::preview_new(),
             name: "Test Wallet".to_string(),
-            master_fingerprint: Arc::new(Fingerprint::default()),
+            master_fingerprint: Some(Arc::new(Fingerprint::default())),
             color: WalletColor::Blue,
             verified: false,
             network: Network::Bitcoin,
