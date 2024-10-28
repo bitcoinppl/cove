@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, network::Network};
 
-use super::{AddressInfo, WalletAddressType};
+use super::{fingerprint::Fingerprint, AddressInfo, WalletAddressType};
 
 new_type!(WalletId, String);
 impl_default_for!(WalletId);
@@ -31,6 +31,8 @@ pub struct WalletMetadata {
     pub verified: bool,
     pub network: Network,
     pub performed_full_scan: bool,
+    #[serde(default)]
+    pub master_fingerprint: Arc<Fingerprint>,
     #[serde(default)]
     pub selected_unit: Unit,
     #[serde(default = "default_fiat_currency")]
@@ -139,13 +141,14 @@ mod ffi {
 }
 
 impl WalletMetadata {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, fingerprint: impl Into<Arc<Fingerprint>>) -> Self {
         let network = Database::global().global_config.selected_network();
 
         Self {
             id: WalletId::new(),
             name: name.into(),
             color: WalletColor::Blue,
+            master_fingerprint: fingerprint.into(),
             verified: false,
             network,
             performed_full_scan: false,
@@ -161,8 +164,12 @@ impl WalletMetadata {
         }
     }
 
-    pub fn new_with_id(id: WalletId, name: impl Into<String>) -> Self {
-        let me = Self::new(name);
+    pub fn new_with_id(
+        id: WalletId,
+        name: impl Into<String>,
+        fingerprint: impl Into<Arc<Fingerprint>>,
+    ) -> Self {
+        let me = Self::new(name, fingerprint);
 
         Self {
             id,
@@ -172,8 +179,12 @@ impl WalletMetadata {
         }
     }
 
-    pub fn new_imported_from_mnemonic(name: impl Into<String>, network: Network) -> Self {
-        let mut me = Self::new(name);
+    pub fn new_imported_from_mnemonic(
+        name: impl Into<String>,
+        network: Network,
+        fingerprint: impl Into<Arc<Fingerprint>>,
+    ) -> Self {
+        let mut me = Self::new(name, fingerprint);
         me.discovery_state = DiscoveryState::StartedMnemonic;
 
         Self {
@@ -187,6 +198,7 @@ impl WalletMetadata {
         Self {
             id: WalletId::preview_new(),
             name: "Test Wallet".to_string(),
+            master_fingerprint: Arc::new(Fingerprint::default()),
             color: WalletColor::Blue,
             verified: false,
             network: Network::Bitcoin,

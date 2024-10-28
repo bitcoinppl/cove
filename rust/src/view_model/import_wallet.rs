@@ -118,7 +118,6 @@ impl RustImportWalletViewModel {
                     .into_iter()
                     .filter_map(|wallet_metadata| {
                         let fingerprint = Fingerprint::try_new(&wallet_metadata.id).ok()?;
-
                         Some((wallet_metadata.id, fingerprint))
                     })
                     .collect()
@@ -136,7 +135,8 @@ impl RustImportWalletViewModel {
         let number_of_wallets = Database::global().wallets.len(network).unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
-        let wallet_metadata = WalletMetadata::new_imported_from_mnemonic(name, network);
+        let wallet_metadata =
+            WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
 
         Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
             .map_err(|e| ImportWalletError::WalletImportError(e.to_string()))?;
