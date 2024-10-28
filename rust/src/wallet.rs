@@ -23,10 +23,11 @@ use crate::{
 use balance::Balance;
 use bdk_file_store::Store;
 use bdk_wallet::{
-    bitcoin::bip32::Fingerprint, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey,
-    KeychainKind,
+    bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
+    keys::DescriptorPublicKey, KeychainKind,
 };
 use bip39::Mnemonic;
+use fingerprint::Fingerprint;
 use metadata::{DiscoveryState, WalletId, WalletMetadata};
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
@@ -207,7 +208,7 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = WalletId::new();
-        let mut metadata = WalletMetadata::new_with_id(id.clone(), "");
+        let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
 
         let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
             id.to_string().as_bytes(),
@@ -234,19 +235,17 @@ impl Wallet {
 
         // make sure its not already imported
         if let Some(fingerprint) = fingerprint.as_ref() {
-            let fingerprint = (*fingerprint).into();
-            let all_fingerprints: Vec<(WalletId, fingerprint::Fingerprint)> = Database::global()
+            let fingerprint: Fingerprint = (*fingerprint).into();
+
+            // update the fingerprint
+            metadata.master_fingerprint = Some(fingerprint.into());
+            let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
                 .wallets
                 .get_all(network)
                 .map(|wallets| {
                     wallets
                         .into_iter()
-                        .filter_map(|wallet_metadata| {
-                            let fingerprint =
-                                fingerprint::Fingerprint::try_new(&wallet_metadata.id).ok()?;
-
-                            Some((wallet_metadata.id, fingerprint))
-                        })
+                        .map(|wallet_metadata| (wallet_metadata.id, fingerprint))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -490,7 +489,7 @@ impl Wallet {
         Ok(address_info)
     }
 
-    pub fn master_fingerprint(&self) -> Result<Fingerprint, WalletError> {
+    pub fn master_fingerprint(&self) -> Result<BdkFingerprint, WalletError> {
         let key = self.get_pub_key()?;
         Ok(key.master_fingerprint())
     }

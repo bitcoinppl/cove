@@ -1,7 +1,20 @@
 use crate::{keychain::Keychain, wallet::metadata::WalletId};
 use bdk_wallet::bitcoin::bip32::Fingerprint as BdkFingerprint;
+use serde::Serialize;
 
-#[derive(Debug, Clone, uniffi::Object, derive_more::From, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Hash,
+    Default,
+    uniffi::Object,
+    derive_more::From,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub struct Fingerprint(BdkFingerprint);
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
@@ -18,12 +31,12 @@ impl Fingerprint {
     }
 
     #[uniffi::method]
-    pub fn to_uppercase(&self) -> String {
+    pub fn as_uppercase(&self) -> String {
         self.0.to_string().to_ascii_uppercase()
     }
 
     #[uniffi::method]
-    pub fn to_lowercase(&self) -> String {
+    pub fn as_lowercase(&self) -> String {
         self.0.to_string().to_ascii_lowercase()
     }
 }
@@ -37,6 +50,31 @@ impl Fingerprint {
             .ok_or(FingerprintError::WalletNotFound)?;
 
         let fingerprint = xpub.fingerprint();
+
+        Ok(Self(fingerprint))
+    }
+}
+
+impl Serialize for Fingerprint {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.as_uppercase())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Fingerprint {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use std::str::FromStr as _;
+
+        let fingerprint = String::deserialize(deserializer)?;
+        let fingerprint = BdkFingerprint::from_str(&fingerprint).map_err(|error| {
+            serde::de::Error::custom(format!("unable to parse fingerprint: {error}"))
+        })?;
 
         Ok(Self(fingerprint))
     }

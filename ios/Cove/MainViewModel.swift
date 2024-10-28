@@ -13,6 +13,9 @@ import SwiftUI
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
 
+    var sheetState: PresentableItem<AppSheetState>? = .none
+    var nfcReader = NFCReader()
+
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
@@ -91,6 +94,10 @@ import SwiftUI
 
     func setRoute(_ routes: [Route]) {
         router.routes = routes
+    }
+
+    func scanQr() {
+        sheetState = PresentableItem(.qr)
     }
 
     @MainActor

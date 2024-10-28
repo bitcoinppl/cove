@@ -165,7 +165,7 @@ struct QrCodeImportScreen: View {
             guard let multiQr else { return }
 
             // single QR
-            if multiQr.isSingle() {
+            if !multiQr.isBbqr() {
                 scanComplete = true
                 scannedCode = IdentifiableString(stringValue)
                 return
@@ -277,8 +277,4 @@ struct HelpView: View {
 #Preview {
     QrCodeImportScreen()
         .environment(MainViewModel())
-}
-
-#Preview("help") {
-    HelpView()
 }

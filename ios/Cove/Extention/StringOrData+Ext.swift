@@ -1,5 +1,5 @@
 //
-//  FfiScanResultData.swift
+//  StringOrData+Ext.swift
 //  Cove
 //
 //  Created by Praveen Perera on 9/23/24.
@@ -23,5 +23,9 @@ extension StringOrData {
 
     init(_ value: Data) {
         self.self = .data(value)
+    }
+
+    func toMultiFormat() throws -> MultiFormat {
+        try stringOrDataTryIntoMultiFormat(stringOrData: self)
     }
 }

@@ -3580,8 +3580,6 @@ public protocol MultiQrProtocol: AnyObject {
 
     func isSeedQr() -> Bool
 
-    func isSingle() -> Bool
-
     func totalParts() -> UInt32
 }
 
@@ -3680,12 +3678,6 @@ open class MultiQr:
     open func isSeedQr() -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_multiqr_is_seed_qr(self.uniffiClonePointer(), $0)
-        })
-    }
-
-    open func isSingle() -> Bool {
-        return try! FfiConverterBool.lift(try! rustCall {
-            uniffi_cove_fn_method_multiqr_is_single(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -7741,6 +7733,7 @@ public struct WalletMetadata {
     public var verified: Bool
     public var network: Network
     public var performedFullScan: Bool
+    public var masterFingerprint: Fingerprint?
     public var selectedUnit: Unit
     public var selectedFiatCurrency: FiatCurrency
     public var sensitiveVisible: Bool
@@ -7753,13 +7746,14 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, selectedUnit: Unit, selectedFiatCurrency: FiatCurrency, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, internal: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, selectedFiatCurrency: FiatCurrency, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, internal: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
         self.verified = verified
         self.network = network
         self.performedFullScan = performedFullScan
+        self.masterFingerprint = masterFingerprint
         self.selectedUnit = selectedUnit
         self.selectedFiatCurrency = selectedFiatCurrency
         self.sensitiveVisible = sensitiveVisible
@@ -7782,6 +7776,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 verified: FfiConverterBool.read(from: &buf),
                 network: FfiConverterTypeNetwork.read(from: &buf),
                 performedFullScan: FfiConverterBool.read(from: &buf),
+                masterFingerprint: FfiConverterOptionTypeFingerprint.read(from: &buf),
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf),
                 selectedFiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf),
                 sensitiveVisible: FfiConverterBool.read(from: &buf),
@@ -7801,6 +7796,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.verified, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterBool.write(value.performedFullScan, into: &buf)
+        FfiConverterOptionTypeFingerprint.write(value.masterFingerprint, into: &buf)
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
         FfiConverterTypeFiatCurrency.write(value.selectedFiatCurrency, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
@@ -12879,6 +12875,27 @@ private struct FfiConverterOptionDuration: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionTypeFingerprint: FfiConverterRustBuffer {
+    typealias SwiftType = Fingerprint?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFingerprint.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFingerprint.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionTypeAddressIndex: FfiConverterRustBuffer {
     typealias SwiftType = AddressIndex?
 
@@ -13532,6 +13549,14 @@ public func previewNewWrappedFoundAddress() -> FoundAddress {
     })
 }
 
+public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData) throws -> MultiFormat {
+    return try FfiConverterTypeMultiFormat.lift(rustCallWithError(FfiConverterTypeMultiFormatError.lift) {
+        uniffi_cove_fn_func_string_or_data_try_into_multi_format(
+            FfiConverterTypeStringOrData.lower(stringOrData), $0
+        )
+    })
+}
+
 public func transactionPreviewConfirmedNew() -> Transaction {
     return try! FfiConverterTypeTransaction.lift(try! rustCall {
         uniffi_cove_fn_func_transaction_preview_confirmed_new($0
@@ -13676,6 +13701,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 57500 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 43706 {
@@ -13943,9 +13971,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_is_seed_qr() != 10256 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_multiqr_is_single() != 64690 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_total_parts() != 51119 {

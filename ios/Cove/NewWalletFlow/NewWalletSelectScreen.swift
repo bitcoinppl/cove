@@ -44,12 +44,20 @@ struct NewWalletSelectScreen: View {
             Spacer()
 
             VStack(spacing: 30) {
-                self.walletOptionButton(
-                    title: "On This Device",
-                    icon: "iphone",
-                    color: .blue,
-                    destination: RouteFactory().newHotWallet()
-                )
+                NavigationLink(value: RouteFactory().newHotWallet()) {
+                    HStack {
+                        Image(systemName: "iphone")
+                            .font(.title2)
+                        Text("On This Device")
+                            .font(.headline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 22)
+                    .background(.blue.opacity(self.colorScheme == .dark ? 0.85 : 1))
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+                .buttonStyle(PlainButtonStyle())
 
                 Button(action: { self.showSelectDialog = true }) {
                     HStack {
@@ -59,12 +67,46 @@ struct NewWalletSelectScreen: View {
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 25)
+                    .padding(.vertical, 22)
                     .background(.green.opacity(self.colorScheme == .dark ? 0.85 : 1))
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
                 .buttonStyle(PlainButtonStyle())
+
+                Divider()
+
+                HStack {
+                    Button(action: self.app.nfcReader.scan) {
+                        HStack(spacing: 16) {
+                            Image(systemName: "wave.3.right")
+                                .font(.system(size: 16))
+                            Text("NFC")
+                                .font(.headline)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(.black.gradient)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    Button(action: self.app.scanQr) {
+                        HStack(spacing: 16) {
+                            Image(systemName: "qrcode")
+                                .font(.title2)
+                            Text("QR")
+                                .font(.headline)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(.black.gradient)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
             }
             .padding(.horizontal)
             .confirmationDialog(
@@ -143,25 +185,6 @@ struct NewWalletSelectScreen: View {
         } catch {
             self.alert = AlertItem(type: .error(error.localizedDescription))
         }
-    }
-
-    private func walletOptionButton(
-        title: String, icon: String, color: Color, destination: some Hashable
-    ) -> some View {
-        NavigationLink(value: destination) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.title2)
-                Text(title)
-                    .font(.headline)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 25)
-            .background(color.opacity(self.colorScheme == .dark ? 0.85 : 1))
-            .foregroundColor(.white)
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
     }
 
     func readFile(from url: URL) throws -> String {

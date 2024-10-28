@@ -7,9 +7,9 @@ use tracing::error;
 use crate::{
     database::{self, Database},
     keychain::KeychainError,
-    mnemonic::{GroupedWord, NumberOfBip39Words, WordAccess as _},
+    mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
     pending_wallet::PendingWallet,
-    wallet::{metadata::WalletMetadata, Wallet},
+    wallet::{fingerprint::Fingerprint, metadata::WalletMetadata, Wallet},
 };
 
 type Error = PendingWalletViewModelError;
@@ -108,14 +108,22 @@ impl RustPendingWalletViewModel {
 
     #[uniffi::method]
     pub fn save_wallet(&self) -> Result<WalletMetadata, Error> {
+        let network = self.state.read().wallet.network;
+
         // get current number of wallets and add one;
-        let number_of_wallets = Database::global()
-            .wallets
-            .len(self.state.read().wallet.network)
-            .unwrap_or(0);
+        let number_of_wallets = Database::global().wallets.len(network).unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
-        let wallet_metadata = WalletMetadata::new(name);
+        let fingerprint: Fingerprint = self
+            .state
+            .read()
+            .wallet
+            .mnemonic
+            .xpub(network.into())
+            .fingerprint()
+            .into();
+
+        let wallet_metadata = WalletMetadata::new(name, fingerprint);
 
         // create, persist and select the wallet
         Wallet::try_new_persisted_and_selected(

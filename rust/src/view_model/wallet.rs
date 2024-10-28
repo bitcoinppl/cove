@@ -444,10 +444,17 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn fingerprint(&self) -> String {
         let wallet_id = &self.metadata.read().id;
+        let fingerprint = &self.metadata.read().master_fingerprint;
+        let fingerprint = fingerprint.as_ref();
 
-        Fingerprint::try_new(wallet_id)
-            .map(|f| f.to_uppercase())
-            .unwrap_or_else(|_| "Unknown".to_string())
+        // if its the default fingerprint get the xpriv fingerprint
+        if fingerprint.is_none() {
+            return Fingerprint::try_new(wallet_id)
+                .map(|f| f.as_uppercase())
+                .unwrap_or_else(|_| "Unknown".to_string());
+        }
+
+        fingerprint.expect("checked above").as_uppercase()
     }
 
     #[uniffi::method]

@@ -189,7 +189,7 @@ impl FfiApp {
         let selected_wallet = Database::global().global_config.selected_wallet()?;
 
         // change default route to selected wallet
-        self.reset_default_route_to(Route::SelectedWallet(selected_wallet.clone()));
+        self.load_and_reset_default_route(Route::SelectedWallet(selected_wallet.clone()));
 
         Some(selected_wallet)
     }
