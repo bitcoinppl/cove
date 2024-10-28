@@ -450,11 +450,11 @@ impl RustWalletViewModel {
         // if its the default fingerprint get the xpriv fingerprint
         if fingerprint.is_none() {
             return Fingerprint::try_new(wallet_id)
-                .map(|f| f.to_uppercase())
+                .map(|f| f.as_uppercase())
                 .unwrap_or_else(|_| "Unknown".to_string());
         }
 
-        fingerprint.expect("checked above").to_uppercase()
+        fingerprint.expect("checked above").as_uppercase()
     }
 
     #[uniffi::method]

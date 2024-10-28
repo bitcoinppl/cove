@@ -31,12 +31,12 @@ impl Fingerprint {
     }
 
     #[uniffi::method]
-    pub fn to_uppercase(&self) -> String {
+    pub fn as_uppercase(&self) -> String {
         self.0.to_string().to_ascii_uppercase()
     }
 
     #[uniffi::method]
-    pub fn to_lowercase(&self) -> String {
+    pub fn as_lowercase(&self) -> String {
         self.0.to_string().to_ascii_lowercase()
     }
 }
@@ -60,7 +60,7 @@ impl Serialize for Fingerprint {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&self.to_uppercase())
+        serializer.serialize_str(&self.as_uppercase())
     }
 }
 

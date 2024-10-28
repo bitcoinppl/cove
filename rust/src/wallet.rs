@@ -235,17 +235,17 @@ impl Wallet {
 
         // make sure its not already imported
         if let Some(fingerprint) = fingerprint.as_ref() {
-            let fingerprint = (*fingerprint).into();
+            let fingerprint: Fingerprint = (*fingerprint).into();
 
             // update the fingerprint
-            metadata.master_fingerprint = Some(Fingerprint::from(fingerprint).into());
-            let all_fingerprints: Vec<(WalletId, fingerprint::Fingerprint)> = Database::global()
+            metadata.master_fingerprint = Some(fingerprint.into());
+            let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
                 .wallets
                 .get_all(network)
                 .map(|wallets| {
                     wallets
                         .into_iter()
-                        .filter_map(|wallet_metadata| Some((wallet_metadata.id, fingerprint)))
+                        .map(|wallet_metadata| (wallet_metadata.id, fingerprint))
                         .collect()
                 })
                 .unwrap_or_default();
