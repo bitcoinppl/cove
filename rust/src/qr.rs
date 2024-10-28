@@ -182,11 +182,6 @@ impl MultiQr {
     }
 
     #[uniffi::method]
-    pub fn is_single(&self) -> bool {
-        matches!(self, MultiQr::Single(_))
-    }
-
-    #[uniffi::method]
     pub fn is_seed_qr(&self) -> bool {
         matches!(self, MultiQr::SeedQr(_))
     }

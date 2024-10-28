@@ -96,6 +96,10 @@ import SwiftUI
         router.routes = routes
     }
 
+    func scanQr() {
+        sheetState = PresentableItem(.qr)
+    }
+
     @MainActor
     func resetRoute(to route: Route) {
         rust.resetDefaultRouteTo(route: route)

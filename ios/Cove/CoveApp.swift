@@ -25,7 +25,7 @@ struct CoveApp: App {
     @State var id = UUID()
 
     @State var alert: PresentableItem<AppAlertState>? = .none
-    @State var scannedCode: IdentifiableString? = .none
+    @State var scannedCode: IdentifiableItem<StringOrData>? = .none
 
     @ViewBuilder
     private func alertMessage(alert: PresentableItem<AppAlertState>) -> some View {
@@ -54,6 +54,8 @@ struct CoveApp: App {
                 return "Found Address"
             case .noCameraPermission:
                 return "Please allow camera access in Settings to use this feature."
+            case let .failedToScanQr(error):
+                return "Error: \(error)"
             }
         }()
 
@@ -111,6 +113,10 @@ struct CoveApp: App {
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
+        case let .failedToScanQr(error):
+            Button("OK") {
+                self.alert = .none
+            }
         }
     }
 
@@ -146,13 +152,14 @@ struct CoveApp: App {
         }
     }
 
+    @MainActor
     func importHotWallet(_ words: [String]) {
         do {
             let app = model
             let model = ImportWalletViewModel()
             let walletMetadata = try model.rust.importWallet(enteredWords: [words])
             try app.rust.selectWallet(id: walletMetadata.id)
-            app.resetRoute(to: .selectedWallet(walletMetadata.id))
+            app.rust.loadAndResetDefaultRoute(route: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
             switch error {
             case let .InvalidWordGroup(error):
@@ -248,6 +255,7 @@ struct CoveApp: App {
         }
     }
 
+    @MainActor
     func handleScannedCode(_ stringOrData: StringOrData) {
         do {
             let multiFormat = try stringOrData.toMultiFormat()
@@ -318,13 +326,13 @@ struct CoveApp: App {
         model.dispatch(action: AppAction.updateRoute(routes: new))
     }
 
-    func onChangeQr(_ old: IdentifiableString?, _ scannedCode: IdentifiableString?) {
+    func onChangeQr(_: IdentifiableItem<StringOrData>?, _ scannedCode: IdentifiableItem<StringOrData>?) {
         guard let scannedCode else { return }
-        if scannedCode.value.isEmpty { return }
-        handleScannedCode(StringOrData(scannedCode.value))
+        model.sheetState = .none
+        handleScannedCode(scannedCode.item)
     }
 
-    func onChangeNfc(_ old: String?, _ scannedMessage: String?) {
+    func onChangeNfc(_: String?, _ scannedMessage: String?) {
         guard let scannedMessage else { return }
         if scannedMessage.isEmpty { return }
         handleScannedCode(StringOrData(scannedMessage))

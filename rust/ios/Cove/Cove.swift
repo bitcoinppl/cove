@@ -3580,8 +3580,6 @@ public protocol MultiQrProtocol: AnyObject {
 
     func isSeedQr() -> Bool
 
-    func isSingle() -> Bool
-
     func totalParts() -> UInt32
 }
 
@@ -3680,12 +3678,6 @@ open class MultiQr:
     open func isSeedQr() -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_multiqr_is_seed_qr(self.uniffiClonePointer(), $0)
-        })
-    }
-
-    open func isSingle() -> Bool {
-        return try! FfiConverterBool.lift(try! rustCall {
-            uniffi_cove_fn_method_multiqr_is_single(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -13954,9 +13946,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_is_seed_qr() != 10256 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_multiqr_is_single() != 64690 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_multiqr_total_parts() != 51119 {

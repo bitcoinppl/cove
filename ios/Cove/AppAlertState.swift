@@ -17,6 +17,7 @@ public enum AppAlertState {
     case noWalletSelected(Address)
     case foundAddress(Address)
     case noCameraPermission
+    case failedToScanQr(error: String)
 
     func title() -> String {
         switch self {
@@ -42,6 +43,8 @@ public enum AppAlertState {
             return "Found Address"
         case .noCameraPermission:
             return "Camera Access is Required"
+        case .failedToScanQr:
+            return "Failed to Scan QR"
         }
     }
 }

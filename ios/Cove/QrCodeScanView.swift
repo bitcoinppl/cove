@@ -13,7 +13,7 @@ struct QrCodeScanView: View {
     // public
     @Binding var app: MainViewModel
     @Binding var alert: PresentableItem<AppAlertState>?
-    @Binding var scannedCode: IdentifiableString?
+    @Binding var scannedCode: IdentifiableItem<StringOrData>?
 
     // private
     @State private var multiQr: MultiQr?
@@ -78,42 +78,52 @@ struct QrCodeScanView: View {
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
-        switch result {
-        case let .success(result):
-            guard case let .string(stringValue) = result.data else { return }
+        if case let .failure(error) = result {
+            if case ScanError.permissionDenied = error {
+                presentationMode.wrappedValue.dismiss()
+                app.sheetState = .none
 
-            if multiQr == nil {
-                multiQr = MultiQr.newFromString(qr: stringValue)
-                totalParts = Int(multiQr?.totalParts() ?? 0)
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
+                    alert = PresentableItem(AppAlertState.noCameraPermission)
+                }
             }
+        }
 
-            guard let multiQr else { return }
+        guard case let .success(scanResult) = result else { return }
+        let qr = StringOrData(scanResult.data)
+
+        do {
+            let multiQr: MultiQr =
+                try self.multiQr
+                    ?? {
+                        let newMultiQr = try MultiQr.tryNew(qr: qr)
+                        self.multiQr = newMultiQr
+                        totalParts = Int(newMultiQr.totalParts())
+                        return newMultiQr
+                    }()
 
             // single QR
-            if multiQr.isSingle() {
+            if !multiQr.isBbqr() {
                 scanComplete = true
-                scannedCode = IdentifiableString(stringValue)
+                scannedCode = IdentifiableItem(qr)
+                presentationMode.wrappedValue.dismiss()
                 return
             }
 
             // BBQr
-            do {
-                let result = try multiQr.addPart(qr: stringValue)
-                partsLeft = Int(result.partsLeft())
+            guard case let .string(stringValue) = qr else { return }
 
-                if result.isComplete() {
-                    scanComplete = true
-                    let data = try result.finalResult()
-                    scannedCode = IdentifiableString(data)
-                }
-            } catch {
-                Log.error("error scanning bbqr part: \(error)")
-            }
+            let result = try multiQr.addPart(qr: stringValue)
+            partsLeft = Int(result.partsLeft())
 
-        case let .failure(error):
-            if case ScanError.permissionDenied = error {
-                DispatchQueue.main.async {}
+            if result.isComplete() {
+                scanComplete = true
+                let data = try result.finalResult()
+                scannedCode = IdentifiableItem(data)
+                presentationMode.wrappedValue.dismiss()
             }
+        } catch {
+            Log.error("error scanning bbqr part: \(error)")
         }
     }
 }
@@ -122,7 +132,7 @@ struct QrCodeScanView: View {
     struct PreviewContainer: View {
         @State private var app = MainViewModel()
         @State private var alert: PresentableItem<AppAlertState>? = nil
-        @State private var scannedCode: IdentifiableString? = nil
+        @State private var scannedCode: IdentifiableItem<StringOrData>? = nil
 
         var body: some View {
             QrCodeScanView(
