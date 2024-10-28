@@ -14,6 +14,7 @@ import SwiftUI
     var selectedNode = Database().globalConfig().selectedNode()
 
     var sheetState: PresentableItem<AppSheetState>? = .none
+    var nfcReader = NFCReader()
 
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()

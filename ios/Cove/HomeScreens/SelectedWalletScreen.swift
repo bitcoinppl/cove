@@ -178,7 +178,7 @@ struct SelectedWalletScreenInner: View {
                 .toolbar {
                     ToolbarItemGroup {
                         Button(action: {
-                            sheetState = PresentableItem(.settings)
+                            app.nfcReader.scan()
                         }) {
                             HStack {
                                 Image(systemName: "wave.3.right")

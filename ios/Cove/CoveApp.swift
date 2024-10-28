@@ -326,8 +326,16 @@ struct CoveApp: App {
                 id = UUID()
             }
             .onChange(of: scannedCode) { _, scannedCode in
+                // QR code scanning
                 guard let scannedCode else { return }
+                if scannedCode.value.isEmpty { return }
                 handleScannedCode(StringOrData(scannedCode.value))
+            }
+            .onChange(of: model.nfcReader.scannedMessage) { _, scannedMessage in
+                // NFC scanning
+                guard let scannedMessage else { return }
+                if scannedMessage.value.isEmpty { return }
+                handleScannedCode(StringOrData(scannedMessage))
             }
             .alert(
                 alert?.item.title() ?? "Alert",
