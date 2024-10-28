@@ -32,8 +32,8 @@ clean:
 fmt:
     cd rust && cargo fmt --all
 
-clippy:
-    cd rust && cargo clippy 
+clippy *flags="":
+    cd rust && cargo clippy {{flags}}
 
 update pkg="":
     cd rust && cargo update {{pkg}}
