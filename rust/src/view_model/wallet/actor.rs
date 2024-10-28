@@ -8,6 +8,7 @@ use crate::{
 use act_zero::*;
 use bdk_chain::spk_client::{FullScanResult, SyncResult};
 use bdk_wallet::KeychainKind;
+use bitcoin_units::Amount;
 use crossbeam::channel::Sender;
 use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, info};
@@ -87,10 +88,12 @@ impl WalletActor {
     }
 
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
+        let zero = Amount::ZERO.into();
         let mut transactions = self
             .wallet
             .transactions()
             .map(|tx| Transaction::new(&self.wallet, tx))
+            .filter(|tx| tx.sent_and_received().amount() > zero)
             .collect::<Vec<Transaction>>();
 
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
