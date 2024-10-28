@@ -35,21 +35,24 @@ struct CoveApp: App {
                 return
                     "The words from the file does not create a valid wallet. Please check the words and try again."
             case .duplicateWallet:
-                return "This wallet has already been imported!"
+                return "This wallet has already been imported! Taking you there now..."
             case .errorImportingHotWallet:
                 return "Error Importing Wallet"
             case .importedSuccessfully:
                 return "Wallet Imported Successfully"
             case .unableToSelectWallet:
-                return "Unable to select wallet"
-            case .errorImportingHardwareWallet:
-                return "Error Importing Hardware Wallet"
+                return "Unable to select wallet, please try again"
+            case let .errorImportingHardwareWallet(error):
+                return "Error: \(error)"
             case .invalidFileFormat:
-                return "Invalid File Format"
-            case .addressWrongNetwork:
-                return "Wrong Network"
+                return "The file or scanned code did not match any formats that Cove supports."
+            case let .addressWrongNetwork(
+                address: address, network: network, currentNetwork: currentNetwork
+            ):
+                return
+                    "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case .noWalletSelected:
-                return "No Wallet Selected"
+                return "Can't do anything with this when you don't have any wallets"
             case let .foundAddress(address):
                 return String(address)
             case .noCameraPermission:
@@ -273,6 +276,7 @@ struct CoveApp: App {
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
+                alert = PresentableItem(.invalidFileFormat(error.localizedDescription))
             }
         }
     }
