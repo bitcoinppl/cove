@@ -76,7 +76,7 @@ impl GlobalConfigTable {
     }
 
     pub fn clear_selected_wallet(&self) -> Result<(), Error> {
-        self.set(GlobalConfigKey::SelectedWalletId, "".to_string())?;
+        self.delete(GlobalConfigKey::SelectedWalletId)?;
 
         Ok(())
     }

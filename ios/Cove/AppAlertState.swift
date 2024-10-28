@@ -37,9 +37,8 @@ public enum AppAlertState {
             return "Invalid File Format"
         case .addressWrongNetwork:
             return "Wrong Network"
-        case .noWalletSelected:
-            return "No Wallet Selected"
-        case .foundAddress:
+        case .noWalletSelected,
+            .foundAddress:
             return "Found Address"
         case .noCameraPermission:
             return "Camera Access is Required"

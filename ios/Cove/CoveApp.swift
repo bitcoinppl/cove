@@ -51,9 +51,8 @@ struct CoveApp: App {
             ):
                 return
                     "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
-            case .noWalletSelected:
-                return "Can't do anything with this when you don't have any wallets"
-            case let .foundAddress(address):
+            case let .noWalletSelected(address),
+                let .foundAddress(address):
                 return String(address)
             case .noCameraPermission:
                 return "Please allow camera access in Settings to use this feature."
@@ -94,6 +93,7 @@ struct CoveApp: App {
             Button("Copy Address") {
                 UIPasteboard.general.string = String(address)
             }
+
             Button("Cancel") {
                 self.alert = .none
             }
