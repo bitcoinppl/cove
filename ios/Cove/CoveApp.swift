@@ -50,8 +50,8 @@ struct CoveApp: App {
                 return "Wrong Network"
             case .noWalletSelected:
                 return "No Wallet Selected"
-            case .foundAddress:
-                return "Found Address"
+            case let .foundAddress(address):
+                return String(address)
             case .noCameraPermission:
                 return "Please allow camera access in Settings to use this feature."
             case let .failedToScanQr(error):
