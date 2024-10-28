@@ -69,14 +69,13 @@ struct CoveApp: App {
             Button("OK") {
                 self.alert = .none
                 try? model.rust.selectWallet(id: walletId)
-                model.resetRoute(to: .selectedWallet(walletId))
             }
         case .invalidWordGroup,
-             .errorImportingHotWallet,
-             .importedSuccessfully,
-             .unableToSelectWallet,
-             .errorImportingHardwareWallet,
-             .invalidFileFormat:
+            .errorImportingHotWallet,
+            .importedSuccessfully,
+            .unableToSelectWallet,
+            .errorImportingHardwareWallet,
+            .invalidFileFormat:
             Button("OK") {
                 self.alert = .none
             }
@@ -113,7 +112,7 @@ struct CoveApp: App {
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
-        case let .failedToScanQr(error):
+        case .failedToScanQr:
             Button("OK") {
                 self.alert = .none
             }
@@ -159,7 +158,6 @@ struct CoveApp: App {
             let model = ImportWalletViewModel()
             let walletMetadata = try model.rust.importWallet(enteredWords: [words])
             try app.rust.selectWallet(id: walletMetadata.id)
-            app.rust.loadAndResetDefaultRoute(route: .selectedWallet(walletMetadata.id))
         } catch let error as ImportWalletError {
             switch error {
             case let .InvalidWordGroup(error):
@@ -326,7 +324,9 @@ struct CoveApp: App {
         model.dispatch(action: AppAction.updateRoute(routes: new))
     }
 
-    func onChangeQr(_: IdentifiableItem<StringOrData>?, _ scannedCode: IdentifiableItem<StringOrData>?) {
+    func onChangeQr(
+        _: IdentifiableItem<StringOrData>?, _ scannedCode: IdentifiableItem<StringOrData>?
+    ) {
         guard let scannedCode else { return }
         model.sheetState = .none
         handleScannedCode(scannedCode.item)
@@ -365,20 +365,20 @@ struct CoveApp: App {
                 .gesture(
                     model.router.routes.isEmpty
                         ? DragGesture()
-                        .onChanged { gesture in
-                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                withAnimation(.spring()) {
-                                    model.isSidebarVisible = true
+                            .onChanged { gesture in
+                                if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                    withAnimation(.spring()) {
+                                        model.isSidebarVisible = true
+                                    }
                                 }
                             }
-                        }
-                        .onEnded { gesture in
-                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                withAnimation(.spring()) {
-                                    model.isSidebarVisible = true
+                            .onEnded { gesture in
+                                if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                    withAnimation(.spring()) {
+                                        model.isSidebarVisible = true
+                                    }
                                 }
-                            }
-                        } : nil
+                            } : nil
                 )
                 .task {
                     await model.rust.initOnStart()
