@@ -32,7 +32,7 @@ struct ListWalletsScreen: View {
                         VStack {
                             Text(wallet.name).foregroundColor(.white).font(.title2)
                             Text(
-                                (try? Fingerprint(id: wallet.id).toUppercase()) ?? "Unknown"
+                                (try? Fingerprint(id: wallet.id).asUppercase()) ?? "Unknown"
                             )
                             .foregroundColor(.white.opacity(0.7))
                             .font(.footnote)
@@ -65,9 +65,7 @@ struct ListWalletsScreen: View {
         .navigationTitle("Wallets")
         .background(.background)
         .padding(.top, 10)
-
     }
-
 }
 
 #Preview {

@@ -2691,9 +2691,9 @@ public func FfiConverterTypeFileHandler_lower(_ value: FileHandler) -> UnsafeMut
 }
 
 public protocol FingerprintProtocol: AnyObject {
-    func toLowercase() -> String
+    func asLowercase() -> String
 
-    func toUppercase() -> String
+    func asUppercase() -> String
 }
 
 open class Fingerprint:
@@ -2744,15 +2744,15 @@ open class Fingerprint:
         try! rustCall { uniffi_cove_fn_free_fingerprint(pointer, $0) }
     }
 
-    open func toLowercase() -> String {
+    open func asLowercase() -> String {
         return try! FfiConverterString.lift(try! rustCall {
-            uniffi_cove_fn_method_fingerprint_to_lowercase(self.uniffiClonePointer(), $0)
+            uniffi_cove_fn_method_fingerprint_as_lowercase(self.uniffiClonePointer(), $0)
         })
     }
 
-    open func toUppercase() -> String {
+    open func asUppercase() -> String {
         return try! FfiConverterString.lift(try! rustCall {
-            uniffi_cove_fn_method_fingerprint_to_uppercase(self.uniffiClonePointer(), $0)
+            uniffi_cove_fn_method_fingerprint_as_uppercase(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -13892,10 +13892,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_filehandler_read() != 31508 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_fingerprint_to_lowercase() != 27643 {
+    if uniffi_cove_checksum_method_fingerprint_as_lowercase() != 25321 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_fingerprint_to_uppercase() != 23675 {
+    if uniffi_cove_checksum_method_fingerprint_as_uppercase() != 11522 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 22146 {

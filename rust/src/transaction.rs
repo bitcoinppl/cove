@@ -147,6 +147,13 @@ impl Transaction {
             }
         }
     }
+
+    pub fn sent_and_received(&self) -> SentAndReceived {
+        match self {
+            Self::Unconfirmed(last_seen) => last_seen.sent_and_received,
+            Self::Confirmed(confirmed) => confirmed.sent_and_received,
+        }
+    }
 }
 
 impl From<(BdkAmount, BdkAmount)> for TransactionDirection {
