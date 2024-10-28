@@ -279,97 +279,106 @@ struct CoveApp: App {
         }
     }
 
-    var body: some Scene {
-        WindowGroup {
-            ZStack {
-                NavigationStack(path: $model.router.routes) {
-                    RouteView(model: model)
-                        .navigationDestination(
-                            for: Route.self,
-                            destination: { route in
-                                RouteView(model: model, route: route)
-                            }
-                        )
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button(action: {
-                                    withAnimation {
-                                        model.toggleSidebar()
-                                    }
-                                }) {
-                                    Image(systemName: "line.horizontal.3")
-                                        .foregroundStyle(navBarColor)
-                                }
-                                .contentShape(Rectangle())
-                                .foregroundStyle(navBarColor)
-                            }
+    @ViewBuilder
+    var BodyView: some View {
+        ZStack {
+            NavigationStack(path: $model.router.routes) {
+                RouteView(model: model)
+                    .navigationDestination(
+                        for: Route.self,
+                        destination: { route in
+                            RouteView(model: model, route: route)
                         }
-                }
-
-                SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
-            }
-            .implementPopupView()
-            .id(id)
-            .environment(\.navigate) { route in
-                model.pushRoute(route)
-            }
-            .environment(model)
-            .preferredColorScheme(model.colorScheme)
-            .onChange(of: model.router.routes) { old, new in
-                if !old.isEmpty && new.isEmpty {
-                    id = UUID()
-                }
-
-                model.dispatch(action: AppAction.updateRoute(routes: new))
-            }
-            .onChange(of: model.selectedNetwork) {
-                id = UUID()
-            }
-            .onChange(of: scannedCode) { _, scannedCode in
-                // QR code scanning
-                guard let scannedCode else { return }
-                if scannedCode.value.isEmpty { return }
-                handleScannedCode(StringOrData(scannedCode.value))
-            }
-            .onChange(of: model.nfcReader.scannedMessage) { _, scannedMessage in
-                // NFC scanning
-                guard let scannedMessage else { return }
-                if scannedMessage.value.isEmpty { return }
-                handleScannedCode(StringOrData(scannedMessage))
-            }
-            .alert(
-                alert?.item.title() ?? "Alert",
-                isPresented: showingAlert,
-                presenting: alert,
-                actions: alertButtons,
-                message: alertMessage
-            )
-            .sheet(item: $model.sheetState, content: SheetContent)
-            .gesture(
-                model.router.routes.isEmpty
-                    ? DragGesture()
-                    .onChanged { gesture in
-                        if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                            withAnimation(.spring()) {
-                                model.isSidebarVisible = true
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                withAnimation {
+                                    model.toggleSidebar()
+                                }
+                            }) {
+                                Image(systemName: "line.horizontal.3")
+                                    .foregroundStyle(navBarColor)
                             }
+                            .contentShape(Rectangle())
+                            .foregroundStyle(navBarColor)
                         }
                     }
-                    .onEnded { gesture in
-                        if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                            withAnimation(.spring()) {
-                                model.isSidebarVisible = true
+            }
+
+            SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
+        }
+    }
+
+    func onChangeRoute(_ old: [Route], _ new: [Route]) {
+        if !old.isEmpty && new.isEmpty {
+            id = UUID()
+        }
+
+        model.dispatch(action: AppAction.updateRoute(routes: new))
+    }
+
+    func onChangeQr(_ old: IdentifiableString?, _ scannedCode: IdentifiableString?) {
+        guard let scannedCode else { return }
+        if scannedCode.value.isEmpty { return }
+        handleScannedCode(StringOrData(scannedCode.value))
+    }
+
+    func onChangeNfc(_ old: String?, _ scannedMessage: String?) {
+        guard let scannedMessage else { return }
+        if scannedMessage.isEmpty { return }
+        handleScannedCode(StringOrData(scannedMessage))
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            BodyView
+                .implementPopupView()
+                .id(id)
+                .environment(\.navigate) { route in
+                    model.pushRoute(route)
+                }
+                .environment(model)
+                .preferredColorScheme(model.colorScheme)
+                .onChange(of: model.router.routes, onChangeRoute)
+                .onChange(of: model.selectedNetwork) { id = UUID() }
+                // QR code scanning
+                .onChange(of: scannedCode, onChangeQr)
+                // NFC scanning
+                .onChange(of: model.nfcReader.scannedMessage, onChangeNfc)
+                .alert(
+                    alert?.item.title() ?? "Alert",
+                    isPresented: showingAlert,
+                    presenting: alert,
+                    actions: alertButtons,
+                    message: alertMessage
+                )
+                .sheet(item: $model.sheetState, content: SheetContent)
+                .gesture(
+                    model.router.routes.isEmpty
+                        ? DragGesture()
+                        .onChanged { gesture in
+                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                withAnimation(.spring()) {
+                                    model.isSidebarVisible = true
+                                }
                             }
                         }
-                    } : nil
-            )
-            .task {
-                await model.rust.initOnStart()
-                await MainActor.run {
-                    model.asyncRuntimeReady = true
+                        .onEnded { gesture in
+                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                withAnimation(.spring()) {
+                                    model.isSidebarVisible = true
+                                }
+                            }
+                        } : nil
+                )
+                .task {
+                    await model.rust.initOnStart()
+                    await MainActor.run {
+                        model.asyncRuntimeReady = true
+                    }
                 }
-            }
-            .onOpenURL(perform: handleFileOpen)
+                .onOpenURL(perform: handleFileOpen)
         }
     }
 }
