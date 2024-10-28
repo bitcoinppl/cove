@@ -188,7 +188,7 @@ struct SelectedWalletScreenInner: View {
                         }
 
                         Button(action: {
-                            sheetState = PresentableItem(.settings)
+                            app.sheetState = PresentableItem(.qr)
                         }) {
                             HStack {
                                 Image(systemName: "qrcode")

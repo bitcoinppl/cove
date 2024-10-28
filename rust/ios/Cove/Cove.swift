@@ -13532,6 +13532,14 @@ public func previewNewWrappedFoundAddress() -> FoundAddress {
     })
 }
 
+public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData) throws -> MultiFormat {
+    return try FfiConverterTypeMultiFormat.lift(rustCallWithError(FfiConverterTypeMultiFormatError.lift) {
+        uniffi_cove_fn_func_string_or_data_try_into_multi_format(
+            FfiConverterTypeStringOrData.lower(stringOrData), $0
+        )
+    })
+}
+
 public func transactionPreviewConfirmedNew() -> Transaction {
     return try! FfiConverterTypeTransaction.lift(try! rustCall {
         uniffi_cove_fn_func_transaction_preview_confirmed_new($0
@@ -13676,6 +13684,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 57500 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 43706 {

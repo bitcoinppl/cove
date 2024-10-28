@@ -52,6 +52,9 @@
 		AC6F511C2CA205EE00D4D27A /* StringOrData+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */; };
 		AC6F511E2CA36C7600D4D27A /* BinaryDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */; };
 		AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */; };
+		AC73B5952CCEFC5A0003F537 /* QrCodeScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */; };
+		AC73B5972CCF289A0003F537 /* AppAlertState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5962CCF28960003F537 /* AppAlertState.swift */; };
+		AC73B5992CCF2D6F0003F537 /* AppSheetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
@@ -150,6 +153,9 @@
 		AC6F511D2CA36C7100D4D27A /* BinaryDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BinaryDecoder.swift; sourceTree = "<group>"; };
 		AC739D4F2CA09573006B5FF1 /* QrCodeImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeImportScreen.swift; sourceTree = "<group>"; };
 		AC739D542CA09AD6006B5FF1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeScanView.swift; sourceTree = "<group>"; };
+		AC73B5962CCF28960003F537 /* AppAlertState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAlertState.swift; sourceTree = "<group>"; };
+		AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSheetState.swift; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Ext.swift"; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
@@ -415,10 +421,13 @@
 				ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */,
 				AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */,
 				AC2B13522CA1EC0200C5C708 /* IdentifiableString.swift */,
+				AC73B5962CCF28960003F537 /* AppAlertState.swift */,
+				AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
 				048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */,
+				AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */,
 				AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
@@ -563,6 +572,9 @@
 				382288EEB9734474498ED7EE /* KeyboardObserver.swift in Sources */,
 				ACCB02CC2C9747AA00FB2EDF /* TransactionCapsule.swift in Sources */,
 				AC45C4A32C991C1F002C5AEB /* ConfirmationIndicatorView.swift in Sources */,
+				AC73B5992CCF2D6F0003F537 /* AppSheetState.swift in Sources */,
+				AC73B5952CCEFC5A0003F537 /* QrCodeScanView.swift in Sources */,
+				AC73B5972CCF289A0003F537 /* AppAlertState.swift in Sources */,
 				AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */,
 				AC8459BF2CA5DF4800A3083F /* ScannerView.swift in Sources */,
 				6B2189B893A545A2F4E3107E /* WalletColor+Ext.swift in Sources */,

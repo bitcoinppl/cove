@@ -278,7 +278,3 @@ struct HelpView: View {
     QrCodeImportScreen()
         .environment(MainViewModel())
 }
-
-#Preview("help") {
-    HelpView()
-}

@@ -24,49 +24,11 @@ struct CoveApp: App {
     @State var model: MainViewModel
     @State var id = UUID()
 
-    // PRIVATE
-    @State private var alert: PresentableItem<AlertState>? = .none
-
-    private enum AlertState {
-        case invalidWordGroup
-        case duplicateWallet(WalletId)
-        case errorImportingHotWallet(String)
-        case importedSuccessfully
-        case unableToSelectWallet
-        case errorImportingHardwareWallet(String)
-        case invalidFileFormat(String)
-        case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network)
-        case noWalletSelected(Address)
-        case foundAddress(Address)
-
-        func title() -> String {
-            switch self {
-            case .invalidWordGroup:
-                return "Words Not Valid"
-            case .duplicateWallet:
-                return "Duplicate Wallet"
-            case .errorImportingHotWallet:
-                return "Error"
-            case .importedSuccessfully:
-                return "Success"
-            case .unableToSelectWallet:
-                return "Error"
-            case .errorImportingHardwareWallet:
-                return "Error Importing Hardware Wallet"
-            case .invalidFileFormat:
-                return "Invalid File Format"
-            case .addressWrongNetwork:
-                return "Wrong Network"
-            case .noWalletSelected:
-                return "No Wallet Selected"
-            case .foundAddress:
-                return "Found Address"
-            }
-        }
-    }
+    @State var alert: PresentableItem<AppAlertState>? = .none
+    @State var scannedCode: IdentifiableString? = .none
 
     @ViewBuilder
-    private func alertMessage(alert: PresentableItem<AlertState>) -> some View {
+    private func alertMessage(alert: PresentableItem<AppAlertState>) -> some View {
         let text = {
             switch alert.item {
             case .invalidWordGroup:
@@ -90,6 +52,8 @@ struct CoveApp: App {
                 return "No Wallet Selected"
             case .foundAddress:
                 return "Found Address"
+            case .noCameraPermission:
+                return "Please allow camera access in Settings to use this feature."
             }
         }()
 
@@ -97,7 +61,7 @@ struct CoveApp: App {
     }
 
     @ViewBuilder
-    private func alertButtons(alert: PresentableItem<AlertState>) -> some View {
+    private func alertButtons(alert: PresentableItem<AppAlertState>) -> some View {
         switch alert.item {
         case let .duplicateWallet(walletId):
             Button("OK") {
@@ -140,6 +104,12 @@ struct CoveApp: App {
             }
             Button("Cancel") {
                 self.alert = .none
+            }
+        case .noCameraPermission:
+            Button("OK") {
+                self.alert = .none
+                let url = URL(string: UIApplication.openSettingsURLString)!
+                UIApplication.shared.open(url)
             }
         }
     }
@@ -229,14 +199,19 @@ struct CoveApp: App {
         let selectedWallet = Database().globalConfig().selectedWallet()
 
         if selectedWallet == nil {
-            return alert = PresentableItem(AlertState.noWalletSelected(address))
+            alert = PresentableItem(AppAlertState.noWalletSelected(address))
+            return
         }
 
         if network != currentNetwork {
-            return alert = PresentableItem(AlertState.addressWrongNetwork(address: address, network: network, currentNetwork: currentNetwork))
+            alert = PresentableItem(
+                AppAlertState.addressWrongNetwork(
+                    address: address, network: network, currentNetwork: currentNetwork
+                ))
+            return
         }
 
-        return alert = PresentableItem(.foundAddress(address))
+        alert = PresentableItem(.foundAddress(address))
     }
 
     func handleFileOpen(_ url: URL) {
@@ -268,16 +243,39 @@ struct CoveApp: App {
                 Log.error("File not found")
 
             default:
-                ()
+                Log.error("Unknown error file handling file: \(error)")
+            }
+        }
+    }
+
+    func handleScannedCode(_ stringOrData: StringOrData) {
+        do {
+            let multiFormat = try stringOrData.toMultiFormat()
+            switch multiFormat {
+            case let .mnemonic(mnemonic):
+                importHotWallet(mnemonic.words())
+            case let .hardwareExport(export):
+                importColdWallet(export)
+            case let .address(addressWithNetwork):
+                handleAddress(addressWithNetwork)
+            }
+        } catch {
+            switch error {
+            case let FileHandlerError.NotRecognizedFormat(multiFormatError):
+                Log.error("Unrecognized format mulit format error: \(multiFormatError)")
+                alert = PresentableItem(.invalidFileFormat(multiFormatError.localizedDescription))
+
+            default:
+                Log.error("Unable to handle scanned code, error: \(error)")
             }
         }
     }
 
     @ViewBuilder
-    func SheetContent(_ state: MainViewModel.SheetState) -> some View {
-        switch state {
+    func SheetContent(_ state: PresentableItem<AppSheetState>) -> some View {
+        switch state.item {
         case .qr:
-            Text("QR")
+            QrCodeScanView(app: $model, alert: $alert, scannedCode: $scannedCode)
         }
     }
 
@@ -326,6 +324,10 @@ struct CoveApp: App {
             }
             .onChange(of: model.selectedNetwork) {
                 id = UUID()
+            }
+            .onChange(of: scannedCode) { _, scannedCode in
+                guard let scannedCode else { return }
+                handleScannedCode(StringOrData(scannedCode.value))
             }
             .alert(
                 alert?.item.title() ?? "Alert",
