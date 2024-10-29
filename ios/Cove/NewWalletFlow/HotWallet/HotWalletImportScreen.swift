@@ -36,9 +36,9 @@ struct HotWalletImportScreen: View {
     // qr code scanning
     @Environment(\.presentationMode) var presentationMode
     @State private var multiQr: MultiQr?
-    @State private var scannedCode: IdentifiableString?
+    @State private var scannedCode: TaggedString?
     @State private var scanComplete: Bool = false
-    @State private var scanError: IdentifiableString?
+    @State private var scanError: TaggedString?
 
     // nfc scanning
     @State private var nfcReader: NFCReader = .init()
@@ -123,7 +123,7 @@ struct HotWalletImportScreen: View {
             }
         } catch {
             Log.error("Seed QR failed to scan: \(error.localizedDescription)")
-            scanError = IdentifiableString(error.localizedDescription)
+            scanError = TaggedString(error.localizedDescription)
             isPresentingScanner = false
 
             // reset multiqr on error
@@ -411,7 +411,7 @@ struct HotWalletImportScreen: View {
         case 24: self.numberOfWords = .twentyFour
         default:
             Log.warn("Invalid number of words: \(numberOfWords)")
-            scanError = IdentifiableString(
+            scanError = TaggedString(
                 "Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
             isPresentingScanner = false
             return

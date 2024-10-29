@@ -13,7 +13,7 @@ import SwiftUI
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
 
-    var sheetState: IdentifiableItem<AppSheetState>? = .none
+    var sheetState: TaggedItem<AppSheetState>? = .none
     var nfcReader = NFCReader()
 
     // changed when route is reset, to clear lifecycle view state
@@ -97,7 +97,7 @@ import SwiftUI
     }
 
     func scanQr() {
-        sheetState = IdentifiableItem(.qr)
+        sheetState = TaggedItem(.qr)
     }
 
     @MainActor

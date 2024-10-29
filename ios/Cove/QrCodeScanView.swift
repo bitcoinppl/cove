@@ -12,8 +12,8 @@ struct QrCodeScanView: View {
 
     // public
     @Binding var app: MainViewModel
-    @Binding var alert: IdentifiableItem<AppAlertState>?
-    @Binding var scannedCode: IdentifiableItem<StringOrData>?
+    @Binding var alert: TaggedItem<AppAlertState>?
+    @Binding var scannedCode: TaggedItem<StringOrData>?
 
     // private
     @State private var multiQr: MultiQr?
@@ -84,7 +84,7 @@ struct QrCodeScanView: View {
                 app.sheetState = .none
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
-                    alert = IdentifiableItem(AppAlertState.noCameraPermission)
+                    alert = TaggedItem(AppAlertState.noCameraPermission)
                 }
             }
         }
@@ -105,7 +105,7 @@ struct QrCodeScanView: View {
             // single QR
             if !multiQr.isBbqr() {
                 scanComplete = true
-                scannedCode = IdentifiableItem(qr)
+                scannedCode = TaggedItem(qr)
                 presentationMode.wrappedValue.dismiss()
                 return
             }
@@ -119,7 +119,7 @@ struct QrCodeScanView: View {
             if result.isComplete() {
                 scanComplete = true
                 let data = try result.finalResult()
-                scannedCode = IdentifiableItem(data)
+                scannedCode = TaggedItem(data)
                 presentationMode.wrappedValue.dismiss()
             }
         } catch {
@@ -131,8 +131,8 @@ struct QrCodeScanView: View {
 #Preview {
     struct PreviewContainer: View {
         @State private var app = MainViewModel()
-        @State private var alert: IdentifiableItem<AppAlertState>? = nil
-        @State private var scannedCode: IdentifiableItem<StringOrData>? = nil
+        @State private var alert: TaggedItem<AppAlertState>? = nil
+        @State private var scannedCode: TaggedItem<StringOrData>? = nil
 
         var body: some View {
             QrCodeScanView(

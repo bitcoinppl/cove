@@ -25,10 +25,10 @@ struct NewWalletSelectScreen: View {
     @State private var isImporting = false
 
     // sheets
-    @State private var sheetState: IdentifiableItem<SheetState>? = nil
+    @State private var sheetState: TaggedItem<SheetState>? = nil
 
     @ViewBuilder
-    private func SheetContent(_ state: IdentifiableItem<SheetState>) -> some View {
+    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
         case .nfcHelp: NfcHelpView()
         }
@@ -135,7 +135,7 @@ struct NewWalletSelectScreen: View {
 
             if self.nfcCalled {
                 Button(action: {
-                    self.sheetState = IdentifiableItem(.nfcHelp)
+                    self.sheetState = TaggedItem(.nfcHelp)
                 }) {
                     HStack {
                         Image(systemName: "wave.3.right")

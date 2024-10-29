@@ -28,7 +28,7 @@
 		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
-		AC2B13532CA1EC1000C5C708 /* IdentifiableItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13522CA1EC0200C5C708 /* IdentifiableItem.swift */; };
+		AC2B13532CA1EC1000C5C708 /* TaggedItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */; };
 		AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */; };
 		AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */; };
 		AC2B135A2CA1F49A00C5C708 /* CodeScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */; };
@@ -126,7 +126,7 @@
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
-		AC2B13522CA1EC0200C5C708 /* IdentifiableItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifiableItem.swift; sourceTree = "<group>"; };
+		AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaggedItem.swift; sourceTree = "<group>"; };
 		AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AVCaptureDevice+bestForBuiltInCamera.swift"; sourceTree = "<group>"; };
 		AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeScanner.swift; sourceTree = "<group>"; };
 		AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerViewController.swift; sourceTree = "<group>"; };
@@ -423,7 +423,7 @@
 				AC8459C02CA5ED7700A3083F /* NFCReader.swift */,
 				ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */,
 				AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */,
-				AC2B13522CA1EC0200C5C708 /* IdentifiableItem.swift */,
+				AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */,
 				AC73B5962CCF28960003F537 /* AppAlertState.swift */,
 				AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
@@ -560,7 +560,7 @@
 				AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */,
 				AC49121B2C77B8A100ED8ED7 /* SecretWordsScreen.swift in Sources */,
 				ACCB02CE2C97572100FB2EDF /* AsyncView.swift in Sources */,
-				AC2B13532CA1EC1000C5C708 /* IdentifiableItem.swift in Sources */,
+				AC2B13532CA1EC1000C5C708 /* TaggedItem.swift in Sources */,
 				AC5F3CDB2C99E96000469EBA /* SentDetailsExpandedView.swift in Sources */,
 				AC5F3CE12C99EBD600469EBA /* TransactionDetailsView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,

@@ -52,7 +52,7 @@ private enum AlertType: Equatable {
 
 struct QrCodeImportScreen: View {
     @State private var multiQr: MultiQr?
-    @State private var scannedCode: IdentifiableString?
+    @State private var scannedCode: TaggedString?
     @State private var showingHelp = false
     @Environment(MainViewModel.self) var app
     @Environment(\.presentationMode) var presentationMode
@@ -167,7 +167,7 @@ struct QrCodeImportScreen: View {
             // single QR
             if !multiQr.isBbqr() {
                 scanComplete = true
-                scannedCode = IdentifiableString(stringValue)
+                scannedCode = TaggedString(stringValue)
                 return
             }
 
@@ -179,7 +179,7 @@ struct QrCodeImportScreen: View {
                 if result.isComplete() {
                     scanComplete = true
                     let data = try result.finalResult()
-                    scannedCode = IdentifiableString(data)
+                    scannedCode = TaggedString(data)
                 }
             } catch {
                 Log.error("error scanning bbqr part: \(error)")
