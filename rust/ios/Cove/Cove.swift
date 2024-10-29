@@ -13417,6 +13417,15 @@ private func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) 
     }
 }
 
+public func addressIsEqual(lhs: Address, rhs: Address) -> Bool {
+    return try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_fn_func_address_is_equal(
+            FfiConverterTypeAddress.lower(lhs),
+            FfiConverterTypeAddress.lower(rhs), $0
+        )
+    })
+}
+
 public func allColorSchemes() -> [ColorSchemeSelection] {
     return try! FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall {
         uniffi_cove_fn_func_all_color_schemes($0
@@ -13651,6 +13660,9 @@ private var initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_cove_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if uniffi_cove_checksum_func_address_is_equal() != 63981 {
+        return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_all_color_schemes() != 24835 {
         return InitializationResult.apiChecksumMismatch

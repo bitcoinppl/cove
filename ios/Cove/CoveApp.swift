@@ -24,11 +24,11 @@ struct CoveApp: App {
     @State var model: MainViewModel
     @State var id = UUID()
 
-    @State var alert: PresentableItem<AppAlertState>? = .none
+    @State var alert: IdentifiableItem<AppAlertState>? = .none
     @State var scannedCode: IdentifiableItem<StringOrData>? = .none
 
     @ViewBuilder
-    private func alertMessage(alert: PresentableItem<AppAlertState>) -> some View {
+    private func alertMessage(alert: IdentifiableItem<AppAlertState>) -> some View {
         let text = {
             switch alert.item {
             case .invalidWordGroup:
@@ -65,7 +65,7 @@ struct CoveApp: App {
     }
 
     @ViewBuilder
-    private func alertButtons(alert: PresentableItem<AppAlertState>) -> some View {
+    private func alertButtons(alert: IdentifiableItem<AppAlertState>) -> some View {
         switch alert.item {
         case let .duplicateWallet(walletId):
             Button("OK") {
@@ -165,17 +165,17 @@ struct CoveApp: App {
             switch error {
             case let .InvalidWordGroup(error):
                 Log.debug("Invalid words: \(error)")
-                self.alert = PresentableItem(.invalidWordGroup)
+                self.alert = IdentifiableItem(.invalidWordGroup)
             case let .WalletAlreadyExists(walletId):
-                self.alert = PresentableItem(.duplicateWallet(walletId))
+                self.alert = IdentifiableItem(.duplicateWallet(walletId))
             default:
                 Log.error("Unable to import wallet: \(error)")
-                self.alert = PresentableItem(
+                self.alert = IdentifiableItem(
                     .errorImportingHotWallet(error.localizedDescription))
             }
         } catch {
             Log.error("Unknown error \(error)")
-            alert = PresentableItem(
+            alert = IdentifiableItem(
                 .errorImportingHotWallet(error.localizedDescription))
         }
     }
@@ -187,16 +187,16 @@ struct CoveApp: App {
             let wallet = try Wallet.newFromExport(export: export)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
-            alert = PresentableItem(.importedSuccessfully)
+            alert = IdentifiableItem(.importedSuccessfully)
             try app.rust.selectWallet(id: id)
         } catch let WalletError.WalletAlreadyExists(id) {
-            self.alert = PresentableItem(.duplicateWallet(id))
+            self.alert = IdentifiableItem(.duplicateWallet(id))
 
             if (try? app.rust.selectWallet(id: id)) == nil {
-                self.alert = PresentableItem(.unableToSelectWallet)
+                self.alert = IdentifiableItem(.unableToSelectWallet)
             }
         } catch {
-            alert = PresentableItem(.errorImportingHardwareWallet(error.localizedDescription))
+            alert = IdentifiableItem(.errorImportingHardwareWallet(error.localizedDescription))
         }
     }
 
@@ -207,19 +207,19 @@ struct CoveApp: App {
         let selectedWallet = Database().globalConfig().selectedWallet()
 
         if selectedWallet == nil {
-            alert = PresentableItem(AppAlertState.noWalletSelected(address))
+            alert = IdentifiableItem(AppAlertState.noWalletSelected(address))
             return
         }
 
         if network != currentNetwork {
-            alert = PresentableItem(
+            alert = IdentifiableItem(
                 AppAlertState.addressWrongNetwork(
                     address: address, network: network, currentNetwork: currentNetwork
                 ))
             return
         }
 
-        alert = PresentableItem(.foundAddress(address))
+        alert = IdentifiableItem(.foundAddress(address))
     }
 
     func handleFileOpen(_ url: URL) {
@@ -239,7 +239,7 @@ struct CoveApp: App {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
-                alert = PresentableItem(.invalidFileFormat(multiFormatError.localizedDescription))
+                alert = IdentifiableItem(.invalidFileFormat(multiFormatError.localizedDescription))
 
             case let FileHandlerError.OpenFile(error):
                 Log.error("File handler error: \(error)")
@@ -272,17 +272,17 @@ struct CoveApp: App {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
-                alert = PresentableItem(.invalidFileFormat(multiFormatError.localizedDescription))
+                alert = IdentifiableItem(.invalidFileFormat(multiFormatError.localizedDescription))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
-                alert = PresentableItem(.invalidFileFormat(error.localizedDescription))
+                alert = IdentifiableItem(.invalidFileFormat(error.localizedDescription))
             }
         }
     }
 
     @ViewBuilder
-    func SheetContent(_ state: PresentableItem<AppSheetState>) -> some View {
+    func SheetContent(_ state: IdentifiableItem<AppSheetState>) -> some View {
         switch state.item {
         case .qr:
             QrCodeScanView(app: $model, alert: $alert, scannedCode: $scannedCode)

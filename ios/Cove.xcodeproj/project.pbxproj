@@ -46,7 +46,6 @@
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
 		AC6F4CD92CC554FE008D26C0 /* ChooseWalletTypeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CD82CC554F1008D26C0 /* ChooseWalletTypeView.swift */; };
 		AC6F4CDB2CC55981008D26C0 /* General+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */; };
-		AC6F4CE12CC5DAAB008D26C0 /* PresentableItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */; };
 		AC6F4CE32CC6BC30008D26C0 /* LoadAndResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */; };
 		AC6F4CE52CC6F56F008D26C0 /* NfcHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE42CC6F569008D26C0 /* NfcHelpView.swift */; };
 		AC6F511C2CA205EE00D4D27A /* StringOrData+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */; };
@@ -146,7 +145,6 @@
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
 		AC6F4CD82CC554F1008D26C0 /* ChooseWalletTypeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChooseWalletTypeView.swift; sourceTree = "<group>"; };
 		AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "General+Ext.swift"; sourceTree = "<group>"; };
-		AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentableItem.swift; sourceTree = "<group>"; };
 		AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadAndResetView.swift; sourceTree = "<group>"; };
 		AC6F4CE42CC6F569008D26C0 /* NfcHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcHelpView.swift; sourceTree = "<group>"; };
 		AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StringOrData+Ext.swift"; sourceTree = "<group>"; };
@@ -433,7 +431,6 @@
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
 				048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */,
 				AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */,
-				AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
 				AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */,
@@ -554,7 +551,6 @@
 				AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */,
 				ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */,
 				ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */,
-				AC6F4CE12CC5DAAB008D26C0 /* PresentableItem.swift in Sources */,
 				AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */,
 				AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */,
 				AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */,

@@ -60,7 +60,7 @@ struct SelectedWalletScreen: View {
     }
 }
 
-private enum SheetState {
+private enum SheetState: Equatable {
     case receive
     case settings
     case chooseAddressType([FoundAddress])
@@ -76,7 +76,7 @@ struct SelectedWalletScreenInner: View {
     var model: WalletViewModel
 
     // private
-    @State private var sheetState: PresentableItem<SheetState>? = nil
+    @State private var sheetState: IdentifiableItem<SheetState>? = nil
     @State private var showingCopiedPopup = true
 
     func updater(_ action: WalletViewModelAction) {
@@ -130,7 +130,7 @@ struct SelectedWalletScreenInner: View {
     }
 
     @ViewBuilder
-    private func SheetContent(_ state: PresentableItem<SheetState>) -> some View {
+    private func SheetContent(_ state: IdentifiableItem<SheetState>) -> some View {
         switch state.item {
         case .receive:
             ReceiveView(model: model)
@@ -146,15 +146,15 @@ struct SelectedWalletScreenInner: View {
 
         switch discoveryState {
         case let .foundAddressesFromMnemonic(foundAddresses):
-            sheetState = PresentableItem(.chooseAddressType(foundAddresses))
+            sheetState = IdentifiableItem(.chooseAddressType(foundAddresses))
         case let .foundAddressesFromJson(foundAddress, _):
-            sheetState = PresentableItem(.chooseAddressType(foundAddress))
+            sheetState = IdentifiableItem(.chooseAddressType(foundAddress))
         default: ()
         }
     }
 
     func showReceiveSheet() {
-        sheetState = PresentableItem(.receive)
+        sheetState = IdentifiableItem(.receive)
     }
 
     var body: some View {
@@ -188,7 +188,7 @@ struct SelectedWalletScreenInner: View {
                         }
 
                         Button(action: {
-                            app.sheetState = PresentableItem(.qr)
+                            app.sheetState = IdentifiableItem(.qr)
                         }) {
                             HStack {
                                 Image(systemName: "qrcode")
@@ -199,7 +199,7 @@ struct SelectedWalletScreenInner: View {
 
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: {
-                            sheetState = PresentableItem(.settings)
+                            sheetState = IdentifiableItem(.settings)
                         }) {
                             Image(systemName: "gear")
                                 .foregroundColor(.primary.opacity(0.8))

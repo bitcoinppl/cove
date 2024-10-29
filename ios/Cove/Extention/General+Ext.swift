@@ -21,3 +21,8 @@ extension DiscoveryState: Equatable {
     }
 }
 
+extension Address: Equatable {
+    public static func == (lhs: Address, rhs: Address) -> Bool {
+        addressIsEqual(lhs: lhs, rhs: rhs)
+    }
+}

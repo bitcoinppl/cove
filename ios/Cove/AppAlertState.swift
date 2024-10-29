@@ -5,7 +5,7 @@
 //  Created by Praveen Perera on 10/27/24.
 //
 
-public enum AppAlertState {
+public enum AppAlertState: Equatable {
     case invalidWordGroup
     case duplicateWallet(WalletId)
     case errorImportingHotWallet(String)
@@ -38,7 +38,7 @@ public enum AppAlertState {
         case .addressWrongNetwork:
             return "Wrong Network"
         case .noWalletSelected,
-            .foundAddress:
+             .foundAddress:
             return "Found Address"
         case .noCameraPermission:
             return "Camera Access is Required"

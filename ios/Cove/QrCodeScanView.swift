@@ -12,7 +12,7 @@ struct QrCodeScanView: View {
 
     // public
     @Binding var app: MainViewModel
-    @Binding var alert: PresentableItem<AppAlertState>?
+    @Binding var alert: IdentifiableItem<AppAlertState>?
     @Binding var scannedCode: IdentifiableItem<StringOrData>?
 
     // private
@@ -84,7 +84,7 @@ struct QrCodeScanView: View {
                 app.sheetState = .none
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
-                    alert = PresentableItem(AppAlertState.noCameraPermission)
+                    alert = IdentifiableItem(AppAlertState.noCameraPermission)
                 }
             }
         }
@@ -131,7 +131,7 @@ struct QrCodeScanView: View {
 #Preview {
     struct PreviewContainer: View {
         @State private var app = MainViewModel()
-        @State private var alert: PresentableItem<AppAlertState>? = nil
+        @State private var alert: IdentifiableItem<AppAlertState>? = nil
         @State private var scannedCode: IdentifiableItem<StringOrData>? = nil
 
         var body: some View {

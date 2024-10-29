@@ -146,6 +146,11 @@ mod ffi {
     use super::*;
 
     #[uniffi::export]
+    fn address_is_equal(lhs: Arc<Address>, rhs: Arc<Address>) -> bool {
+        lhs == rhs
+    }
+
+    #[uniffi::export]
     impl AddressWithNetwork {
         fn address(&self) -> Address {
             self.address.clone()
