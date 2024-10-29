@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -196,6 +196,10 @@
 		D0245F562C0F7B500042B447 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		AC73B59A2CD14EDD0003F537 /* SendFlow */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SendFlow; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		D0245F492C0F7B4E0042B447 /* Frameworks */ = {
@@ -405,6 +409,7 @@
 				AC8459C22CA5F13A00A3083F /* Cove.entitlements */,
 				AC739D542CA09AD6006B5FF1 /* Info.plist */,
 				AC4343612C6AF87B00105C03 /* SettingsScreen */,
+				AC73B59A2CD14EDD0003F537 /* SendFlow */,
 				AC4343602C6AF80000105C03 /* HomeScreens */,
 				ACF479F62C59D76E008A9362 /* FFI */,
 				D000B2F12C0F7BB100E32143 /* Cove.swift */,
@@ -465,6 +470,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AC73B59A2CD14EDD0003F537 /* SendFlow */,
 			);
 			name = Cove;
 			packageProductDependencies = (
