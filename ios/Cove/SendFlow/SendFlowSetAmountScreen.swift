@@ -184,7 +184,7 @@ struct SendFlowSetAmountScreen: View {
                             .foregroundColor(.white)
                             .cornerRadius(10)
                     }
-                    .padding(.top, 25)
+                    .padding(.top, 12)
                     .padding(.bottom)
                 }
             }
