@@ -1,5 +1,5 @@
 //
-//  SendFlowSetAmountScreen.swift
+//  SendFlowConfirmScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 10/29/24.
@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-struct SendFlowSetAmountScreen: View {
+struct SendFlowConfirmScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
@@ -22,39 +22,39 @@ struct SendFlowSetAmountScreen: View {
                     // set amount
                     VStack(spacing: 8) {
                         HStack {
-                            Text("Set amount")
+                            Text("You're sending")
                                 .font(.title3)
                                 .fontWeight(.bold)
-                            
+
                             Spacer()
                         }
                         .padding(.top, 10)
-                        
+
                         HStack {
-                            Text("How much would you like to send?")
+                            Text("The amount they will receive")
                                 .font(.callout)
                                 .foregroundStyle(.secondary.opacity(0.80))
                                 .fontWeight(.medium)
                             Spacer()
                         }
                     }
-                    
+
                     // Balance Section
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
                             Text("573,299")
                                 .font(.system(size: 48, weight: .bold))
-                            
+
                             Text("sats")
                                 .padding(.bottom, 10)
                         }
-                        
+
                         Text("≈ $326.93 USD")
                             .font(.title3)
                             .foregroundColor(.secondary)
                     }
-                    .padding(.vertical, 8)
-                    
+                    .padding(.top, 8)
+
                     // Account Section
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
@@ -62,80 +62,68 @@ struct SendFlowSetAmountScreen: View {
                                 .font(.title2)
                                 .foregroundColor(.orange)
                                 .padding(.trailing, 6)
-                            
+
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("73C5DA0A")
                                     .font(.footnote)
                                     .foregroundColor(.secondary)
-                                
+
                                 Text("Daily Spending Wallet")
                                     .font(.headline)
                                     .fontWeight(.medium)
                             }
-                            
+
                             Spacer()
                         }
                         .padding()
                         .background(Color(.systemGray6))
                         .cornerRadius(12)
                     }
-                    
+                    .padding(.vertical, 12)
+
+                    // To Address Section
+                    HStack {
+                        Text("To Address")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .foregroundColor(.primary)
+
+                        Spacer()
+
+                        Text("bc1q uyye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a")
+                            .lineLimit(3, reservesSpace: true)
+                            .font(.system(.callout, design: .monospaced))
+                            .padding(.leading, 60)
+                    }
+                    .padding(.top, 6)
+
                     // Network Fee Section
-                    VStack(alignment: .leading, spacing: 4) {
+                    HStack {
                         Text("Network Fee")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                        
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
                         HStack {
-                            Text("2 hours")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button("Change speed") {
-                                // Action
-                            }
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                            
-                            Spacer()
-                            
-                            Text("300 sats")
-                                .foregroundStyle(.secondary)
-                                .fontWeight(.medium)
+                            Text("300")
+                            Text("sats")
+                        }
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    // Total Amount Section
+                    HStack {
+                        Text("You'll pay")
+                            .fontWeight(.medium)
+                        Spacer()
+                        HStack {
+                            Text("573,000")
+                                .fontWeight(.semibold)
+                            Text("sats")
                         }
                     }
-                    .padding(.top, 12)
-                    
-                    // Total Section
-                    HStack {
-                        Text("Total Spent")
-                            .font(.title3)
-                            .fontWeight(.medium)
-                        
-                        Spacer()
-                        
-                        Text("573,599")
-                            .font(.title3)
-                            .fontWeight(.medium)
-                    }
-                    .padding(.top, 12)
-                    
-                    Spacer()
-                    
-                    // Next Button
-                    Button(action: {
-                        // Action
-                    }) {
-                        Text("Next")
-                            .font(.title3)
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.midnightBlue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    .padding(.top, 8)
-                    .padding(.bottom)
                 }
             }
             .padding()
@@ -143,7 +131,7 @@ struct SendFlowSetAmountScreen: View {
 
             Spacer()
         }
-        .navigationTitle("Send")
+        .navigationTitle("Confirm Transaction")
         .navigationBarTitleDisplayMode(.inline)
         .scrollIndicators(.hidden)
     }
@@ -151,6 +139,6 @@ struct SendFlowSetAmountScreen: View {
 
 #Preview {
     NavigationStack {
-        SendFlowSetAmountScreen()
+        SendFlowConfirmScreen()
     }
 }
