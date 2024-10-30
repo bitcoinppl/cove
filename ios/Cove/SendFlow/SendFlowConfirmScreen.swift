@@ -124,6 +124,9 @@ struct SendFlowConfirmScreen: View {
                             Text("sats")
                         }
                     }
+
+                    SwipeToSendView()
+                        .padding(.top, 28)
                 }
             }
             .padding()
