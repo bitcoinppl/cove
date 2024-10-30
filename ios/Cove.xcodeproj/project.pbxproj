@@ -54,6 +54,7 @@
 		AC73B5952CCEFC5A0003F537 /* QrCodeScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */; };
 		AC73B5972CCF289A0003F537 /* AppAlertState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5962CCF28960003F537 /* AppAlertState.swift */; };
 		AC73B5992CCF2D6F0003F537 /* AppSheetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */; };
+		AC73B5A12CD154BE0003F537 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5A02CD154BA0003F537 /* Constants.swift */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
@@ -154,6 +155,7 @@
 		AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeScanView.swift; sourceTree = "<group>"; };
 		AC73B5962CCF28960003F537 /* AppAlertState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAlertState.swift; sourceTree = "<group>"; };
 		AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSheetState.swift; sourceTree = "<group>"; };
+		AC73B5A02CD154BA0003F537 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Ext.swift"; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
@@ -427,6 +429,7 @@
 				AC73B5962CCF28960003F537 /* AppAlertState.swift */,
 				AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
+				AC73B5A02CD154BA0003F537 /* Constants.swift */,
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
 				048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */,
@@ -615,6 +618,7 @@
 				AC6F4CD92CC554FE008D26C0 /* ChooseWalletTypeView.swift in Sources */,
 				9BEA921FB93FC209CF7A8CA2 /* NewWalletContainer.swift in Sources */,
 				69455D17216AD109B6EE2F25 /* WalletMetadata+Ext.swift in Sources */,
+				AC73B5A12CD154BE0003F537 /* Constants.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
