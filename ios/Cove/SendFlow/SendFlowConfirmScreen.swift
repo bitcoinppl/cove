@@ -55,6 +55,19 @@ struct SendFlowConfirmScreen: View {
 
                             Text("sats")
                                 .padding(.bottom, 10)
+                                .contextMenu {
+                                    Button {
+//                                          unit = "sats"
+                                    } label: {
+                                        Label("Sats", systemImage: "bitcoinsign.circle")
+                                    }
+
+                                    Button {
+//                                          unit = "btc"
+                                    } label: {
+                                        Label("BTC", systemImage: "bitcoinsign.circle.fill")
+                                    }
+                                }
                         }
 
                         Text("≈ $326.93 USD")
@@ -153,9 +166,10 @@ struct SendFlowConfirmScreen: View {
         AsyncPreview {
             SendFlowConfirmScreen(
                 id: WalletId(),
-                model: WalletViewModel(preview: "preview_new"),
+                model: WalletViewModel(preview: "preview_only"),
                 details: ConfirmDetails.previewNew()
             )
+            .environment(MainViewModel())
         }
     }
 }
