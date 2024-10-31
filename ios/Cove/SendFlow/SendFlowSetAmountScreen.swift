@@ -11,7 +11,8 @@ import SwiftUI
 struct SendFlowSetAmountScreen: View {
     let id: WalletId
     let model: WalletViewModel
-
+    @State var address: String = "bc1pjkd077qrljaalh5pehmpjkk39908ahgwle9ukt40vkjxpljapncqxjs86a"
+    
     var metadata: WalletMetadata {
         model.walletMetadata
     }
@@ -62,6 +63,31 @@ struct SendFlowSetAmountScreen: View {
                     }
                     .padding(.vertical, 8)
                     
+                    // Address Section
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("Set Address")
+                                .font(.headline)
+                                .fontWeight(.bold)
+                            
+                            Spacer()
+                        }
+                        .padding(.top, 10)
+                        
+                        HStack {
+                            Text("Where do you want to send to?")
+                                .font(.callout)
+                                .foregroundStyle(.secondary.opacity(0.80))
+                                .fontWeight(.medium)
+                            Spacer()
+                        }
+                        
+                        TextEditor(text: $address)
+                            .frame(height: 60)
+                            .font(.system(size: 16, design: .none))
+                            .foregroundStyle(.primary.opacity(0.9))
+                    }
+
                     // Account Section
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
