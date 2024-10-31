@@ -37,60 +37,8 @@ struct SendFlowHeaderView: View {
     }
 
     var body: some View {
-        VStack {
-            HStack {
-                Text("Balance")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-
-            HStack {
-                Text(balanceString)
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                HStack(spacing: 0) {
-                    Text(unitString)
-                        .font(.subheadline)
-                        .padding(.trailing, 0)
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .padding(.top, 2)
-                        .padding(.leading, 4)
-                }
-                .onTapGesture {
-                    showingMenu.toggle()
-                }
-                .popover(isPresented: $showingMenu) {
-                    VStack {
-                        Button("sats") {
-                            model.dispatch(action: .updateUnit(.sat))
-                            showingMenu = false
-                        }
-                        Button("btc") {
-                            model.dispatch(action: .updateUnit(.btc))
-                            showingMenu = false
-                        }
-                    }
-                    .padding()
-                }
-
-                Spacer()
-
-                Button(action: { model.dispatch(action: .toggleSensitiveVisibility) }) {
-                    switch metadata.sensitiveVisible {
-                    case true: Image(systemName: "eye.slash")
-                    case false: Image(systemName: "eye")
-                    }
-                }
-            }
-            .padding(.top, 2)
-        }
-        .padding()
-        .background(
+        ZStack {
+            // background
             Image(.headerPattern)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
@@ -98,12 +46,65 @@ struct SendFlowHeaderView: View {
                     width: 400, height: 300,
                     alignment: .topTrailing
                 )
-                .ignoresSafeArea(.all)
-                .clipped()
-        )
+                .ignoresSafeArea(edges: .top)
+
+            // content
+            VStack {
+                HStack {
+                    Text("Balance")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+
+                HStack {
+                    Text(balanceString)
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    HStack(spacing: 0) {
+                        Text(unitString)
+                            .font(.subheadline)
+                            .padding(.trailing, 0)
+
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .padding(.top, 2)
+                            .padding(.leading, 4)
+                    }
+                    .onTapGesture {
+                        showingMenu.toggle()
+                    }
+                    .popover(isPresented: $showingMenu) {
+                        VStack {
+                            Button("sats") {
+                                model.dispatch(action: .updateUnit(.sat))
+                                showingMenu = false
+                            }
+                            Button("btc") {
+                                model.dispatch(action: .updateUnit(.btc))
+                                showingMenu = false
+                            }
+                        }
+                        .padding()
+                    }
+
+                    Spacer()
+
+                    Button(action: { model.dispatch(action: .toggleSensitiveVisibility) }) {
+                        switch metadata.sensitiveVisible {
+                        case true: Image(systemName: "eye.slash")
+                        case false: Image(systemName: "eye")
+                        }
+                    }
+                }
+            }
+            .padding(.top, 20)
+            .padding() // /content
+        }
         .foregroundStyle(.white)
-        .ignoresSafeArea(.all)
-        .frame(width: screenWidth, height: screenHeight * 0.22)
+        .frame(width: screenWidth, height: screenHeight * 0.20)
         .background(Color.midnightBlue)
     }
 }
