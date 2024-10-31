@@ -5,7 +5,7 @@ use crate::{
     database::Database,
     mnemonic::NumberOfBip39Words,
     transaction::TransactionDetails,
-    wallet::{confirm::ConfirmDetails, metadata::WalletId},
+    wallet::{confirm::ConfirmDetails, metadata::WalletId, Address},
 };
 
 use derive_more::From;
@@ -64,7 +64,10 @@ pub enum ImportType {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendRoute {
-    SetAmount(WalletId),
+    SetAmount {
+        id: WalletId,
+        address: Arc<Address>,
+    },
     Confirm {
         id: WalletId,
         details: Arc<ConfirmDetails>,

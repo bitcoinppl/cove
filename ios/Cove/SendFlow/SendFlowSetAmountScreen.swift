@@ -159,7 +159,8 @@ struct SendFlowSetAmountScreen: View {
 #Preview {
     NavigationStack {
         AsyncPreview {
-            SendFlowSetAmountScreen(id: WalletId(), model: WalletViewModel(preview: "preview_new"))
+            SendFlowSetAmountScreen(id: WalletId(), model: WalletViewModel(preview: "preview_only"))
+                .environment(MainViewModel())
         }
     }
 }
