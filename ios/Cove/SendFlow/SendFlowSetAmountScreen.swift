@@ -9,6 +9,13 @@ import Foundation
 import SwiftUI
 
 struct SendFlowSetAmountScreen: View {
+    let id: WalletId
+    let model: WalletViewModel
+
+    var metadata: WalletMetadata {
+        model.walletMetadata
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
@@ -151,6 +158,8 @@ struct SendFlowSetAmountScreen: View {
 
 #Preview {
     NavigationStack {
-        SendFlowSetAmountScreen()
+        AsyncPreview {
+            SendFlowSetAmountScreen(id: WalletId(), model: WalletViewModel(preview: "preview_new"))
+        }
     }
 }

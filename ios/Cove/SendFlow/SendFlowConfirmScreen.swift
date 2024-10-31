@@ -9,6 +9,14 @@ import Foundation
 import SwiftUI
 
 struct SendFlowConfirmScreen: View {
+    let id: WalletId
+    let model: WalletViewModel
+    let details: ConfirmDetails
+
+    var metadata: WalletMetadata {
+        model.walletMetadata
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
@@ -142,6 +150,12 @@ struct SendFlowConfirmScreen: View {
 
 #Preview {
     NavigationStack {
-        SendFlowConfirmScreen()
+        AsyncPreview {
+            SendFlowConfirmScreen(
+                id: WalletId(),
+                model: WalletViewModel(preview: "preview_new"),
+                details: ConfirmDetails.previewNew()
+            )
+        }
     }
 }

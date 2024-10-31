@@ -26,3 +26,12 @@ extension Address: Equatable {
         addressIsEqual(lhs: lhs, rhs: rhs)
     }
 }
+
+public extension SendRoute {
+    func id() -> WalletId {
+        switch self {
+        case let .setAmount(id): id
+        case let .confirm(id: id, details: _): id
+        }
+    }
+}

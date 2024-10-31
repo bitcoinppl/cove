@@ -1784,6 +1784,94 @@ public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> Unsaf
     return FfiConverterTypeChainPosition.lower(value)
 }
 
+public protocol ConfirmDetailsProtocol: AnyObject {}
+
+open class ConfirmDetails:
+    ConfirmDetailsProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_confirmdetails(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_confirmdetails(pointer, $0) }
+    }
+
+    public static func previewNew() -> ConfirmDetails {
+        return try! FfiConverterTypeConfirmDetails.lift(try! rustCall {
+            uniffi_cove_fn_constructor_confirmdetails_preview_new($0
+            )
+        })
+    }
+}
+
+public struct FfiConverterTypeConfirmDetails: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ConfirmDetails
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ConfirmDetails {
+        return ConfirmDetails(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ConfirmDetails) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmDetails {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ConfirmDetails, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeConfirmDetails_lift(_ pointer: UnsafeMutableRawPointer) throws -> ConfirmDetails {
+    return try FfiConverterTypeConfirmDetails.lift(pointer)
+}
+
+public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeConfirmDetails.lower(value)
+}
+
 public protocol ConfirmedTransactionProtocol: AnyObject {
     func blockHeight() -> UInt32
 
@@ -10660,6 +10748,8 @@ public enum Route {
     case secretWords(WalletId
     )
     case transactionDetails(id: WalletId, details: TransactionDetails)
+    case send(SendRoute
+    )
 }
 
 public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
@@ -10684,6 +10774,9 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             )
 
         case 7: return try .transactionDetails(id: FfiConverterTypeWalletId.read(from: &buf), details: FfiConverterTypeTransactionDetails.read(from: &buf))
+
+        case 8: return try .send(FfiConverterTypeSendRoute.read(from: &buf)
+            )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -10718,6 +10811,10 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeTransactionDetails.write(details, into: &buf)
+
+        case let .send(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeSendRoute.write(v1, into: &buf)
         }
     }
 }
@@ -10884,6 +10981,52 @@ extension SeedQrError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SendRoute {
+    case setAmount(WalletId
+    )
+    case confirm(id: WalletId, details: ConfirmDetails)
+}
+
+public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
+    typealias SwiftType = SendRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .setAmount(FfiConverterTypeWalletId.read(from: &buf)
+            )
+
+        case 2: return try .confirm(id: FfiConverterTypeWalletId.read(from: &buf), details: FfiConverterTypeConfirmDetails.read(from: &buf))
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendRoute, into buf: inout [UInt8]) {
+        switch value {
+        case let .setAmount(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+
+        case let .confirm(id, details):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            FfiConverterTypeConfirmDetails.write(details, into: &buf)
+        }
+    }
+}
+
+public func FfiConverterTypeSendRoute_lift(_ buf: RustBuffer) throws -> SendRoute {
+    return try FfiConverterTypeSendRoute.lift(buf)
+}
+
+public func FfiConverterTypeSendRoute_lower(_ value: SendRoute) -> RustBuffer {
+    return FfiConverterTypeSendRoute.lower(value)
 }
 
 public enum SerdeError {
@@ -14298,6 +14441,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_boxedroute_new() != 62486 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_confirmdetails_preview_new() != 31485 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_database_new() != 41458 {

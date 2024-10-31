@@ -47,5 +47,7 @@ func routeToView(model: MainViewModel, route: Route) -> some View {
         SecretWordsScreen(id: walletId)
     case let .transactionDetails(id: id, details: details):
         TransactionsDetailScreen(id: id, transactionDetails: details)
+    case let .send(sendRoute):
+        SendRouteContainer(sendRoute: sendRoute)
     }
 }

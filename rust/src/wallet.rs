@@ -1,5 +1,6 @@
 pub mod address;
 pub mod balance;
+pub mod confirm;
 pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;

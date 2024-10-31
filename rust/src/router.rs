@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    app::FfiApp, database::Database, mnemonic::NumberOfBip39Words, transaction::TransactionDetails,
-    wallet::metadata::WalletId,
+    app::FfiApp,
+    database::Database,
+    mnemonic::NumberOfBip39Words,
+    transaction::TransactionDetails,
+    wallet::{confirm::ConfirmDetails, metadata::WalletId},
 };
 
 use derive_more::From;
@@ -14,6 +17,7 @@ pub enum Route {
         reset_to: Arc<BoxedRoute>,
         after_millis: u32,
     },
+
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
@@ -23,6 +27,7 @@ pub enum Route {
         id: WalletId,
         details: Arc<TransactionDetails>,
     },
+    Send(SendRoute),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -55,6 +60,15 @@ pub enum ImportType {
     Manual,
     Nfc,
     Qr,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SendRoute {
+    SetAmount(WalletId),
+    Confirm {
+        id: WalletId,
+        details: Arc<ConfirmDetails>,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
