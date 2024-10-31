@@ -16,7 +16,6 @@ struct SendFlowHeaderView: View {
 
     // private
     @State var showingMenu: Bool = false
-    private let topPadding: CGFloat = 50
     private var metadata: WalletMetadata { model.walletMetadata }
     private var balanceString: String {
         if !metadata.sensitiveVisible {
@@ -38,96 +37,59 @@ struct SendFlowHeaderView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Custom navigation bar
+        VStack {
             HStack {
-                Button(action: {
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    HStack(spacing: 0) {
-                        Image(systemName: "chevron.left")
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 0)
-                        Text("Back")
-                            .offset(x: 5)
-                    }
-                    .offset(x: -8)
-                    .foregroundStyle(.white)
-                }
-
-                Spacer()
-
-                Text("Send")
-                    .foregroundColor(.white)
-                    .fontWeight(.medium)
-                    .padding(.trailing, 50)
-
+                Text("Balance")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 Spacer()
             }
-            .padding()
-            .padding(.top, topPadding)
 
-            Spacer()
-            Spacer()
-            Spacer()
-            Spacer()
+            HStack {
+                Text(balanceString)
+                    .font(.title2)
+                    .fontWeight(.bold)
 
-            VStack {
-                HStack {
-                    Text("Balance")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
+                HStack(spacing: 0) {
+                    Text(unitString)
+                        .font(.subheadline)
+                        .padding(.trailing, 0)
 
-                HStack {
-                    Text(balanceString)
-                        .font(.title2)
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
                         .fontWeight(.bold)
-
-                    HStack(spacing: 0) {
-                        Text(unitString)
-                            .font(.subheadline)
-                            .padding(.trailing, 0)
-
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .padding(.top, 2)
-                            .padding(.leading, 4)
-                    }
-                    .onTapGesture {
-                        showingMenu.toggle()
-                    }
-                    .popover(isPresented: $showingMenu) {
-                        VStack {
-                            Button("sats") {
-                                model.dispatch(action: .updateUnit(.sat))
-                                showingMenu = false
-                            }
-                            Button("btc") {
-                                model.dispatch(action: .updateUnit(.btc))
-                                showingMenu = false
-                            }
-                        }
-                        .padding()
-                    }
-
-                    Spacer()
-
-                    Button(action: { model.dispatch(action: .toggleSensitiveVisibility) }) {
-                        switch metadata.sensitiveVisible {
-                        case true: Image(systemName: "eye.slash")
-                        case false: Image(systemName: "eye")
-                        }
-                    }
+                        .padding(.top, 2)
+                        .padding(.leading, 4)
                 }
-                .padding(.top, 2)
+                .onTapGesture {
+                    showingMenu.toggle()
+                }
+                .popover(isPresented: $showingMenu) {
+                    VStack {
+                        Button("sats") {
+                            model.dispatch(action: .updateUnit(.sat))
+                            showingMenu = false
+                        }
+                        Button("btc") {
+                            model.dispatch(action: .updateUnit(.btc))
+                            showingMenu = false
+                        }
+                    }
+                    .padding()
+                }
 
                 Spacer()
+
+                Button(action: { model.dispatch(action: .toggleSensitiveVisibility) }) {
+                    switch metadata.sensitiveVisible {
+                    case true: Image(systemName: "eye.slash")
+                    case false: Image(systemName: "eye")
+                    }
+                }
             }
-            .padding()
+            .padding(.top, 2)
         }
+        .padding()
         .background(
             Image(.headerPattern)
                 .resizable()
@@ -136,17 +98,13 @@ struct SendFlowHeaderView: View {
                     width: 400, height: 300,
                     alignment: .topTrailing
                 )
-                .clipped()
                 .ignoresSafeArea(.all)
+                .clipped()
         )
         .foregroundStyle(.white)
         .ignoresSafeArea(.all)
-        .frame(width: screenWidth, height: screenHeight * 0.30)
+        .frame(width: screenWidth, height: screenHeight * 0.22)
         .background(Color.midnightBlue)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationBarBackButtonHidden()
-        .edgesIgnoringSafeArea(.top)
     }
 }
 

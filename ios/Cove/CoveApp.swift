@@ -52,7 +52,7 @@ struct CoveApp: App {
                 return
                     "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
-                let .foundAddress(address):
+                 let .foundAddress(address):
                 return String(address)
             case .noCameraPermission:
                 return "Please allow camera access in Settings to use this feature."
@@ -73,11 +73,11 @@ struct CoveApp: App {
                 try? model.rust.selectWallet(id: walletId)
             }
         case .invalidWordGroup,
-            .errorImportingHotWallet,
-            .importedSuccessfully,
-            .unableToSelectWallet,
-            .errorImportingHardwareWallet,
-            .invalidFileFormat:
+             .errorImportingHotWallet,
+             .importedSuccessfully,
+             .unableToSelectWallet,
+             .errorImportingHardwareWallet,
+             .invalidFileFormat:
             Button("OK") {
                 self.alert = .none
             }
@@ -123,6 +123,15 @@ struct CoveApp: App {
     }
 
     public init() {
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().compactAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+
         // initialize keychain
         _ = Keychain(keychain: KeychainAccessor())
 
@@ -315,8 +324,20 @@ struct CoveApp: App {
                         }
                     }
             }
+            .tint(routeToTint())
 
             SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
+        }
+    }
+
+    func routeToTint() -> Color {
+        switch model.router.routes.last {
+        case .send:
+            .white
+        case .selectedWallet:
+            .white
+        default:
+            .blue
         }
     }
 
@@ -369,20 +390,20 @@ struct CoveApp: App {
                 .gesture(
                     model.router.routes.isEmpty
                         ? DragGesture()
-                            .onChanged { gesture in
-                                if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                    withAnimation(.spring()) {
-                                        model.isSidebarVisible = true
-                                    }
+                        .onChanged { gesture in
+                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                withAnimation(.spring()) {
+                                    model.isSidebarVisible = true
                                 }
                             }
-                            .onEnded { gesture in
-                                if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                    withAnimation(.spring()) {
-                                        model.isSidebarVisible = true
-                                    }
+                        }
+                        .onEnded { gesture in
+                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                withAnimation(.spring()) {
+                                    model.isSidebarVisible = true
                                 }
-                            } : nil
+                            }
+                        } : nil
                 )
                 .task {
                     await model.rust.initOnStart()
