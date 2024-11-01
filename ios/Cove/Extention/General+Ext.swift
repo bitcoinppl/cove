@@ -30,7 +30,7 @@ extension Address: Equatable {
 public extension SendRoute {
     func id() -> WalletId {
         switch self {
-        case let .setAmount(id): id
+        case let .setAmount(id, address: _): id
         case let .confirm(id: id, details: _): id
         }
     }

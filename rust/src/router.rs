@@ -66,7 +66,7 @@ pub enum ImportType {
 pub enum SendRoute {
     SetAmount {
         id: WalletId,
-        address: Arc<Address>,
+        address: Option<Arc<Address>>,
     },
     Confirm {
         id: WalletId,

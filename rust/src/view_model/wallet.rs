@@ -235,7 +235,7 @@ impl RustWalletViewModel {
         }
 
         let unit = self.metadata.read().selected_unit;
-        amount.fmt_string(unit)
+        amount.fmt_string_with_unit(unit)
     }
 
     #[uniffi::method]

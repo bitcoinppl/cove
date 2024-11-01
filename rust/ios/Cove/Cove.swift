@@ -865,9 +865,13 @@ public protocol AmountProtocol: AnyObject {
 
     func btcString() -> String
 
-    func fmtString(unit: Unit) -> String
+    func btcStringWithUnit() -> String
+
+    func fmtStringWithUnit(unit: Unit) -> String
 
     func satsString() -> String
+
+    func satsStringWithUnit() -> String
 }
 
 open class Amount:
@@ -950,16 +954,28 @@ open class Amount:
         })
     }
 
-    open func fmtString(unit: Unit) -> String {
+    open func btcStringWithUnit() -> String {
         return try! FfiConverterString.lift(try! rustCall {
-            uniffi_cove_fn_method_amount_fmt_string(self.uniffiClonePointer(),
-                                                    FfiConverterTypeUnit.lower(unit), $0)
+            uniffi_cove_fn_method_amount_btc_string_with_unit(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func fmtStringWithUnit(unit: Unit) -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_amount_fmt_string_with_unit(self.uniffiClonePointer(),
+                                                              FfiConverterTypeUnit.lower(unit), $0)
         })
     }
 
     open func satsString() -> String {
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_amount_sats_string(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func satsStringWithUnit() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_amount_sats_string_with_unit(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -10987,8 +11003,7 @@ extension SeedQrError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SendRoute {
-    case setAmount(WalletId
-    )
+    case setAmount(id: WalletId, address: Address?)
     case confirm(id: WalletId, details: ConfirmDetails)
 }
 
@@ -10998,8 +11013,7 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendRoute {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .setAmount(FfiConverterTypeWalletId.read(from: &buf)
-            )
+        case 1: return try .setAmount(id: FfiConverterTypeWalletId.read(from: &buf), address: FfiConverterOptionTypeAddress.read(from: &buf))
 
         case 2: return try .confirm(id: FfiConverterTypeWalletId.read(from: &buf), details: FfiConverterTypeConfirmDetails.read(from: &buf))
 
@@ -11009,9 +11023,10 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
 
     public static func write(_ value: SendRoute, into buf: inout [UInt8]) {
         switch value {
-        case let .setAmount(v1):
+        case let .setAmount(id, address):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeWalletId.write(v1, into: &buf)
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            FfiConverterOptionTypeAddress.write(address, into: &buf)
 
         case let .confirm(id, details):
             writeInt(&buf, Int32(2))
@@ -13018,6 +13033,27 @@ private struct FfiConverterOptionDuration: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionTypeAddress: FfiConverterRustBuffer {
+    typealias SwiftType = Address?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAddress.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAddress.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionTypeFingerprint: FfiConverterRustBuffer {
     typealias SwiftType = Fingerprint?
 
@@ -13915,10 +13951,16 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_amount_btc_string() != 21387 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_amount_fmt_string() != 15357 {
+    if uniffi_cove_checksum_method_amount_btc_string_with_unit() != 10939 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_amount_fmt_string_with_unit() != 14497 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_amount_sats_string() != 36019 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_amount_sats_string_with_unit() != 34409 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748 {

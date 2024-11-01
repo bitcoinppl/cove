@@ -8,7 +8,7 @@ import Foundation
 import SwiftUI
 
 public struct SendRouteContainer: View {
-    @Environment(MainViewModel.self) private var app;
+    @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
     // passed in
@@ -33,8 +33,8 @@ public struct SendRouteContainer: View {
     public var body: some View {
         if let model = model {
             switch sendRoute {
-            case let .setAmount(id: id):
-                SendFlowSetAmountScreen(id: id, model: model)
+            case let .setAmount(id: id, address: address):
+                SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "")
             case let .confirm(id: id, details: details):
                 SendFlowConfirmScreen(id: id, model: model, details: details)
             }

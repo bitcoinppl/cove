@@ -15,6 +15,12 @@ struct SendFlowSetAmountScreen: View {
     @State var model: WalletViewModel
     @State var address: String = ""
 
+    // private
+
+    // text inputs
+    @State private var sendAmount: String = "0"
+    @State private var sendAmountFiat: String = "≈ $0.00 USD"
+
     var metadata: WalletMetadata {
         model.walletMetadata
     }
@@ -53,14 +59,26 @@ struct SendFlowSetAmountScreen: View {
                     // Balance Section
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
-                            Text("573,299")
+                            TextField("", text: $sendAmount)
+                                .multilineTextAlignment(.center)
                                 .font(.system(size: 48, weight: .bold))
+                                .multilineTextAlignment(.center)
+                                .keyboardType(.decimalPad)
+                                .toolbar {
+                                    ToolbarItemGroup(placement: .keyboard) {
+                                        Button("Done") {
+//                                            isFocused = false
+                                        }
+                                        .foregroundStyle(.primary)
+                                    }
+                                }
+                                .offset(x: 14)
 
                             Text("sats")
                                 .padding(.bottom, 10)
                         }
 
-                        Text("≈ $326.93 USD")
+                        Text(sendAmountFiat)
                             .font(.title3)
                             .foregroundColor(.secondary)
                     }
@@ -205,6 +223,4 @@ struct SendFlowSetAmountScreen: View {
             .environment(MainViewModel())
         }
     }
-    .toolbarBackground(.clear, for: .navigationBar)
-    .toolbarColorScheme(.dark, for: .navigationBar)
 }

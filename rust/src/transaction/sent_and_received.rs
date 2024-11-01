@@ -59,8 +59,8 @@ mod ffi {
             };
 
             match unit {
-                Unit::Btc => format!("{prefix}{}", self.amount().btc_string()),
-                Unit::Sat => format!("{prefix}{}", self.amount().sats_string()),
+                Unit::Btc => format!("{prefix}{}", self.amount().btc_string_with_unit()),
+                Unit::Sat => format!("{prefix}{}", self.amount().sats_string_with_unit()),
             }
         }
 

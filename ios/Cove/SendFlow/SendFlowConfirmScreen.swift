@@ -10,7 +10,7 @@ import SwiftUI
 
 struct SendFlowConfirmScreen: View {
     let id: WalletId
-    let model: WalletViewModel
+    @State var model: WalletViewModel
     let details: ConfirmDetails
 
     var metadata: WalletMetadata {
@@ -21,7 +21,7 @@ struct SendFlowConfirmScreen: View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView()
+            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
 
             // MARK: CONTENT
 
@@ -113,7 +113,7 @@ struct SendFlowConfirmScreen: View {
 
                         Text("bc1q uyye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a")
                             .lineLimit(3, reservesSpace: true)
-                            .font(.system(.callout, design: .monospaced))
+                            .font(.system(.callout, design: .none))
                             .padding(.leading, 60)
                     }
                     .padding(.top, 6)

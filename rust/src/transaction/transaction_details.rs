@@ -162,7 +162,7 @@ mod ffi {
         #[uniffi::method]
         pub fn fee_fmt(&self, unit: Unit) -> Option<String> {
             let fee = self.fee?;
-            Some(fee.fmt_string(unit))
+            Some(fee.fmt_string_with_unit(unit))
         }
 
         #[uniffi::method]
@@ -198,7 +198,7 @@ mod ffi {
         #[uniffi::method]
         pub fn sent_sans_fee_fmt(&self, unit: Unit) -> Option<String> {
             let amount = self.sent_sans_fee()?;
-            Some(amount.fmt_string(unit))
+            Some(amount.fmt_string_with_unit(unit))
         }
 
         #[uniffi::method]

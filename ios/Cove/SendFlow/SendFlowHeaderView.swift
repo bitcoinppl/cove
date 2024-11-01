@@ -42,10 +42,8 @@ struct SendFlowHeaderView: View {
             Image(.headerPattern)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(
-                    width: 400, height: 300,
-                    alignment: .topTrailing
-                )
+                .frame(height: 300, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
                 .ignoresSafeArea(edges: .top)
 
             // content
@@ -53,7 +51,8 @@ struct SendFlowHeaderView: View {
                 HStack {
                     Text("Balance")
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.82))
+
                     Spacer()
                 }
 
@@ -61,6 +60,7 @@ struct SendFlowHeaderView: View {
                     Text(balanceString)
                         .font(.title2)
                         .fontWeight(.bold)
+                        .foregroundStyle(.white)
 
                     HStack(spacing: 0) {
                         Text(unitString)
@@ -73,21 +73,31 @@ struct SendFlowHeaderView: View {
                             .padding(.top, 2)
                             .padding(.leading, 4)
                     }
+                    .foregroundStyle(.white)
                     .onTapGesture {
                         showingMenu.toggle()
                     }
                     .popover(isPresented: $showingMenu) {
-                        VStack {
+                        VStack(alignment: .center, spacing: 8) {
                             Button("sats") {
                                 model.dispatch(action: .updateUnit(.sat))
                                 showingMenu = false
                             }
+                            .buttonStyle(.plain)
+
+                            Divider()
+
                             Button("btc") {
                                 model.dispatch(action: .updateUnit(.btc))
                                 showingMenu = false
                             }
+                            .buttonStyle(.plain)
                         }
-                        .padding()
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .frame(minWidth: 120, maxWidth: 200)
+                        .presentationCompactAdaptation(.popover)
+                        .foregroundStyle(.primary.opacity(0.8))
                     }
 
                     Spacer()
@@ -98,13 +108,13 @@ struct SendFlowHeaderView: View {
                         case false: Image(systemName: "eye")
                         }
                     }
+                    .foregroundStyle(.white)
                 }
             }
-            .padding(.top, 20)
-            .padding() // /content
+            // </content>
+            .padding()
         }
-        .foregroundStyle(.white)
-        .frame(width: screenWidth, height: screenHeight * 0.20)
+        .frame(height: screenHeight * 0.20)
         .background(Color.midnightBlue)
     }
 }
