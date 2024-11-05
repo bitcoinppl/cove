@@ -270,7 +270,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58b4f6412af88f35a54f1bc7839b807aa2606514181caa30d5f501f85d333c8e"
 dependencies = [
  "data-encoding",
- "fast_qr",
  "flate2",
  "log",
  "radix_fmt",
@@ -659,6 +658,7 @@ dependencies = [
  "hex",
  "itertools",
  "jiff",
+ "libz-sys",
  "macros",
  "nid",
  "num-bigint",
@@ -906,12 +906,6 @@ dependencies = [
  "indenter",
  "once_cell",
 ]
-
-[[package]]
-name = "fast_qr"
-version = "0.12.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4caec93f3f5074bb9c1cc2abe722ad81b7734fc69c5bb362766a881901d49d88"
 
 [[package]]
 name = "fastrand"
@@ -1425,6 +1419,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2d16453e800a8cf6dd2fc3eb4bc99b786a9b90c663b8559a5b1a041bf89e472"
 dependencies = [
  "cc",
+ "libc",
  "pkg-config",
  "vcpkg",
 ]
