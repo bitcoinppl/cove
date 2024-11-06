@@ -19,4 +19,26 @@ extension String {
     init(_ adress: Address) {
         self = adress.string()
     }
+
+    func removingLeadingZeros() -> String {
+        guard self != "0" else { return self }
+        if self.contains(".") {
+            if self.hasSuffix("0") {
+                return self.normalizeZero()
+            } else {
+                return self
+            }
+        }
+
+        let int = Int(self) ?? 0
+        return String(int)
+    }
+
+    func normalizeZero() -> String {
+        let pattern = "^0+\\.0$"
+        if self.range(of: pattern, options: .regularExpression) != nil {
+            return "0.0"
+        }
+        return self
+    }
 }
