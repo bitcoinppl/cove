@@ -125,7 +125,7 @@ struct SendFlowSetAmountScreen: View {
                             .foregroundStyle(.primary)
                         }
                     }
-                    .offset(x: 14)
+                    .offset(x: screenWidth * 0.07)
 
                 Text("sats")
                     .padding(.bottom, 10)
