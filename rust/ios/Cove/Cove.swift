@@ -2270,6 +2270,8 @@ public protocol FfiAppProtocol: AnyObject {
      */
     func numWallets() -> UInt16
 
+    func prices() async throws -> PriceResponse
+
     /**
      * Change the default route, and reset the routes
      */
@@ -2421,6 +2423,22 @@ open class FfiApp:
         return try! FfiConverterUInt16.lift(try! rustCall {
             uniffi_cove_fn_method_ffiapp_num_wallets(self.uniffiClonePointer(), $0)
         })
+    }
+
+    open func prices() async throws -> PriceResponse {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_ffiapp_prices(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+                completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+                freeFunc: ffi_cove_rust_future_free_rust_buffer,
+                liftFunc: FfiConverterTypePriceResponse.lift,
+                errorHandler: FfiConverterTypeAppError.lift
+            )
     }
 
     /**
@@ -6694,11 +6712,13 @@ public func FfiConverterTypeAddressIndex_lower(_ value: AddressIndex) -> RustBuf
 
 public struct AppState {
     public var router: Router
+    public var prices: PriceResponse?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(router: Router) {
+    public init(router: Router, prices: PriceResponse?) {
         self.router = router
+        self.prices = prices
     }
 }
 
@@ -6706,12 +6726,14 @@ public struct FfiConverterTypeAppState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppState {
         return
             try AppState(
-                router: FfiConverterTypeRouter.read(from: &buf)
+                router: FfiConverterTypeRouter.read(from: &buf),
+                prices: FfiConverterOptionTypePriceResponse.read(from: &buf)
             )
     }
 
     public static func write(_ value: AppState, into buf: inout [UInt8]) {
         FfiConverterTypeRouter.write(value.router, into: &buf)
+        FfiConverterOptionTypePriceResponse.write(value.prices, into: &buf)
     }
 }
 
@@ -7619,6 +7641,106 @@ public func FfiConverterTypePendingWalletViewModelState_lower(_ value: PendingWa
     return FfiConverterTypePendingWalletViewModelState.lower(value)
 }
 
+public struct PriceResponse {
+    public var time: UInt64
+    public var usd: UInt64
+    public var eur: UInt64
+    public var gbp: UInt64
+    public var cad: UInt64
+    public var chf: UInt64
+    public var aud: UInt64
+    public var jpy: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(time: UInt64, usd: UInt64, eur: UInt64, gbp: UInt64, cad: UInt64, chf: UInt64, aud: UInt64, jpy: UInt64) {
+        self.time = time
+        self.usd = usd
+        self.eur = eur
+        self.gbp = gbp
+        self.cad = cad
+        self.chf = chf
+        self.aud = aud
+        self.jpy = jpy
+    }
+}
+
+extension PriceResponse: Equatable, Hashable {
+    public static func == (lhs: PriceResponse, rhs: PriceResponse) -> Bool {
+        if lhs.time != rhs.time {
+            return false
+        }
+        if lhs.usd != rhs.usd {
+            return false
+        }
+        if lhs.eur != rhs.eur {
+            return false
+        }
+        if lhs.gbp != rhs.gbp {
+            return false
+        }
+        if lhs.cad != rhs.cad {
+            return false
+        }
+        if lhs.chf != rhs.chf {
+            return false
+        }
+        if lhs.aud != rhs.aud {
+            return false
+        }
+        if lhs.jpy != rhs.jpy {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(time)
+        hasher.combine(usd)
+        hasher.combine(eur)
+        hasher.combine(gbp)
+        hasher.combine(cad)
+        hasher.combine(chf)
+        hasher.combine(aud)
+        hasher.combine(jpy)
+    }
+}
+
+public struct FfiConverterTypePriceResponse: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PriceResponse {
+        return
+            try PriceResponse(
+                time: FfiConverterUInt64.read(from: &buf),
+                usd: FfiConverterUInt64.read(from: &buf),
+                eur: FfiConverterUInt64.read(from: &buf),
+                gbp: FfiConverterUInt64.read(from: &buf),
+                cad: FfiConverterUInt64.read(from: &buf),
+                chf: FfiConverterUInt64.read(from: &buf),
+                aud: FfiConverterUInt64.read(from: &buf),
+                jpy: FfiConverterUInt64.read(from: &buf)
+            )
+    }
+
+    public static func write(_ value: PriceResponse, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.time, into: &buf)
+        FfiConverterUInt64.write(value.usd, into: &buf)
+        FfiConverterUInt64.write(value.eur, into: &buf)
+        FfiConverterUInt64.write(value.gbp, into: &buf)
+        FfiConverterUInt64.write(value.cad, into: &buf)
+        FfiConverterUInt64.write(value.chf, into: &buf)
+        FfiConverterUInt64.write(value.aud, into: &buf)
+        FfiConverterUInt64.write(value.jpy, into: &buf)
+    }
+}
+
+public func FfiConverterTypePriceResponse_lift(_ buf: RustBuffer) throws -> PriceResponse {
+    return try FfiConverterTypePriceResponse.lift(buf)
+}
+
+public func FfiConverterTypePriceResponse_lower(_ value: PriceResponse) -> RustBuffer {
+    return FfiConverterTypePriceResponse.lower(value)
+}
+
 public struct Rgb {
     public var r: UInt8
     public var g: UInt8
@@ -8032,6 +8154,7 @@ public enum AppAction {
     )
     case setSelectedNode(Node
     )
+    case updateFiatPrices
 }
 
 public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
@@ -8051,6 +8174,8 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
 
         case 4: return try .setSelectedNode(FfiConverterTypeNode.read(from: &buf)
             )
+
+        case 5: return .updateFiatPrices
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -8073,6 +8198,9 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case let .setSelectedNode(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeNode.write(v1, into: &buf)
+
+        case .updateFiatPrices:
+            writeInt(&buf, Int32(5))
         }
     }
 }
@@ -8083,6 +8211,42 @@ public func FfiConverterTypeAppAction_lift(_ buf: RustBuffer) throws -> AppActio
 
 public func FfiConverterTypeAppAction_lower(_ value: AppAction) -> RustBuffer {
     return FfiConverterTypeAppAction.lower(value)
+}
+
+public enum AppError {
+    case PricesError(String
+    )
+}
+
+public struct FfiConverterTypeAppError: FfiConverterRustBuffer {
+    typealias SwiftType = AppError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return try .PricesError(
+                FfiConverterString.read(from: &buf)
+            )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AppError, into buf: inout [UInt8]) {
+        switch value {
+        case let .PricesError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension AppError: Equatable, Hashable {}
+
+extension AppError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -8097,6 +8261,8 @@ public enum AppStateReconcileMessage {
     case colorSchemeChanged(ColorSchemeSelection
     )
     case selectedNodeChanged(Node
+    )
+    case fiatPricesChanged(PriceResponse
     )
 }
 
@@ -8118,6 +8284,9 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             )
 
         case 5: return try .selectedNodeChanged(FfiConverterTypeNode.read(from: &buf)
+            )
+
+        case 6: return try .fiatPricesChanged(FfiConverterTypePriceResponse.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -8144,6 +8313,10 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case let .selectedNodeChanged(v1):
             writeInt(&buf, Int32(5))
             FfiConverterTypeNode.write(v1, into: &buf)
+
+        case let .fiatPricesChanged(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypePriceResponse.write(v1, into: &buf)
         }
     }
 }
@@ -12210,6 +12383,9 @@ public enum WalletViewModelError {
     case UnableToSwitch(WalletAddressType, String)
     case FiatError(String
     )
+    case PricesNotLoaded
+    case PricesError(String
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -12256,6 +12432,10 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
                 FfiConverterString.read(from: &buf)
             )
         case 15: return try .FiatError(
+                FfiConverterString.read(from: &buf)
+            )
+        case 16: return .PricesNotLoaded
+        case 17: return try .PricesError(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -12320,6 +12500,13 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
 
         case let .FiatError(v1):
             writeInt(&buf, Int32(15))
+            FfiConverterString.write(v1, into: &buf)
+
+        case .PricesNotLoaded:
+            writeInt(&buf, Int32(16))
+
+        case let .PricesError(v1):
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(v1, into: &buf)
         }
     }
@@ -13154,6 +13341,27 @@ private struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeMessageInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+private struct FfiConverterOptionTypePriceResponse: FfiConverterRustBuffer {
+    typealias SwiftType = PriceResponse?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePriceResponse.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePriceResponse.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -14060,6 +14268,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_num_wallets() != 28903 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ffiapp_prices() != 58350 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 40613 {

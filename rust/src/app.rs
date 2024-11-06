@@ -7,6 +7,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
+    fiat::client::{PriceResponse, FIAT_CLIENT},
     network::Network,
     node::Node,
     router::{Route, Router},
@@ -24,6 +25,7 @@ pub static APP: OnceCell<App> = OnceCell::new();
 #[derive(Clone, uniffi::Record)]
 pub struct AppState {
     router: Router,
+    prices: Option<PriceResponse>,
 }
 
 impl_default_for!(AppState);
@@ -31,6 +33,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             router: Router::new(),
+            prices: None,
         }
     }
 }
@@ -42,13 +45,22 @@ pub struct App {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-#[allow(clippy::enum_variant_names)]
 pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
     SetSelectedNode(Node),
+    UpdateFiatPrices,
 }
+
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error, derive_more::Display,
+)]
+pub enum AppError {
+    PricesError(String),
+}
+
+type Error = AppError;
 
 impl_default_for!(App);
 impl App {
@@ -142,6 +154,25 @@ impl App {
                         error!("Unable to set selected node: {error}");
                     }
                 }
+            }
+
+            AppAction::UpdateFiatPrices => {
+                debug!("Updating fiat prices");
+
+                crate::task::spawn(async move {
+                    let fiat_client = &FIAT_CLIENT;
+                    match fiat_client.get_prices().await {
+                        Ok(prices) => {
+                            state.write().prices = Some(prices.clone());
+                            Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(
+                                prices,
+                            ))
+                        }
+                        Err(error) => {
+                            error!("unable to update prices: {error:?}");
+                        }
+                    }
+                });
             }
         }
     }
@@ -249,6 +280,16 @@ impl FfiApp {
         Database::global().global_config.selected_network()
     }
 
+    #[uniffi::method]
+    pub async fn prices(&self) -> Result<PriceResponse, Error> {
+        let prices = FIAT_CLIENT
+            .get_prices()
+            .await
+            .map_err(|e| Error::PricesError(e.to_string()))?;
+
+        Ok(prices)
+    }
+
     /// Frontend calls this method to send events to the rust application logic
     pub fn dispatch(&self, action: AppAction) {
         self.inner().handle_action(action);
@@ -263,7 +304,8 @@ impl FfiApp {
         crate::task::init_tokio();
 
         // get / update prices
-        crate::task::spawn(async {
+        let state = self.inner().state.clone();
+        crate::task::spawn(async move {
             if crate::fiat::client::init_prices().await.is_ok() {
                 return;
             }
@@ -283,6 +325,12 @@ impl FfiApp {
                     Err(error) => {
                         warn!("unable to init prices: {error}, trying again");
                     }
+                }
+
+                let prices = FIAT_CLIENT.get_prices().await;
+                if let Ok(prices) = prices {
+                    state.write().prices = Some(prices.clone());
+                    Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
                 }
             }
         });

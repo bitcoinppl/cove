@@ -16,6 +16,8 @@ import SwiftUI
     var sheetState: TaggedItem<AppSheetState>? = .none
     var nfcReader = NFCReader()
 
+    var prices: PriceResponse?
+
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
@@ -128,6 +130,9 @@ import SwiftUI
                     self.router.routes = []
                     self.router.default = route
                     self.routeId = UUID()
+
+                case let .fiatPricesChanged(prices):
+                    self.prices = prices
                 }
             }
         }
