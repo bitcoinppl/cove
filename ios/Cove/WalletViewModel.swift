@@ -34,6 +34,13 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
+    var unit: String {
+        return switch walletMetadata.selectedUnit {
+        case .btc: "btc"
+        case .sat: "sats"
+        }
+    }
+
     var isVerified: Bool {
         walletMetadata.verified
     }

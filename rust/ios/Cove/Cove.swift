@@ -12383,9 +12383,6 @@ public enum WalletViewModelError {
     case UnableToSwitch(WalletAddressType, String)
     case FiatError(String
     )
-    case PricesNotLoaded
-    case PricesError(String
-    )
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -12432,10 +12429,6 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
                 FfiConverterString.read(from: &buf)
             )
         case 15: return try .FiatError(
-                FfiConverterString.read(from: &buf)
-            )
-        case 16: return .PricesNotLoaded
-        case 17: return try .PricesError(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -12500,13 +12493,6 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
 
         case let .FiatError(v1):
             writeInt(&buf, Int32(15))
-            FfiConverterString.write(v1, into: &buf)
-
-        case .PricesNotLoaded:
-            writeInt(&buf, Int32(16))
-
-        case let .PricesError(v1):
-            writeInt(&buf, Int32(17))
             FfiConverterString.write(v1, into: &buf)
         }
     }

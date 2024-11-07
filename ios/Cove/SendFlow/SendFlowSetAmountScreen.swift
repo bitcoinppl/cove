@@ -23,16 +23,17 @@ struct SendFlowSetAmountScreen: View {
 
     // private
     @FocusState private var focusField: FocusField?
+    @State private var scrollPosition: ScrollPosition = .init(idType: FocusField.self)
 
     // text inputs
     @State private var sendAmount: String = "0"
     @State private var sendAmountFiat: String = "≈ $0.00"
 
-    var metadata: WalletMetadata {
+    private var metadata: WalletMetadata {
         model.walletMetadata
     }
 
-    var formatter: NumberFormatter {
+    private var formatter: NumberFormatter {
         let f = NumberFormatter()
         f.numberStyle = .currency
 
@@ -43,15 +44,61 @@ struct SendFlowSetAmountScreen: View {
             f.minimumFractionDigits = 2
             f.maximumFractionDigits = 2
         }
-
         return f
     }
 
-    var sendAmountBinding: Binding<String> {
-        Binding(get: { sendAmount }, set: { sendAmount = $0 })
+    var body: some View {
+        VStack(spacing: 0) {
+            // MARK: HEADER
+
+            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
+
+            // MARK: CONTENT
+
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Set amount, header and text
+                    AmountInfoSection
+
+                    // Amount input
+                    EnterAmountSection
+
+                    // Address Section
+                    EnterAddressSection
+
+                    // Account Section
+                    AccountSection
+
+                    // Network Fee Section
+                    NetworkFeeSection
+
+                    // Total Section
+                    TotalSection
+
+                    Spacer()
+
+                    // Next Button
+                    NextButtonBottom
+                }
+            }
+            .padding(.horizontal)
+            .frame(width: screenWidth)
+            .background(colorScheme == .light ? .white : .black)
+            .scrollIndicators(.hidden)
+            .scrollPosition($scrollPosition, anchor: .top)
+        }
+        .padding(.top, 0)
+        .navigationTitle("Send")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: focusField, initial: false, focusFieldChanged)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                ToolBarView
+            }
+        }
     }
 
-    func amountSats(_ amount: Double) -> Double {
+    private func amountSats(_ amount: Double) -> Double {
         if amount == 0 {
             return 0
         }
@@ -63,7 +110,13 @@ struct SendFlowSetAmountScreen: View {
         return amount * 100_000_000
     }
 
-    func sendAmountChanged(_ oldValue: String, _ value: String) {
+    private func sendAmountChanged(_ oldValue: String, _ value: String) {
+        // allow clearing completely
+        if value == "" {
+            sendAmountFiat = "≈ $0.00"
+            return
+        }
+
         let value = value.removingLeadingZeros()
         sendAmount = value
 
@@ -84,6 +137,100 @@ struct SendFlowSetAmountScreen: View {
         sendAmountFiat = "≈ \(formatter.string(from: NSNumber(value: fiatAmount)) ?? "$0.00")"
     }
 
+    private func selectedUnitChanged(_ oldUnit: Unit, _ newUnit: Unit) {
+        guard let amount = Double(sendAmount) else { return }
+        if amount == 0 { return }
+        if oldUnit == newUnit { return }
+
+        switch newUnit {
+        case .btc:
+            sendAmount = String(amount / 100_000_000)
+        case .sat:
+            sendAmount = String(Int(amount * 100_000_000))
+        }
+    }
+
+    private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
+        print("focusFieldChangedl \(oldField) --> \(newField)")
+
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                scrollPosition.scrollTo(id: newField)
+            }
+        }
+    }
+
+    @ViewBuilder
+    var AmountKeyboardToolbar: some View {
+        HStack {
+            Button(action: { focusField = .address }) {
+                Text("Enter Address")
+            }
+            .tint(Color.midnightBlue)
+            .buttonStyle(.bordered)
+
+            Spacer()
+
+            Button(action: {
+                // TODO: add  max
+            }) {
+                Text("Max")
+            }
+            .tint(.green)
+            .buttonStyle(.bordered)
+
+            Button(action: { sendAmount = "" }) {
+                Label("Clear", systemImage: "xmark.circle.fill")
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+
+            Button(action: { focusField = .none }) {
+                Label("Done", systemImage: "keyboard.chevron.compact.down")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.bordered)
+            .tint(colorScheme == .light ? .black : .white)
+        }
+    }
+
+    @ViewBuilder
+    var AddressKeyboardToolbar: some View {
+        HStack {
+            Button(action: { focusField = .amount }) {
+                Text("Enter Amount")
+            }
+            .tint(Color.midnightBlue)
+            .buttonStyle(.bordered)
+
+            Spacer()
+
+            Button(action: { address = "" }) {
+                Label("Clear", systemImage: "xmark.circle.fill")
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+
+            Button(action: { focusField = .none }) {
+                Label("Done", systemImage: "keyboard.chevron.compact.down")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.bordered)
+            .tint(colorScheme == .light ? .black : .white)
+        }
+    }
+
+    @ViewBuilder
+    var ToolBarView: some View {
+        switch focusField {
+        case .amount: AmountKeyboardToolbar
+        case .address: AddressKeyboardToolbar
+        case .none: EmptyView()
+        }
+    }
+
     @ViewBuilder
     var AmountInfoSection: some View {
         VStack(spacing: 8) {
@@ -94,6 +241,7 @@ struct SendFlowSetAmountScreen: View {
 
                 Spacer()
             }
+            .id(FocusField.amount)
             .padding(.top, 10)
 
             HStack {
@@ -111,32 +259,51 @@ struct SendFlowSetAmountScreen: View {
     var EnterAmountSection: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
-                TextField("", text: sendAmountBinding)
+                TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)
                     .multilineTextAlignment(.center)
                     .font(.system(size: 48, weight: .bold))
-                    .multilineTextAlignment(.center)
-                    .keyboardType(.decimalPad)
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Button("Done") {
-                                //                                            isFocused = false
-                            }
-                            .foregroundStyle(.primary)
-                        }
-                    }
-                    .offset(x: screenWidth * 0.07)
+                    .keyboardType(metadata.selectedUnit == .btc ? .decimalPad : .numberPad)
+                    .offset(x: screenWidth * 0.06)
+                    .padding(.horizontal, 30)
+                    .minimumScaleFactor(0.01)
+                    .lineLimit(1)
 
-                Text("sats")
-                    .padding(.bottom, 10)
+                Text(model.unit)
+                    .padding(.vertical, 10)
+                    .contentShape(
+                        .contextMenuPreview, RoundedRectangle(cornerRadius: 8).inset(by: -5)
+                    )
+                    .contextMenu(
+                        menuItems: {
+                            Button {
+                                model.dispatch(action: .updateUnit(.btc))
+                            } label: {
+                                Text("btc")
+                            }
+
+                            Button {
+                                model.dispatch(action: .updateUnit(.sat))
+                            } label: {
+                                Text("sats")
+                            }
+                        },
+                        preview: {
+                            Text(model.unit)
+                                .padding(12)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    )
+                    .offset(y: -1)
             }
 
             Text(sendAmountFiat)
                 .font(.title3)
                 .foregroundColor(.secondary)
         }
-        .padding(.vertical, 8)
-        .onChange(of: sendAmount) { oldValue, newValue in sendAmountChanged(oldValue, newValue) }
+        .padding(.vertical, 4)
+        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
+        .onChange(of: sendAmount, sendAmountChanged)
     }
 
     @ViewBuilder
@@ -167,15 +334,16 @@ struct SendFlowSetAmountScreen: View {
     }
 
     @ViewBuilder
-    var AddressSection: some View {
+    var EnterAddressSection: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Set Address")
+                Text("Set address")
                     .font(.headline)
                     .fontWeight(.bold)
 
                 Spacer()
             }
+            .id(FocusField.address)
             .padding(.top, 10)
 
             HStack {
@@ -188,6 +356,7 @@ struct SendFlowSetAmountScreen: View {
                 Button(action: {}) {
                     Image(systemName: "qrcode")
                 }
+                .foregroundStyle(.secondary)
                 .foregroundStyle(.secondary)
             }
 
@@ -238,7 +407,7 @@ struct SendFlowSetAmountScreen: View {
 
             Spacer()
 
-            TextField("Send Amount", text: $sendAmount)
+            Text(sendAmount)
                 .multilineTextAlignment(.center)
                 .font(.title3)
                 .fontWeight(.medium)
@@ -262,55 +431,6 @@ struct SendFlowSetAmountScreen: View {
         }
         .padding(.top, 8)
         .padding(.bottom)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // MARK: HEADER
-
-            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
-
-            // MARK: CONTENT
-
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Set amount, header and text
-                    AmountInfoSection
-
-                    // Amount input
-                    EnterAmountSection
-
-                    // Address Section
-                    AddressSection
-
-                    // Account Section
-                    AccountSection
-
-                    // Network Fee Section
-                    NetworkFeeSection
-
-                    // Total Section
-                    TotalSection
-
-                    Spacer()
-
-                    // Next Button
-                    NextButtonBottom
-                }
-            }
-            // </ScrollView>
-            .padding(.horizontal)
-            .frame(width: screenWidth)
-            .background(colorScheme == .light ? .white : .black)
-            .scrollIndicators(.hidden)
-        }
-        // </VStack>
-        .padding(.top, 0)
-        .navigationTitle("Send")
-        .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: focusField) { oldValue, newValue in
-            print("FOCUS FIELD CHANGED: \(oldValue) -> \(newValue)")
-        }
     }
 }
 

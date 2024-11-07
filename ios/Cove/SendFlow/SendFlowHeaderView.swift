@@ -29,13 +29,6 @@ struct SendFlowHeaderView: View {
         }
     }
 
-    private var unitString: String {
-        return switch metadata.selectedUnit {
-        case .btc: "btc"
-        case .sat: "sats"
-        }
-    }
-
     var body: some View {
         ZStack {
             // background
@@ -63,7 +56,7 @@ struct SendFlowHeaderView: View {
                         .foregroundStyle(.white)
 
                     HStack(spacing: 0) {
-                        Text(unitString)
+                        Text(model.unit)
                             .font(.subheadline)
                             .padding(.trailing, 0)
 

@@ -163,7 +163,7 @@ impl App {
                     let fiat_client = &FIAT_CLIENT;
                     match fiat_client.get_prices().await {
                         Ok(prices) => {
-                            state.write().prices = Some(prices.clone());
+                            state.write().prices = Some(prices);
                             Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(
                                 prices,
                             ))
@@ -329,7 +329,7 @@ impl FfiApp {
 
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    state.write().prices = Some(prices.clone());
+                    state.write().prices = Some(prices);
                     Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
                 }
             }
