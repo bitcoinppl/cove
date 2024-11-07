@@ -36,14 +36,9 @@ struct SendFlowSetAmountScreen: View {
     private var formatter: NumberFormatter {
         let f = NumberFormatter()
         f.numberStyle = .currency
+        f.minimumFractionDigits = 2
+        f.maximumFractionDigits = 2
 
-        if metadata.selectedUnit == .btc {
-            f.minimumFractionDigits = 0
-            f.maximumFractionDigits = 0
-        } else {
-            f.minimumFractionDigits = 2
-            f.maximumFractionDigits = 2
-        }
         return f
     }
 
@@ -117,6 +112,8 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
+        if metadata.selectedUnit == .sat && value.contains(",") { return }
+
         let value = value.removingLeadingZeros()
         sendAmount = value
 
@@ -138,20 +135,36 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func selectedUnitChanged(_ oldUnit: Unit, _ newUnit: Unit) {
+        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(sendAmount) else { return }
         if amount == 0 { return }
         if oldUnit == newUnit { return }
 
         switch newUnit {
         case .btc:
-            sendAmount = String(amount / 100_000_000)
+            self.sendAmount = String(amount / 100_000_000)
         case .sat:
-            sendAmount = String(Int(amount * 100_000_000))
+            let sendAmount = Int(amount * 100_000_000)
+            if focusField == .address || focusField == .none {
+                self.sendAmount = ThousandsFormatter(sendAmount).fmt()
+            } else {
+                self.sendAmount = String(sendAmount)
+            }
         }
     }
 
     private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
-        print("focusFieldChangedl \(oldField) --> \(newField)")
+        let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
+
+        DispatchQueue.main.async {
+            if let sendAmountInt = Int(sendAmount), metadata.selectedUnit == .sat {
+                switch newField {
+                case .amount: self.sendAmount = String(sendAmountInt)
+                case .address, .none:
+                    self.sendAmount = ThousandsFormatter(sendAmountInt).fmt()
+                }
+            }
+        }
 
         DispatchQueue.main.async {
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -163,11 +176,23 @@ struct SendFlowSetAmountScreen: View {
     @ViewBuilder
     var AmountKeyboardToolbar: some View {
         HStack {
-            Button(action: { focusField = .address }) {
-                Text("Enter Address")
+            Group {
+                if address.isEmpty {
+                    Button(action: { focusField = .address }) {
+                        Text("Enter Address")
+                    }
+                } else {
+                    Button(action: { focusField = .none }) {
+                        Text("Done")
+                    }
+                }
             }
-            .tint(Color.midnightBlue)
-            .buttonStyle(.bordered)
+            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .background(.midnightBlue.opacity(0.80))
+            .foregroundStyle(.white)
+            .cornerRadius(7)
+            .buttonStyle(.plain)
 
             Spacer()
 
@@ -176,14 +201,14 @@ struct SendFlowSetAmountScreen: View {
             }) {
                 Text("Max")
             }
-            .tint(.green)
+            .tint(.primary)
             .buttonStyle(.bordered)
 
             Button(action: { sendAmount = "" }) {
                 Label("Clear", systemImage: "xmark.circle.fill")
             }
             .buttonStyle(.bordered)
-            .tint(.red)
+            .tint(.primary)
 
             Button(action: { focusField = .none }) {
                 Label("Done", systemImage: "keyboard.chevron.compact.down")
@@ -191,26 +216,44 @@ struct SendFlowSetAmountScreen: View {
                     .foregroundStyle(.primary)
             }
             .buttonStyle(.bordered)
-            .tint(colorScheme == .light ? .black : .white)
+            .tint(.primary)
         }
     }
 
     @ViewBuilder
     var AddressKeyboardToolbar: some View {
         HStack {
-            Button(action: { focusField = .amount }) {
-                Text("Enter Amount")
+            Group {
+                if address.isEmpty {
+                    Button(action: {
+                        address = UIPasteboard.general.string ?? ""
+                        if !address.isEmpty {
+                            focusField = .none
+                        }
+                    }) {
+                        Text("Paste")
+                    }
+                } else {
+                    Button(action: { focusField = .none }) {
+                        Text("Done")
+                    }
+                }
             }
-            .tint(Color.midnightBlue)
-            .buttonStyle(.bordered)
+            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .background(.midnightBlue.opacity(0.80))
+            .foregroundStyle(.white)
+            .cornerRadius(7)
+            .buttonStyle(.plain)
 
             Spacer()
 
             Button(action: { address = "" }) {
                 Label("Clear", systemImage: "xmark.circle.fill")
+                    .tint(.red)
             }
             .buttonStyle(.bordered)
-            .tint(.red)
+            .tint(.primary)
 
             Button(action: { focusField = .none }) {
                 Label("Done", systemImage: "keyboard.chevron.compact.down")
@@ -218,7 +261,7 @@ struct SendFlowSetAmountScreen: View {
                     .foregroundStyle(.primary)
             }
             .buttonStyle(.bordered)
-            .tint(colorScheme == .light ? .black : .white)
+            .tint(.primary)
         }
     }
 
@@ -294,7 +337,6 @@ struct SendFlowSetAmountScreen: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
                     )
-                    .offset(y: -1)
             }
 
             Text(sendAmountFiat)
@@ -361,11 +403,13 @@ struct SendFlowSetAmountScreen: View {
             }
 
             HStack {
-                TextEditor(text: $address)
+                PlaceholderTextEditor(text: $address, placeholder: "bc1p.....")
                     .focused($focusField, equals: .address)
                     .frame(height: 40)
                     .font(.system(size: 16, design: .none))
                     .foregroundStyle(.primary.opacity(0.9))
+                    .autocorrectionDisabled(true)
+                    .keyboardType(.asciiCapable)
             }
         }
         .padding(.top, 14)
