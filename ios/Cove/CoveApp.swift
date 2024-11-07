@@ -24,7 +24,6 @@ struct CoveApp: App {
     @State var model: MainViewModel
     @State var id = UUID()
 
-    @State var alert: TaggedItem<AppAlertState>? = .none
     @State var scannedCode: TaggedItem<StringOrData>? = .none
 
     @ViewBuilder
@@ -52,7 +51,7 @@ struct CoveApp: App {
                 return
                     "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
-                 let .foundAddress(address):
+                let .foundAddress(address):
                 return String(address)
             case .noCameraPermission:
                 return "Please allow camera access in Settings to use this feature."
@@ -69,17 +68,17 @@ struct CoveApp: App {
         switch alert.item {
         case let .duplicateWallet(walletId):
             Button("OK") {
-                self.alert = .none
+                model.alertState = .none
                 try? model.rust.selectWallet(id: walletId)
             }
         case .invalidWordGroup,
-             .errorImportingHotWallet,
-             .importedSuccessfully,
-             .unableToSelectWallet,
-             .errorImportingHardwareWallet,
-             .invalidFileFormat:
+            .errorImportingHotWallet,
+            .importedSuccessfully,
+            .unableToSelectWallet,
+            .errorImportingHardwareWallet,
+            .invalidFileFormat:
             Button("OK") {
-                self.alert = .none
+                model.alertState = .none
             }
         case let .addressWrongNetwork(address: address, network: _, currentNetwork: _):
             Button("Copy Address") {
@@ -87,7 +86,7 @@ struct CoveApp: App {
             }
 
             Button("Cancel") {
-                self.alert = .none
+                model.alertState = .none
             }
         case let .noWalletSelected(address):
             Button("Copy Address") {
@@ -95,7 +94,7 @@ struct CoveApp: App {
             }
 
             Button("Cancel") {
-                self.alert = .none
+                model.alertState = .none
             }
         case let .foundAddress(address):
             Button("Copy Address") {
@@ -104,20 +103,20 @@ struct CoveApp: App {
 
             Button("Send To Address") {
                 // TODO: Route to Send for the wallet
-                self.alert = .none
+                model.alertState = .none
             }
             Button("Cancel") {
-                self.alert = .none
+                model.alertState = .none
             }
         case .noCameraPermission:
             Button("OK") {
-                self.alert = .none
+                model.alertState = .none
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
         case .failedToScanQr:
             Button("OK") {
-                self.alert = .none
+                model.alertState = .none
             }
         }
     }
@@ -139,12 +138,12 @@ struct CoveApp: App {
         self.model = model
     }
 
-    var showingAlert: Binding<Bool> {
+    private var showingAlert: Binding<Bool> {
         Binding(
-            get: { self.alert != nil },
+            get: { model.alertState != nil },
             set: { newValue in
                 if !newValue {
-                    self.alert = .none
+                    model.alertState = .none
                 }
             }
         )
@@ -174,17 +173,17 @@ struct CoveApp: App {
             switch error {
             case let .InvalidWordGroup(error):
                 Log.debug("Invalid words: \(error)")
-                self.alert = TaggedItem(.invalidWordGroup)
+                model.alertState = TaggedItem(.invalidWordGroup)
             case let .WalletAlreadyExists(walletId):
-                self.alert = TaggedItem(.duplicateWallet(walletId))
+                model.alertState = TaggedItem(.duplicateWallet(walletId))
             default:
                 Log.error("Unable to import wallet: \(error)")
-                self.alert = TaggedItem(
+                model.alertState = TaggedItem(
                     .errorImportingHotWallet(error.localizedDescription))
             }
         } catch {
             Log.error("Unknown error \(error)")
-            alert = TaggedItem(
+            model.alertState = TaggedItem(
                 .errorImportingHotWallet(error.localizedDescription))
         }
     }
@@ -196,16 +195,16 @@ struct CoveApp: App {
             let wallet = try Wallet.newFromExport(export: export)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
-            alert = TaggedItem(.importedSuccessfully)
+            model.alertState = TaggedItem(.importedSuccessfully)
             try app.rust.selectWallet(id: id)
         } catch let WalletError.WalletAlreadyExists(id) {
-            self.alert = TaggedItem(.duplicateWallet(id))
+            model.alertState = TaggedItem(.duplicateWallet(id))
 
             if (try? app.rust.selectWallet(id: id)) == nil {
-                self.alert = TaggedItem(.unableToSelectWallet)
+                model.alertState = TaggedItem(.unableToSelectWallet)
             }
         } catch {
-            alert = TaggedItem(.errorImportingHardwareWallet(error.localizedDescription))
+            model.alertState = TaggedItem(.errorImportingHardwareWallet(error.localizedDescription))
         }
     }
 
@@ -216,19 +215,19 @@ struct CoveApp: App {
         let selectedWallet = Database().globalConfig().selectedWallet()
 
         if selectedWallet == nil {
-            alert = TaggedItem(AppAlertState.noWalletSelected(address))
+            model.alertState = TaggedItem(AppAlertState.noWalletSelected(address))
             return
         }
 
         if network != currentNetwork {
-            alert = TaggedItem(
+            model.alertState = TaggedItem(
                 AppAlertState.addressWrongNetwork(
                     address: address, network: network, currentNetwork: currentNetwork
                 ))
             return
         }
 
-        alert = TaggedItem(.foundAddress(address))
+        model.alertState = TaggedItem(.foundAddress(address))
     }
 
     func handleFileOpen(_ url: URL) {
@@ -248,7 +247,8 @@ struct CoveApp: App {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
-                alert = TaggedItem(.invalidFileFormat(multiFormatError.localizedDescription))
+                model.alertState = TaggedItem(
+                    .invalidFileFormat(multiFormatError.localizedDescription))
 
             case let FileHandlerError.OpenFile(error):
                 Log.error("File handler error: \(error)")
@@ -281,11 +281,12 @@ struct CoveApp: App {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
-                alert = TaggedItem(.invalidFileFormat(multiFormatError.localizedDescription))
+                model.alertState = TaggedItem(
+                    .invalidFileFormat(multiFormatError.localizedDescription))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
-                alert = TaggedItem(.invalidFileFormat(error.localizedDescription))
+                model.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
             }
         }
     }
@@ -294,7 +295,7 @@ struct CoveApp: App {
     func SheetContent(_ state: TaggedItem<AppSheetState>) -> some View {
         switch state.item {
         case .qr:
-            QrCodeScanView(app: $model, alert: $alert, scannedCode: $scannedCode)
+            QrCodeScanView(app: model, scannedCode: $scannedCode)
         }
     }
 
@@ -380,9 +381,9 @@ struct CoveApp: App {
                 // NFC scanning
                 .onChange(of: model.nfcReader.scannedMessage, onChangeNfc)
                 .alert(
-                    alert?.item.title() ?? "Alert",
+                    model.alertState?.item.title() ?? "Alert",
                     isPresented: showingAlert,
-                    presenting: alert,
+                    presenting: model.alertState,
                     actions: alertButtons,
                     message: alertMessage
                 )
@@ -390,20 +391,20 @@ struct CoveApp: App {
                 .gesture(
                     model.router.routes.isEmpty
                         ? DragGesture()
-                        .onChanged { gesture in
-                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                withAnimation(.spring()) {
-                                    model.isSidebarVisible = true
+                            .onChanged { gesture in
+                                if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                    withAnimation(.spring()) {
+                                        model.isSidebarVisible = true
+                                    }
                                 }
                             }
-                        }
-                        .onEnded { gesture in
-                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                withAnimation(.spring()) {
-                                    model.isSidebarVisible = true
+                            .onEnded { gesture in
+                                if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                    withAnimation(.spring()) {
+                                        model.isSidebarVisible = true
+                                    }
                                 }
-                            }
-                        } : nil
+                            } : nil
                 )
                 .task {
                     await model.rust.initOnStart()

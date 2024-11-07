@@ -13799,6 +13799,23 @@ public func addressIsEqual(lhs: Address, rhs: Address) -> Bool {
     })
 }
 
+public func addressIsValid(address: String) -> Bool {
+    return try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_fn_func_address_is_valid(
+            FfiConverterString.lower(address), $0
+        )
+    })
+}
+
+public func addressIsValidForNetwork(address: String, network: Network) -> Bool {
+    return try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_fn_func_address_is_valid_for_network(
+            FfiConverterString.lower(address),
+            FfiConverterTypeNetwork.lower(network), $0
+        )
+    })
+}
+
 public func allColorSchemes() -> [ColorSchemeSelection] {
     return try! FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall {
         uniffi_cove_fn_func_all_color_schemes($0
@@ -14035,6 +14052,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if uniffi_cove_checksum_func_address_is_equal() != 63981 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_address_is_valid() != 16664 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_func_address_is_valid_for_network() != 10130 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_all_color_schemes() != 24835 {

@@ -10,10 +10,12 @@ import SwiftUI
     var isSidebarVisible = false
     var asyncRuntimeReady = false
 
+    var alertState: TaggedItem<AppAlertState>? = .none
+    var sheetState: TaggedItem<AppSheetState>? = .none
+
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
 
-    var sheetState: TaggedItem<AppSheetState>? = .none
     var nfcReader = NFCReader()
 
     var prices: PriceResponse?

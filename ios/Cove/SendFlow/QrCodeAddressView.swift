@@ -1,32 +1,26 @@
 //
-//  QrCodeScanView.swift
+//  QrCodeAddressView.swift
 //  Cove
 //
-//  Created by Praveen Perera on 10/27/24.
+//  Created by Praveen Perera on 11/7/24.
 //
 
 import SwiftUI
 
-struct QrCodeScanView: View {
+struct QrCodeAddressView: View {
+    @State private var multiQr: MultiQr?
+    @Environment(MainViewModel.self) var app
     @Environment(\.presentationMode) var presentationMode
 
-    // public
-    @Bindable var app: MainViewModel
-    @Binding var scannedCode: TaggedItem<StringOrData>?
+    // passed in
+    @Binding var scannedCode: TaggedString?
 
     // private
-    @State private var multiQr: MultiQr?
-
-    // bbqr
     @State private var scanComplete = false
     @State private var totalParts: Int? = nil
     @State private var partsLeft: Int? = nil
 
     private let screenHeight = UIScreen.main.bounds.height
-
-    var alertState: Binding<TaggedItem<AppAlertState>?> {
-        $app.alertState
-    }
 
     var partsScanned: Int {
         if let totalParts, let partsLeft {
@@ -81,66 +75,50 @@ struct QrCodeScanView: View {
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
-        if case let .failure(error) = result {
-            if case ScanError.permissionDenied = error {
-                presentationMode.wrappedValue.dismiss()
-                app.sheetState = .none
+        switch result {
+        case let .success(result):
+            guard case let .string(stringValue) = result.data else { return }
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
-                    app.alertState = TaggedItem(AppAlertState.noCameraPermission)
-                }
+            if multiQr == nil {
+                multiQr = MultiQr.newFromString(qr: stringValue)
+                totalParts = Int(multiQr?.totalParts() ?? 0)
             }
-        }
 
-        guard case let .success(scanResult) = result else { return }
-        let qr = StringOrData(scanResult.data)
-
-        do {
-            let multiQr: MultiQr =
-                try self.multiQr
-                ?? {
-                    let newMultiQr = try MultiQr.tryNew(qr: qr)
-                    self.multiQr = newMultiQr
-                    totalParts = Int(newMultiQr.totalParts())
-                    return newMultiQr
-                }()
+            guard let multiQr else { return }
 
             // single QR
             if !multiQr.isBbqr() {
                 scanComplete = true
-                scannedCode = TaggedItem(qr)
-                presentationMode.wrappedValue.dismiss()
+                scannedCode = TaggedString(stringValue)
                 return
             }
 
             // BBQr
-            guard case let .string(stringValue) = qr else { return }
+            do {
+                let result = try multiQr.addPart(qr: stringValue)
+                partsLeft = Int(result.partsLeft())
 
-            let result = try multiQr.addPart(qr: stringValue)
-            partsLeft = Int(result.partsLeft())
-
-            if result.isComplete() {
-                scanComplete = true
-                let data = try result.finalResult()
-                scannedCode = TaggedItem(data)
-                presentationMode.wrappedValue.dismiss()
+                if result.isComplete() {
+                    scanComplete = true
+                    let data = try result.finalResult()
+                    scannedCode = TaggedString(data)
+                }
+            } catch {
+                Log.error("error scanning bbqr part: \(error)")
             }
-        } catch {
-            Log.error("error scanning bbqr part: \(error)")
+
+        case let .failure(error):
+            if case ScanError.permissionDenied = error {
+                presentationMode.wrappedValue.dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1100)) {
+                    app.alertState = TaggedItem(.noCameraPermission)
+                }
+            }
         }
     }
 }
 
 #Preview {
-    struct PreviewContainer: View {
-        @State private var app = MainViewModel()
-        @State private var alert: TaggedItem<AppAlertState>? = nil
-        @State private var scannedCode: TaggedItem<StringOrData>? = nil
-
-        var body: some View {
-            QrCodeScanView(app: app, scannedCode: $scannedCode)
-        }
-    }
-
-    return PreviewContainer()
+    QrCodeAddressView(scannedCode: Binding.constant(nil))
+        .environment(MainViewModel())
 }

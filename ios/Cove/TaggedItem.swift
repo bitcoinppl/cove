@@ -1,5 +1,5 @@
 //
-//  TaggedString.swift
+//  TaggedItem.swift
 //  Cove
 //
 //  Created by Praveen Perera on 9/23/24.
@@ -11,7 +11,7 @@ import SwiftUI
 typealias TaggedString = TaggedItem<String>
 extension TaggedString {
     var value: String {
-        self.item
+        item
     }
 }
 
@@ -27,11 +27,11 @@ struct TaggedItem<T: Equatable>: Identifiable, Equatable {
 extension TaggedItem<StringOrData> {
     init(_ string: String) {
         let stringOrData = StringOrData(string)
-        self.item = stringOrData
+        item = stringOrData
     }
 
     init(_ data: Data) {
         let stringOrData = StringOrData(data)
-        self.item = stringOrData
+        item = stringOrData
     }
 }

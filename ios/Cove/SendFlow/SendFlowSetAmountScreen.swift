@@ -13,6 +13,27 @@ private enum FocusField: Hashable {
     case address
 }
 
+private enum SheetState: Equatable {
+    case qr
+}
+
+private enum AlertState: Equatable {
+    case emptyAddress
+    case invalidNumber
+    case invalidAddress(String)
+    case wrongNetwork(String)
+    case zeroAmount
+    case insufficientFunds
+
+    var title: String {
+        switch self {
+        case .emptyAddress, .invalidAddress, .wrongNetwork: "Invalid Address"
+        case .invalidNumber, .zeroAmount: "Invalid Amount"
+        case .insufficientFunds: "Insufficient Funds"
+        }
+    }
+}
+
 struct SendFlowSetAmountScreen: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.colorScheme) private var colorScheme
@@ -24,6 +45,11 @@ struct SendFlowSetAmountScreen: View {
     // private
     @FocusState private var focusField: FocusField?
     @State private var scrollPosition: ScrollPosition = .init(idType: FocusField.self)
+    @State private var scannedCode: TaggedString? = .none
+
+    // alert & sheet
+    @State private var sheetState: TaggedItem<SheetState>? = .none
+    @State private var alertState: TaggedItem<AlertState>? = .none
 
     // text inputs
     @State private var sendAmount: String = "0"
@@ -38,8 +64,18 @@ struct SendFlowSetAmountScreen: View {
         f.numberStyle = .currency
         f.minimumFractionDigits = 2
         f.maximumFractionDigits = 2
-
         return f
+    }
+
+    private var showingAlert: Binding<Bool> {
+        Binding(
+            get: { alertState != nil },
+            set: { newValue in
+                if !newValue {
+                    alertState = .none
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -77,7 +113,7 @@ struct SendFlowSetAmountScreen: View {
                 }
             }
             .padding(.horizontal)
-            .frame(width: screenWidth)
+            .frame(maxWidth: .infinity)
             .background(colorScheme == .light ? .white : .black)
             .scrollIndicators(.hidden)
             .scrollPosition($scrollPosition, anchor: .top)
@@ -86,11 +122,60 @@ struct SendFlowSetAmountScreen: View {
         .navigationTitle("Send")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: focusField, initial: false, focusFieldChanged)
+        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
+        .onChange(of: sendAmount, initial: false, sendAmountChanged)
+        .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+        .sheet(item: $sheetState, content: SheetContent)
+        .alert(
+            alertState?.item.title ?? "Alert",
+            isPresented: showingAlert,
+            presenting: alertState,
+            actions: alertButtons,
+            message: alertMessage
+        )
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 ToolBarView
             }
         }
+    }
+
+    private func validate(displayAlert: Bool = false) -> Bool {
+        validateAmount(displayAlert: displayAlert) && validateAddress(displayAlert: displayAlert)
+    }
+
+    private func validateAddress(_ address: String? = nil, displayAlert: Bool = false) -> Bool {
+        let address = address ?? self.address
+        if address.isEmpty {
+            if displayAlert { alertState = TaggedItem(.emptyAddress) }
+            return false
+        }
+
+        if Address.isValid(address) {
+            if displayAlert { alertState = TaggedItem(.invalidAddress(address)) }
+            return false
+        }
+
+        return true
+    }
+
+    private func validateAmount(_ amount: String? = nil, displayAlert: Bool = false) -> Bool {
+        let sendAmount = amount ?? self.sendAmount
+        guard let amount = Double(sendAmount) else {
+            if displayAlert { alertState = TaggedItem(.invalidNumber) }
+            return false
+        }
+
+        let balance = Double(model.balance.confirmed.asSats())
+        let amountSats = amountSats(amount)
+
+        // TODO: check if amount + fees is less than balance
+        if amountSats > balance {
+            if displayAlert { alertState = TaggedItem(.insufficientFunds) }
+            return false
+        }
+
+        return true
     }
 
     private func amountSats(_ amount: Double) -> Double {
@@ -153,7 +238,7 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
+    private func focusFieldChanged(_: FocusField?, _ newField: FocusField?) {
         let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
 
         DispatchQueue.main.async {
@@ -173,13 +258,26 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
+        guard let newValue = newValue else { return }
+        sheetState = nil
+
+        if validateAddress(newValue.item) {
+            address = newValue.item
+            focusField = .none
+        } else {
+            address = ""
+            // TODO: show error
+        }
+    }
+
     @ViewBuilder
     var AmountKeyboardToolbar: some View {
         HStack {
             Group {
                 if address.isEmpty {
                     Button(action: { focusField = .address }) {
-                        Text("Enter Address")
+                        Text("Next")
                     }
                 } else {
                     Button(action: { focusField = .none }) {
@@ -187,11 +285,12 @@ struct SendFlowSetAmountScreen: View {
                     }
                 }
             }
+            .font(.callout)
             .padding(.vertical, 7)
             .padding(.horizontal, 12)
-            .background(.midnightBlue.opacity(0.80))
-            .foregroundStyle(.white)
+            .background(.midnightBlue.opacity(0.2))
             .cornerRadius(7)
+            .foregroundStyle(.midnightBlue)
             .buttonStyle(.plain)
 
             Spacer()
@@ -200,12 +299,13 @@ struct SendFlowSetAmountScreen: View {
                 // TODO: add  max
             }) {
                 Text("Max")
+                    .font(.callout)
             }
             .tint(.primary)
             .buttonStyle(.bordered)
 
             Button(action: { sendAmount = "" }) {
-                Label("Clear", systemImage: "xmark.circle.fill")
+                Label("Clear", systemImage: "xmark.circle")
             }
             .buttonStyle(.bordered)
             .tint(.primary)
@@ -241,16 +341,27 @@ struct SendFlowSetAmountScreen: View {
             }
             .padding(.vertical, 7)
             .padding(.horizontal, 12)
-            .background(.midnightBlue.opacity(0.80))
-            .foregroundStyle(.white)
+            .background(.midnightBlue.opacity(0.2))
+            .foregroundStyle(.midnightBlue)
             .cornerRadius(7)
             .buttonStyle(.plain)
+            .font(.callout)
+
+            Button(action: { sheetState = TaggedItem(.qr) }) {
+                Label("QR", systemImage: "qrcode")
+            }
+            .padding(.vertical, 5.25)
+            .padding(.horizontal, 12)
+            .background(.midnightBlue.opacity(0.2))
+            .foregroundStyle(.midnightBlue)
+            .cornerRadius(7)
+            .buttonStyle(.plain)
+            .font(.callout)
 
             Spacer()
 
             Button(action: { address = "" }) {
-                Label("Clear", systemImage: "xmark.circle.fill")
-                    .tint(.red)
+                Label("Clear", systemImage: "xmark.circle")
             }
             .buttonStyle(.bordered)
             .tint(.primary)
@@ -268,9 +379,8 @@ struct SendFlowSetAmountScreen: View {
     @ViewBuilder
     var ToolBarView: some View {
         switch focusField {
-        case .amount: AmountKeyboardToolbar
+        case .amount, .none: AmountKeyboardToolbar
         case .address: AddressKeyboardToolbar
-        case .none: EmptyView()
         }
     }
 
@@ -344,8 +454,6 @@ struct SendFlowSetAmountScreen: View {
                 .foregroundColor(.secondary)
         }
         .padding(.vertical, 4)
-        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
-        .onChange(of: sendAmount, sendAmountChanged)
     }
 
     @ViewBuilder
@@ -395,7 +503,7 @@ struct SendFlowSetAmountScreen: View {
                     .fontWeight(.medium)
                 Spacer()
 
-                Button(action: {}) {
+                Button(action: { sheetState = TaggedItem(.qr) }) {
                     Image(systemName: "qrcode")
                 }
                 .foregroundStyle(.secondary)
@@ -405,7 +513,7 @@ struct SendFlowSetAmountScreen: View {
             HStack {
                 PlaceholderTextEditor(text: $address, placeholder: "bc1p.....")
                     .focused($focusField, equals: .address)
-                    .frame(height: 40)
+                    .frame(height: 50)
                     .font(.system(size: 16, design: .none))
                     .foregroundStyle(.primary.opacity(0.9))
                     .autocorrectionDisabled(true)
@@ -475,6 +583,48 @@ struct SendFlowSetAmountScreen: View {
         }
         .padding(.top, 8)
         .padding(.bottom)
+    }
+
+    @ViewBuilder
+    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
+        switch state.item {
+        case .qr:
+            QrCodeAddressView(app: _app, scannedCode: $scannedCode)
+        }
+    }
+
+    // MARK: Alerts
+
+    @ViewBuilder
+    private func alertMessage(alert: TaggedItem<AlertState>) -> some View {
+        let text = {
+            switch alert.item {
+            case .emptyAddress:
+                return "Please enter an address"
+            case .invalidNumber:
+                return "Please enter a valid number for the amout to send"
+            case .zeroAmount:
+                return "Can't send an empty transaction. Please enter a valid amount"
+            case let .invalidAddress(address):
+                return "The address \(address) is invalid"
+            case let .wrongNetwork(address):
+                return "The address \(address) is on the wrong network. You are on \(metadata.network)"
+            case .insufficientFunds:
+                return "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+            }
+        }()
+
+        Text(text)
+    }
+
+    @ViewBuilder
+    private func alertButtons(alert: TaggedItem<AlertState>) -> some View {
+        switch alert.item {
+        case .emptyAddress, .wrongNetwork, .invalidAddress:
+            Button("OK") { focusField = .address }
+        case .invalidNumber, .insufficientFunds, .zeroAmount:
+            Button("OK") { focusField = .amount }
+        }
     }
 }
 

@@ -143,6 +143,8 @@ mod ffi {
 
     use bdk_chain::bitcoin::address::NetworkChecked;
 
+    use crate::database::Database;
+
     use super::*;
 
     #[uniffi::export]
@@ -194,5 +196,20 @@ mod ffi {
         fn index(&self) -> u32 {
             self.index
         }
+    }
+
+    #[uniffi::export]
+    fn address_is_valid(address: String) -> bool {
+        let network = Database::global().global_config.selected_network();
+        address_is_valid_for_network(address, network)
+    }
+
+    #[uniffi::export]
+    fn address_is_valid_for_network(address: String, network: Network) -> bool {
+        let Ok(address) = BdkAddress::from_str(&address) else {
+            return false;
+        };
+
+        address.require_network(network.into()).is_ok()
     }
 }
