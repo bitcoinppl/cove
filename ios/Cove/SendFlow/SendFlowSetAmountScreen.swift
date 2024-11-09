@@ -24,14 +24,7 @@ private enum AlertState: Equatable {
     case wrongNetwork(String)
     case zeroAmount
     case insufficientFunds
-
-    var title: String {
-        switch self {
-        case .emptyAddress, .invalidAddress, .wrongNetwork: "Invalid Address"
-        case .invalidNumber, .zeroAmount: "Invalid Amount"
-        case .insufficientFunds: "Insufficient Funds"
-        }
-    }
+    case sendAmountToLow
 }
 
 struct SendFlowSetAmountScreen: View {
@@ -127,7 +120,7 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .sheet(item: $sheetState, content: SheetContent)
         .alert(
-            alertState?.item.title ?? "Alert",
+            alertTitle,
             isPresented: showingAlert,
             presenting: alertState,
             actions: alertButtons,
@@ -595,6 +588,19 @@ struct SendFlowSetAmountScreen: View {
 
     // MARK: Alerts
 
+    private var alertTitle: String {
+        guard let alertState = alertState else { return "" }
+
+        return {
+            switch alertState.item {
+            case .emptyAddress, .invalidAddress, .wrongNetwork: "Invalid Address"
+            case .invalidNumber, .zeroAmount: "Invalid Amount"
+            case .insufficientFunds: "Insufficient Funds"
+            case .sendAmountToLow: "Send Amount Too Low"
+            }
+        }()
+    }
+
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AlertState>) -> some View {
         let text = {
@@ -608,9 +614,12 @@ struct SendFlowSetAmountScreen: View {
             case let .invalidAddress(address):
                 return "The address \(address) is invalid"
             case let .wrongNetwork(address):
-                return "The address \(address) is on the wrong network. You are on \(metadata.network)"
+                return
+                    "The address \(address) is on the wrong network. You are on \(metadata.network)"
             case .insufficientFunds:
                 return "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+            case .sendAmountToLow:
+                return "Send amount is too low. Please send atleast 5000 sats"
             }
         }()
 
@@ -622,7 +631,7 @@ struct SendFlowSetAmountScreen: View {
         switch alert.item {
         case .emptyAddress, .wrongNetwork, .invalidAddress:
             Button("OK") { focusField = .address }
-        case .invalidNumber, .insufficientFunds, .zeroAmount:
+        case .invalidNumber, .insufficientFunds, .zeroAmount, .sendAmountToLow:
             Button("OK") { focusField = .amount }
         }
     }
