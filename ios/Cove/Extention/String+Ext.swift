@@ -16,8 +16,12 @@ extension String {
         self = walletAddressTypeToString(walletAddressType: walletAddressType)
     }
 
-    init(_ adress: Address) {
-        self = adress.string()
+    init(_ address: Address) {
+        self = address.string()
+    }
+
+    init(_ fingeprint: Fingerprint) {
+        self = fingeprint.asUppercase()
     }
 
     func removingLeadingZeros() -> String {
@@ -40,5 +44,11 @@ extension String {
             return "0.0"
         }
         return self
+    }
+}
+
+extension Optional where Wrapped == String {
+    init(_ fingeprint: Fingerprint?) {
+        if let fingeprint { self = String(fingeprint) } else { self = .none }
     }
 }

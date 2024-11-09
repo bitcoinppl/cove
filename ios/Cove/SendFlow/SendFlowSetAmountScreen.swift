@@ -533,11 +533,11 @@ struct SendFlowSetAmountScreen: View {
                     .padding(.trailing, 6)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("73C5DA0A")
+                    Text(metadata.masterFingerprint?.asUppercase() ?? "No Fingerprint")
                         .font(.footnote)
                         .foregroundColor(.secondary)
 
-                    Text("Daily Spending Wallet")
+                    Text(metadata.name)
                         .font(.headline)
                         .fontWeight(.medium)
                 }
