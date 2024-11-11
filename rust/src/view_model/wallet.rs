@@ -1,6 +1,9 @@
 mod actor;
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use act_zero::{call, send, Addr};
 use actor::WalletActor;
@@ -146,8 +149,12 @@ pub enum WalletViewModelError {
 
     #[error("unable to get balance in fiat")]
     FiatError(String),
+
     #[error("unable to get fees: {0}")]
     FeesError(String),
+
+    #[error("unable to build transaction: {0}")]
+    BuildTxError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -515,6 +522,43 @@ impl RustWalletViewModel {
 
         None
     }
+
+    #[uniffi::method]
+    pub fn build_transaction(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+    ) -> Result<Psbt, Error> {
+        let medium_fee = self
+            .get_fees()
+            .map(|fees| FeeRateOptions::from(fees).medium.fee_rate)
+            .unwrap_or_else(|| FeeRate::from_sat_per_vb(10));
+
+        self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee))
+    }
+
+    #[uniffi::method]
+    pub fn build_transaction_with_fee_rate(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+        fee_rate: Arc<FeeRate>,
+    ) -> Result<Psbt, Error> {
+        let actor = self.actor.clone();
+
+        let amount = Arc::unwrap_or_clone(amount).into();
+        let address = Arc::unwrap_or_clone(address).into();
+        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
+
+        let psbt: Result<BdkPsbt, Error> = crate::task::block_on(async move {
+            call!(actor.build_tx(amount, address, fee_rate))
+                .await
+                .map_err(|error| Error::BuildTxError(error.to_string()))
+        });
+
+        Ok(psbt?.into())
+    }
+
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();

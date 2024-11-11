@@ -3,12 +3,17 @@ use crate::{
     node::client::NodeClient,
     transaction::{Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
-    wallet::{balance::Balance, metadata::BlockSizeLast, AddressInfo, Wallet, WalletAddressType},
+    wallet::{
+        balance::Balance, metadata::BlockSizeLast, Address, AddressInfo, Wallet, WalletAddressType,
+    },
 };
 use act_zero::*;
-use bdk_chain::spk_client::{FullScanResult, SyncResult};
+use bdk_chain::{
+    bitcoin::Psbt,
+    spk_client::{FullScanResult, SyncResult},
+};
 use bdk_wallet::KeychainKind;
-use bitcoin_units::Amount;
+use bitcoin_units::{Amount, FeeRate};
 use crossbeam::channel::Sender;
 use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, info};
@@ -85,6 +90,23 @@ impl WalletActor {
     pub async fn balance(&mut self) -> ActorResult<Balance> {
         let balance = self.wallet.balance();
         Produces::ok(balance)
+    }
+
+    pub async fn build_tx(
+        &mut self,
+        amount: Amount,
+        address: Address,
+        fee_rate: FeeRate,
+    ) -> ActorResult<Psbt> {
+        let script_pubkey = address.script_pubkey();
+
+        let mut tx_builder = self.wallet.build_tx();
+        tx_builder.add_recipient(script_pubkey, amount);
+        tx_builder.fee_rate(fee_rate);
+
+        let psbt = tx_builder.finish()?;
+
+        Produces::ok(psbt)
     }
 
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
