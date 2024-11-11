@@ -240,20 +240,24 @@ impl Wallet {
 
             // update the fingerprint
             metadata.master_fingerprint = Some(fingerprint.into());
-            let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
+
+            let all_fingerprints: Vec<(WalletId, Arc<Fingerprint>)> = Database::global()
                 .wallets
                 .get_all(network)
                 .map(|wallets| {
                     wallets
                         .into_iter()
-                        .map(|wallet_metadata| (wallet_metadata.id, fingerprint))
+                        .filter_map(|wallet_metadata| {
+                            let fingerprint = wallet_metadata.master_fingerprint?;
+                            Some((wallet_metadata.id, fingerprint))
+                        })
                         .collect()
                 })
                 .unwrap_or_default();
 
             if let Some((id, _)) = all_fingerprints
                 .into_iter()
-                .find(|(_, f)| f == &fingerprint)
+                .find(|(_, f)| f.as_ref() == &fingerprint)
             {
                 return Err(WalletError::WalletAlreadyExists(id));
             }
