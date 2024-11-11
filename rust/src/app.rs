@@ -11,6 +11,7 @@ use crate::{
     network::Network,
     node::Node,
     router::{Route, Router},
+    transaction::fees::client::{FeeResponse, FEE_CLIENT},
     wallet::metadata::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
@@ -25,7 +26,6 @@ pub static APP: OnceCell<App> = OnceCell::new();
 #[derive(Clone, uniffi::Record)]
 pub struct AppState {
     router: Router,
-    prices: Option<PriceResponse>,
 }
 
 impl_default_for!(AppState);
@@ -33,7 +33,6 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             router: Router::new(),
-            prices: None,
         }
     }
 }
@@ -51,6 +50,7 @@ pub enum AppAction {
     ChangeColorScheme(ColorSchemeSelection),
     SetSelectedNode(Node),
     UpdateFiatPrices,
+    UpdateFees,
 }
 
 #[derive(
@@ -58,6 +58,7 @@ pub enum AppAction {
 )]
 pub enum AppError {
     PricesError(String),
+    FeesError(String),
 }
 
 type Error = AppError;
@@ -160,16 +161,28 @@ impl App {
                 debug!("Updating fiat prices");
 
                 crate::task::spawn(async move {
-                    let fiat_client = &FIAT_CLIENT;
-                    match fiat_client.get_prices().await {
-                        Ok(prices) => {
-                            state.write().prices = Some(prices);
-                            Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(
-                                prices,
-                            ))
-                        }
+                    match FIAT_CLIENT.get_prices().await {
+                        Ok(prices) => Updater::send_update(
+                            AppStateReconcileMessage::FiatPricesChanged(prices),
+                        ),
                         Err(error) => {
                             error!("unable to update prices: {error:?}");
+                        }
+                    }
+                });
+            }
+
+            AppAction::UpdateFees => {
+                debug!("Updating fees");
+
+                crate::task::spawn(async move {
+                    match FEE_CLIENT.get_fees().await {
+                        Ok(fees) => {
+                            Updater::send_update(AppStateReconcileMessage::FeesChanged(fees));
+                        }
+                        Err(error) => {
+                            error!("unable to get fees: {error:?}");
+                            return;
                         }
                     }
                 });
@@ -290,6 +303,16 @@ impl FfiApp {
         Ok(prices)
     }
 
+    #[uniffi::method]
+    pub async fn fees(&self) -> Result<FeeResponse, Error> {
+        let fees = FEE_CLIENT
+            .get_fees()
+            .await
+            .map_err(|error| Error::FeesError(error.to_string()))?;
+
+        Ok(fees.into())
+    }
+
     /// Frontend calls this method to send events to the rust application logic
     pub fn dispatch(&self, action: AppAction) {
         self.inner().handle_action(action);
@@ -304,9 +327,15 @@ impl FfiApp {
         crate::task::init_tokio();
 
         // get / update prices
-        let state = self.inner().state.clone();
+        let _state = self.inner().state.clone();
         crate::task::spawn(async move {
+            // init prices and update the client state
             if crate::fiat::client::init_prices().await.is_ok() {
+                let prices = FIAT_CLIENT.get_prices().await;
+                if let Ok(prices) = prices {
+                    Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
+                }
+
                 return;
             }
 
@@ -329,9 +358,18 @@ impl FfiApp {
 
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    state.write().prices = Some(prices);
                     Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
                 }
+            }
+        });
+
+        // get / update fees
+        crate::task::spawn(async move {
+            crate::transaction::fees::client::init_fees().await;
+
+            let fees = FEE_CLIENT.get_fees().await;
+            if let Ok(fees) = fees {
+                Updater::send_update(AppStateReconcileMessage::FeesChanged(fees));
             }
         });
     }

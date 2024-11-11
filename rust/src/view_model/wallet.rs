@@ -9,20 +9,29 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
 
+use bdk_wallet::bitcoin::Psbt as BdkPsbt;
+
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
     fiat::{client::FIAT_CLIENT, FiatCurrency},
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
+    psbt::Psbt,
     router::Route,
     task::{self, spawn_actor},
-    transaction::{Amount, SentAndReceived, Transaction, TransactionDetails, TxId, Unit},
+    transaction::{
+        fees::{
+            client::{FeeResponse, FEES, FEE_CLIENT},
+            FeeRateOptions,
+        },
+        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
+    },
     wallet::{
         balance::Balance,
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
-        AddressInfo, Wallet, WalletAddressType, WalletError,
+        Address, AddressInfo, Wallet, WalletAddressType, WalletError,
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -137,6 +146,8 @@ pub enum WalletViewModelError {
 
     #[error("unable to get balance in fiat")]
     FiatError(String),
+    #[error("unable to get fees: {0}")]
+    FeesError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -194,6 +205,17 @@ impl RustWalletViewModel {
             reconcile_receiver: Arc::new(receiver),
             scanner,
         })
+    }
+
+    #[uniffi::method]
+    pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
+        let fee_client = &FEE_CLIENT;
+        let fees = fee_client
+            .get_fees()
+            .await
+            .map_err(|error| Error::FeesError(error.to_string()))?;
+
+        Ok(fees.into())
     }
 
     #[uniffi::method]
@@ -468,6 +490,31 @@ impl RustWalletViewModel {
         Ok(validator)
     }
 
+    pub fn get_fees(&self) -> Option<FeeResponse> {
+        let cached_fees = FEES.load().as_ref().clone();
+
+        match cached_fees {
+            Some(cached_fees)
+                if cached_fees.last_fetched > Instant::now() - Duration::from_secs(30) =>
+            {
+                crate::task::spawn(async move {
+                    crate::transaction::fees::client::get_and_update_fees().await
+                });
+            }
+            None => {
+                crate::task::spawn(async move {
+                    crate::transaction::fees::client::get_and_update_fees().await
+                });
+            }
+            _ => {}
+        }
+
+        if let Some(cached_fees) = cached_fees {
+            return Some(cached_fees.fees);
+        }
+
+        None
+    }
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();

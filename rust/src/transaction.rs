@@ -3,7 +3,7 @@ mod ffi;
 mod sent_and_received;
 mod unit;
 
-pub mod fee_rate;
+pub mod fees;
 pub mod transaction_details;
 
 use std::{cmp::Ordering, sync::Arc};
@@ -26,7 +26,7 @@ pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
 pub type Unit = unit::Unit;
 pub type TransactionDetails = transaction_details::TransactionDetails;
-pub type FeeRate = fee_rate::FeeRate;
+pub type FeeRate = fees::FeeRate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionDirection {

@@ -5,6 +5,7 @@ use once_cell::sync::OnceCell;
 
 use crate::{
     color_scheme::ColorSchemeSelection, fiat::client::PriceResponse, node::Node, router::Route,
+    transaction::fees::client::FeeResponse,
 };
 
 #[derive(uniffi::Enum)]
@@ -16,6 +17,7 @@ pub enum AppStateReconcileMessage {
     ColorSchemeChanged(ColorSchemeSelection),
     SelectedNodeChanged(Node),
     FiatPricesChanged(PriceResponse),
+    FeesChanged(FeeResponse),
 }
 
 // alais for easier imports on the rust side

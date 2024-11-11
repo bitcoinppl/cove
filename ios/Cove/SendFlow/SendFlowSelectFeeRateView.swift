@@ -8,32 +8,12 @@
 import Foundation
 import SwiftUI
 
-private enum FeeSpeed {
-    case fast
-    case medium
-    case slow
-
-    var string: String {
-        switch self {
-        case .fast: "Fast"
-        case .medium: "Medium"
-        case .slow: "Slow"
-        }
-    }
-
-    var circleColor: Color {
-        switch self {
-        case .fast:
-            .green
-        case .medium:
-            .yellow
-        case .slow:
-            .orange
-        }
-    }
-}
-
 struct SendFlowSelectFeeRateView: View {
+    let feeOptions: FeeRateOptions
+    let txnSize: Int
+
+    @State var selectedOption: FeeSpeed = .medium
+
     var body: some View {
         VStack(spacing: 20) {
             Text("Network Fee")
@@ -42,30 +22,19 @@ struct SendFlowSelectFeeRateView: View {
                 .padding(.bottom, 8)
 
             FeeOptionView(
-                speed: .fast,
-                duration: "30 minutes",
-                satsPerVbyte: 4.46,
-                sats: 620,
-                fiatAmount: "≈ 0.36 USD",
-                isSelected: false
+                feeOption: feeOptions.fast(),
+                fiatAmount: "",
+                txnSize: txnSize,
+                isSelected: selectedOption == .fast
             )
 
             FeeOptionView(
-                speed: .medium,
-                duration: "2 hours",
-                satsPerVbyte: 2.48,
-                sats: 250,
-                fiatAmount: "≈ 0.16 USD",
-                isSelected: true
+                feeOption: feeOptions.medium(), fiatAmount: "", txnSize: txnSize, isSelected: selectedOption == .medium
             )
 
             FeeOptionView(
-                speed: .slow,
-                duration: "4 hours",
-                satsPerVbyte: 1.24,
-                sats: 120,
-                fiatAmount: "≈ 0.06 USD",
-                isSelected: false
+                feeOption: feeOptions.slow(), fiatAmount: "",
+                txnSize: txnSize, isSelected: selectedOption == .slow
             )
 
             Button(action: {
@@ -86,11 +55,10 @@ struct SendFlowSelectFeeRateView: View {
 }
 
 private struct FeeOptionView: View {
-    let speed: FeeSpeed
-    let duration: String
-    let satsPerVbyte: Double
-    let sats: Int
+    let feeOption: FeeRateOption
     let fiatAmount: String
+    let txnSize: Int
+
     let isSelected: Bool
 
     var fontColor: Color {
@@ -101,15 +69,25 @@ private struct FeeOptionView: View {
         if isSelected { Color.midnightBlue } else { Color(UIColor.systemGray2) }
     }
 
+    var totalFee: String {
+        feeOption.totalFee(txnSize: UInt64(txnSize)).map { $0.satsString() } ?? "---"
+    }
+
+    var satsPerVbyte: Double {
+        feeOption.satPerVb()
+    }
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(speed.string)
+                    Text(feeOption.duration())
                         .font(.headline)
                         .foregroundColor(fontColor)
 
-                    DurationCapsule(duration: duration, speed: speed, fontColor: fontColor)
+                    DurationCapsule(
+                        speed: feeOption.feeSpeed(), fontColor: fontColor
+                    )
                 }
                 Text("\(String(format: "%.2f", satsPerVbyte)) sats/vbyte")
                     .font(.subheadline)
@@ -119,7 +97,7 @@ private struct FeeOptionView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 4) {
-                Text("\(sats) sats")
+                Text("\(totalFee) sats")
                     .font(.headline)
                     .foregroundColor(fontColor)
 
@@ -139,7 +117,6 @@ private struct FeeOptionView: View {
 }
 
 private struct DurationCapsule: View {
-    let duration: String
     let speed: FeeSpeed
     let fontColor: Color
 
@@ -148,7 +125,7 @@ private struct DurationCapsule: View {
             Circle()
                 .fill(speed.circleColor)
                 .frame(width: 8, height: 8)
-            Text(duration)
+            Text(speed.duration)
         }
         .font(.subheadline)
         .foregroundColor(fontColor)
@@ -160,5 +137,5 @@ private struct DurationCapsule: View {
 }
 
 #Preview {
-    SendFlowSelectFeeRateView()
+    SendFlowSelectFeeRateView(feeOptions: FeeRateOptions.preview_new(), txnSize: 3040)
 }

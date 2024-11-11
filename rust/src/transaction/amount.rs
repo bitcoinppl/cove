@@ -13,6 +13,7 @@ use super::Unit;
     Hash,
     uniffi::Object,
     derive_more::From,
+    derive_more::Into,
     derive_more::Deref,
 )]
 pub struct Amount(pub BdkAmount);

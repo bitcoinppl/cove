@@ -20,6 +20,8 @@ use crate::transaction::TransactionDirection;
     Hash,
     derive_more::Display,
     derive_more::From,
+    derive_more::Deref,
+    derive_more::AsRef,
     derive_more::Into,
     uniffi::Object,
 )]

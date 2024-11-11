@@ -27,8 +27,22 @@ extension Address: Equatable {
     }
 }
 
-public extension SendRoute {
-    func id() -> WalletId {
+extension FeeSpeed {
+    var string: String {
+        feeSpeedToString(speed: self)
+    }
+
+    var duration: String {
+        feeSpeedDuration(speed: self)
+    }
+
+    var circleColor: Color {
+        Color(feeSpeedToCircleColor(speed: self))
+    }
+}
+
+extension SendRoute {
+    public func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _): id
         case let .confirm(id: id, details: _): id

@@ -27,6 +27,8 @@ private enum AlertState: Equatable {
     case sendAmountToLow
 }
 
+// MARK: SendFlowSetAmountScreen
+
 struct SendFlowSetAmountScreen: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.colorScheme) private var colorScheme
@@ -472,6 +474,9 @@ struct SendFlowSetAmountScreen: View {
                     .foregroundStyle(.secondary)
                     .fontWeight(.medium)
             }
+        }
+        .onTapGesture {
+            self.isShowingAddressSheet = true
         }
         .padding(.top, 12)
     }

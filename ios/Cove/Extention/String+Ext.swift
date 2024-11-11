@@ -24,11 +24,15 @@ extension String {
         self = fingeprint.asUppercase()
     }
 
+    init(_ feeSpeed: FeeSpeed) {
+        self = feeSpeed.toString()
+    }
+
     func removingLeadingZeros() -> String {
         guard self != "0" else { return self }
-        if self.contains(".") {
-            if self.hasSuffix("0") {
-                return self.normalizeZero()
+        if contains(".") {
+            if hasSuffix("0") {
+                return normalizeZero()
             } else {
                 return self
             }
@@ -40,7 +44,7 @@ extension String {
 
     func normalizeZero() -> String {
         let pattern = "^0+\\.0$"
-        if self.range(of: pattern, options: .regularExpression) != nil {
+        if range(of: pattern, options: .regularExpression) != nil {
             return "0.0"
         }
         return self
