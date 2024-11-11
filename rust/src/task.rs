@@ -1,6 +1,7 @@
 use act_zero::{Actor, Addr};
 use core::future::Future;
-use std::sync::OnceLock;
+use rusty_pool::{Builder, ThreadPool};
+use std::sync::{LazyLock, OnceLock};
 
 use futures::task::{Spawn, SpawnError};
 use tokio::{runtime::Handle, task::JoinHandle};
@@ -8,6 +9,9 @@ use tokio::{runtime::Handle, task::JoinHandle};
 struct CustomRuntime;
 
 static TOKIO: OnceLock<Handle> = OnceLock::new();
+
+static THREAD_POOL: LazyLock<ThreadPool> =
+    LazyLock::new(|| Builder::default().max_size(50).build());
 
 pub fn init_tokio() {
     if is_tokio_initalized() {
@@ -46,10 +50,10 @@ where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
 {
-    TOKIO
-        .get()
-        .expect("tokio runtime not initalized")
-        .block_on(task)
+    let handle = TOKIO.get().expect("tokio runtime not initalized");
+    THREAD_POOL
+        .evaluate(move || handle.block_on(task))
+        .await_complete()
 }
 
 /// Provides an infallible way to spawn an actor onto the Tokio runtime,
