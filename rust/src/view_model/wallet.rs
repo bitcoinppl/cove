@@ -523,6 +523,16 @@ impl RustWalletViewModel {
         None
     }
 
+    pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
+        let fee_client = &FEE_CLIENT;
+        let fees = fee_client
+            .get_fees()
+            .await
+            .map_err(|error| Error::FeesError(error.to_string()))?;
+
+        Ok(fees.into())
+    }
+
     #[uniffi::method]
     pub fn build_transaction(
         &self,

@@ -604,6 +604,14 @@ open class Address:
         try! rustCall { uniffi_cove_fn_free_address(pointer, $0) }
     }
 
+    public static func fromString(address: String) throws -> Address {
+        return try FfiConverterTypeAddress.lift(rustCallWithError(FfiConverterTypeAddressError.lift) {
+            uniffi_cove_fn_constructor_address_from_string(
+                FfiConverterString.lower(address), $0
+            )
+        })
+    }
+
     public static func previewNew() -> Address {
         return try! FfiConverterTypeAddress.lift(try! rustCall {
             uniffi_cove_fn_constructor_address_preview_new($0
@@ -2245,6 +2253,8 @@ public func FfiConverterTypeFeeRate_lower(_ value: FeeRate) -> UnsafeMutableRawP
 public protocol FeeRateOptionProtocol: AnyObject {
     func duration() -> String
 
+    func rate() -> FeeRate
+
     func satPerVb() -> Double
 
     func speed() -> FeeSpeed
@@ -2304,6 +2314,12 @@ open class FeeRateOption:
     open func duration() -> String {
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_feerateoption_duration(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func rate() -> FeeRate {
+        return try! FfiConverterTypeFeeRate.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoption_rate(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -4565,7 +4581,17 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
     return FfiConverterTypePendingWallet.lower(value)
 }
 
-public protocol PsbtProtocol: AnyObject {}
+public protocol PsbtProtocol: AnyObject {
+    /**
+     * Total fee in sats.
+     */
+    func fee() throws -> Amount
+
+    /**
+     * The virtual size of the transaction.
+     */
+    func weight() -> UInt64
+}
 
 open class Psbt:
     PsbtProtocol
@@ -4605,6 +4631,24 @@ open class Psbt:
         }
 
         try! rustCall { uniffi_cove_fn_free_psbt(pointer, $0) }
+    }
+
+    /**
+     * Total fee in sats.
+     */
+    open func fee() throws -> Amount {
+        return try FfiConverterTypeAmount.lift(rustCallWithError(FfiConverterTypePsbtError.lift) {
+            uniffi_cove_fn_method_psbt_fee(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    /**
+     * The virtual size of the transaction.
+     */
+    open func weight() -> UInt64 {
+        return try! FfiConverterUInt64.lift(try! rustCall {
+            uniffi_cove_fn_method_psbt_weight(self.uniffiClonePointer(), $0)
+        })
     }
 }
 
@@ -5153,6 +5197,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> String
 
+    func feeRateOptions() async throws -> FeeRateOptions
+
     func fingerprint() -> String
 
     func forceUpdateHeight() async throws -> UInt32
@@ -5389,6 +5435,22 @@ open class RustWalletViewModel:
             uniffi_cove_fn_method_rustwalletviewmodel_display_sent_and_received_amount(self.uniffiClonePointer(),
                                                                                        FfiConverterTypeSentAndReceived.lower(sentAndReceived), $0)
         })
+    }
+
+    open func feeRateOptions() async throws -> FeeRateOptions {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_fee_rate_options(
+                        self.uniffiClonePointer()
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeFeeRateOptions.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
     }
 
     open func fingerprint() -> String {
@@ -8518,6 +8580,9 @@ public enum AddressError {
     )
     case InvalidAddress
     case UnsupportedNetwork
+    case WrongNetwork(current: Network
+    )
+    case EmptyAddress
 }
 
 public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
@@ -8532,6 +8597,10 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
             )
         case 3: return .InvalidAddress
         case 4: return .UnsupportedNetwork
+        case 5: return try .WrongNetwork(
+                current: FfiConverterTypeNetwork.read(from: &buf)
+            )
+        case 6: return .EmptyAddress
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -8550,6 +8619,13 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
 
         case .UnsupportedNetwork:
             writeInt(&buf, Int32(4))
+
+        case let .WrongNetwork(current):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeNetwork.write(current, into: &buf)
+
+        case .EmptyAddress:
+            writeInt(&buf, Int32(6))
         }
     }
 }
@@ -11385,6 +11461,68 @@ public func FfiConverterTypePendingWalletViewModelReconcileMessage_lower(_ value
 }
 
 extension PendingWalletViewModelReconcileMessage: Equatable, Hashable {}
+
+public enum PsbtError {
+    /**
+     * Missing UTXO
+     */
+    case MissingUtxo
+    /**
+     * Negative fee.
+     */
+    case NegativeFee
+    /**
+     * Fee overflow.
+     */
+    case FeeOverflow
+    /**
+     * Other PSBT error {0}
+     */
+    case Other(String
+    )
+}
+
+public struct FfiConverterTypePsbtError: FfiConverterRustBuffer {
+    typealias SwiftType = PsbtError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PsbtError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        case 1: return .MissingUtxo
+        case 2: return .NegativeFee
+        case 3: return .FeeOverflow
+        case 4: return try .Other(
+                FfiConverterString.read(from: &buf)
+            )
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PsbtError, into buf: inout [UInt8]) {
+        switch value {
+        case .MissingUtxo:
+            writeInt(&buf, Int32(1))
+
+        case .NegativeFee:
+            writeInt(&buf, Int32(2))
+
+        case .FeeOverflow:
+            writeInt(&buf, Int32(3))
+
+        case let .Other(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+        }
+    }
+}
+
+extension PsbtError: Equatable, Hashable {}
+
+extension PsbtError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
 
 public enum ResumeError {
     /**
@@ -14381,21 +14519,19 @@ public func addressIsEqual(lhs: Address, rhs: Address) -> Bool {
     })
 }
 
-public func addressIsValid(address: String) -> Bool {
-    return try! FfiConverterBool.lift(try! rustCall {
-        uniffi_cove_fn_func_address_is_valid(
-            FfiConverterString.lower(address), $0
-        )
-    })
+public func addressIsValid(address: String) throws { try rustCallWithError(FfiConverterTypeAddressError.lift) {
+    uniffi_cove_fn_func_address_is_valid(
+        FfiConverterString.lower(address), $0
+    )
+}
 }
 
-public func addressIsValidForNetwork(address: String, network: Network) -> Bool {
-    return try! FfiConverterBool.lift(try! rustCall {
-        uniffi_cove_fn_func_address_is_valid_for_network(
-            FfiConverterString.lower(address),
-            FfiConverterTypeNetwork.lower(network), $0
-        )
-    })
+public func addressIsValidForNetwork(address: String, network: Network) throws { try rustCallWithError(FfiConverterTypeAddressError.lift) {
+    uniffi_cove_fn_func_address_is_valid_for_network(
+        FfiConverterString.lower(address),
+        FfiConverterTypeNetwork.lower(network), $0
+    )
+}
 }
 
 public func allColorSchemes() -> [ColorSchemeSelection] {
@@ -14450,26 +14586,26 @@ public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> B
     })
 }
 
-public func feeSpeedDuration(speed: FeeSpeed) -> String {
+public func feeSpeedDuration(feeSpeed: FeeSpeed) -> String {
     return try! FfiConverterString.lift(try! rustCall {
         uniffi_cove_fn_func_fee_speed_duration(
-            FfiConverterTypeFeeSpeed.lower(speed), $0
+            FfiConverterTypeFeeSpeed.lower(feeSpeed), $0
         )
     })
 }
 
-public func feeSpeedToCircleColor(speed: FeeSpeed) -> FfiColor {
+public func feeSpeedToCircleColor(feeSpeed: FeeSpeed) -> FfiColor {
     return try! FfiConverterTypeFfiColor.lift(try! rustCall {
         uniffi_cove_fn_func_fee_speed_to_circle_color(
-            FfiConverterTypeFeeSpeed.lower(speed), $0
+            FfiConverterTypeFeeSpeed.lower(feeSpeed), $0
         )
     })
 }
 
-public func feeSpeedToString(speed: FeeSpeed) -> String {
+public func feeSpeedToString(feeSpeed: FeeSpeed) -> String {
     return try! FfiConverterString.lift(try! rustCall {
         uniffi_cove_fn_func_fee_speed_to_string(
-            FfiConverterTypeFeeSpeed.lower(speed), $0
+            FfiConverterTypeFeeSpeed.lower(feeSpeed), $0
         )
     })
 }
@@ -14660,10 +14796,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_address_is_equal() != 63981 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_func_address_is_valid() != 16664 {
+    if uniffi_cove_checksum_func_address_is_valid() != 22920 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_func_address_is_valid_for_network() != 10130 {
+    if uniffi_cove_checksum_func_address_is_valid_for_network() != 41522 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_all_color_schemes() != 24835 {
@@ -14687,13 +14823,13 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_discovery_state_is_equal() != 12390 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_func_fee_speed_duration() != 25449 {
+    if uniffi_cove_checksum_func_fee_speed_duration() != 28599 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_func_fee_speed_to_circle_color() != 17837 {
+    if uniffi_cove_checksum_func_fee_speed_to_circle_color() != 46076 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_func_fee_speed_to_string() != 45101 {
+    if uniffi_cove_checksum_func_fee_speed_to_string() != 21405 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_func_fiat_amount_preview_new() != 6422 {
@@ -14871,6 +15007,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_feerateoption_duration() != 58541 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoption_rate() != 46294 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_feerateoption_sat_per_vb() != 60748 {
@@ -15062,6 +15201,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_nodeselector_selected_node() != 29849 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_psbt_fee() != 37973 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_psbt_weight() != 5696 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_routefactory_cold_wallet_import() != 14120 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15165,6 +15310,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_display_sent_and_received_amount() != 30788 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_fee_rate_options() != 44766 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {
@@ -15336,6 +15484,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_wordvalidator_is_valid_word_group() != 6393 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_address_from_string() != 47046 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_address_preview_new() != 14015 {

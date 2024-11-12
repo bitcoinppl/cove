@@ -46,6 +46,7 @@ pub struct AddressWithNetwork {
 }
 
 type Error = AddressError;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum AddressError {
@@ -60,6 +61,12 @@ pub enum AddressError {
 
     #[error("valid address, but for an unsupported network")]
     UnsupportedNetwork,
+
+    #[error("address for wrong network, current network is {current}")]
+    WrongNetwork { current: Network },
+
+    #[error("empty address")]
+    EmptyAddress,
 }
 
 impl Clone for AddressInfo {
@@ -167,12 +174,21 @@ mod ffi {
 
     #[uniffi::export]
     impl Address {
+        #[uniffi::constructor]
+        pub fn from_string(address: String) -> Result<Self> {
+            let network = Database::global().global_config.selected_network();
+            let bdk_address = BdkAddress::from_str(&address)
+                .map_err(|_| Error::InvalidAddress)?
+                .require_network(network.into())
+                .map_err(|_| Error::WrongNetwork { current: network })?;
+
+            Ok(Self(bdk_address))
+        }
+
         #[uniffi::constructor(name = "preview_new")]
         pub fn preview_new() -> Self {
-            let address = BdkAddress::from_str(
-                "bc1p0000304alk4tg3vxcu7l9m4xf4cvauzml5608cssvz5f60jwg68q83lyn9",
-            )
-            .unwrap();
+            let address =
+                BdkAddress::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap();
 
             let address: BdkAddress<NetworkChecked> =
                 address.require_network(Network::Bitcoin.into()).unwrap();
@@ -201,17 +217,20 @@ mod ffi {
     }
 
     #[uniffi::export]
-    fn address_is_valid(address: String) -> bool {
+    fn address_is_valid(address: String) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
         address_is_valid_for_network(address, network)
     }
 
     #[uniffi::export]
-    fn address_is_valid_for_network(address: String, network: Network) -> bool {
-        let Ok(address) = BdkAddress::from_str(&address) else {
-            return false;
-        };
+    fn address_is_valid_for_network(address: String, network: Network) -> Result<(), Error> {
+        let address = address.trim();
+        let address = BdkAddress::from_str(address).map_err(|_| Error::InvalidAddress)?;
 
-        address.require_network(network.into()).is_ok()
+        address
+            .require_network(network.into())
+            .map_err(|_| Error::WrongNetwork { current: network })?;
+
+        Ok(())
     }
 }

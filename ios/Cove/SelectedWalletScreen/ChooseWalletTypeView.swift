@@ -26,7 +26,8 @@ public struct ChooseWalletTypeView: View {
             Task {
                 // switch the wallet
                 do {
-                    try await model.rust.switchToDifferentWalletAddressType(walletAddressType: foundAddress.type)
+                    try await model.rust.switchToDifferentWalletAddressType(
+                        walletAddressType: foundAddress.type)
                 } catch {
                     Log.error(error.localizedDescription)
                     presentationMode.wrappedValue.dismiss()
@@ -71,7 +72,7 @@ public struct ChooseWalletTypeView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.blue)
 
-                    Text(address?.adressString() ?? "bc1")
+                    Text(address?.adressString() ?? "bc1q")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -98,6 +99,7 @@ public struct ChooseWalletTypeView: View {
             foundAddresses: [
                 previewNewLegacyFoundAddress(),
                 previewNewWrappedFoundAddress(),
-            ])
+            ]
+        )
     }
 }

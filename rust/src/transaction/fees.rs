@@ -124,6 +124,10 @@ impl FeeRateOption {
     pub fn speed(&self) -> FeeSpeed {
         self.fee_speed
     }
+
+    pub fn rate(&self) -> FeeRate {
+        self.fee_rate
+    }
 }
 
 // MARK: FeeSpeed
@@ -157,17 +161,17 @@ mod fee_speed_ffi {
     use super::*;
 
     #[uniffi::export]
-    fn fee_speed_to_string(speed: FeeSpeed) -> String {
-        speed.to_string()
+    fn fee_speed_to_string(fee_speed: FeeSpeed) -> String {
+        fee_speed.to_string()
     }
 
     #[uniffi::export]
-    fn fee_speed_to_circle_color(speed: FeeSpeed) -> FfiColor {
-        speed.circle_color()
+    fn fee_speed_to_circle_color(fee_speed: FeeSpeed) -> FfiColor {
+        fee_speed.circle_color()
     }
 
     #[uniffi::export]
-    fn fee_speed_duration(speed: FeeSpeed) -> String {
-        speed.duration()
+    fn fee_speed_duration(fee_speed: FeeSpeed) -> String {
+        fee_speed.duration()
     }
 }

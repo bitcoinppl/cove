@@ -25,7 +25,7 @@ extension String {
     }
 
     init(_ feeSpeed: FeeSpeed) {
-        self = feeSpeed.toString()
+        self = feeSpeedToString(feeSpeed: feeSpeed)
     }
 
     func removingLeadingZeros() -> String {

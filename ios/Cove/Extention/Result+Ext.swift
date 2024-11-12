@@ -16,3 +16,12 @@ public extension Result where Failure == Swift.Error {
         }
     }
 }
+
+public extension Result {
+    func isSuccess() -> Bool {
+        switch self {
+        case .success: return true
+        case .failure: return false
+        }
+    }
+}

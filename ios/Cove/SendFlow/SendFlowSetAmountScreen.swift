@@ -15,6 +15,7 @@ private enum FocusField: Hashable {
 
 private enum SheetState: Equatable {
     case qr
+    case fee
 }
 
 private enum AlertState: Equatable {
@@ -25,6 +26,15 @@ private enum AlertState: Equatable {
     case zeroAmount
     case insufficientFunds
     case sendAmountToLow
+
+    init(_ error: AddressError, address: String) {
+        switch error {
+        case .EmptyAddress: self = .emptyAddress
+        case .InvalidAddress: self = .invalidAddress(address)
+        case .WrongNetwork: self = .wrongNetwork(address)
+        default: self = .invalidAddress(address)
+        }
+    }
 }
 
 // MARK: SendFlowSetAmountScreen
@@ -41,6 +51,12 @@ struct SendFlowSetAmountScreen: View {
     @FocusState private var focusField: FocusField?
     @State private var scrollPosition: ScrollPosition = .init(idType: FocusField.self)
     @State private var scannedCode: TaggedString? = .none
+
+    // fees
+    @State private var txnSize: Int? = nil
+    @State private var totalFee: Int? = nil
+    @State private var selectedFeeRate: FeeRateOption? = .none
+    @State private var feeRateOptions: FeeRateOptions? = .none
 
     // alert & sheet
     @State private var sheetState: TaggedItem<SheetState>? = .none
@@ -73,6 +89,26 @@ struct SendFlowSetAmountScreen: View {
         )
     }
 
+    private var sendAmountSats: Int? {
+        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
+        guard let amount = Double(sendAmount) else { return .none }
+
+        switch metadata.selectedUnit {
+        case .btc:
+            return Int(amount * 100_000_000)
+        case .sat:
+            return Int(amount)
+        }
+    }
+
+    private var totalFeeString: String {
+        if let totalFee = totalFee {
+            return "\(String(totalFee)) sats"
+        }
+
+        return "---"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
@@ -95,16 +131,18 @@ struct SendFlowSetAmountScreen: View {
                     // Account Section
                     AccountSection
 
-                    // Network Fee Section
-                    NetworkFeeSection
+                    if feeRateOptions != nil && selectedFeeRate != nil && Address.isValid(address) {
+                        // Network Fee Section
+                        NetworkFeeSection
 
-                    // Total Section
-                    TotalSection
+                        // Total Section
+                        TotalSection
 
-                    Spacer()
+                        Spacer()
 
-                    // Next Button
-                    NextButtonBottom
+                        // Next Button
+                        NextButtonBottom
+                    }
                 }
             }
             .padding(.horizontal)
@@ -120,7 +158,17 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
         .onChange(of: sendAmount, initial: false, sendAmountChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+        .onChange(of: address, initial: true, addressChanged)
         .sheet(item: $sheetState, content: SheetContent)
+        .task {
+            guard let feeRateOptions = try? await model.rust.feeRateOptions() else { return }
+            await MainActor.run {
+                self.feeRateOptions = feeRateOptions
+                if selectedFeeRate == nil {
+                    selectedFeeRate = feeRateOptions.medium()
+                }
+            }
+        }
         .alert(
             alertTitle,
             isPresented: showingAlert,
@@ -146,8 +194,8 @@ struct SendFlowSetAmountScreen: View {
             return false
         }
 
-        if Address.isValid(address) {
-            if displayAlert { alertState = TaggedItem(.invalidAddress(address)) }
+        if case let .failure(error) = Address.checkValid(address) {
+            if displayAlert { alertState = TaggedItem(AlertState(error, address: address)) }
             return false
         }
 
@@ -184,6 +232,8 @@ struct SendFlowSetAmountScreen: View {
 
         return amount * 100_000_000
     }
+
+    // MARK: OnChange Functions
 
     private func sendAmountChanged(_ oldValue: String, _ value: String) {
         // allow clearing completely
@@ -257,12 +307,43 @@ struct SendFlowSetAmountScreen: View {
         guard let newValue = newValue else { return }
         sheetState = nil
 
-        if validateAddress(newValue.item) {
+        if validateAddress(newValue.item, displayAlert: true) {
             address = newValue.item
             focusField = .none
         } else {
             address = ""
-            // TODO: show error
+        }
+    }
+
+    private func addressChanged(_: String, _ address: String) {
+        if address.isEmpty { return }
+        if address.count < 26 || address.count > 62 { return }
+
+        let addressString = address.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let address = try? Address.fromString(address: addressString) else { return }
+        guard let selectedFeeRate = selectedFeeRate else { return }
+
+        guard validateAddress(addressString) else { return }
+
+        let amountSats = max(sendAmountSats ?? 0, 10000)
+        let amount = Amount.fromSat(sats: UInt64(amountSats))
+
+        let psbt = try? model.rust.buildTransactionWithFeeRate(
+            amount: amount, address: address,
+            feeRate: selectedFeeRate.rate()
+        )
+
+        if let psbt = psbt {
+            do {
+                let fee = try psbt.fee()
+                let totalFee = Int(fee.asSats())
+
+                self.totalFee = totalFee
+                txnSize = Int(Double(totalFee) / selectedFeeRate.rate().satPerVb())
+            } catch {
+                Log.warn("Failed to get PSBT: \(error)")
+            }
         }
     }
 
@@ -463,20 +544,20 @@ struct SendFlowSetAmountScreen: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
-                    // Action
+                    self.sheetState = TaggedItem(.fee)
                 }
                 .font(.caption)
                 .foregroundColor(.blue)
 
                 Spacer()
 
-                Text("300 sats")
+                Text(totalFeeString)
                     .foregroundStyle(.secondary)
                     .fontWeight(.medium)
             }
         }
         .onTapGesture {
-            self.isShowingAddressSheet = true
+            self.sheetState = TaggedItem(.fee)
         }
         .padding(.top, 12)
     }
@@ -509,7 +590,7 @@ struct SendFlowSetAmountScreen: View {
             }
 
             HStack {
-                PlaceholderTextEditor(text: $address, placeholder: "bc1p.....")
+                PlaceholderTextEditor(text: $address, placeholder: "bc1q.....")
                     .focused($focusField, equals: .address)
                     .frame(height: 50)
                     .font(.system(size: 16, design: .none))
@@ -588,6 +669,10 @@ struct SendFlowSetAmountScreen: View {
         switch state.item {
         case .qr:
             QrCodeAddressView(app: _app, scannedCode: $scannedCode)
+                .presentationDetents([.large])
+        case .fee:
+            SendFlowSelectFeeRateView(feeOptions: feeRateOptions!, txnSize: txnSize ?? 0)
+                .presentationDetents([.height(455)])
         }
     }
 
@@ -642,12 +727,26 @@ struct SendFlowSetAmountScreen: View {
     }
 }
 
-#Preview {
+#Preview("with address") {
     NavigationStack {
         AsyncPreview {
             SendFlowSetAmountScreen(
-                id: WalletId(), model: WalletViewModel(preview: "preview_only"),
+                id: WalletId(),
+                model: WalletViewModel(preview: "preview_only"),
                 address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
+            )
+            .environment(MainViewModel())
+        }
+    }
+}
+
+#Preview("no address") {
+    NavigationStack {
+        AsyncPreview {
+            SendFlowSetAmountScreen(
+                id: WalletId(),
+                model: WalletViewModel(preview: "preview_only"),
+                address: ""
             )
             .environment(MainViewModel())
         }

@@ -50,7 +50,8 @@ struct SendFlowSelectFeeRateView: View {
             .padding(.top, 20)
             .padding(.horizontal, 32)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.top, 22)
     }
 }
 
@@ -81,12 +82,12 @@ private struct FeeOptionView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(feeOption.duration())
+                    Text(String(feeOption.speed()))
                         .font(.headline)
                         .foregroundColor(fontColor)
 
                     DurationCapsule(
-                        speed: feeOption.feeSpeed(), fontColor: fontColor
+                        speed: feeOption.speed(), fontColor: fontColor
                     )
                 }
                 Text("\(String(format: "%.2f", satsPerVbyte)) sats/vbyte")
@@ -137,5 +138,5 @@ private struct DurationCapsule: View {
 }
 
 #Preview {
-    SendFlowSelectFeeRateView(feeOptions: FeeRateOptions.preview_new(), txnSize: 3040)
+    SendFlowSelectFeeRateView(feeOptions: FeeRateOptions.previewNew(), txnSize: 3040)
 }
