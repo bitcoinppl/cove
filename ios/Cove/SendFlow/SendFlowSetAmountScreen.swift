@@ -159,6 +159,21 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: sendAmount, initial: false, sendAmountChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .onChange(of: address, initial: true, addressChanged)
+        .onChange(of: selectedFeeRate, initial: false, selectedFeeRateChanged)
+        .onAppear {
+            print("ON APPEAR", sendAmount, address)
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) {
+                if sendAmount == "0" || sendAmount == "" {
+                    focusField = .amount
+                    return
+                }
+
+                if address == "" {
+                    focusField = .address
+                    return
+                }
+            }
+        }
         .sheet(item: $sheetState, content: SheetContent)
         .task {
             guard let feeRateOptions = try? await model.rust.feeRateOptions() else { return }
@@ -320,12 +335,34 @@ struct SendFlowSetAmountScreen: View {
         if address.count < 26 || address.count > 62 { return }
 
         let addressString = address.trimmingCharacters(in: .whitespacesAndNewlines)
-
         guard let address = try? Address.fromString(address: addressString) else { return }
-        guard let selectedFeeRate = selectedFeeRate else { return }
-
         guard validateAddress(addressString) else { return }
 
+        updateTotalFee(selectedFeeRate: selectedFeeRate, address: address)
+    }
+
+    private func selectedFeeRateChanged(_: FeeRateOption?, _ selectedFeeRate: FeeRateOption?) {
+        updateTotalFee(selectedFeeRate: selectedFeeRate)
+    }
+
+    private func updateTotalFee(selectedFeeRate: FeeRateOption?, address: Address? = nil) {
+        guard let selectedFeeRate = selectedFeeRate else { return }
+
+        let address: Address? = {
+            switch address {
+            case let .some(address): return address
+            case .none:
+                let addressString = self.address.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard validateAddress(addressString) else { return nil }
+                guard let address = try? Address.fromString(address: addressString) else {
+                    return nil
+                }
+
+                return address
+            }
+        }()
+
+        guard let address = address else { return }
         let amountSats = max(sendAmountSats ?? 0, 10000)
         let amount = Amount.fromSat(sats: UInt64(amountSats))
 
@@ -340,7 +377,6 @@ struct SendFlowSetAmountScreen: View {
                 let totalFee = Int(fee.asSats())
 
                 self.totalFee = totalFee
-                txnSize = Int(Double(totalFee) / selectedFeeRate.rate().satPerVb())
             } catch {
                 Log.warn("Failed to get PSBT: \(error)")
             }
@@ -540,7 +576,7 @@ struct SendFlowSetAmountScreen: View {
                 .foregroundColor(.secondary)
 
             HStack {
-                Text("2 hours")
+                Text(selectedFeeRate?.duration() ?? "2 hours")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
@@ -671,8 +707,16 @@ struct SendFlowSetAmountScreen: View {
             QrCodeAddressView(app: _app, scannedCode: $scannedCode)
                 .presentationDetents([.large])
         case .fee:
-            SendFlowSelectFeeRateView(feeOptions: feeRateOptions!, txnSize: txnSize ?? 0)
-                .presentationDetents([.height(455)])
+            SendFlowSelectFeeRateView(
+                feeOptions: feeRateOptions!,
+                selectedOption: Binding(
+                    get: { selectedFeeRate! },
+                    set: { newValue in
+                        selectedFeeRate = newValue
+                    }
+                )
+            )
+            .presentationDetents([.height(400)])
         }
     }
 
