@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 public struct ChooseWalletTypeView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @State var model: WalletViewModel
     @State var foundAddresses: [FoundAddress]
 
@@ -30,14 +30,14 @@ public struct ChooseWalletTypeView: View {
                         walletAddressType: foundAddress.type)
                 } catch {
                     Log.error(error.localizedDescription)
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                     return
                 }
 
                 // update the metadata
                 await MainActor.run {
                     model.dispatch(action: .selectDifferentWalletAddressType(foundAddress.type))
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
             }
         }) {
@@ -64,7 +64,7 @@ public struct ChooseWalletTypeView: View {
 
             Button(action: {
                 model.dispatch(action: .selectCurrentWalletAddressType)
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
             }) {
                 VStack {
                     Text("Keep Current")

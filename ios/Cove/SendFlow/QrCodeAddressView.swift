@@ -10,7 +10,7 @@ import SwiftUI
 struct QrCodeAddressView: View {
     @State private var multiQr: MultiQr?
     @Environment(MainViewModel.self) var app
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     // passed in
     @Binding var scannedCode: TaggedString?
@@ -109,7 +109,7 @@ struct QrCodeAddressView: View {
 
         case let .failure(error):
             if case ScanError.permissionDenied = error {
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1100)) {
                     app.alertState = TaggedItem(.noCameraPermission)
                 }

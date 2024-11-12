@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 struct SendFlowHeaderView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     @Bindable var model: WalletViewModel
     let amount: Amount

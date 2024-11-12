@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct QrCodeScanView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     // public
     @Bindable var app: MainViewModel
@@ -83,7 +83,7 @@ struct QrCodeScanView: View {
     private func handleScan(result: Result<ScanResult, ScanError>) {
         if case let .failure(error) = result {
             if case ScanError.permissionDenied = error {
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
                 app.sheetState = .none
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
@@ -109,7 +109,7 @@ struct QrCodeScanView: View {
             if !multiQr.isBbqr() {
                 scanComplete = true
                 scannedCode = TaggedItem(qr)
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
                 return
             }
 
@@ -123,7 +123,7 @@ struct QrCodeScanView: View {
                 scanComplete = true
                 let data = try result.finalResult()
                 scannedCode = TaggedItem(data)
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
             }
         } catch {
             Log.error("error scanning bbqr part: \(error)")

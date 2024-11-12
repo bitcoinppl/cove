@@ -55,7 +55,7 @@ struct QrCodeImportScreen: View {
     @State private var scannedCode: TaggedString?
     @State private var showingHelp = false
     @Environment(MainViewModel.self) var app
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     // private
     @State private var scanComplete = false

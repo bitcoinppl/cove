@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 
 struct NewWalletSelectScreen: View {
     @Environment(MainViewModel.self) var app
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     @Environment(\.colorScheme) var colorScheme
     @State var showSelectDialog: Bool = false
@@ -165,7 +165,7 @@ struct NewWalletSelectScreen: View {
                 title: Text(alert.type.title),
                 message: Text(alert.type.message),
                 dismissButton: .default(Text("OK")) {
-                    self.presentationMode.wrappedValue.dismiss()
+                    self.dismiss()
                 }
             )
         }
