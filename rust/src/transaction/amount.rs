@@ -21,6 +21,11 @@ pub struct Amount(pub BdkAmount);
 #[uniffi::export]
 impl Amount {
     #[uniffi::constructor]
+    pub fn from_sat(sats: u64) -> Self {
+        Self(bitcoin_units::Amount::from_sat(sats))
+    }
+
+    #[uniffi::constructor]
     pub fn one_btc() -> Self {
         Self(bitcoin_units::Amount::ONE_BTC)
     }
@@ -28,11 +33,6 @@ impl Amount {
     #[uniffi::constructor]
     pub fn one_sat() -> Self {
         Self(bitcoin_units::Amount::ONE_SAT)
-    }
-
-    #[uniffi::constructor]
-    pub fn from_sat(sats: u64) -> Self {
-        Self(bitcoin_units::Amount::from_sat(sats))
     }
 
     pub fn as_btc(&self) -> f64 {

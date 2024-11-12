@@ -128,6 +128,10 @@ impl FeeRateOption {
     pub fn rate(&self) -> FeeRate {
         self.fee_rate
     }
+
+    pub fn is_equal(&self, rhs: &FeeRateOption) -> bool {
+        self.fee_speed == rhs.fee_speed && self.fee_rate.sat_per_vb() == rhs.fee_rate.sat_per_vb()
+    }
 }
 
 // MARK: FeeSpeed
@@ -152,7 +156,7 @@ impl FeeSpeed {
         match self {
             FeeSpeed::Fast => "15 minutes".to_string(),
             FeeSpeed::Medium => "30 minutes".to_string(),
-            FeeSpeed::Slow => "1+ hour".to_string(),
+            FeeSpeed::Slow => "1+ hours".to_string(),
         }
     }
 }
@@ -173,5 +177,65 @@ mod fee_speed_ffi {
     #[uniffi::export]
     fn fee_speed_duration(fee_speed: FeeSpeed) -> String {
         fee_speed.duration()
+    }
+}
+
+// MARK: FeeRateOptionWithTotalFee
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object)]
+pub struct FeeRateOptionsWithTotalFee {
+    pub fast: FeeRateOptionWithTotalFee,
+    pub medium: FeeRateOptionWithTotalFee,
+    pub slow: FeeRateOptionWithTotalFee,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object)]
+pub struct FeeRateOptionWithTotalFee {
+    pub fee_speed: FeeSpeed,
+    pub fee_rate: FeeRate,
+    pub total_fee: Amount,
+}
+
+impl FeeRateOptionWithTotalFee {
+    pub fn new(option: FeeRateOption, total_fee: impl Into<Amount>) -> Self {
+        Self {
+            fee_speed: option.fee_speed,
+            fee_rate: option.fee_rate,
+            total_fee: total_fee.into(),
+        }
+    }
+}
+
+mod fee_rate_option_with_total_fee_ffi {
+    use super::*;
+
+    #[uniffi::export]
+    impl FeeRateOptionWithTotalFee {
+        pub fn fee_speed(&self) -> FeeSpeed {
+            self.fee_speed
+        }
+
+        pub fn fee_rate(&self) -> FeeRate {
+            self.fee_rate
+        }
+
+        pub fn total_fee(&self) -> Amount {
+            self.total_fee
+        }
+    }
+
+    #[uniffi::export]
+    impl FeeRateOptionsWithTotalFee {
+        pub fn fast(&self) -> FeeRateOptionWithTotalFee {
+            self.fast
+        }
+
+        pub fn medium(&self) -> FeeRateOptionWithTotalFee {
+            self.medium
+        }
+
+        pub fn slow(&self) -> FeeRateOptionWithTotalFee {
+            self.slow
+        }
     }
 }

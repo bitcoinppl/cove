@@ -10,9 +10,9 @@ import SwiftUI
 
 struct SendFlowSelectFeeRateView: View {
     let feeOptions: FeeRateOptions
-    let txnSize: Int
+    let txnSize: Double
 
-    @State var selectedOption: FeeSpeed = .medium
+    @Binding var selectedOption: FeeRateOption
 
     var body: some View {
         VStack(spacing: 20) {
@@ -24,31 +24,20 @@ struct SendFlowSelectFeeRateView: View {
             FeeOptionView(
                 feeOption: feeOptions.fast(),
                 fiatAmount: "",
-                txnSize: txnSize,
-                isSelected: selectedOption == .fast
+                selectedOption: $selectedOption
             )
 
             FeeOptionView(
-                feeOption: feeOptions.medium(), fiatAmount: "", txnSize: txnSize, isSelected: selectedOption == .medium
+                feeOption: feeOptions.medium(),
+                fiatAmount: "",
+                selectedOption: $selectedOption
             )
 
             FeeOptionView(
-                feeOption: feeOptions.slow(), fiatAmount: "",
-                txnSize: txnSize, isSelected: selectedOption == .slow
+                feeOption: feeOptions.slow(),
+                fiatAmount: "",
+                selectedOption: $selectedOption
             )
-
-            Button(action: {
-                // Handle learn more action
-            }) {
-                Text("Learn More")
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.midnightBlue)
-                    .cornerRadius(10)
-            }
-            .padding(.top, 20)
-            .padding(.horizontal, 32)
         }
         .padding(.horizontal)
         .padding(.top, 22)
@@ -56,18 +45,23 @@ struct SendFlowSelectFeeRateView: View {
 }
 
 private struct FeeOptionView: View {
+    @Environment(\.dismiss) private var dismiss
+
     let feeOption: FeeRateOption
     let fiatAmount: String
-    let txnSize: Int
 
-    let isSelected: Bool
+    @Binding var selectedOption: FeeRateOption
+
+    var isSelected: Bool {
+        selectedOption.speed() == feeOption.speed()
+    }
 
     var fontColor: Color {
         if isSelected { .white } else { .primary }
     }
 
     var strokeColor: Color {
-        if isSelected { Color.midnightBlue } else { Color(UIColor.systemGray2) }
+        if isSelected { Color.midnightBlue } else { Color.secondary }
     }
 
     var totalFee: String {
@@ -113,6 +107,10 @@ private struct FeeOptionView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(strokeColor, lineWidth: 1)
         )
+        .onTapGesture {
+            selectedOption = feeOption
+            dismiss()
+        }
         .cornerRadius(12)
     }
 }
@@ -138,5 +136,9 @@ private struct DurationCapsule: View {
 }
 
 #Preview {
-    SendFlowSelectFeeRateView(feeOptions: FeeRateOptions.previewNew(), txnSize: 3040)
+    SendFlowSelectFeeRateView(
+        feeOptions: FeeRateOptions.previewNew(),
+        txnSize: 3040,
+        selectedOption: Binding.constant(FeeRateOptions.previewNew().medium())
+    )
 }

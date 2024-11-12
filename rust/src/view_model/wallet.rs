@@ -12,8 +12,6 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
 
-use bdk_wallet::bitcoin::Psbt as BdkPsbt;
-
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
@@ -26,7 +24,7 @@ use crate::{
     transaction::{
         fees::{
             client::{FeeResponse, FEES, FEE_CLIENT},
-            FeeRateOptions,
+            FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
         },
         Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
     },
@@ -533,8 +531,59 @@ impl RustWalletViewModel {
         Ok(fees.into())
     }
 
-    #[uniffi::method]
-    pub fn build_transaction(
+    pub async fn fee_rate_options_with_total_fee(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let fee_rate_options = self.fee_rate_options().await?;
+
+        let amount = Arc::unwrap_or_clone(amount).into();
+        let address: Address = Arc::unwrap_or_clone(address).into();
+
+        let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
+        let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
+        let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
+
+        let fast_psbt = call!(self.actor.build_tx(amount, address.clone(), fast_fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        let medium_psbt = call!(self
+            .actor
+            .build_tx(amount, address.clone(), medium_fee_rate))
+        .await
+        .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        let slow_psbt = call!(self.actor.build_tx(amount, address.clone(), slow_fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        let options = FeeRateOptionsWithTotalFee {
+            fast: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.fast,
+                fast_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            medium: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.medium,
+                medium_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            slow: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.slow,
+                slow_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+        };
+
+        Ok(options)
+    }
+
+    pub async fn build_transaction(
         &self,
         amount: Arc<Amount>,
         address: Arc<Address>,
@@ -545,10 +594,10 @@ impl RustWalletViewModel {
             .unwrap_or_else(|| FeeRate::from_sat_per_vb(10));
 
         self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee))
+            .await
     }
 
-    #[uniffi::method]
-    pub fn build_transaction_with_fee_rate(
+    pub async fn build_transaction_with_fee_rate(
         &self,
         amount: Arc<Amount>,
         address: Arc<Address>,
@@ -560,13 +609,11 @@ impl RustWalletViewModel {
         let address = Arc::unwrap_or_clone(address).into();
         let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
 
-        let psbt: Result<BdkPsbt, Error> = crate::task::block_on(async move {
-            call!(actor.build_tx(amount, address, fee_rate))
-                .await
-                .map_err(|error| Error::BuildTxError(error.to_string()))
-        });
+        let psbt = call!(actor.build_tx(amount, address, fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
-        Ok(psbt?.into())
+        Ok(psbt.into())
     }
 
     #[uniffi::method]
