@@ -54,13 +54,24 @@ extension FeeRateOptionWithTotalFee: Equatable {
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
+    {
         lhs.fast() == rhs.fast() && lhs.medium() == rhs.medium() && lhs.slow() == rhs.slow()
     }
 }
 
-public extension SendRoute {
-    func id() -> WalletId {
+extension Double {
+    func btcFmt(maxDecimals: Int = 10) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = maxDecimals
+        formatter.usesGroupingSeparator = false
+        return formatter.string(from: NSNumber(value: self))!
+    }
+}
+
+extension SendRoute {
+    public func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _): id
         case let .confirm(id: id, details: _): id

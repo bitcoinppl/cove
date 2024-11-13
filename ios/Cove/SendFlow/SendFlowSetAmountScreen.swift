@@ -109,7 +109,7 @@ struct SendFlowSetAmountScreen: View {
             let totalSend = Double(sendAmount) ?? 0
             let totalFee = selectedFeeRate?.totalFee().asBtc() ?? 0
             let totalSpent = totalSend + totalFee
-            return "\(String(totalSpent)) BTC"
+            return "\(totalSpent.btcFmt()) BTC"
         case .sat:
             let totalSend = Int(sendAmount) ?? 0
             let totalFee = Int(selectedFeeRate?.totalFee().asSats() ?? 0)
@@ -292,7 +292,7 @@ struct SendFlowSetAmountScreen: View {
 
         switch newUnit {
         case .btc:
-            self.sendAmount = String(amount / 100_000_000)
+            self.sendAmount = Double(amount / 100_000_000).btcFmt()
         case .sat:
             let sendAmount = Int(amount * 100_000_000)
             if focusField == .address || focusField == .none {
