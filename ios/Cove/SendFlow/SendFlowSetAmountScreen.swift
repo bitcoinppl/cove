@@ -101,6 +101,23 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    private var totalSpent: String {
+        let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
+
+        switch metadata.selectedUnit {
+        case .btc:
+            let totalSend = Double(sendAmount) ?? 0
+            let totalFee = selectedFeeRate?.totalFee().asBtc() ?? 0
+            let totalSpent = totalSend + totalFee
+            return "\(String(totalSpent)) BTC"
+        case .sat:
+            let totalSend = Int(sendAmount) ?? 0
+            let totalFee = Int(selectedFeeRate?.totalFee().asSats() ?? 0)
+            let totalSpent = totalSend + totalFee
+            return "\(ThousandsFormatter(totalSpent).fmt()) SATS"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
@@ -636,7 +653,7 @@ struct SendFlowSetAmountScreen: View {
 
             Spacer()
 
-            Text(sendAmount)
+            Text(totalSpent)
                 .multilineTextAlignment(.center)
                 .font(.title3)
                 .fontWeight(.medium)
