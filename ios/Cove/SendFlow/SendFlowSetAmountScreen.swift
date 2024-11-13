@@ -48,6 +48,8 @@ struct SendFlowSetAmountScreen: View {
     @State var address: String = ""
 
     // private
+    @State private var isLoading: Bool = true
+
     @FocusState private var focusField: FocusField?
     @State private var scrollPosition: ScrollPosition = .init(idType: FocusField.self)
     @State private var scannedCode: TaggedString? = .none
@@ -130,93 +132,113 @@ struct SendFlowSetAmountScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: HEADER
+        ZStack {
+            VStack(spacing: 0) {
+                // MARK: HEADER
 
-            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
+                SendFlowHeaderView(model: model, amount: model.balance.confirmed)
 
-            // MARK: CONTENT
+                // MARK: CONTENT
 
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Set amount, header and text
-                    AmountInfoSection
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Set amount, header and text
+                        AmountInfoSection
 
-                    // Amount input
-                    EnterAmountSection(
-                        model: model,
-                        sendAmount: $sendAmount,
-                        focusField: _focusField,
-                        sendAmountFiat: sendAmountFiat
-                    )
+                        // Amount input
+                        EnterAmountSection(
+                            model: model,
+                            sendAmount: $sendAmount,
+                            focusField: _focusField,
+                            sendAmountFiat: sendAmountFiat
+                        )
 
-                    // Address Section
-                    EnterAddressSection
+                        // Address Section
+                        EnterAddressSection
 
-                    // Account Section
-                    AccountSection
+                        // Account Section
+                        AccountSection
 
-                    if feeRateOptions != nil && selectedFeeRate != nil && Address.isValid(address) {
-                        // Network Fee Section
-                        NetworkFeeSection
+                        if feeRateOptions != nil && selectedFeeRate != nil && Address.isValid(address) {
+                            // Network Fee Section
+                            NetworkFeeSection
 
-                        // Total Section
-                        TotalSection
+                            // Total Section
+                            TotalSection
 
-                        Spacer()
+                            Spacer()
 
-                        // Next Button
-                        NextButtonBottom
+                            // Next Button
+                            NextButtonBottom
+                        }
+                    }
+
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            ToolBarView
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .frame(maxWidth: .infinity)
+                .background(colorScheme == .light ? .white : .black)
+                .scrollIndicators(.hidden)
+                .scrollPosition($scrollPosition, anchor: .top)
+            }
+            .padding(.top, 0)
+            .navigationTitle("Send")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: focusField, initial: false, focusFieldChanged)
+            .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
+            .onChange(of: sendAmount, initial: false, sendAmountChanged)
+            .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+            .onChange(of: address, initial: true, addressChanged)
+            .task {
+                // HACK: Bug in SwiftUI where keyboard toolbar is broken
+                try? await Task.sleep(for: .milliseconds(600))
+                await MainActor.run {
+                    if sendAmount == "0" || sendAmount == "" {
+                        focusField = .amount
+                        return
+                    }
+
+                    if address == "" {
+                        focusField = .address
+                        return
                     }
                 }
 
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        ToolBarView
+                Task {
+                    try? await Task.sleep(for: .milliseconds(550))
+                    await MainActor.run {
+                        withAnimation {
+                            isLoading = false
+                        }
                     }
                 }
             }
-            .padding(.horizontal)
-            .frame(maxWidth: .infinity)
-            .background(colorScheme == .light ? .white : .black)
-            .scrollIndicators(.hidden)
-            .scrollPosition($scrollPosition, anchor: .top)
-        }
-        .padding(.top, 0)
-        .navigationTitle("Send")
-        .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: focusField, initial: false, focusFieldChanged)
-        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
-        .onChange(of: sendAmount, initial: false, sendAmountChanged)
-        .onChange(of: scannedCode, initial: false, scannedCodeChanged)
-        .onChange(of: address, initial: true, addressChanged)
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(600)) {
-                if sendAmount == "0" || sendAmount == "" {
-                    focusField = .amount
-                    return
+            .sheet(item: $sheetState, content: SheetContent)
+            .task {
+                guard let feeRateOptions = try? await model.rust.getFeeOptions() else { return }
+                await MainActor.run {
+                    self.feeRateOptionsBase = feeRateOptions
                 }
+            }
+            .alert(
+                alertTitle,
+                isPresented: showingAlert,
+                presenting: alertState,
+                actions: alertButtons,
+                message: alertMessage
+            )
 
-                if address == "" {
-                    focusField = .address
-                    return
+            if isLoading {
+                ZStack {
+                    Color.black.ignoresSafeArea(.all).opacity(0.9)
+                    ProgressView().tint(.white)
                 }
             }
         }
-        .sheet(item: $sheetState, content: SheetContent)
-        .task {
-            guard let feeRateOptions = try? await model.rust.getFeeOptions() else { return }
-            await MainActor.run {
-                self.feeRateOptionsBase = feeRateOptions
-            }
-        }
-        .alert(
-            alertTitle,
-            isPresented: showingAlert,
-            presenting: alertState,
-            actions: alertButtons,
-            message: alertMessage
-        )
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
