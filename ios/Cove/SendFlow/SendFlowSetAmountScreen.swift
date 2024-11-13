@@ -169,6 +169,12 @@ struct SendFlowSetAmountScreen: View {
                         NextButtonBottom
                     }
                 }
+
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        ToolBarView
+                    }
+                }
             }
             .padding(.horizontal)
             .frame(maxWidth: .infinity)
@@ -185,8 +191,7 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .onChange(of: address, initial: true, addressChanged)
         .onAppear {
-            print("ON APPEAR", sendAmount, address)
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(600)) {
                 if sendAmount == "0" || sendAmount == "" {
                     focusField = .amount
                     return
@@ -212,11 +217,6 @@ struct SendFlowSetAmountScreen: View {
             actions: alertButtons,
             message: alertMessage
         )
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                ToolBarView
-            }
-        }
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
@@ -763,7 +763,7 @@ private struct EnterAmountSection: View {
                     .multilineTextAlignment(.center)
                     .font(.system(size: 48, weight: .bold))
                     .keyboardType(metadata.selectedUnit == .btc ? .decimalPad : .numberPad)
-                    .offset(x: screenWidth * 0.08)
+                    .offset(x: screenWidth * 0.09)
                     .padding(.horizontal, 30)
                     .minimumScaleFactor(0.01)
                     .lineLimit(1)
