@@ -769,17 +769,17 @@ private struct EnterAmountSection: View {
                     .lineLimit(1)
 
                 HStack(spacing: 0) {
-                    Text(model.unit)
-                        .padding(.vertical, 10)
+                    Button(action: { showingMenu.toggle() }) {
+                        Text(model.unit)
+                            .padding(.vertical, 10)
 
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .padding(.top, 2)
-                        .padding(.leading, 4)
-                }
-                .onTapGesture {
-                    showingMenu.toggle()
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .padding(.top, 2)
+                            .padding(.leading, 4)
+                    }
+                    .foregroundStyle(.primary)
                 }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 8) {
@@ -791,7 +791,7 @@ private struct EnterAmountSection: View {
 
                         Divider()
 
-                        Button("btc") {
+                        Button("btc ") {
                             model.dispatch(action: .updateUnit(.btc))
                             showingMenu = false
                         }
