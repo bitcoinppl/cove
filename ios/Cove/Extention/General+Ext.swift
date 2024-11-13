@@ -54,8 +54,7 @@ extension FeeRateOptionWithTotalFee: Equatable {
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
-    {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
         lhs.fast() == rhs.fast() && lhs.medium() == rhs.medium() && lhs.slow() == rhs.slow()
     }
 }
@@ -70,11 +69,22 @@ extension Double {
     }
 }
 
-extension SendRoute {
-    public func id() -> WalletId {
+public extension SendRoute {
+    func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _): id
         case let .confirm(id: id, details: _): id
         }
     }
 }
+
+#if canImport(UIKit)
+extension View {
+    func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                        to: nil,
+                                        from: nil,
+                                        for: nil)
+    }
+}
+#endif

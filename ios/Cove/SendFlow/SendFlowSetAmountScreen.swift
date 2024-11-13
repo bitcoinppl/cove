@@ -66,18 +66,10 @@ struct SendFlowSetAmountScreen: View {
 
     // text inputs
     @State private var sendAmount: String = "0"
-    @State private var sendAmountFiat: String = "≈ $0.00"
+    @State private var sendAmountFiat: String = "≈ $0.00 USD"
 
     private var metadata: WalletMetadata {
         model.walletMetadata
-    }
-
-    private var formatter: NumberFormatter {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.minimumFractionDigits = 2
-        f.maximumFractionDigits = 2
-        return f
     }
 
     private var showingAlert: Binding<Bool> {
@@ -114,20 +106,51 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private var totalSpent: String {
+    private var totalSpentInBtc: Double? {
         let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
 
         switch metadata.selectedUnit {
         case .btc:
             let totalSend = Double(sendAmount) ?? 0
             let totalFee = selectedFeeRate?.totalFee().asBtc() ?? 0
-            let totalSpent = totalSend + totalFee
-            return "\(totalSpent.btcFmt()) BTC"
+            return totalSend + totalFee
         case .sat:
             let totalSend = Int(sendAmount) ?? 0
             let totalFee = Int(selectedFeeRate?.totalFee().asSats() ?? 0)
             let totalSpent = totalSend + totalFee
-            return "\(ThousandsFormatter(totalSpent).fmt()) SATS"
+            return Double(totalSpent) / 100_000_000.0
+        }
+    }
+
+    private var totalSpent: String {
+        guard let totalSpent = totalSpentInBtc else { return "---" }
+
+        switch metadata.selectedUnit {
+        case .btc:
+            return "\(totalSpent.btcFmt()) BTC"
+        case .sat:
+            return "\(ThousandsFormatter(totalSpent * 100_000_000).fmt()) SATS"
+        }
+    }
+
+    private var totalSpentInFiat: String {
+        guard let totalSpentInBtc else { return "---" }
+        guard let usd = app.prices?.usd else { return "---" }
+
+        let fiat = totalSpentInBtc * Double(usd)
+        return model.fiatAmountToString(fiat)
+    }
+
+    private var totalSending: String {
+        let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
+
+        switch metadata.selectedUnit {
+        case .btc:
+            let totalSend = Double(sendAmount) ?? 0
+            return "\(totalSend.btcFmt()) BTC"
+        case .sat:
+            let totalSend = Int(sendAmount) ?? 0
+            return "\(ThousandsFormatter(totalSend).fmt()) SATS"
         }
     }
 
@@ -159,7 +182,11 @@ struct SendFlowSetAmountScreen: View {
                         // Account Section
                         AccountSection
 
-                        if feeRateOptions != nil && selectedFeeRate != nil && Address.isValid(address) {
+                        if feeRateOptions != nil && selectedFeeRate != nil
+                                                  
+
+                            && Address.isValid(address)
+                        {
                             // Network Fee Section
                             NetworkFeeSection
 
@@ -193,6 +220,7 @@ struct SendFlowSetAmountScreen: View {
             .onChange(of: sendAmount, initial: false, sendAmountChanged)
             .onChange(of: scannedCode, initial: false, scannedCodeChanged)
             .onChange(of: address, initial: true, addressChanged)
+            .environment(model)
             .task {
                 // HACK: Bug in SwiftUI where keyboard toolbar is broken
                 try? await Task.sleep(for: .milliseconds(600))
@@ -234,7 +262,7 @@ struct SendFlowSetAmountScreen: View {
 
             if isLoading {
                 ZStack {
-                    Color.black.ignoresSafeArea(.all).opacity(0.9)
+                    Color.black.ignoresSafeArea(.all).opacity(isLoading ? 1 : 0)
                     ProgressView().tint(.white)
                 }
             }
@@ -296,7 +324,7 @@ struct SendFlowSetAmountScreen: View {
     private func sendAmountChanged(_ oldValue: String, _ value: String) {
         // allow clearing completely
         if value == "" {
-            sendAmountFiat = "≈ $0.00"
+            sendAmountFiat = "≈ $0.00 USD"
             return
         }
 
@@ -323,7 +351,7 @@ struct SendFlowSetAmountScreen: View {
             Task { await getFeeRateOptions() }
         }
 
-        sendAmountFiat = "≈ \(formatter.string(from: NSNumber(value: fiatAmount)) ?? "$0.00")"
+        sendAmountFiat = model.fiatAmountToString(fiatAmount)
     }
 
     private func selectedUnitChanged(_ oldUnit: Unit, _ newUnit: Unit) {
@@ -661,19 +689,42 @@ struct SendFlowSetAmountScreen: View {
 
     @ViewBuilder
     var TotalSection: some View {
-        HStack {
-            Text("Total Spent")
-                .font(.title3)
-                .fontWeight(.medium)
+        VStack {
+            HStack {
+                Text("Sending")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
 
-            Spacer()
+                Spacer()
 
-            Text(totalSpent)
-                .multilineTextAlignment(.center)
-                .font(.title3)
-                .fontWeight(.medium)
+                Text(totalSending)
+                    .multilineTextAlignment(.center)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Total Spent")
+                    .font(.title3)
+                    .fontWeight(.medium)
+
+                Spacer()
+
+                Text(totalSpent)
+                    .multilineTextAlignment(.center)
+                    .font(.title3)
+                    .fontWeight(.medium)
+            }
+            .padding(.top, 12)
+
+            HStack {
+                Spacer()
+                Text(totalSpentInFiat)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 1)
         }
-        .padding(.top, 12)
     }
 
     @ViewBuilder
@@ -702,6 +753,7 @@ struct SendFlowSetAmountScreen: View {
                 .presentationDetents([.large])
         case .fee:
             SendFlowSelectFeeRateView(
+                model: model,
                 feeOptions: feeRateOptions!,
                 selectedOption: Binding(
                     get: { selectedFeeRate! },
@@ -773,14 +825,22 @@ private struct EnterAmountSection: View {
     let sendAmountFiat: String
 
     // private
+                        
+                    
+
     @State private var showingMenu: Bool = false
 
     var metadata: WalletMetadata { model.walletMetadata }
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(alignment: .bottom) {
-                TextField("", text: $sendAmount)
+            HStack(alignment:
+                .bottom)
+            {
+                TextField("",
+
+                          text: $sendAmount)
+
                     .focused($focusField, equals: .amount)
                     .multilineTextAlignment(.center)
                     .font(.system(size: 48, weight: .bold))

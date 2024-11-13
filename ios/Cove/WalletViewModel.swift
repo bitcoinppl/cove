@@ -53,6 +53,10 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         return try await rust.addressAt(index: 0)
     }
 
+    func fiatAmountToString<T: Numeric & LosslessStringConvertible>(_ amount: T) -> String {
+        "≈ \(FiatFormatter(amount).fmt()) USD"
+    }
+
     func reconcile(message: WalletViewModelReconcileMessage) {
         Task { [weak self] in
             guard let self = self else {

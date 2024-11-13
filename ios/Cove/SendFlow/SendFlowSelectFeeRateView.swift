@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 
 struct SendFlowSelectFeeRateView: View {
+    let model: WalletViewModel
     let feeOptions: FeeRateOptionsWithTotalFee
     @Binding var selectedOption: FeeRateOptionWithTotalFee
 
@@ -20,20 +21,20 @@ struct SendFlowSelectFeeRateView: View {
                 .padding(.bottom, 8)
 
             FeeOptionView(
+                model: model,
                 feeOption: feeOptions.fast(),
-                fiatAmount: "",
                 selectedOption: $selectedOption
             )
 
             FeeOptionView(
+                model: model,
                 feeOption: feeOptions.medium(),
-                fiatAmount: "",
                 selectedOption: $selectedOption
             )
 
             FeeOptionView(
+                model: model,
                 feeOption: feeOptions.slow(),
-                fiatAmount: "",
                 selectedOption: $selectedOption
             )
         }
@@ -43,11 +44,12 @@ struct SendFlowSelectFeeRateView: View {
 }
 
 private struct FeeOptionView: View {
+    @Environment(MainViewModel.self) private var app
     @Environment(\.dismiss) private var dismiss
 
+    // passed in args
+    let model: WalletViewModel
     let feeOption: FeeRateOptionWithTotalFee
-    let fiatAmount: String
-
     @Binding var selectedOption: FeeRateOptionWithTotalFee
 
     var isSelected: Bool {
@@ -70,6 +72,16 @@ private struct FeeOptionView: View {
         feeOption.satPerVb()
     }
 
+    private var fiatAmount: String {
+        guard let prices = app.prices else {
+            app.dispatch(action: .updateFiatPrices)
+            return "---"
+        }
+
+        let amount = feeOption.totalFee().asBtc() * Double(prices.usd)
+        return model.fiatAmountToString(amount)
+    }
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -82,9 +94,12 @@ private struct FeeOptionView: View {
                         speed: feeOption.feeSpeed(), fontColor: fontColor
                     )
                 }
-                Text("\(String(format: "%.2f", satsPerVbyte)) sats/vbyte")
-                    .font(.subheadline)
-                    .foregroundColor(fontColor)
+
+                HStack {
+                    Text("\(String(format: "%.2f", satsPerVbyte)) sats/vbyte")
+                        .font(.subheadline)
+                        .foregroundColor(fontColor)
+                }
             }
 
             Spacer()
@@ -134,8 +149,12 @@ private struct DurationCapsule: View {
 }
 
 #Preview {
-    SendFlowSelectFeeRateView(
-        feeOptions: FeeRateOptionsWithTotalFee.previewNew(),
-        selectedOption: Binding.constant(FeeRateOptionsWithTotalFee.previewNew().medium())
-    )
+    AsyncPreview {
+        SendFlowSelectFeeRateView(
+            model: WalletViewModel(preview: "preview_only"),
+            feeOptions: FeeRateOptionsWithTotalFee.previewNew(),
+            selectedOption: Binding.constant(FeeRateOptionsWithTotalFee.previewNew().medium())
+        )
+        .environment(MainViewModel())
+    }
 }
