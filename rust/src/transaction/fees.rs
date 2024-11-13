@@ -80,7 +80,7 @@ mod preview_ffi {
     #[uniffi::export]
     impl FeeRateOptions {
         #[uniffi::constructor]
-        fn preview_new() -> Self {
+        pub fn preview_new() -> Self {
             Self {
                 fast: FeeRateOption::new(FeeSpeed::Fast, 10),
                 medium: FeeRateOption::new(FeeSpeed::Medium, 7),
@@ -121,11 +121,11 @@ impl FeeRateOption {
         self.fee_speed.duration()
     }
 
-    pub fn speed(&self) -> FeeSpeed {
+    pub fn fee_speed(&self) -> FeeSpeed {
         self.fee_speed
     }
 
-    pub fn rate(&self) -> FeeRate {
+    pub fn fee_rate(&self) -> FeeRate {
         self.fee_rate
     }
 
@@ -222,6 +222,24 @@ mod fee_rate_option_with_total_fee_ffi {
         pub fn total_fee(&self) -> Amount {
             self.total_fee
         }
+
+        pub fn sat_per_vb(&self) -> f64 {
+            self.fee_rate.sat_per_vb()
+        }
+
+        pub fn duration(&self) -> String {
+            self.fee_speed.duration()
+        }
+
+        pub fn fee_rate_options(&self) -> FeeRateOption {
+            (*self).into()
+        }
+
+        pub fn is_equal(&self, rhs: Arc<FeeRateOptionWithTotalFee>) -> bool {
+            self.fee_speed == rhs.fee_speed
+                && self.fee_rate == rhs.fee_rate
+                && self.total_fee == rhs.total_fee
+        }
     }
 
     #[uniffi::export]
@@ -236,6 +254,40 @@ mod fee_rate_option_with_total_fee_ffi {
 
         pub fn slow(&self) -> FeeRateOptionWithTotalFee {
             self.slow
+        }
+
+        pub fn fee_rate_options(&self) -> FeeRateOptions {
+            (*self).into()
+        }
+
+        #[uniffi::constructor]
+        fn preview_new() -> Self {
+            let options = FeeRateOptions::preview_new();
+
+            Self {
+                fast: FeeRateOptionWithTotalFee::new(options.fast, Amount::from_sat(3050)),
+                medium: FeeRateOptionWithTotalFee::new(options.medium, Amount::from_sat(2344)),
+                slow: FeeRateOptionWithTotalFee::new(options.slow, Amount::from_sat(1375)),
+            }
+        }
+    }
+}
+
+impl From<FeeRateOptionWithTotalFee> for FeeRateOption {
+    fn from(fee_rate: FeeRateOptionWithTotalFee) -> Self {
+        FeeRateOption {
+            fee_speed: fee_rate.fee_speed,
+            fee_rate: fee_rate.fee_rate,
+        }
+    }
+}
+
+impl From<FeeRateOptionsWithTotalFee> for FeeRateOptions {
+    fn from(fee_rates: FeeRateOptionsWithTotalFee) -> Self {
+        FeeRateOptions {
+            fast: fee_rates.fast.into(),
+            medium: fee_rates.medium.into(),
+            slow: fee_rates.slow.into(),
         }
     }
 }

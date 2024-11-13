@@ -54,9 +54,9 @@ struct SendFlowSetAmountScreen: View {
 
     // fees
     @State private var txnSize: Int? = nil
-    @State private var totalFee: Int? = nil
-    @State private var selectedFeeRate: FeeRateOption? = .none
-    @State private var feeRateOptions: FeeRateOptions? = .none
+    @State private var selectedFeeRate: FeeRateOptionWithTotalFee? = .none
+    @State private var feeRateOptions: FeeRateOptionsWithTotalFee? = .none
+    @State private var feeRateOptionsBase: FeeRateOptions? = .none
 
     // alert & sheet
     @State private var sheetState: TaggedItem<SheetState>? = .none
@@ -99,14 +99,6 @@ struct SendFlowSetAmountScreen: View {
         case .sat:
             return Int(amount)
         }
-    }
-
-    private var totalFeeString: String {
-        if let totalFee = totalFee {
-            return "\(String(totalFee)) sats"
-        }
-
-        return "---"
     }
 
     var body: some View {
@@ -159,7 +151,6 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: sendAmount, initial: false, sendAmountChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .onChange(of: address, initial: true, addressChanged)
-        .onChange(of: selectedFeeRate, initial: false, selectedFeeRateChanged)
         .onAppear {
             print("ON APPEAR", sendAmount, address)
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) {
@@ -176,12 +167,9 @@ struct SendFlowSetAmountScreen: View {
         }
         .sheet(item: $sheetState, content: SheetContent)
         .task {
-            guard let feeRateOptions = try? await model.rust.feeRateOptions() else { return }
+            guard let feeRateOptions = try? await model.rust.getFeeOptions() else { return }
             await MainActor.run {
-                self.feeRateOptions = feeRateOptions
-                if selectedFeeRate == nil {
-                    selectedFeeRate = feeRateOptions.medium()
-                }
+                self.feeRateOptionsBase = feeRateOptions
             }
         }
         .alert(
@@ -338,47 +326,21 @@ struct SendFlowSetAmountScreen: View {
         guard let address = try? Address.fromString(address: addressString) else { return }
         guard validateAddress(addressString) else { return }
 
-        updateTotalFee(selectedFeeRate: selectedFeeRate, address: address)
-    }
-
-    private func selectedFeeRateChanged(_: FeeRateOption?, _ selectedFeeRate: FeeRateOption?) {
-        updateTotalFee(selectedFeeRate: selectedFeeRate)
-    }
-
-    private func updateTotalFee(selectedFeeRate: FeeRateOption?, address: Address? = nil) {
-        guard let selectedFeeRate = selectedFeeRate else { return }
-
-        let address: Address? = {
-            switch address {
-            case let .some(address): return address
-            case .none:
-                let addressString = self.address.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard validateAddress(addressString) else { return nil }
-                guard let address = try? Address.fromString(address: addressString) else {
-                    return nil
-                }
-
-                return address
-            }
-        }()
-
-        guard let address = address else { return }
         let amountSats = max(sendAmountSats ?? 0, 10000)
         let amount = Amount.fromSat(sats: UInt64(amountSats))
 
-        let psbt = try? model.rust.buildTransactionWithFeeRate(
-            amount: amount, address: address,
-            feeRate: selectedFeeRate.rate()
-        )
+        Task {
+            guard
+                let feeRateOptions = try? await model.rust.feeRateOptionsWithTotalFee(
+                    feeRateOptions: feeRateOptionsBase, amount: amount, address: address
+                )
+            else { return }
 
-        if let psbt = psbt {
-            do {
-                let fee = try psbt.fee()
-                let totalFee = Int(fee.asSats())
-
-                self.totalFee = totalFee
-            } catch {
-                Log.warn("Failed to get PSBT: \(error)")
+            await MainActor.run {
+                self.feeRateOptions = feeRateOptions
+                if self.selectedFeeRate == nil {
+                    self.selectedFeeRate = feeRateOptions.medium()
+                }
             }
         }
     }
@@ -587,7 +549,7 @@ struct SendFlowSetAmountScreen: View {
 
                 Spacer()
 
-                Text(totalFeeString)
+                Text(selectedFeeRate?.totalFee().satsStringWithUnit() ?? "---")
                     .foregroundStyle(.secondary)
                     .fontWeight(.medium)
             }

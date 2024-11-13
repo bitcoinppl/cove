@@ -47,8 +47,20 @@ extension FeeRateOption: Equatable {
     }
 }
 
-extension SendRoute {
-    public func id() -> WalletId {
+extension FeeRateOptionWithTotalFee: Equatable {
+    public static func == (lhs: FeeRateOptionWithTotalFee, rhs: FeeRateOptionWithTotalFee) -> Bool {
+        lhs.isEqual(rhs: rhs)
+    }
+}
+
+extension FeeRateOptionsWithTotalFee: Equatable {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
+        lhs.fast() == rhs.fast() && lhs.medium() == rhs.medium() && lhs.slow() == rhs.slow()
+    }
+}
+
+public extension SendRoute {
+    func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _): id
         case let .confirm(id: id, details: _): id

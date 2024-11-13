@@ -2253,13 +2253,13 @@ public func FfiConverterTypeFeeRate_lower(_ value: FeeRate) -> UnsafeMutableRawP
 public protocol FeeRateOptionProtocol: AnyObject {
     func duration() -> String
 
+    func feeRate() -> FeeRate
+
+    func feeSpeed() -> FeeSpeed
+
     func isEqual(rhs: FeeRateOption) -> Bool
 
-    func rate() -> FeeRate
-
     func satPerVb() -> Double
-
-    func speed() -> FeeSpeed
 
     func totalFee(txnSize: UInt64) -> Amount?
 }
@@ -2319,6 +2319,18 @@ open class FeeRateOption:
         })
     }
 
+    open func feeRate() -> FeeRate {
+        return try! FfiConverterTypeFeeRate.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoption_fee_rate(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func feeSpeed() -> FeeSpeed {
+        return try! FfiConverterTypeFeeSpeed.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoption_fee_speed(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func isEqual(rhs: FeeRateOption) -> Bool {
         return try! FfiConverterBool.lift(try! rustCall {
             uniffi_cove_fn_method_feerateoption_is_equal(self.uniffiClonePointer(),
@@ -2326,21 +2338,9 @@ open class FeeRateOption:
         })
     }
 
-    open func rate() -> FeeRate {
-        return try! FfiConverterTypeFeeRate.lift(try! rustCall {
-            uniffi_cove_fn_method_feerateoption_rate(self.uniffiClonePointer(), $0)
-        })
-    }
-
     open func satPerVb() -> Double {
         return try! FfiConverterDouble.lift(try! rustCall {
             uniffi_cove_fn_method_feerateoption_sat_per_vb(self.uniffiClonePointer(), $0)
-        })
-    }
-
-    open func speed() -> FeeSpeed {
-        return try! FfiConverterTypeFeeSpeed.lift(try! rustCall {
-            uniffi_cove_fn_method_feerateoption_speed(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -2388,6 +2388,144 @@ public func FfiConverterTypeFeeRateOption_lift(_ pointer: UnsafeMutableRawPointe
 
 public func FfiConverterTypeFeeRateOption_lower(_ value: FeeRateOption) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFeeRateOption.lower(value)
+}
+
+public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject {
+    func duration() -> String
+
+    func feeRate() -> FeeRate
+
+    func feeRateOptions() -> FeeRateOption
+
+    func feeSpeed() -> FeeSpeed
+
+    func isEqual(rhs: FeeRateOptionWithTotalFee) -> Bool
+
+    func satPerVb() -> Double
+
+    func totalFee() -> Amount
+}
+
+open class FeeRateOptionWithTotalFee:
+    FeeRateOptionWithTotalFeeProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_feerateoptionwithtotalfee(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_feerateoptionwithtotalfee(pointer, $0) }
+    }
+
+    open func duration() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionwithtotalfee_duration(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func feeRate() -> FeeRate {
+        return try! FfiConverterTypeFeeRate.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionwithtotalfee_fee_rate(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func feeRateOptions() -> FeeRateOption {
+        return try! FfiConverterTypeFeeRateOption.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionwithtotalfee_fee_rate_options(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func feeSpeed() -> FeeSpeed {
+        return try! FfiConverterTypeFeeSpeed.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionwithtotalfee_fee_speed(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isEqual(rhs: FeeRateOptionWithTotalFee) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionwithtotalfee_is_equal(self.uniffiClonePointer(),
+                                                                     FfiConverterTypeFeeRateOptionWithTotalFee.lower(rhs), $0)
+        })
+    }
+
+    open func satPerVb() -> Double {
+        return try! FfiConverterDouble.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionwithtotalfee_sat_per_vb(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func totalFee() -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionwithtotalfee_total_fee(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeFeeRateOptionWithTotalFee: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = FeeRateOptionWithTotalFee
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FeeRateOptionWithTotalFee {
+        return FeeRateOptionWithTotalFee(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: FeeRateOptionWithTotalFee) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeRateOptionWithTotalFee {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: FeeRateOptionWithTotalFee, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeFeeRateOptionWithTotalFee_lift(_ pointer: UnsafeMutableRawPointer) throws -> FeeRateOptionWithTotalFee {
+    return try FfiConverterTypeFeeRateOptionWithTotalFee.lift(pointer)
+}
+
+public func FfiConverterTypeFeeRateOptionWithTotalFee_lower(_ value: FeeRateOptionWithTotalFee) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFeeRateOptionWithTotalFee.lower(value)
 }
 
 public protocol FeeRateOptionsProtocol: AnyObject {
@@ -2500,6 +2638,126 @@ public func FfiConverterTypeFeeRateOptions_lift(_ pointer: UnsafeMutableRawPoint
 
 public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFeeRateOptions.lower(value)
+}
+
+public protocol FeeRateOptionsWithTotalFeeProtocol: AnyObject {
+    func fast() -> FeeRateOptionWithTotalFee
+
+    func feeRateOptions() -> FeeRateOptions
+
+    func medium() -> FeeRateOptionWithTotalFee
+
+    func slow() -> FeeRateOptionWithTotalFee
+}
+
+open class FeeRateOptionsWithTotalFee:
+    FeeRateOptionsWithTotalFeeProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    /// This constructor can be used to instantiate a fake object.
+    /// - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    ///
+    /// - Warning:
+    ///     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_feerateoptionswithtotalfee(self.pointer, $0) }
+    }
+
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_feerateoptionswithtotalfee(pointer, $0) }
+    }
+
+    public static func previewNew() -> FeeRateOptionsWithTotalFee {
+        return try! FfiConverterTypeFeeRateOptionsWithTotalFee.lift(try! rustCall {
+            uniffi_cove_fn_constructor_feerateoptionswithtotalfee_preview_new($0
+            )
+        })
+    }
+
+    open func fast() -> FeeRateOptionWithTotalFee {
+        return try! FfiConverterTypeFeeRateOptionWithTotalFee.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionswithtotalfee_fast(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func feeRateOptions() -> FeeRateOptions {
+        return try! FfiConverterTypeFeeRateOptions.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionswithtotalfee_fee_rate_options(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func medium() -> FeeRateOptionWithTotalFee {
+        return try! FfiConverterTypeFeeRateOptionWithTotalFee.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionswithtotalfee_medium(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func slow() -> FeeRateOptionWithTotalFee {
+        return try! FfiConverterTypeFeeRateOptionWithTotalFee.lift(try! rustCall {
+            uniffi_cove_fn_method_feerateoptionswithtotalfee_slow(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+public struct FfiConverterTypeFeeRateOptionsWithTotalFee: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = FeeRateOptionsWithTotalFee
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FeeRateOptionsWithTotalFee {
+        return FeeRateOptionsWithTotalFee(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: FeeRateOptionsWithTotalFee) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeRateOptionsWithTotalFee {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: FeeRateOptionsWithTotalFee, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+public func FfiConverterTypeFeeRateOptionsWithTotalFee_lift(_ pointer: UnsafeMutableRawPointer) throws -> FeeRateOptionsWithTotalFee {
+    return try FfiConverterTypeFeeRateOptionsWithTotalFee.lift(pointer)
+}
+
+public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOptionsWithTotalFee) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFeeRateOptionsWithTotalFee.lower(value)
 }
 
 /**
@@ -5187,9 +5445,9 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func balanceInFiat() async throws -> Double
 
-    func buildTransaction(amount: Amount, address: Address) throws -> Psbt
+    func buildTransaction(amount: Amount, address: Address) async throws -> Psbt
 
-    func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) throws -> Psbt
+    func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) async throws -> Psbt
 
     func currentBlockHeight() async throws -> UInt32
 
@@ -5207,6 +5465,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> String
 
     func feeRateOptions() async throws -> FeeRateOptions
+
+    func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Amount, address: Address) async throws -> FeeRateOptionsWithTotalFee
 
     func fingerprint() -> String
 
@@ -5378,21 +5638,38 @@ open class RustWalletViewModel:
             )
     }
 
-    open func buildTransaction(amount: Amount, address: Address) throws -> Psbt {
-        return try FfiConverterTypePsbt.lift(rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
-            uniffi_cove_fn_method_rustwalletviewmodel_build_transaction(self.uniffiClonePointer(),
-                                                                        FfiConverterTypeAmount.lower(amount),
-                                                                        FfiConverterTypeAddress.lower(address), $0)
-        })
+    open func buildTransaction(amount: Amount, address: Address) async throws -> Psbt {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_build_transaction(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeAmount.lower(amount), FfiConverterTypeAddress.lower(address)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypePsbt.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
     }
 
-    open func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) throws -> Psbt {
-        return try FfiConverterTypePsbt.lift(rustCallWithError(FfiConverterTypeWalletViewModelError.lift) {
-            uniffi_cove_fn_method_rustwalletviewmodel_build_transaction_with_fee_rate(self.uniffiClonePointer(),
-                                                                                      FfiConverterTypeAmount.lower(amount),
-                                                                                      FfiConverterTypeAddress.lower(address),
-                                                                                      FfiConverterTypeFeeRate.lower(feeRate), $0)
-        })
+    open func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) async throws -> Psbt {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_build_transaction_with_fee_rate(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeAmount.lower(amount), FfiConverterTypeAddress.lower(address), FfiConverterTypeFeeRate.lower(feeRate)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypePsbt.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
     }
 
     open func currentBlockHeight() async throws -> UInt32 {
@@ -5458,6 +5735,23 @@ open class RustWalletViewModel:
                 completeFunc: ffi_cove_rust_future_complete_pointer,
                 freeFunc: ffi_cove_rust_future_free_pointer,
                 liftFunc: FfiConverterTypeFeeRateOptions.lift,
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Amount, address: Address) async throws -> FeeRateOptionsWithTotalFee {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_fee_rate_options_with_total_fee(
+                        self.uniffiClonePointer(),
+                        FfiConverterOptionTypeFeeRateOptions.lower(feeRateOptions), FfiConverterTypeAmount.lower(amount), FfiConverterTypeAddress.lower(address)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeFeeRateOptionsWithTotalFee.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
@@ -13956,6 +14250,27 @@ private struct FfiConverterOptionTypeAmount: FfiConverterRustBuffer {
     }
 }
 
+private struct FfiConverterOptionTypeFeeRateOptions: FfiConverterRustBuffer {
+    typealias SwiftType = FeeRateOptions?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFeeRateOptions.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFeeRateOptions.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
 private struct FfiConverterOptionTypeFingerprint: FfiConverterRustBuffer {
     typealias SwiftType = Fingerprint?
 
@@ -15018,19 +15333,40 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_feerateoption_duration() != 58541 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_feerateoption_is_equal() != 48538 {
+    if uniffi_cove_checksum_method_feerateoption_fee_rate() != 56298 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_feerateoption_rate() != 46294 {
+    if uniffi_cove_checksum_method_feerateoption_fee_speed() != 22536 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoption_is_equal() != 48538 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_feerateoption_sat_per_vb() != 60748 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_feerateoption_speed() != 45305 {
+    if uniffi_cove_checksum_method_feerateoption_total_fee() != 29575 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_feerateoption_total_fee() != 29575 {
+    if uniffi_cove_checksum_method_feerateoptionwithtotalfee_duration() != 26593 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionwithtotalfee_fee_rate() != 14029 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionwithtotalfee_fee_rate_options() != 29806 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionwithtotalfee_fee_speed() != 32155 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionwithtotalfee_is_equal() != 47764 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 40506 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionwithtotalfee_total_fee() != 40202 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_feerateoptions_fast() != 29009 {
@@ -15040,6 +15376,18 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_feerateoptions_slow() != 58269 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionswithtotalfee_fast() != 15779 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 7503 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionswithtotalfee_medium() != 444 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_feerateoptionswithtotalfee_slow() != 1762 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_ffiapp_dispatch() != 48712 {
@@ -15300,10 +15648,10 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_balance_in_fiat() != 18683 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_build_transaction() != 22495 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_build_transaction() != 22450 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_build_transaction_with_fee_rate() != 27960 {
+    if uniffi_cove_checksum_method_rustwalletviewmodel_build_transaction_with_fee_rate() != 28947 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_current_block_height() != 59265 {
@@ -15325,6 +15673,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fee_rate_options() != 44766 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_fee_rate_options_with_total_fee() != 22160 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {
@@ -15535,6 +15886,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_feerateoptions_preview_new() != 9368 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 15548 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_ffiapp_new() != 11955 {

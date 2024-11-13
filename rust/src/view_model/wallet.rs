@@ -495,7 +495,7 @@ impl RustWalletViewModel {
         Ok(validator)
     }
 
-    pub fn get_fees(&self) -> Option<FeeResponse> {
+    pub fn fees(&self) -> Option<FeeResponse> {
         let cached_fees = FEES.load().as_ref().clone();
 
         match cached_fees {
@@ -533,10 +533,14 @@ impl RustWalletViewModel {
 
     pub async fn fee_rate_options_with_total_fee(
         &self,
+        fee_rate_options: Option<Arc<FeeRateOptions>>,
         amount: Arc<Amount>,
         address: Arc<Address>,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
-        let fee_rate_options = self.fee_rate_options().await?;
+        let fee_rate_options = match fee_rate_options {
+            Some(fee_rate_options) => Arc::unwrap_or_clone(fee_rate_options),
+            None => self.fee_rate_options().await?,
+        };
 
         let amount = Arc::unwrap_or_clone(amount).into();
         let address: Address = Arc::unwrap_or_clone(address).into();
@@ -589,7 +593,7 @@ impl RustWalletViewModel {
         address: Arc<Address>,
     ) -> Result<Psbt, Error> {
         let medium_fee = self
-            .get_fees()
+            .fees()
             .map(|fees| FeeRateOptions::from(fees).medium.fee_rate)
             .unwrap_or_else(|| FeeRate::from_sat_per_vb(10));
 

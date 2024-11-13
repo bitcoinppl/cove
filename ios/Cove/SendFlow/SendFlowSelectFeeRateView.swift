@@ -9,10 +9,8 @@ import Foundation
 import SwiftUI
 
 struct SendFlowSelectFeeRateView: View {
-    let feeOptions: FeeRateOptions
-    let txnSize: Double
-
-    @Binding var selectedOption: FeeRateOption
+    let feeOptions: FeeRateOptionsWithTotalFee
+    @Binding var selectedOption: FeeRateOptionWithTotalFee
 
     var body: some View {
         VStack(spacing: 20) {
@@ -47,13 +45,13 @@ struct SendFlowSelectFeeRateView: View {
 private struct FeeOptionView: View {
     @Environment(\.dismiss) private var dismiss
 
-    let feeOption: FeeRateOption
+    let feeOption: FeeRateOptionWithTotalFee
     let fiatAmount: String
 
-    @Binding var selectedOption: FeeRateOption
+    @Binding var selectedOption: FeeRateOptionWithTotalFee
 
     var isSelected: Bool {
-        selectedOption.speed() == feeOption.speed()
+        selectedOption.feeSpeed() == feeOption.feeSpeed()
     }
 
     var fontColor: Color {
@@ -65,7 +63,7 @@ private struct FeeOptionView: View {
     }
 
     var totalFee: String {
-        feeOption.totalFee(txnSize: UInt64(txnSize)).map { $0.satsString() } ?? "---"
+        feeOption.totalFee().satsString()
     }
 
     var satsPerVbyte: Double {
@@ -76,12 +74,12 @@ private struct FeeOptionView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(String(feeOption.speed()))
+                    Text(String(feeOption.feeSpeed()))
                         .font(.headline)
                         .foregroundColor(fontColor)
 
                     DurationCapsule(
-                        speed: feeOption.speed(), fontColor: fontColor
+                        speed: feeOption.feeSpeed(), fontColor: fontColor
                     )
                 }
                 Text("\(String(format: "%.2f", satsPerVbyte)) sats/vbyte")
@@ -137,8 +135,7 @@ private struct DurationCapsule: View {
 
 #Preview {
     SendFlowSelectFeeRateView(
-        feeOptions: FeeRateOptions.previewNew(),
-        txnSize: 3040,
-        selectedOption: Binding.constant(FeeRateOptions.previewNew().medium())
+        feeOptions: FeeRateOptionsWithTotalFee.previewNew(),
+        selectedOption: Binding.constant(FeeRateOptionsWithTotalFee.previewNew().medium())
     )
 }
