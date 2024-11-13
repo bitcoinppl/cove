@@ -785,7 +785,7 @@ private struct EnterAmountSection: View {
                     .multilineTextAlignment(.center)
                     .font(.system(size: 48, weight: .bold))
                     .keyboardType(metadata.selectedUnit == .btc ? .decimalPad : .numberPad)
-                    .offset(x: screenWidth * 0.09)
+                    .offset(x: metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11)
                     .padding(.horizontal, 30)
                     .minimumScaleFactor(0.01)
                     .lineLimit(1)
@@ -804,19 +804,21 @@ private struct EnterAmountSection: View {
                     .foregroundStyle(.primary)
                 }
                 .popover(isPresented: $showingMenu) {
-                    VStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .center, spacing: 0) {
                         Button("sats") {
                             model.dispatch(action: .updateUnit(.sat))
                             showingMenu = false
                         }
+                        .padding()
                         .buttonStyle(.plain)
 
                         Divider()
 
-                        Button("btc ") {
+                        Button("btc") {
                             model.dispatch(action: .updateUnit(.btc))
                             showingMenu = false
                         }
+                        .padding()
                         .buttonStyle(.plain)
                     }
                     .padding(.vertical, 8)

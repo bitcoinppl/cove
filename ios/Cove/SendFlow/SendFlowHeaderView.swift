@@ -65,11 +65,12 @@ struct SendFlowHeaderView: View {
                         showingMenu.toggle()
                     }
                     .popover(isPresented: $showingMenu) {
-                        VStack(alignment: .center, spacing: 8) {
+                        VStack(alignment: .center, spacing: 0) {
                             Button("sats") {
                                 model.dispatch(action: .updateUnit(.sat))
                                 showingMenu = false
                             }
+                            .padding()
                             .buttonStyle(.plain)
 
                             Divider()
@@ -78,6 +79,7 @@ struct SendFlowHeaderView: View {
                                 model.dispatch(action: .updateUnit(.btc))
                                 showingMenu = false
                             }
+                            .padding()
                             .buttonStyle(.plain)
                         }
                         .padding(.vertical, 8)
