@@ -399,7 +399,9 @@ struct SendFlowSetAmountScreen: View {
 
         if validateAddress(newValue.item, displayAlert: true) {
             address = newValue.item
-            focusField = .none
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                focusField = .none
+            }
         } else {
             address = ""
         }
@@ -415,6 +417,13 @@ struct SendFlowSetAmountScreen: View {
 
         let amountSats = max(sendAmountSats ?? 0, 10000)
         let amount = Amount.fromSat(sats: UInt64(amountSats))
+
+        // address and amount is valid, dismiss the keyboard
+        if validateAmount() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                focusField = .none
+            }
+        }
 
         Task {
             await getFeeRateOptions(address: address, amount: amount)
