@@ -101,6 +101,17 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    private var totalFeeString: String {
+        guard let totalFee = selectedFeeRate?.totalFee() else { return "---" }
+
+        switch metadata.selectedUnit {
+        case .btc:
+            return totalFee.btcStringWithUnit()
+        case .sat:
+            return totalFee.satsStringWithUnit()
+        }
+    }
+
     private var totalSpent: String {
         let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
 
@@ -132,7 +143,12 @@ struct SendFlowSetAmountScreen: View {
                     AmountInfoSection
 
                     // Amount input
-                    EnterAmountSection
+                    EnterAmountSection(
+                        model: model,
+                        sendAmount: $sendAmount,
+                        focusField: _focusField,
+                        sendAmountFiat: sendAmountFiat
+                    )
 
                     // Address Section
                     EnterAddressSection
@@ -281,6 +297,10 @@ struct SendFlowSetAmountScreen: View {
         let amountSats = amountSats(amount)
         let fiatAmount = (amountSats / 100_000_000) * Double(prices.usd)
 
+        if feeRateOptions == nil {
+            Task { await getFeeRateOptions() }
+        }
+
         sendAmountFiat = "≈ \(formatter.string(from: NSNumber(value: fiatAmount)) ?? "$0.00")"
     }
 
@@ -347,17 +367,38 @@ struct SendFlowSetAmountScreen: View {
         let amount = Amount.fromSat(sats: UInt64(amountSats))
 
         Task {
-            guard
-                let feeRateOptions = try? await model.rust.feeRateOptionsWithTotalFee(
-                    feeRateOptions: feeRateOptionsBase, amount: amount, address: address
-                )
-            else { return }
+            await getFeeRateOptions(address: address, amount: amount)
+        }
+    }
 
-            await MainActor.run {
-                self.feeRateOptions = feeRateOptions
-                if self.selectedFeeRate == nil {
-                    self.selectedFeeRate = feeRateOptions.medium()
+    private func getFeeRateOptions(address: Address? = nil, amount: Amount? = nil) async {
+        let address: Address? = {
+            switch address {
+            case let .some(address): return address
+            case .none:
+                let addressString = self.address.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard validateAddress(addressString) else { return .none }
+                guard let address = try? Address.fromString(address: addressString) else {
+                    return .none
                 }
+
+                return address
+            }
+        }()
+
+        guard let address = address else { return }
+        let amount = amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
+
+        guard
+            let feeRateOptions = try? await model.rust.feeRateOptionsWithTotalFee(
+                feeRateOptions: feeRateOptionsBase, amount: amount, address: address
+            )
+        else { return }
+
+        await MainActor.run {
+            self.feeRateOptions = feeRateOptions
+            if self.selectedFeeRate == nil {
+                self.selectedFeeRate = feeRateOptions.medium()
             }
         }
     }
@@ -500,54 +541,6 @@ struct SendFlowSetAmountScreen: View {
     }
 
     @ViewBuilder
-    var EnterAmountSection: some View {
-        VStack(spacing: 8) {
-            HStack(alignment: .bottom) {
-                TextField("", text: $sendAmount)
-                    .focused($focusField, equals: .amount)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 48, weight: .bold))
-                    .keyboardType(metadata.selectedUnit == .btc ? .decimalPad : .numberPad)
-                    .offset(x: screenWidth * 0.06)
-                    .padding(.horizontal, 30)
-                    .minimumScaleFactor(0.01)
-                    .lineLimit(1)
-
-                Text(model.unit)
-                    .padding(.vertical, 10)
-                    .contentShape(
-                        .contextMenuPreview, RoundedRectangle(cornerRadius: 8).inset(by: -5)
-                    )
-                    .contextMenu(
-                        menuItems: {
-                            Button {
-                                model.dispatch(action: .updateUnit(.btc))
-                            } label: {
-                                Text("btc")
-                            }
-
-                            Button {
-                                model.dispatch(action: .updateUnit(.sat))
-                            } label: {
-                                Text("sats")
-                            }
-                        },
-                        preview: {
-                            Text(model.unit)
-                                .padding(12)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                    )
-            }
-
-            Text(sendAmountFiat)
-                .font(.title3)
-                .foregroundColor(.secondary)
-        }
-        .padding(.vertical, 4)
-    }
-
-    @ViewBuilder
     var NetworkFeeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Network Fee")
@@ -566,7 +559,7 @@ struct SendFlowSetAmountScreen: View {
 
                 Spacer()
 
-                Text(selectedFeeRate?.totalFee().satsStringWithUnit() ?? "---")
+                Text(totalFeeString)
                     .foregroundStyle(.secondary)
                     .fontWeight(.medium)
             }
@@ -747,6 +740,76 @@ struct SendFlowSetAmountScreen: View {
         case .invalidNumber, .insufficientFunds, .zeroAmount, .sendAmountToLow:
             Button("OK") { focusField = .amount }
         }
+    }
+}
+
+private struct EnterAmountSection: View {
+    let model: WalletViewModel
+
+    @Binding var sendAmount: String
+    @FocusState var focusField: FocusField?
+    let sendAmountFiat: String
+
+    // private
+    @State private var showingMenu: Bool = false
+
+    var metadata: WalletMetadata { model.walletMetadata }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom) {
+                TextField("", text: $sendAmount)
+                    .focused($focusField, equals: .amount)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 48, weight: .bold))
+                    .keyboardType(metadata.selectedUnit == .btc ? .decimalPad : .numberPad)
+                    .offset(x: screenWidth * 0.08)
+                    .padding(.horizontal, 30)
+                    .minimumScaleFactor(0.01)
+                    .lineLimit(1)
+
+                HStack(spacing: 0) {
+                    Text(model.unit)
+                        .padding(.vertical, 10)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .padding(.top, 2)
+                        .padding(.leading, 4)
+                }
+                .onTapGesture {
+                    showingMenu.toggle()
+                }
+                .popover(isPresented: $showingMenu) {
+                    VStack(alignment: .center, spacing: 8) {
+                        Button("sats") {
+                            model.dispatch(action: .updateUnit(.sat))
+                            showingMenu = false
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider()
+
+                        Button("btc") {
+                            model.dispatch(action: .updateUnit(.btc))
+                            showingMenu = false
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .frame(minWidth: 120, maxWidth: 200)
+                    .presentationCompactAdaptation(.popover)
+                    .foregroundStyle(.primary.opacity(0.8))
+                }
+            }
+
+            Text(sendAmountFiat)
+                .font(.title3)
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 }
 

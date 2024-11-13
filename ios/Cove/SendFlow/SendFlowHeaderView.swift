@@ -59,12 +59,6 @@ struct SendFlowHeaderView: View {
                         Text(model.unit)
                             .font(.subheadline)
                             .padding(.trailing, 0)
-
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .padding(.top, 2)
-                            .padding(.leading, 4)
                     }
                     .foregroundStyle(.white)
                     .onTapGesture {
