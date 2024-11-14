@@ -155,14 +155,14 @@ struct SendFlowSetAmountScreen: View {
     }
 
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                // MARK: HEADER
+        VStack(spacing: 0) {
+            // MARK: HEADER
 
-                SendFlowHeaderView(model: model, amount: model.balance.confirmed)
+            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
 
-                // MARK: CONTENT
+            // MARK: CONTENT
 
+            ZStack {
                 ScrollView {
                     VStack(spacing: 24) {
                         // Set amount, header and text
@@ -183,7 +183,6 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil && selectedFeeRate != nil
-                                                  
 
                             && Address.isValid(address)
                         {
@@ -211,62 +210,80 @@ struct SendFlowSetAmountScreen: View {
                 .background(colorScheme == .light ? .white : .black)
                 .scrollIndicators(.hidden)
                 .scrollPosition($scrollPosition, anchor: .top)
-            }
-            .padding(.top, 0)
-            .navigationTitle("Send")
-            .navigationBarTitleDisplayMode(.inline)
-            .onChange(of: focusField, initial: false, focusFieldChanged)
-            .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
-            .onChange(of: sendAmount, initial: false, sendAmountChanged)
-            .onChange(of: scannedCode, initial: false, scannedCodeChanged)
-            .onChange(of: address, initial: true, addressChanged)
-            .environment(model)
-            .task {
-                // HACK: Bug in SwiftUI where keyboard toolbar is broken
-                try? await Task.sleep(for: .milliseconds(600))
-                await MainActor.run {
-                    if sendAmount == "0" || sendAmount == "" {
-                        focusField = .amount
-                        return
-                    }
 
-                    if address == "" {
-                        focusField = .address
-                        return
+                if isLoading {
+                    ZStack {
+                        Color.black.ignoresSafeArea(.all).opacity(isLoading ? 1 : 0)
+                        ProgressView().tint(.white)
                     }
-                }
-
-                Task {
-                    try? await Task.sleep(for: .milliseconds(550))
-                    await MainActor.run {
-                        withAnimation {
-                            isLoading = false
-                        }
-                    }
-                }
-            }
-            .sheet(item: $sheetState, content: SheetContent)
-            .task {
-                guard let feeRateOptions = try? await model.rust.getFeeOptions() else { return }
-                await MainActor.run {
-                    self.feeRateOptionsBase = feeRateOptions
-                }
-            }
-            .alert(
-                alertTitle,
-                isPresented: showingAlert,
-                presenting: alertState,
-                actions: alertButtons,
-                message: alertMessage
-            )
-
-            if isLoading {
-                ZStack {
-                    Color.black.ignoresSafeArea(.all).opacity(isLoading ? 1 : 0)
-                    ProgressView().tint(.white)
                 }
             }
         }
+        .padding(.top, 0)
+        .onChange(of: focusField, initial: false, focusFieldChanged)
+        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
+        .onChange(of: sendAmount, initial: false, sendAmountChanged)
+        .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+        .onChange(of: address, initial: true, addressChanged)
+        .environment(model)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Send")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+            }
+        }
+        .task {
+            guard let feeRateOptions = try? await model.rust.getFeeOptions() else { return }
+            await MainActor.run {
+                self.feeRateOptionsBase = feeRateOptions
+            }
+        }
+        .task {
+            // HACK: Bug in SwiftUI where keyboard toolbar is broken
+            try? await Task.sleep(for: .milliseconds(600))
+            await MainActor.run {
+                if sendAmount == "0" || sendAmount == "" {
+                    focusField = .amount
+                    return
+                }
+
+                if address == "" {
+                    focusField = .address
+                    return
+                }
+            }
+
+            Task {
+                try? await Task.sleep(for: .milliseconds(550))
+                await MainActor.run {
+                    withAnimation {
+                        isLoading = false
+                    }
+                }
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithTransparentBackground()
+                appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+                appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            }
+        }
+        .sheet(item: $sheetState, content: SheetContent)
+        .alert(
+            alertTitle,
+            isPresented: showingAlert,
+            presenting: alertState,
+            actions: alertButtons,
+            message: alertMessage
+        )
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
@@ -373,7 +390,11 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func focusFieldChanged(_: FocusField?, _ newField: FocusField?) {
+    private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
+        if oldField == .amount && newField == .address {
+            if !validateAmount(displayAlert: true) { return }
+        }
+
         let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
 
         DispatchQueue.main.async {
@@ -470,19 +491,15 @@ struct SendFlowSetAmountScreen: View {
                     Button(action: { focusField = .address }) {
                         Text("Next")
                     }
+
                 } else {
                     Button(action: { focusField = .none }) {
                         Text("Done")
                     }
                 }
             }
-            .font(.callout)
-            .padding(.vertical, 7)
-            .padding(.horizontal, 12)
-            .background(.midnightBlue.opacity(0.2))
-            .cornerRadius(7)
-            .foregroundStyle(.midnightBlue)
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .tint(.primary)
 
             Spacer()
 
@@ -530,24 +547,14 @@ struct SendFlowSetAmountScreen: View {
                     }
                 }
             }
-            .padding(.vertical, 7)
-            .padding(.horizontal, 12)
-            .background(.midnightBlue.opacity(0.2))
-            .foregroundStyle(.midnightBlue)
-            .cornerRadius(7)
-            .buttonStyle(.plain)
-            .font(.callout)
+            .buttonStyle(.bordered)
+            .tint(.primary)
 
             Button(action: { sheetState = TaggedItem(.qr) }) {
                 Label("QR", systemImage: "qrcode")
             }
-            .padding(.vertical, 5.25)
-            .padding(.horizontal, 12)
-            .background(.midnightBlue.opacity(0.2))
-            .foregroundStyle(.midnightBlue)
-            .cornerRadius(7)
-            .buttonStyle(.plain)
-            .font(.callout)
+            .buttonStyle(.bordered)
+            .tint(.primary)
 
             Spacer()
 
@@ -749,6 +756,7 @@ struct SendFlowSetAmountScreen: View {
                 .background(Color.midnightBlue)
                 .foregroundColor(.white)
                 .cornerRadius(10)
+                .disabled(!validate())
         }
         .padding(.top, 8)
         .padding(.bottom)
@@ -834,27 +842,24 @@ private struct EnterAmountSection: View {
     let sendAmountFiat: String
 
     // private
-                        
-                    
-
     @State private var showingMenu: Bool = false
 
     var metadata: WalletMetadata { model.walletMetadata }
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(alignment:
-                .bottom)
-            {
-                TextField("",
-
-                          text: $sendAmount)
-
+            HStack(
+                alignment:
+                    .bottom
+            ) {
+                TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)
                     .multilineTextAlignment(.center)
                     .font(.system(size: 48, weight: .bold))
                     .keyboardType(metadata.selectedUnit == .btc ? .decimalPad : .numberPad)
-                    .offset(x: metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11)
+                    .offset(
+                        x: metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
+                    )
                     .padding(.horizontal, 30)
                     .minimumScaleFactor(0.01)
                     .lineLimit(1)
@@ -902,6 +907,7 @@ private struct EnterAmountSection: View {
                 .font(.title3)
                 .foregroundColor(.secondary)
         }
+
         .padding(.vertical, 4)
     }
 }

@@ -85,10 +85,12 @@ struct SelectedWalletScreenInner: View {
 
     @ViewBuilder
     func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
-        TransactionsCardView(transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata)
-            .background(.thickMaterial)
-            .ignoresSafeArea()
-            .padding(.top, 10)
+        TransactionsCardView(
+            transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata
+        )
+        .background(.thickMaterial)
+        .ignoresSafeArea()
+        .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -159,7 +161,9 @@ struct SelectedWalletScreenInner: View {
 
     var body: some View {
         VStack {
-            VerifyReminder(walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified)
+            VerifyReminder(
+                walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
+            )
 
             ScrollView {
                 VStack {
@@ -217,9 +221,13 @@ struct SelectedWalletScreenInner: View {
                 let _ = try? await model.rust.forceUpdateHeight()
             }
         }
-        .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue) }
+        .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue)
+        }
         .onAppear { setSheetState(self.model.walletMetadata.discoveryState) }
-        .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
+        .alert(
+            item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
+            content: DisplayErrorAlert
+        )
         .environment(model)
     }
 }
