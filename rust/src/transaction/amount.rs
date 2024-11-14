@@ -71,3 +71,9 @@ impl Amount {
         format!("{} SATS", self.sats_string())
     }
 }
+
+impl Amount {
+    pub fn from_btc(btc: f64) -> Result<Self, eyre::Report> {
+        Ok(Self(bitcoin_units::Amount::from_btc(btc)?))
+    }
+}

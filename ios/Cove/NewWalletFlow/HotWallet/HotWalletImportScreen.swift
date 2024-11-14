@@ -252,6 +252,7 @@ struct HotWalletImportScreen: View {
             .frame(height: cardHeight)
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
             .navigationTitle("Import Wallet")
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .navigationBarTitleDisplayMode(navDisplay)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
@@ -631,11 +632,15 @@ private struct DuplicateWalletItem: Identifiable {
 }
 
 #Preview("12 Words") {
-    HotWalletImportScreen(numberOfWords: .twelve)
-        .environment(MainViewModel())
+    NavigationStack {
+        HotWalletImportScreen(numberOfWords: .twelve)
+            .environment(MainViewModel())
+    }
 }
 
 #Preview("24 Words") {
-    HotWalletImportScreen(numberOfWords: .twentyFour)
-        .environment(MainViewModel())
+    NavigationStack {
+        HotWalletImportScreen(numberOfWords: .twentyFour)
+            .environment(MainViewModel())
+    }
 }

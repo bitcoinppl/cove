@@ -126,7 +126,7 @@ struct WalletBalanceHeaderView: View {
                 }
 
                 Button(action: {
-                    app.pushRoute(Route.send(.setAmount(id: metadata.id, address: nil)))
+                    app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.up.right")

@@ -33,8 +33,8 @@ public struct SendRouteContainer: View {
     public var body: some View {
         if let model = model {
             switch sendRoute {
-            case let .setAmount(id: id, address: address):
-                SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "")
+            case let .setAmount(id: id, address: address, amount: amount):
+                SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "", amount: amount)
             case let .confirm(id: id, details: details):
                 SendFlowConfirmScreen(id: id, model: model, details: details)
             }

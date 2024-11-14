@@ -10,6 +10,7 @@ use bdk_chain::ConfirmationBlockTime;
 use bdk_wallet::{bitcoin::Transaction as BdkTransaction, AddressInfo as BdkAddressInfo};
 
 use crate::network::Network;
+use crate::transaction::Amount;
 use crate::transaction::TransactionDirection;
 
 #[derive(
@@ -43,6 +44,7 @@ pub struct AddressInfo(BdkAddressInfo);
 pub struct AddressWithNetwork {
     pub address: Address,
     pub network: Network,
+    pub amount: Option<Amount>,
 }
 
 type Error = AddressError;
@@ -124,14 +126,20 @@ impl Address {
 
 impl AddressWithNetwork {
     pub fn try_new(str: &str) -> Result<Self, Error> {
+        let str = str.trim();
+        let str = str.trim_start_matches("bitcoin:");
+
+        let (address_str, amount) = extract_amount(str);
+
         let address: BdkAddress<NetworkUnchecked> =
-            str.parse().map_err(|_| Error::InvalidAddress)?;
+            address_str.parse().map_err(|_| Error::InvalidAddress)?;
 
         let network = Network::Bitcoin;
         if let Ok(address) = address.clone().require_network(network.into()) {
             return Ok(Self {
                 address: address.into(),
                 network,
+                amount,
             });
         }
 
@@ -140,11 +148,24 @@ impl AddressWithNetwork {
             return Ok(Self {
                 address: address.into(),
                 network,
+                amount,
             });
         }
 
         Err(Error::UnsupportedNetwork)
     }
+}
+
+fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
+    let Some(pos) = full_qr.find("?amount=") else { return (full_qr, None) };
+
+    let address = &full_qr[..pos];
+    let number = &full_qr[pos + 8..];
+
+    let Ok(amount_float) = number.parse::<f64>() else { return (address, None) };
+    let Ok(amount) = Amount::from_btc(amount_float) else { return (address, None) };
+
+    (address, Some(amount))
 }
 
 mod ffi {
@@ -169,6 +190,10 @@ mod ffi {
 
         fn network(&self) -> Network {
             self.network
+        }
+
+        fn amount(&self) -> Option<Arc<Amount>> {
+            self.amount.map(Arc::new)
         }
     }
 

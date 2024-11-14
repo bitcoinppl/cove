@@ -15,7 +15,7 @@ public enum AppAlertState: Equatable {
     case invalidFileFormat(String)
     case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network)
     case noWalletSelected(Address)
-    case foundAddress(Address)
+    case foundAddress(Address, Amount?)
     case noCameraPermission
     case failedToScanQr(error: String)
 
@@ -38,7 +38,7 @@ public enum AppAlertState: Equatable {
         case .addressWrongNetwork:
             return "Wrong Network"
         case .noWalletSelected,
-             .foundAddress:
+            .foundAddress:
             return "Found Address"
         case .noCameraPermission:
             return "Camera Access is Required"

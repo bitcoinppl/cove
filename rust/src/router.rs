@@ -4,7 +4,7 @@ use crate::{
     app::FfiApp,
     database::Database,
     mnemonic::NumberOfBip39Words,
-    transaction::TransactionDetails,
+    transaction::{Amount, TransactionDetails},
     wallet::{confirm::ConfirmDetails, metadata::WalletId, Address},
 };
 
@@ -67,6 +67,7 @@ pub enum SendRoute {
     SetAmount {
         id: WalletId,
         address: Option<Arc<Address>>,
+        amount: Option<Arc<Amount>>,
     },
     Confirm {
         id: WalletId,
@@ -231,6 +232,26 @@ mod ffi {
 
         pub fn load_and_reset_to_after(&self, reset_to: Route, time: u32) -> Route {
             reset_to.load_and_reset_after(time)
+        }
+
+        #[uniffi::method(default(address = None, amount = None))]
+        pub fn send_set_amount(
+            &self,
+            id: WalletId,
+            address: Option<Arc<Address>>,
+            amount: Option<Arc<Amount>>,
+        ) -> Route {
+            let send = SendRoute::SetAmount {
+                id,
+                address,
+                amount,
+            };
+
+            Route::Send(send)
+        }
+
+        pub fn send(&self, send: SendRoute) -> Route {
+            Route::Send(send)
         }
     }
 

@@ -772,6 +772,8 @@ public func FfiConverterTypeAddressInfo_lower(_ value: AddressInfo) -> UnsafeMut
 public protocol AddressWithNetworkProtocol: AnyObject {
     func address() -> Address
 
+    func amount() -> Amount?
+
     func network() -> Network
 }
 
@@ -818,6 +820,12 @@ open class AddressWithNetwork:
     open func address() -> Address {
         return try! FfiConverterTypeAddress.lift(try! rustCall {
             uniffi_cove_fn_method_addresswithnetwork_address(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func amount() -> Amount? {
+        return try! FfiConverterOptionTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_addresswithnetwork_amount(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -4981,6 +4989,10 @@ public protocol RouteFactoryProtocol: AnyObject {
     func qrImport() -> Route
 
     func secretWords(walletId: WalletId) -> Route
+
+    func send(send: SendRoute) -> Route
+
+    func sendSetAmount(id: WalletId, address: Address?, amount: Amount?) -> Route
 }
 
 open class RouteFactory:
@@ -5107,6 +5119,22 @@ open class RouteFactory:
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_secret_words(self.uniffiClonePointer(),
                                                             FfiConverterTypeWalletId.lower(walletId), $0)
+        })
+    }
+
+    open func send(send: SendRoute) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_send(self.uniffiClonePointer(),
+                                                    FfiConverterTypeSendRoute.lower(send), $0)
+        })
+    }
+
+    open func sendSetAmount(id: WalletId, address: Address? = nil, amount: Amount? = nil) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_send_set_amount(self.uniffiClonePointer(),
+                                                               FfiConverterTypeWalletId.lower(id),
+                                                               FfiConverterOptionTypeAddress.lower(address),
+                                                               FfiConverterOptionTypeAmount.lower(amount), $0)
         })
     }
 }
@@ -5468,6 +5496,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Amount, address: Address) async throws -> FeeRateOptionsWithTotalFee
 
+    func fees() -> FeeResponse?
+
     func fingerprint() -> String
 
     func forceUpdateHeight() async throws -> UInt32
@@ -5475,8 +5505,6 @@ public protocol RustWalletViewModelProtocol: AnyObject {
     func forceWalletScan() async throws
 
     func getFeeOptions() async throws -> FeeRateOptions
-
-    func getFees() -> FeeResponse?
 
     func listenForUpdates(reconciler: WalletViewModelReconciler)
 
@@ -5756,6 +5784,12 @@ open class RustWalletViewModel:
             )
     }
 
+    open func fees() -> FeeResponse? {
+        return try! FfiConverterOptionTypeFeeResponse.lift(try! rustCall {
+            uniffi_cove_fn_method_rustwalletviewmodel_fees(self.uniffiClonePointer(), $0)
+        })
+    }
+
     open func fingerprint() -> String {
         return try! FfiConverterString.lift(try! rustCall {
             uniffi_cove_fn_method_rustwalletviewmodel_fingerprint(self.uniffiClonePointer(), $0)
@@ -5808,12 +5842,6 @@ open class RustWalletViewModel:
                 liftFunc: FfiConverterTypeFeeRateOptions.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
-    }
-
-    open func getFees() -> FeeResponse? {
-        return try! FfiConverterOptionTypeFeeResponse.lift(try! rustCall {
-            uniffi_cove_fn_method_rustwalletviewmodel_get_fees(self.uniffiClonePointer(), $0)
-        })
     }
 
     open func listenForUpdates(reconciler: WalletViewModelReconciler) { try! rustCall {
@@ -12160,7 +12188,7 @@ extension SeedQrError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SendRoute {
-    case setAmount(id: WalletId, address: Address?)
+    case setAmount(id: WalletId, address: Address?, amount: Amount?)
     case confirm(id: WalletId, details: ConfirmDetails)
 }
 
@@ -12170,7 +12198,7 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendRoute {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        case 1: return try .setAmount(id: FfiConverterTypeWalletId.read(from: &buf), address: FfiConverterOptionTypeAddress.read(from: &buf))
+        case 1: return try .setAmount(id: FfiConverterTypeWalletId.read(from: &buf), address: FfiConverterOptionTypeAddress.read(from: &buf), amount: FfiConverterOptionTypeAmount.read(from: &buf))
 
         case 2: return try .confirm(id: FfiConverterTypeWalletId.read(from: &buf), details: FfiConverterTypeConfirmDetails.read(from: &buf))
 
@@ -12180,10 +12208,11 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
 
     public static func write(_ value: SendRoute, into buf: inout [UInt8]) {
         switch value {
-        case let .setAmount(id, address):
+        case let .setAmount(id, address, amount):
             writeInt(&buf, Int32(1))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterOptionTypeAddress.write(address, into: &buf)
+            FfiConverterOptionTypeAmount.write(amount, into: &buf)
 
         case let .confirm(id, details):
             writeInt(&buf, Int32(2))
@@ -15231,6 +15260,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_addresswithnetwork_address() != 33477 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_addresswithnetwork_amount() != 23019 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_addresswithnetwork_network() != 64145 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15603,6 +15635,12 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_routefactory_secret_words() != 64915 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_routefactory_send() != 62083 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_routefactory_send_set_amount() != 33578 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustimportwalletviewmodel_dispatch() != 54003 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15678,6 +15716,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_rustwalletviewmodel_fee_rate_options_with_total_fee() != 22160 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_fees() != 36596 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_rustwalletviewmodel_fingerprint() != 38447 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15688,9 +15729,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_get_fee_options() != 47126 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_rustwalletviewmodel_get_fees() != 4762 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064 {

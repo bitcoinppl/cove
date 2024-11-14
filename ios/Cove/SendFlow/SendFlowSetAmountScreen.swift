@@ -46,6 +46,7 @@ struct SendFlowSetAmountScreen: View {
     let id: WalletId
     @State var model: WalletViewModel
     @State var address: String = ""
+    @State var amount: Amount? = nil
 
     // private
     @State private var isLoading: Bool = true
@@ -213,7 +214,7 @@ struct SendFlowSetAmountScreen: View {
 
                 if isLoading {
                     ZStack {
-                        Color.black.ignoresSafeArea(.all).opacity(isLoading ? 1 : 0)
+                        Color.primary.ignoresSafeArea(.all).opacity(isLoading ? 1 : 0)
                         ProgressView().tint(.white)
                     }
                 }
@@ -265,15 +266,11 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                let appearance = UINavigationBarAppearance()
-                appearance.configureWithTransparentBackground()
-                appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
-                appearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
-
-                UINavigationBar.appearance().standardAppearance = appearance
-                UINavigationBar.appearance().compactAppearance = appearance
-                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            if let amount = amount {
+                switch metadata.selectedUnit {
+                case .btc: sendAmount = amount.btcString()
+                case .sat: sendAmount = amount.satsString()
+                }
             }
         }
         .sheet(item: $sheetState, content: SheetContent)
@@ -850,7 +847,7 @@ private struct EnterAmountSection: View {
         VStack(spacing: 8) {
             HStack(
                 alignment:
-                    .bottom
+                .bottom
             ) {
                 TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)

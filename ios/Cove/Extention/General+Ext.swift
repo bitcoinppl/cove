@@ -69,10 +69,16 @@ extension Double {
     }
 }
 
+extension Amount: Equatable {
+    public static func == (lhs: Amount, rhs: Amount) -> Bool {
+        lhs.asSats() == rhs.asSats()
+    }
+}
+
 public extension SendRoute {
     func id() -> WalletId {
         switch self {
-        case let .setAmount(id, address: _): id
+        case let .setAmount(id, address: _, amount: _): id
         case let .confirm(id: id, details: _): id
         }
     }
