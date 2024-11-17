@@ -26,7 +26,7 @@ use crate::{
             client::{FeeResponse, FEES, FEE_CLIENT},
             FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
         },
-        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
+        Amount, BdkAmount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
     },
     wallet::{
         balance::Balance,
@@ -153,6 +153,9 @@ pub enum WalletViewModelError {
 
     #[error("unable to build transaction: {0}")]
     BuildTxError(String),
+
+    #[error("insufficient funds: {0}")]
+    InsufficientFunds(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -226,6 +229,26 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub async fn balance(&self) -> Balance {
         call!(self.actor.balance()).await.unwrap_or_default()
+    }
+
+    #[uniffi::method]
+    pub async fn get_max_send_amount(
+        &self,
+        fee: Arc<FeeRateOptionWithTotalFee>,
+    ) -> Result<Arc<Amount>, Error> {
+        let balance = call!(self.actor.balance())
+            .await
+            .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
+
+        let confirmed: BdkAmount = Arc::unwrap_or_clone(balance.confirmed).into();
+        let fee: BdkAmount = fee.total_fee.into();
+
+        let available: Amount = confirmed
+            .checked_sub(fee)
+            .ok_or_else(|| Error::InsufficientFunds("unable to get max send amount".to_string()))?
+            .into();
+
+        Ok(available.into())
     }
 
     #[uniffi::method]

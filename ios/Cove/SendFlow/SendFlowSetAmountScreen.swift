@@ -52,7 +52,8 @@ struct SendFlowSetAmountScreen: View {
     @State private var isLoading: Bool = true
 
     @FocusState private var focusField: FocusField?
-    @State private var scrollPosition: ScrollPosition = .init(idType: FocusField.self)
+    @State private var scrollPosition: ScrollPosition = .init(
+        idType: FocusField.self)
     @State private var scannedCode: TaggedString? = .none
 
     // fees
@@ -68,6 +69,9 @@ struct SendFlowSetAmountScreen: View {
     // text inputs
     @State private var sendAmount: String = "0"
     @State private var sendAmountFiat: String = "≈ $0.00 USD"
+
+    // max
+    @State private var maxSelected: Bool = false
 
     private var metadata: WalletMetadata {
         model.walletMetadata
@@ -214,7 +218,8 @@ struct SendFlowSetAmountScreen: View {
 
                 if isLoading {
                     ZStack {
-                        Color.primary.ignoresSafeArea(.all).opacity(isLoading ? 1 : 0)
+                        Color.primary.ignoresSafeArea(.all).opacity(
+                            isLoading ? 1 : 0)
                         ProgressView().tint(.white)
                     }
                 }
@@ -222,7 +227,9 @@ struct SendFlowSetAmountScreen: View {
         }
         .padding(.top, 0)
         .onChange(of: focusField, initial: false, focusFieldChanged)
-        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
+        .onChange(
+            of: metadata.selectedUnit, initial: false, selectedUnitChanged
+        )
         .onChange(of: sendAmount, initial: false, sendAmountChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .onChange(of: address, initial: true, addressChanged)
@@ -245,13 +252,19 @@ struct SendFlowSetAmountScreen: View {
             // HACK: Bug in SwiftUI where keyboard toolbar is broken
             try? await Task.sleep(for: .milliseconds(600))
             await MainActor.run {
-                if sendAmount == "0" || sendAmount == "" {
-                    focusField = .amount
+                if address == "" {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        scrollPosition.scrollTo(id: FocusField.address, anchor: .center)
+                        focusField = .address
+                        
+                        guard let point = scrollPosition.point else { return }
+                    }
+
                     return
                 }
 
-                if address == "" {
-                    focusField = .address
+                if sendAmount == "0" || sendAmount == "" {
+                    focusField = .amount
                     return
                 }
             }
@@ -284,10 +297,13 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
-        validateAmount(displayAlert: displayAlert) && validateAddress(displayAlert: displayAlert)
+        validateAmount(displayAlert: displayAlert)
+            && validateAddress(displayAlert: displayAlert)
     }
 
-    private func validateAddress(_ address: String? = nil, displayAlert: Bool = false) -> Bool {
+    private func validateAddress(
+        _ address: String? = nil, displayAlert: Bool = false
+    ) -> Bool {
         let address = address ?? self.address
         if address.isEmpty {
             if displayAlert { alertState = TaggedItem(.emptyAddress) }
@@ -295,14 +311,18 @@ struct SendFlowSetAmountScreen: View {
         }
 
         if case let .failure(error) = Address.checkValid(address) {
-            if displayAlert { alertState = TaggedItem(AlertState(error, address: address)) }
+            if displayAlert {
+                alertState = TaggedItem(AlertState(error, address: address))
+            }
             return false
         }
 
         return true
     }
 
-    private func validateAmount(_ amount: String? = nil, displayAlert: Bool = false) -> Bool {
+    private func validateAmount(
+        _ amount: String? = nil, displayAlert: Bool = false
+    ) -> Bool {
         let sendAmount = amount ?? self.sendAmount
         guard let amount = Double(sendAmount) else {
             if displayAlert { alertState = TaggedItem(.invalidNumber) }
@@ -336,6 +356,10 @@ struct SendFlowSetAmountScreen: View {
     // MARK: OnChange Functions
 
     private func sendAmountChanged(_ oldValue: String, _ value: String) {
+        Log.debug("sendAmountChanged \(oldValue) -> \(value)")
+
+        maxSelected = false
+
         // allow clearing completely
         if value == "" {
             sendAmountFiat = "≈ $0.00 USD"
@@ -501,7 +525,28 @@ struct SendFlowSetAmountScreen: View {
             Spacer()
 
             Button(action: {
-                // TODO: add  max
+                guard let selectedFeeRate = selectedFeeRate else {
+                    return Log.error("no fee rate selected")
+                }
+
+                Task {
+                    guard
+                        let max = try? await model.rust.getMaxSendAmount(
+                            fee: selectedFeeRate)
+                    else {
+                        return Log.error("unable to get max send amount")
+                    }
+
+                    await MainActor.run {
+                        switch metadata.selectedUnit {
+                        case .btc:
+                            sendAmount = max.btcString()
+                        case .sat:
+                            sendAmount = max.satsString()
+                        }
+                        maxSelected = true
+                    }
+                }
             }) {
                 Text("Max")
                     .font(.callout)
@@ -538,11 +583,21 @@ struct SendFlowSetAmountScreen: View {
                     }) {
                         Text("Paste")
                     }
-                } else {
-                    Button(action: { focusField = .none }) {
-                        Text("Done")
+                }
+
+            }
+            .buttonStyle(.bordered)
+            .tint(.primary)
+
+            Group {
+                if validateAddress() && sendAmount != "" || sendAmount != "0"
+                    || !validateAmount()
+                {
+                    Button(action: {}) {
+                        Text("Next")
                     }
                 }
+
             }
             .buttonStyle(.bordered)
             .tint(.primary)

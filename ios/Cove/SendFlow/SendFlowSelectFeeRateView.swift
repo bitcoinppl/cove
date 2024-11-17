@@ -115,7 +115,10 @@ private struct FeeOptionView: View {
             }
         }
         .padding()
-        .background(isSelected ? Color.midnightBlue.opacity(0.8) : Color(UIColor.systemGray6))
+        .background(
+            isSelected
+                ? Color.midnightBlue.opacity(0.8) : Color(UIColor.systemGray6)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(strokeColor, lineWidth: 1)
@@ -153,7 +156,8 @@ private struct DurationCapsule: View {
         SendFlowSelectFeeRateView(
             model: WalletViewModel(preview: "preview_only"),
             feeOptions: FeeRateOptionsWithTotalFee.previewNew(),
-            selectedOption: Binding.constant(FeeRateOptionsWithTotalFee.previewNew().medium())
+            selectedOption: Binding.constant(
+                FeeRateOptionsWithTotalFee.previewNew().medium())
         )
         .environment(MainViewModel())
     }

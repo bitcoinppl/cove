@@ -56,6 +56,7 @@ xcode-reset:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     rm -rf ~/Library/Developer/Xcode/DerivedData
     cd ios && xcodebuild clean
+    cd ios && xcode-build-server config -project *.xcodeproj -scheme Cove
     open ios/Cove.xcodeproj
 
 build-android:
