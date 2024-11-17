@@ -442,8 +442,10 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
-        let oldValueCleaned = oldValue.replacingOccurrences(of: ",", with: "")
+        let oldValueCleaned = oldValue
+            .replacingOccurrences(of: ",", with: "")
             .removingLeadingZeros()
+        
         if oldValueCleaned == value { return }
 
         // if we had max selected before, but then start entering a different amount
@@ -528,15 +530,18 @@ struct SendFlowSetAmountScreen: View {
 
     private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
         guard let newValue = newValue else { return }
-        guard validateAddress(newValue.item, displayAlert: true) else { return }
 
         sheetState = nil
 
-        guard
-            let addressWithNetwork = try? AddressWithNetwork(
-                address: newValue.item)
-        else { return }
+        let addressWithNetwork = try? AddressWithNetwork(address: newValue.item)
+
+        guard let addressWithNetwork = addressWithNetwork else {
+            setAlertState(.invalidAddress(newValue.item))
+            return
+        }
+
         address = addressWithNetwork.address().string()
+        guard validateAddress(address, displayAlert: true) else { return }
 
         if let amount = addressWithNetwork.amount() {
             setAmount(amount)
@@ -546,10 +551,6 @@ struct SendFlowSetAmountScreen: View {
             }
         }
 
-        if !validateAddress(address, displayAlert: true) {
-            return
-        }
-
         if sendAmount == "0" || sendAmount == "" || !validateAmount() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 focusField = .amount
@@ -557,7 +558,10 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
-        focusField = .none
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            focusField = .none
+            scrollPosition.scrollTo(edge: .bottom)
+        }
     }
 
     private func addressChanged(_: String, _ address: String) {
@@ -577,6 +581,7 @@ struct SendFlowSetAmountScreen: View {
         if validateAmount() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 focusField = .none
+                scrollPosition.scrollTo(edge: .bottom)
             }
         }
 
@@ -612,10 +617,10 @@ struct SendFlowSetAmountScreen: View {
 
         guard
             let feeRateOptions = try? await model.rust
-            .feeRateOptionsWithTotalFee(
-                feeRateOptions: feeRateOptionsBase, amount: amount,
-                address: address
-            )
+                .feeRateOptionsWithTotalFee(
+                    feeRateOptions: feeRateOptionsBase, amount: amount,
+                    address: address
+                )
         else { return }
 
         await MainActor.run {
@@ -1018,7 +1023,7 @@ private struct EnterAmountSection: View {
         VStack(spacing: 8) {
             HStack(
                 alignment:
-                .bottom
+                    .bottom
             ) {
                 TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)
