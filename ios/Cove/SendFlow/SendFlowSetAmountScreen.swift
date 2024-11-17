@@ -295,6 +295,10 @@ struct SendFlowSetAmountScreen: View {
 
                 if !validateAmount(displayAlert: true) {
                     self.focusField = .amount
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        setFormattedAmount(sendAmount)
+                    }
                 }
             }
 
@@ -431,14 +435,16 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
-
-        let value = value.removingLeadingZeros()
-        sendAmount = value
+        let value = newValue.replacingOccurrences(of: ",", with: "").removingLeadingZeros()
 
         guard let amount = Double(value) else {
             sendAmount = oldValue
             return
         }
+
+        let oldValueCleaned = oldValue.replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
+        if oldValueCleaned == value { return }
 
         // if we had max selected before, but then start entering a different amount
         // cancel max selected
@@ -470,6 +476,10 @@ struct SendFlowSetAmountScreen: View {
         }
 
         sendAmountFiat = model.fiatAmountToString(fiatAmount)
+
+        if oldValue.contains(",") && metadata.selectedUnit == .sat {
+            setFormattedAmount(String(amountSats))
+        }
     }
 
     private func selectedUnitChanged(_ oldUnit: Unit, _ newUnit: Unit) {
@@ -507,18 +517,7 @@ struct SendFlowSetAmountScreen: View {
         }
 
         let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
-
-        DispatchQueue.main.async {
-            if let sendAmountInt = Int(sendAmount),
-                metadata.selectedUnit == .sat
-            {
-                switch newField {
-                case .amount: self.sendAmount = String(sendAmountInt)
-                case .address, .none:
-                    self.sendAmount = ThousandsFormatter(sendAmountInt).fmt()
-                }
-            }
-        }
+        setFormattedAmount(sendAmount)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
@@ -527,8 +526,7 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
-    {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
         guard let newValue = newValue else { return }
         guard validateAddress(newValue.item, displayAlert: true) else { return }
 
@@ -614,10 +612,10 @@ struct SendFlowSetAmountScreen: View {
 
         guard
             let feeRateOptions = try? await model.rust
-                .feeRateOptionsWithTotalFee(
-                    feeRateOptions: feeRateOptionsBase, amount: amount,
-                    address: address
-                )
+            .feeRateOptionsWithTotalFee(
+                feeRateOptions: feeRateOptionsBase, amount: amount,
+                address: address
+            )
         else { return }
 
         await MainActor.run {
@@ -693,7 +691,6 @@ struct SendFlowSetAmountScreen: View {
                         Text("Paste")
                     }
                 }
-
             }
             .buttonStyle(.bordered)
             .tint(.primary)
@@ -706,7 +703,6 @@ struct SendFlowSetAmountScreen: View {
                         Text("Next")
                     }
                 }
-
             }
             .buttonStyle(.bordered)
             .tint(.primary)
@@ -1022,7 +1018,7 @@ private struct EnterAmountSection: View {
         VStack(spacing: 8) {
             HStack(
                 alignment:
-                    .bottom
+                .bottom
             ) {
                 TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)
