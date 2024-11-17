@@ -73,13 +73,15 @@ struct SendFlowSetAmountScreen: View {
     // max
     @State private var maxSelected: Amount? = nil
 
+    @State private var disappearing: Bool = false
+
     private var metadata: WalletMetadata {
         model.walletMetadata
     }
 
     private var showingAlert: Binding<Bool> {
         Binding(
-            get: { alertState != nil },
+            get: { alertState != nil && !disappearing },
             set: { newValue in
                 if !newValue {
                     alertState = .none
@@ -239,9 +241,9 @@ struct SendFlowSetAmountScreen: View {
         .onChange(
             of: metadata.selectedUnit, initial: false, selectedUnitChanged
         )
-        .onChange(of: sendAmount, initial: false, sendAmountChanged)
-        .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+        .onChange(of: sendAmount, initial: true, sendAmountChanged)
         .onChange(of: address, initial: true, addressChanged)
+        .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .environment(model)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -282,17 +284,35 @@ struct SendFlowSetAmountScreen: View {
                     return
                 }
             }
-
         }
         .onAppear {
+            // amount
             if let amount = amount {
                 switch metadata.selectedUnit {
-                case .btc: sendAmount = amount.btcString()
-                case .sat: sendAmount = amount.satsString()
+                case .btc: sendAmount = String(amount.btcString())
+                case .sat: sendAmount = String(amount.asSats())
                 }
+
+                if !validateAmount(displayAlert: true) {
+                    self.focusField = .amount
+                }
+            }
+
+            // address
+            if address != "" {
+                if !validateAddress(displayAlert: true) {
+                    self.focusField = .address
+                }
+            }
+
+            if validate() {
+                self.focusField = .none
             }
         }
         .sheet(item: $sheetState, content: SheetContent)
+        .onDisappear {
+            self.disappearing = true
+        }
         .alert(
             alertTitle,
             isPresented: showingAlert,
@@ -300,6 +320,14 @@ struct SendFlowSetAmountScreen: View {
             actions: alertButtons,
             message: alertMessage
         )
+    }
+
+    // doing it this way prevents an alert popping up when the user just goes back
+    private func setAlertState(_ alertState: AlertState) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard !self.disappearing else { return }
+            self.alertState = TaggedItem(alertState)
+        }
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
@@ -312,13 +340,13 @@ struct SendFlowSetAmountScreen: View {
     ) -> Bool {
         let address = address ?? self.address
         if address.isEmpty {
-            if displayAlert { alertState = TaggedItem(.emptyAddress) }
+            if displayAlert { setAlertState(.emptyAddress) }
             return false
         }
 
         if case let .failure(error) = Address.checkValid(address) {
             if displayAlert {
-                alertState = TaggedItem(AlertState(error, address: address))
+                setAlertState(AlertState(error, address: address))
             }
             return false
         }
@@ -329,13 +357,14 @@ struct SendFlowSetAmountScreen: View {
     private func validateAmount(
         _ amount: String? = nil, displayAlert: Bool = false
     ) -> Bool {
-        let sendAmount = amount ?? self.sendAmount
+        let sendAmountRaw = amount ?? self.sendAmount
         if displayAlert {
             Log.debug("validating amount: \(sendAmount)")
         }
 
+        let sendAmount = sendAmountRaw.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(sendAmount) else {
-            if displayAlert { alertState = TaggedItem(.invalidNumber) }
+            if displayAlert { setAlertState(.invalidNumber) }
             return false
         }
 
@@ -343,14 +372,14 @@ struct SendFlowSetAmountScreen: View {
         let amountSats = amountSats(amount)
 
         if amountSats > balance {
-            if displayAlert { alertState = TaggedItem(.insufficientFunds) }
+            if displayAlert { setAlertState(.insufficientFunds) }
             return false
         }
 
         if let selectedFeeRate = selectedFeeRate {
             let totalFeeSats = Double(selectedFeeRate.totalFee().asSats())
-            if (amountSats + totalFeeSats) > balance  {
-                if displayAlert { alertState = TaggedItem(.insufficientFunds) }
+            if (amountSats + totalFeeSats) > balance {
+                if displayAlert { setAlertState(.insufficientFunds) }
                 return false
             }
         }
@@ -389,16 +418,19 @@ struct SendFlowSetAmountScreen: View {
 
     // MARK: OnChange Functions
 
-    private func sendAmountChanged(_ oldValue: String, _ value: String) {
-        Log.debug("sendAmountChanged \(oldValue) -> \(value)")
+    private func sendAmountChanged(_ oldValue: String, _ newValue: String) {
+        Log.debug("sendAmountChanged \(oldValue) -> \(newValue)")
+
+        if feeRateOptions == nil {
+            Task { await getFeeRateOptions() }
+        }
 
         // allow clearing completely
-        if value == "" {
+        if newValue == "" {
             sendAmountFiat = "≈ $0.00 USD"
             return
         }
 
-        if metadata.selectedUnit == .sat && value.contains(",") { return }
 
         let value = value.removingLeadingZeros()
         sendAmount = value
@@ -424,6 +456,7 @@ struct SendFlowSetAmountScreen: View {
         }
 
         guard let prices = app.prices else {
+            Log.warn("unable to get fiat prices")
             app.dispatch(action: .updateFiatPrices)
             sendAmountFiat = "---"
             return
@@ -593,6 +626,12 @@ struct SendFlowSetAmountScreen: View {
                 self.selectedFeeRate = feeRateOptions.medium()
             }
         }
+    }
+
+    private func setFormattedAmount(_ amount: String) {
+        guard metadata.selectedUnit == .sat else { return }
+        guard let amountInt = Int(amount) else { return }
+        sendAmount = ThousandsFormatter(amountInt).fmt()
     }
 
     @ViewBuilder
