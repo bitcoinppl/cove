@@ -73,6 +73,11 @@ struct SendFlowSetAmountScreen: View {
     // max
     @State private var maxSelected: Amount? = nil
 
+    // shrinking header
+    @State private var headerHeight: CGFloat = screenHeight * 0.12
+    @State private var scrollOffset: CGFloat = 0
+
+    // back
     @State private var disappearing: Bool = false
 
     private var metadata: WalletMetadata {
@@ -175,6 +180,7 @@ struct SendFlowSetAmountScreen: View {
             // MARK: HEADER
 
             SendFlowHeaderView(model: model, amount: model.balance.confirmed)
+                .frame(height: max(40, headerHeight - scrollOffset))
 
             // MARK: CONTENT
 
@@ -226,6 +232,11 @@ struct SendFlowSetAmountScreen: View {
                 .background(colorScheme == .light ? .white : .black)
                 .scrollIndicators(.hidden)
                 .scrollPosition($scrollPosition, anchor: .top)
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                } action: { newOffset, _ in
+                    scrollOffset = max(0, newOffset)
+                }
 
                 if isLoading {
                     ZStack {
@@ -435,7 +446,8 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
-        let value = newValue.replacingOccurrences(of: ",", with: "").removingLeadingZeros()
+        let value = newValue.replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
         sendAmount = value
 
         guard let amount = Double(value) else {
@@ -534,7 +546,8 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
+    {
         guard let newValue = newValue else { return }
 
         sheetState = nil
@@ -876,20 +889,7 @@ struct SendFlowSetAmountScreen: View {
     var TotalSection: some View {
         VStack {
             HStack {
-                Text("Sending")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-
-                Spacer()
-
-                Text(totalSending)
-                    .multilineTextAlignment(.center)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Text("Total Spent")
+                Text("Total Spending")
                     .font(.title3)
                     .fontWeight(.medium)
 

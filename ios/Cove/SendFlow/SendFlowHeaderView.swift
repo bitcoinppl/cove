@@ -14,6 +14,8 @@ struct SendFlowHeaderView: View {
     @Bindable var model: WalletViewModel
     let amount: Amount
 
+    @State var height: CGFloat = screenHeight * 0.12
+
     // private
     @State var showingMenu: Bool = false
     private var metadata: WalletMetadata { model.walletMetadata }
@@ -103,7 +105,7 @@ struct SendFlowHeaderView: View {
             // </content>
             .padding()
         }
-        .frame(height: screenHeight * 0.12)
+        .frame(height: height)
         .padding(.bottom, 20)
         .background(Color.midnightBlue)
     }
@@ -115,6 +117,18 @@ struct SendFlowHeaderView: View {
 
         var body: some View {
             SendFlowHeaderView(model: model, amount: Amount.fromSat(sats: 1_385_433))
+        }
+    }
+
+    return AsyncPreview { Container() }
+}
+
+#Preview("small") {
+    struct Container: View {
+        @State var model: WalletViewModel = .init(preview: "preview_only")
+
+        var body: some View {
+            SendFlowHeaderView(model: model, amount: Amount.fromSat(sats: 1_385_433), height: 55)
         }
     }
 
