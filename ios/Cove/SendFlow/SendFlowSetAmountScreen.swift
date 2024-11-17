@@ -330,6 +330,10 @@ struct SendFlowSetAmountScreen: View {
         _ amount: String? = nil, displayAlert: Bool = false
     ) -> Bool {
         let sendAmount = amount ?? self.sendAmount
+        if displayAlert {
+            Log.debug("validating amount: \(sendAmount)")
+        }
+
         guard let amount = Double(sendAmount) else {
             if displayAlert { alertState = TaggedItem(.invalidNumber) }
             return false
@@ -338,10 +342,17 @@ struct SendFlowSetAmountScreen: View {
         let balance = Double(model.balance.confirmed.asSats())
         let amountSats = amountSats(amount)
 
-        // TODO: check if amount + fees is less than balance
         if amountSats > balance {
             if displayAlert { alertState = TaggedItem(.insufficientFunds) }
             return false
+        }
+
+        if let selectedFeeRate = selectedFeeRate {
+            let totalFeeSats = Double(selectedFeeRate.totalFee().asSats())
+            if (amountSats + totalFeeSats) > balance  {
+                if displayAlert { alertState = TaggedItem(.insufficientFunds) }
+                return false
+            }
         }
 
         return true
@@ -380,7 +391,6 @@ struct SendFlowSetAmountScreen: View {
 
     private func sendAmountChanged(_ oldValue: String, _ value: String) {
         Log.debug("sendAmountChanged \(oldValue) -> \(value)")
-        
 
         // allow clearing completely
         if value == "" {
@@ -397,22 +407,22 @@ struct SendFlowSetAmountScreen: View {
             sendAmount = oldValue
             return
         }
-        
+
         // if we had max selected before, but then start entering a different amount
         // cancel max selected
         if let maxSelected = maxSelected {
             switch metadata.selectedUnit {
             case .sat:
-                if amount < Double(maxSelected.asSats())  {
+                if amount < Double(maxSelected.asSats()) {
                     self.maxSelected = nil
                 }
             case .btc:
-                if amount < Double(maxSelected.asBtc())  {
+                if amount < Double(maxSelected.asBtc()) {
                     self.maxSelected = nil
                 }
             }
         }
-        
+
         guard let prices = app.prices else {
             app.dispatch(action: .updateFiatPrices)
             sendAmountFiat = "---"
@@ -455,8 +465,12 @@ struct SendFlowSetAmountScreen: View {
             "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))"
         )
 
-        if oldField == .amount && newField == .address {
+        if oldField == .amount {
             if !validateAmount(displayAlert: true) { return }
+        }
+
+        if oldField == .address {
+            if !validateAddress(displayAlert: true) { return }
         }
 
         let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
