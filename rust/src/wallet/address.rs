@@ -160,8 +160,18 @@ fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
     let Some(pos) = full_qr.find("?amount=") else { return (full_qr, None) };
 
     let address = &full_qr[..pos];
-    let number = &full_qr[pos + 8..];
 
+    let number_start = pos + 8;
+    let mut number_end = number_start;
+    for char in full_qr[number_start..].chars() {
+        if char.is_ascii_digit() || char == '.' {
+            number_end = number_end + 1;
+        } else {
+            break;
+        }
+    }
+
+    let number = &full_qr[number_start..number_end];
     let Ok(amount_float) = number.parse::<f64>() else { return (address, None) };
     let Ok(amount) = Amount::from_btc(amount_float) else { return (address, None) };
 
@@ -184,6 +194,11 @@ mod ffi {
 
     #[uniffi::export]
     impl AddressWithNetwork {
+        #[uniffi::constructor(name = "new")]
+        pub fn new(address: String) -> Result<Self, Error> {
+            Self::try_new(&address)
+        }
+
         fn address(&self) -> Address {
             self.address.clone()
         }
@@ -257,5 +272,89 @@ mod ffi {
             .map_err(|_| Error::WrongNetwork { current: network })?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_amount_no_amount() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, None);
+    }
+
+    #[test]
+    fn test_extract_amount_with_amount() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
+    }
+
+    #[test]
+    fn test_extract_amount_with_amount_and_spaces() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001  ";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
+    }
+
+    #[test]
+    fn test_extract_amount_with_amount_and_other_query_params() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.002&foo=bar";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, Some(Amount::from_btc(0.002).unwrap()));
+    }
+
+    #[test]
+    fn test_address_with_network() {
+        let assert = |address_with_network: AddressWithNetwork, amount: Option<Amount>| {
+            assert_eq!(
+                address_with_network.address.to_string(),
+                "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm"
+            );
+            assert_eq!(address_with_network.network, Network::Bitcoin);
+            assert_eq!(address_with_network.amount, amount);
+        };
+
+        let address_with_network =
+            AddressWithNetwork::try_new("bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+
+        assert!(address_with_network.is_ok());
+        assert(address_with_network.unwrap(), None);
+
+        let address_with_network =
+            AddressWithNetwork::try_new("bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001");
+
+        assert!(address_with_network.is_ok());
+        assert(
+            address_with_network.unwrap(),
+            Some(Amount::from_btc(0.001).unwrap()),
+        );
+
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001",
+        );
+
+        assert!(address_with_network.is_ok());
+        assert(
+            address_with_network.unwrap(),
+            Some(Amount::from_btc(0.001).unwrap()),
+        );
+
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.002&foo=bar",
+        );
+
+        assert!(address_with_network.is_ok());
+        assert(
+            address_with_network.unwrap(),
+            Some(Amount::from_btc(0.002).unwrap()),
+        );
     }
 }

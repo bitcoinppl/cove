@@ -839,7 +839,15 @@ open class AddressWithNetwork:
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_cove_fn_clone_addresswithnetwork(self.pointer, $0) }
     }
-    // No primary constructor declared for this class.
+public convenience init(address: String)throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeAddressError.lift) {
+    uniffi_cove_fn_constructor_addresswithnetwork_new(
+        FfiConverterString.lower(address),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
 
     deinit {
         guard let pointer = pointer else {
@@ -18208,6 +18216,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_address_preview_new() != 14015) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_addresswithnetwork_new() != 36898) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_amount_from_sat() != 58319) {
