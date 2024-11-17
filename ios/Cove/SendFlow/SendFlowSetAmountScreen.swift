@@ -436,16 +436,18 @@ struct SendFlowSetAmountScreen: View {
         }
 
         let value = newValue.replacingOccurrences(of: ",", with: "").removingLeadingZeros()
+        sendAmount = value
 
         guard let amount = Double(value) else {
             sendAmount = oldValue
             return
         }
 
-        let oldValueCleaned = oldValue
+        let oldValueCleaned =
+            oldValue
             .replacingOccurrences(of: ",", with: "")
             .removingLeadingZeros()
-        
+
         if oldValueCleaned == value { return }
 
         // if we had max selected before, but then start entering a different amount
@@ -523,7 +525,11 @@ struct SendFlowSetAmountScreen: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
-                scrollPosition.scrollTo(id: newField)
+                if newField == .none && validate() {
+                    scrollPosition.scrollTo(edge: .bottom)
+                } else {
+                    scrollPosition.scrollTo(id: newField)
+                }
             }
         }
     }
@@ -560,7 +566,6 @@ struct SendFlowSetAmountScreen: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             focusField = .none
-            scrollPosition.scrollTo(edge: .bottom)
         }
     }
 
@@ -581,7 +586,6 @@ struct SendFlowSetAmountScreen: View {
         if validateAmount() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 focusField = .none
-                scrollPosition.scrollTo(edge: .bottom)
             }
         }
 
