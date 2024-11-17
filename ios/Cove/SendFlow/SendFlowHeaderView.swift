@@ -103,7 +103,8 @@ struct SendFlowHeaderView: View {
             // </content>
             .padding()
         }
-        .frame(height: screenHeight * 0.20)
+        .frame(height: screenHeight * 0.12)
+        .padding(.bottom, 20)
         .background(Color.midnightBlue)
     }
 }
