@@ -71,7 +71,7 @@ struct SendFlowSetAmountScreen: View {
     @State private var sendAmountFiat: String = "≈ $0.00 USD"
 
     // max
-    @State private var maxSelected: Bool = false
+    @State private var maxSelected: Amount? = nil
 
     private var metadata: WalletMetadata {
         model.walletMetadata
@@ -159,6 +159,15 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    private func setAmount(_ amount: Amount) {
+        switch metadata.selectedUnit {
+        case .btc:
+            sendAmount = amount.btcString()
+        case .sat:
+            sendAmount = amount.satsString()
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
@@ -243,40 +252,37 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .task {
-            guard let feeRateOptions = try? await model.rust.getFeeOptions() else { return }
+            guard let feeRateOptions = try? await model.rust.getFeeOptions()
+            else { return }
             await MainActor.run {
                 self.feeRateOptionsBase = feeRateOptions
             }
         }
         .task {
-            // HACK: Bug in SwiftUI where keyboard toolbar is broken
-            try? await Task.sleep(for: .milliseconds(600))
-            await MainActor.run {
-                if address == "" {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        scrollPosition.scrollTo(id: FocusField.address, anchor: .center)
-                        focusField = .address
-                        
-                        guard let point = scrollPosition.point else { return }
-                    }
-
-                    return
-                }
-
-                if sendAmount == "0" || sendAmount == "" {
-                    focusField = .amount
-                    return
-                }
-            }
-
             Task {
-                try? await Task.sleep(for: .milliseconds(550))
+                try? await Task.sleep(for: .milliseconds(600))
                 await MainActor.run {
                     withAnimation {
                         isLoading = false
                     }
                 }
             }
+
+            // HACK: Bug in SwiftUI where keyboard toolbar is broken
+            try? await Task.sleep(for: .milliseconds(700))
+
+            await MainActor.run {
+                if address == "" {
+                    self.focusField = .address
+                    return
+                }
+
+                if sendAmount == "0" || sendAmount == "" {
+                    self.focusField = .amount
+                    return
+                }
+            }
+
         }
         .onAppear {
             if let amount = amount {
@@ -353,12 +359,28 @@ struct SendFlowSetAmountScreen: View {
         return amount * 100_000_000
     }
 
+    private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
+        print("setMaxSelected \(selectedFeeRate)")
+        Task {
+            guard
+                let max = try? await model.rust.getMaxSendAmount(
+                    fee: selectedFeeRate)
+            else {
+                return Log.error("unable to get max send amount")
+            }
+
+            await MainActor.run {
+                setAmount(max)
+                maxSelected = max
+            }
+        }
+    }
+
     // MARK: OnChange Functions
 
     private func sendAmountChanged(_ oldValue: String, _ value: String) {
         Log.debug("sendAmountChanged \(oldValue) -> \(value)")
-
-        maxSelected = false
+        
 
         // allow clearing completely
         if value == "" {
@@ -375,7 +397,22 @@ struct SendFlowSetAmountScreen: View {
             sendAmount = oldValue
             return
         }
-
+        
+        // if we had max selected before, but then start entering a different amount
+        // cancel max selected
+        if let maxSelected = maxSelected {
+            switch metadata.selectedUnit {
+            case .sat:
+                if amount < Double(maxSelected.asSats())  {
+                    self.maxSelected = nil
+                }
+            case .btc:
+                if amount < Double(maxSelected.asBtc())  {
+                    self.maxSelected = nil
+                }
+            }
+        }
+        
         guard let prices = app.prices else {
             app.dispatch(action: .updateFiatPrices)
             sendAmountFiat = "---"
@@ -411,7 +448,13 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
+    private func focusFieldChanged(
+        _ oldField: FocusField?, _ newField: FocusField?
+    ) {
+        Log.debug(
+            "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))"
+        )
+
         if oldField == .amount && newField == .address {
             if !validateAmount(displayAlert: true) { return }
         }
@@ -419,7 +462,9 @@ struct SendFlowSetAmountScreen: View {
         let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
 
         DispatchQueue.main.async {
-            if let sendAmountInt = Int(sendAmount), metadata.selectedUnit == .sat {
+            if let sendAmountInt = Int(sendAmount),
+                metadata.selectedUnit == .sat
+            {
                 switch newField {
                 case .amount: self.sendAmount = String(sendAmountInt)
                 case .address, .none:
@@ -428,33 +473,56 @@ struct SendFlowSetAmountScreen: View {
             }
         }
 
-        DispatchQueue.main.async {
-            withAnimation(.easeInOut(duration: 0.3)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.easeInOut(duration: 0.4)) {
                 scrollPosition.scrollTo(id: newField)
             }
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
+    {
         guard let newValue = newValue else { return }
+        guard validateAddress(newValue.item, displayAlert: true) else { return }
+
         sheetState = nil
 
-        if validateAddress(newValue.item, displayAlert: true) {
-            address = newValue.item
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                focusField = .none
+        guard
+            let addressWithNetwork = try? AddressWithNetwork(
+                address: newValue.item)
+        else { return }
+        address = addressWithNetwork.address().string()
+
+        if let amount = addressWithNetwork.amount() {
+            setAmount(amount)
+            if !validateAmount(displayAlert: true) {
+                focusField = .amount
+                return
             }
-        } else {
-            address = ""
         }
+
+        if !validateAddress(address, displayAlert: true) {
+            return
+        }
+
+        if sendAmount == "0" || sendAmount == "" || !validateAmount() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                focusField = .amount
+            }
+            return
+        }
+
+        focusField = .none
     }
 
     private func addressChanged(_: String, _ address: String) {
         if address.isEmpty { return }
         if address.count < 26 || address.count > 62 { return }
 
-        let addressString = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let address = try? Address.fromString(address: addressString) else { return }
+        let addressString = address.trimmingCharacters(
+            in: .whitespacesAndNewlines)
+        guard let address = try? Address.fromString(address: addressString)
+        else { return }
         guard validateAddress(addressString) else { return }
 
         let amountSats = max(sendAmountSats ?? 0, 10000)
@@ -472,14 +540,20 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func getFeeRateOptions(address: Address? = nil, amount: Amount? = nil) async {
+    private func getFeeRateOptions(
+        address: Address? = nil, amount: Amount? = nil
+    ) async {
         let address: Address? = {
             switch address {
             case let .some(address): return address
             case .none:
-                let addressString = self.address.trimmingCharacters(in: .whitespacesAndNewlines)
+                let addressString = self.address.trimmingCharacters(
+                    in: .whitespacesAndNewlines)
                 guard validateAddress(addressString) else { return .none }
-                guard let address = try? Address.fromString(address: addressString) else {
+                guard
+                    let address = try? Address.fromString(
+                        address: addressString)
+                else {
                     return .none
                 }
 
@@ -488,12 +562,15 @@ struct SendFlowSetAmountScreen: View {
         }()
 
         guard let address = address else { return }
-        let amount = amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
+        let amount =
+            amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
 
         guard
-            let feeRateOptions = try? await model.rust.feeRateOptionsWithTotalFee(
-                feeRateOptions: feeRateOptionsBase, amount: amount, address: address
-            )
+            let feeRateOptions = try? await model.rust
+                .feeRateOptionsWithTotalFee(
+                    feeRateOptions: feeRateOptionsBase, amount: amount,
+                    address: address
+                )
         else { return }
 
         await MainActor.run {
@@ -524,35 +601,14 @@ struct SendFlowSetAmountScreen: View {
 
             Spacer()
 
-            Button(action: {
-                guard let selectedFeeRate = selectedFeeRate else {
-                    return Log.error("no fee rate selected")
+            if let selectedFeeRate = selectedFeeRate {
+                Button(action: { setMaxSelected(selectedFeeRate) }) {
+                    Text("Max")
+                        .font(.callout)
                 }
-
-                Task {
-                    guard
-                        let max = try? await model.rust.getMaxSendAmount(
-                            fee: selectedFeeRate)
-                    else {
-                        return Log.error("unable to get max send amount")
-                    }
-
-                    await MainActor.run {
-                        switch metadata.selectedUnit {
-                        case .btc:
-                            sendAmount = max.btcString()
-                        case .sat:
-                            sendAmount = max.satsString()
-                        }
-                        maxSelected = true
-                    }
-                }
-            }) {
-                Text("Max")
-                    .font(.callout)
+                .tint(.primary)
+                .buttonStyle(.bordered)
             }
-            .tint(.primary)
-            .buttonStyle(.bordered)
 
             Button(action: { sendAmount = "" }) {
                 Label("Clear", systemImage: "xmark.circle")
@@ -593,7 +649,7 @@ struct SendFlowSetAmountScreen: View {
                 if validateAddress() && sendAmount != "" || sendAmount != "0"
                     || !validateAmount()
                 {
-                    Button(action: {}) {
+                    Button(action: { focusField = .amount }) {
                         Text("Next")
                     }
                 }
@@ -738,9 +794,12 @@ struct SendFlowSetAmountScreen: View {
                     .padding(.trailing, 6)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(metadata.masterFingerprint?.asUppercase() ?? "No Fingerprint")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
+                    Text(
+                        metadata.masterFingerprint?.asUppercase()
+                            ?? "No Fingerprint"
+                    )
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
 
                     Text(metadata.name)
                         .font(.headline)
@@ -827,6 +886,11 @@ struct SendFlowSetAmountScreen: View {
                 selectedOption: Binding(
                     get: { selectedFeeRate! },
                     set: { newValue in
+                        // in maxSelected mode, so adjust with new rate
+                        if maxSelected != nil {
+                            setMaxSelected(newValue)
+                        }
+
                         selectedFeeRate = newValue
                     }
                 )
@@ -842,7 +906,8 @@ struct SendFlowSetAmountScreen: View {
 
         return {
             switch alertState.item {
-            case .emptyAddress, .invalidAddress, .wrongNetwork: "Invalid Address"
+            case .emptyAddress, .invalidAddress, .wrongNetwork:
+                "Invalid Address"
             case .invalidNumber, .zeroAmount: "Invalid Amount"
             case .insufficientFunds: "Insufficient Funds"
             case .sendAmountToLow: "Send Amount Too Low"
@@ -859,14 +924,16 @@ struct SendFlowSetAmountScreen: View {
             case .invalidNumber:
                 return "Please enter a valid number for the amout to send"
             case .zeroAmount:
-                return "Can't send an empty transaction. Please enter a valid amount"
+                return
+                    "Can't send an empty transaction. Please enter a valid amount"
             case let .invalidAddress(address):
                 return "The address \(address) is invalid"
             case let .wrongNetwork(address):
                 return
                     "The address \(address) is on the wrong network. You are on \(metadata.network)"
             case .insufficientFunds:
-                return "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+                return
+                    "You do not have enough bitcoin in your wallet to cover the amount plus fees"
             case .sendAmountToLow:
                 return "Send amount is too low. Please send atleast 5000 sats"
             }
@@ -902,15 +969,18 @@ private struct EnterAmountSection: View {
         VStack(spacing: 8) {
             HStack(
                 alignment:
-                .bottom
+                    .bottom
             ) {
                 TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)
                     .multilineTextAlignment(.center)
                     .font(.system(size: 48, weight: .bold))
-                    .keyboardType(metadata.selectedUnit == .btc ? .decimalPad : .numberPad)
+                    .keyboardType(
+                        metadata.selectedUnit == .btc ? .decimalPad : .numberPad
+                    )
                     .offset(
-                        x: metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
+                        x: metadata.selectedUnit == .btc
+                            ? screenWidth * 0.10 : screenWidth * 0.11
                     )
                     .padding(.horizontal, 30)
                     .minimumScaleFactor(0.01)
