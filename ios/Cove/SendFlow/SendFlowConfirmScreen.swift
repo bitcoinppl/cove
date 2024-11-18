@@ -155,9 +155,6 @@ struct SendFlowConfirmScreen: View {
 
             Spacer()
         }
-        .navigationTitle("Confirm Transaction")
-        .navigationBarTitleDisplayMode(.inline)
-        .scrollIndicators(.hidden)
     }
 }
 

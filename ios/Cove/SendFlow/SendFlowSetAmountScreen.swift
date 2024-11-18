@@ -218,8 +218,6 @@ struct SendFlowSetAmountScreen: View {
                             // Total Spending Section
                             TotalSpendingSection
 
-                            Spacer()
-
                             // Next Button
                             NextButtonBottom
                         }
@@ -406,6 +404,11 @@ struct SendFlowSetAmountScreen: View {
 
         let balance = Double(model.balance.confirmed.asSats())
         let amountSats = amountSats(amount)
+
+        if amountSats < 10_000 {
+            if displayAlert { setAlertState(.sendAmountToLow) }
+            return false
+        }
 
         if amountSats > balance {
             if displayAlert { setAlertState(.insufficientFunds) }
@@ -727,9 +730,15 @@ struct SendFlowSetAmountScreen: View {
                 if address.isEmpty {
                     Button(action: {
                         address = UIPasteboard.general.string ?? ""
-                        if !address.isEmpty {
-                            focusField = .none
+                        if address.isEmpty { return }
+                        if !validateAddress() { return }
+                        if !validateAmount() {
+                            focusField = .amount
+                            return
                         }
+
+                        focusField = .none
+                        return
                     }) {
                         Text("Paste")
                     }
@@ -966,8 +975,7 @@ struct SendFlowSetAmountScreen: View {
                 .cornerRadius(10)
                 .disabled(!validate())
         }
-        .padding(.top, 8)
-        .padding(.bottom)
+        .padding(.vertical)
     }
 
     @ViewBuilder
@@ -1033,6 +1041,7 @@ struct SendFlowSetAmountScreen: View {
                     "The address \(address) is on the wrong network. You are on \(metadata.network)"
             case .insufficientFunds:
                 return
+                    "You do not have enough bitcoin in your wallet to cover the amount plus fees"
             case .sendAmountToLow:
                 return "Send amount is too low. Please send atleast 5000 sats"
             }
