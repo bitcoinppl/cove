@@ -112,7 +112,7 @@ struct SendFlowSetAmountScreen: View {
 
         switch metadata.selectedUnit {
         case .btc:
-            return totalFee.btcStringWithUnit()
+            return Double(totalFee.asBtc()).btcFmt() + " BTC"
         case .sat:
             return totalFee.satsStringWithUnit()
         }
@@ -208,11 +208,14 @@ struct SendFlowSetAmountScreen: View {
 
                             && Address.isValid(address)
                         {
+                            // Total Sending Section
+                            TotalSendingSection
+
                             // Network Fee Section
                             NetworkFeeSection
 
-                            // Total Section
-                            TotalSection
+                            // Total Spending Section
+                            TotalSpendingSection
 
                             Spacer()
 
@@ -321,7 +324,12 @@ struct SendFlowSetAmountScreen: View {
             }
 
             if validate() {
-                self.focusField = .none
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3){
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        self.focusField = .none
+                        scrollPosition.scrollTo(edge: .bottom)
+                    }
+                }
             }
         }
         .sheet(item: $sheetState, content: SheetContent)
@@ -457,8 +465,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -546,8 +554,7 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
-    {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
         guard let newValue = newValue else { return }
 
         sheetState = nil
@@ -634,10 +641,10 @@ struct SendFlowSetAmountScreen: View {
 
         guard
             let feeRateOptions = try? await model.rust
-                .feeRateOptionsWithTotalFee(
-                    feeRateOptions: feeRateOptionsBase, amount: amount,
-                    address: address
-                )
+            .feeRateOptionsWithTotalFee(
+                feeRateOptions: feeRateOptionsBase, amount: amount,
+                address: address
+            )
         else { return }
 
         await MainActor.run {
@@ -789,8 +796,9 @@ struct SendFlowSetAmountScreen: View {
     var NetworkFeeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Network Fee")
-                .font(.headline)
-                .foregroundColor(.secondary)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fontWeight(.medium)
 
             HStack {
                 Text(selectedFeeRate?.duration() ?? "2 hours")
@@ -805,6 +813,7 @@ struct SendFlowSetAmountScreen: View {
                 Spacer()
 
                 Text(totalFeeString)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .fontWeight(.medium)
             }
@@ -812,7 +821,6 @@ struct SendFlowSetAmountScreen: View {
         .onTapGesture {
             self.sheetState = TaggedItem(.fee)
         }
-        .padding(.top, 12)
     }
 
     @ViewBuilder
@@ -886,7 +894,24 @@ struct SendFlowSetAmountScreen: View {
     }
 
     @ViewBuilder
-    var TotalSection: some View {
+    var TotalSendingSection: some View {
+        HStack {
+            Text("Total Sending")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fontWeight(.medium)
+
+            Spacer()
+
+            Text(totalSending)
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .fontWeight(.medium)
+        }
+    }
+
+    @ViewBuilder
+    var TotalSpendingSection: some View {
         VStack {
             HStack {
                 Text("Total Spending")
@@ -1027,7 +1052,8 @@ private struct EnterAmountSection: View {
         VStack(spacing: 8) {
             HStack(
                 alignment:
-                    .bottom
+                .bottom
+
             ) {
                 TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)
