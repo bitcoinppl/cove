@@ -13059,6 +13059,7 @@ extension WalletError: Foundation.LocalizedError {
 public enum WalletErrorAlert {
     case nodeConnectionFailed(String
     )
+    case noBalance
 }
 
 public struct FfiConverterTypeWalletErrorAlert: FfiConverterRustBuffer {
@@ -13070,6 +13071,8 @@ public struct FfiConverterTypeWalletErrorAlert: FfiConverterRustBuffer {
         case 1: return try .nodeConnectionFailed(FfiConverterString.read(from: &buf)
             )
 
+        case 2: return .noBalance
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -13079,6 +13082,9 @@ public struct FfiConverterTypeWalletErrorAlert: FfiConverterRustBuffer {
         case let .nodeConnectionFailed(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
+
+        case .noBalance:
+            writeInt(&buf, Int32(2))
         }
     }
 }

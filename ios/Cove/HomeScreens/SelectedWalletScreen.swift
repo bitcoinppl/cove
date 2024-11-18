@@ -112,6 +112,14 @@ struct SelectedWalletScreenInner: View {
                 primaryButton: .default(Text("Yes, Change Node"), action: { navigate(.settings) }),
                 secondaryButton: .cancel()
             )
+        case .noBalance:
+            .init(
+                    title: Text("No Balance"),
+                    message: Text("Can't send a transaction, when you have no funds."),
+                    primaryButton: .default(Text("Receive Funds"),
+                                            action: { sheetState = .init(.receive) }),
+                    secondaryButton: .cancel()
+                )
         }
     }
 

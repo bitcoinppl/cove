@@ -126,6 +126,11 @@ struct WalletBalanceHeaderView: View {
                 }
 
                 Button(action: {
+                    if balance.asSats() == 0 {
+                        model.errorAlert = .noBalance
+                        return
+                    }
+                    
                     app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
                 }) {
                     HStack(spacing: 10) {

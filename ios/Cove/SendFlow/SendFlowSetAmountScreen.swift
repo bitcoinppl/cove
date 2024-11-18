@@ -302,14 +302,14 @@ struct SendFlowSetAmountScreen: View {
         }
         .onAppear {
             // if zero balance, show alert and send back
-            if metadata.balance.confirmed.asSats() == 0 {
+            if model.balance.confirmed.asSats() == 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
                         self.focusField = .none
                     }
                 }
 
-                showAlert(AlertState(.zeroBalance))
+                setAlertState(.noBalance)
                 return
             }
 
@@ -1004,7 +1004,7 @@ struct SendFlowSetAmountScreen: View {
             switch alertState.item {
             case .emptyAddress, .invalidAddress, .wrongNetwork:
                 "Invalid Address"
-            case .invalidNumber,: "Invalid Amount"
+            case .invalidNumber, .zeroAmount: "Invalid Amount"
             case .insufficientFunds, .noBalance: "Insufficient Funds"
             case .sendAmountToLow: "Send Amount Too Low"
             }

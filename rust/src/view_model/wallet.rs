@@ -98,6 +98,7 @@ pub enum WalletLoadState {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletErrorAlert {
     NodeConnectionFailed(String),
+    NoBalance,
 }
 
 pub type Error = WalletViewModelError;
