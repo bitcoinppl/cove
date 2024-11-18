@@ -337,7 +337,7 @@ struct SendFlowSetAmountScreen: View {
             }
 
             if validate() {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3){
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
                         self.focusField = .none
                         scrollPosition.scrollTo(edge: .bottom)
@@ -478,8 +478,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -567,7 +567,8 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
+    {
         guard let newValue = newValue else { return }
 
         sheetState = nil
@@ -654,10 +655,10 @@ struct SendFlowSetAmountScreen: View {
 
         guard
             let feeRateOptions = try? await model.rust
-            .feeRateOptionsWithTotalFee(
-                feeRateOptions: feeRateOptionsBase, amount: amount,
-                address: address
-            )
+                .feeRateOptionsWithTotalFee(
+                    feeRateOptions: feeRateOptionsBase, amount: amount,
+                    address: address
+                )
         else { return }
 
         await MainActor.run {
@@ -1020,15 +1021,18 @@ struct SendFlowSetAmountScreen: View {
             case .invalidNumber:
                 return "Please enter a valid number for the amout to send"
             case .zeroAmount:
-                return "Can't send an empty transaction. Please enter a valid amount"
+                return
+                    "Can't send an empty transaction. Please enter a valid amount"
             case .noBalance:
-                return "You do not have any bitcoin in your wallet. Please add some to send a transaction"
+                return
+                    "You do not have any bitcoin in your wallet. Please add some to send a transaction"
             case let .invalidAddress(address):
                 return "The address \(address) is invalid"
             case let .wrongNetwork(address):
-                return "The address \(address) is on the wrong network. You are on \(metadata.network)"
+                return
+                    "The address \(address) is on the wrong network. You are on \(metadata.network)"
             case .insufficientFunds:
-                return "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+                return
             case .sendAmountToLow:
                 return "Send amount is too low. Please send atleast 5000 sats"
             }
@@ -1064,11 +1068,7 @@ private struct EnterAmountSection: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HStack(
-                alignment:
-                .bottom
-
-            ) {
+            HStack(alignment: .bottom) {
                 TextField("", text: $sendAmount)
                     .focused($focusField, equals: .amount)
                     .multilineTextAlignment(.center)

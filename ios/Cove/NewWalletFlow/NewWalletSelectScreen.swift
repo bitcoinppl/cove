@@ -53,7 +53,9 @@ struct NewWalletSelectScreen: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)
-                    .background(.blue.opacity(self.colorScheme == .dark ? 0.85 : 1))
+                    .background(
+                        .blue.opacity(self.colorScheme == .dark ? 0.85 : 1)
+                    )
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
@@ -68,7 +70,9 @@ struct NewWalletSelectScreen: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)
-                    .background(.green.opacity(self.colorScheme == .dark ? 0.85 : 1))
+                    .background(
+                        .green.opacity(self.colorScheme == .dark ? 0.85 : 1)
+                    )
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
@@ -157,14 +161,18 @@ struct NewWalletSelectScreen: View {
             Spacer()
         }
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: self.$isImporting, allowedContentTypes: [.plainText, .json]) { result in
+        .fileImporter(
+            isPresented: self.$isImporting,
+            allowedContentTypes: [.plainText, .json]
+        ) { result in
             switch result {
             case let .success(file):
                 do {
                     let fileContents = try readFile(from: file)
                     self.newWalletFromXpub(fileContents)
                 } catch {
-                    self.alert = AlertItem(type: .error(error.localizedDescription))
+                    self.alert = AlertItem(
+                        type: .error(error.localizedDescription))
                 }
             case let .failure(error):
                 self.alert = AlertItem(type: .error(error.localizedDescription))
@@ -190,7 +198,8 @@ struct NewWalletSelectScreen: View {
             let wallet = try Wallet.newFromXpub(xpub: xpub)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
-            self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
+            self.alert = AlertItem(
+                type: .success("Imported Wallet Successfully"))
             try self.app.rust.selectWallet(id: id)
         } catch {
             self.alert = AlertItem(type: .error(error.localizedDescription))
@@ -199,7 +208,8 @@ struct NewWalletSelectScreen: View {
 
     func readFile(from url: URL) throws -> String {
         guard url.startAccessingSecurityScopedResource() else {
-            throw FileReadError(message: "Failed to access the file at \(url.path)")
+            throw FileReadError(
+                message: "Failed to access the file at \(url.path)")
         }
 
         defer { url.stopAccessingSecurityScopedResource() }
