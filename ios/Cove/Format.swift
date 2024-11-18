@@ -22,6 +22,10 @@ struct ThousandsFormatter<T: Numeric & LosslessStringConvertible> {
 
         return formatter.string(from: NSNumber(value: Double(String(number))!)) ?? String(number)
     }
+
+    func fmtWithUnit() -> String {
+        fmt() + " SATS"
+    }
 }
 
 struct FiatFormatter<T: Numeric & LosslessStringConvertible> {
@@ -38,5 +42,9 @@ struct FiatFormatter<T: Numeric & LosslessStringConvertible> {
         f.maximumFractionDigits = 2
 
         return f.string(from: NSNumber(value: Double(String(number))!)) ?? String(number)
+    }
+
+    func fmtWithUnit() -> String {
+        fmt() + " USD"
     }
 }

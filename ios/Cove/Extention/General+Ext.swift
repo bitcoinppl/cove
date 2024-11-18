@@ -69,6 +69,10 @@ extension Double {
         formatter.usesGroupingSeparator = false
         return formatter.string(from: NSNumber(value: self))!
     }
+
+    func btcFmtWithUnit() -> String {
+        btcFmt() + " BTC"
+    }
 }
 
 extension Amount: Equatable {
@@ -93,7 +97,8 @@ extension SendRoute {
                 #selector(UIResponder.resignFirstResponder),
                 to: nil,
                 from: nil,
-                for: nil)
+                for: nil
+            )
         }
     }
 #endif

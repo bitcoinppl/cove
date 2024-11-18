@@ -112,7 +112,7 @@ struct SendFlowSetAmountScreen: View {
 
         switch metadata.selectedUnit {
         case .btc:
-            return Double(totalFee.asBtc()).btcFmt() + " BTC"
+            return Double(totalFee.asBtc()).btcFmtWithUnit()
         case .sat:
             return totalFee.satsStringWithUnit()
         }
@@ -139,9 +139,9 @@ struct SendFlowSetAmountScreen: View {
 
         switch metadata.selectedUnit {
         case .btc:
-            return "\(totalSpent.btcFmt()) BTC"
+            return totalSpent.btcFmtWithUnit()
         case .sat:
-            return "\(ThousandsFormatter(totalSpent * 100_000_000).fmt()) SATS"
+            return ThousandsFormatter(totalSpent * 100_000_000).fmtWithUnit()
         }
     }
 
@@ -159,10 +159,10 @@ struct SendFlowSetAmountScreen: View {
         switch metadata.selectedUnit {
         case .btc:
             let totalSend = Double(sendAmount) ?? 0
-            return "\(totalSend.btcFmt()) BTC"
+            return totalSend.btcFmtWithUnit()
         case .sat:
             let totalSend = Int(sendAmount) ?? 0
-            return "\(ThousandsFormatter(totalSend).fmt()) SATS"
+            return ThousandsFormatter(totalSend).fmtWithUnit()
         }
     }
 
