@@ -23,6 +23,7 @@ private enum AlertState: Equatable {
     case invalidNumber
     case invalidAddress(String)
     case wrongNetwork(String)
+    case noBalance
     case zeroAmount
     case insufficientFunds
     case sendAmountToLow
@@ -300,6 +301,18 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
+            // if zero balance, show alert and send back
+            if metadata.balance.confirmed.asSats() == 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        self.focusField = .none
+                    }
+                }
+
+                showAlert(AlertState(.zeroBalance))
+                return
+            }
+
             // amount
             if let amount = amount {
                 switch metadata.selectedUnit {
@@ -991,8 +1004,8 @@ struct SendFlowSetAmountScreen: View {
             switch alertState.item {
             case .emptyAddress, .invalidAddress, .wrongNetwork:
                 "Invalid Address"
-            case .invalidNumber, .zeroAmount: "Invalid Amount"
-            case .insufficientFunds: "Insufficient Funds"
+            case .invalidNumber,: "Invalid Amount"
+            case .insufficientFunds, .noBalance: "Insufficient Funds"
             case .sendAmountToLow: "Send Amount Too Low"
             }
         }()
@@ -1007,16 +1020,15 @@ struct SendFlowSetAmountScreen: View {
             case .invalidNumber:
                 return "Please enter a valid number for the amout to send"
             case .zeroAmount:
-                return
-                    "Can't send an empty transaction. Please enter a valid amount"
+                return "Can't send an empty transaction. Please enter a valid amount"
+            case .noBalance:
+                return "You do not have any bitcoin in your wallet. Please add some to send a transaction"
             case let .invalidAddress(address):
                 return "The address \(address) is invalid"
             case let .wrongNetwork(address):
-                return
-                    "The address \(address) is on the wrong network. You are on \(metadata.network)"
+                return "The address \(address) is on the wrong network. You are on \(metadata.network)"
             case .insufficientFunds:
-                return
-                    "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+                return "You do not have enough bitcoin in your wallet to cover the amount plus fees"
             case .sendAmountToLow:
                 return "Send amount is too low. Please send atleast 5000 sats"
             }
@@ -1030,7 +1042,9 @@ struct SendFlowSetAmountScreen: View {
         switch alert.item {
         case .emptyAddress, .wrongNetwork, .invalidAddress:
             Button("OK") { focusField = .address }
-        case .invalidNumber, .insufficientFunds, .zeroAmount, .sendAmountToLow:
+        case .noBalance:
+            Button("Go Back") { app.popRoute() }
+        case .invalidNumber, .insufficientFunds, .sendAmountToLow, .zeroAmount:
             Button("OK") { focusField = .amount }
         }
     }
