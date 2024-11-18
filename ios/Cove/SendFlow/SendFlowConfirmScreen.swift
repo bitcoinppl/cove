@@ -53,22 +53,36 @@ struct SendFlowConfirmScreen: View {
                             Text("573,299")
                                 .font(.system(size: 48, weight: .bold))
 
-                            Text("sats")
-                                .padding(.bottom, 10)
+                            Text(metadata.selectedUnit == .sat ? "sats" : "btc")
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 16)
+                                .contentShape(
+                                    .contextMenuPreview,
+                                    RoundedRectangle(cornerRadius: 8)
+                                )
                                 .contextMenu {
                                     Button {
-//                                          unit = "sats"
+                                        model.dispatch(
+                                            action: .updateUnit(.sat))
                                     } label: {
-                                        Label("Sats", systemImage: "bitcoinsign.circle")
+                                        Text("sats")
                                     }
 
                                     Button {
-//                                          unit = "btc"
+                                        model.dispatch(
+                                            action: .updateUnit(.btc))
                                     } label: {
-                                        Label("BTC", systemImage: "bitcoinsign.circle.fill")
+                                        Text("btc")
                                     }
+                                } preview: {
+                                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
+                                        .padding(.vertical, 10)
+                                        .padding(.horizontal)
                                 }
+                                .offset(y: -5)
+                                .offset(x: -16)
                         }
+                        .offset(x: 32)
 
                         Text("≈ $326.93 USD")
                             .font(.title3)
@@ -76,31 +90,7 @@ struct SendFlowConfirmScreen: View {
                     }
                     .padding(.top, 8)
 
-                    // Account Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Image(systemName: "bitcoinsign")
-                                .font(.title2)
-                                .foregroundColor(.orange)
-                                .padding(.trailing, 6)
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("73C5DA0A")
-                                    .font(.footnote)
-                                    .foregroundColor(.secondary)
-
-                                Text("Daily Spending Wallet")
-                                    .font(.headline)
-                                    .fontWeight(.medium)
-                            }
-
-                            Spacer()
-                        }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(12)
-                    }
-                    .padding(.vertical, 12)
+                    AccountSection
 
                     // To Address Section
                     HStack {
@@ -111,10 +101,12 @@ struct SendFlowConfirmScreen: View {
 
                         Spacer()
 
-                        Text("bc1q uyye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a")
-                            .lineLimit(3, reservesSpace: true)
-                            .font(.system(.callout, design: .none))
-                            .padding(.leading, 60)
+                        Text(
+                            "bc1q uyye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a"
+                        )
+                        .lineLimit(3, reservesSpace: true)
+                        .font(.system(.callout, design: .none))
+                        .padding(.leading, 60)
                     }
                     .padding(.top, 6)
 
@@ -156,6 +148,37 @@ struct SendFlowConfirmScreen: View {
             Spacer()
         }
     }
+
+    @ViewBuilder
+    var AccountSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "bitcoinsign")
+                    .font(.title2)
+                    .foregroundColor(.orange)
+                    .padding(.trailing, 6)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(
+                        metadata.masterFingerprint?.asUppercase()
+                            ?? "No Fingerprint"
+                    )
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+
+                    Text(metadata.name)
+                        .font(.headline)
+                        .fontWeight(.medium)
+                }
+
+                Spacer()
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
+    }
+
 }
 
 #Preview {
