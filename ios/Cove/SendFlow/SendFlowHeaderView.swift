@@ -72,7 +72,7 @@ struct SendFlowHeaderView: View {
                                 model.dispatch(action: .updateUnit(.sat))
                                 showingMenu = false
                             }
-                            .padding()
+                            .padding(8)
                             .buttonStyle(.plain)
 
                             Divider()
@@ -81,7 +81,7 @@ struct SendFlowHeaderView: View {
                                 model.dispatch(action: .updateUnit(.btc))
                                 showingMenu = false
                             }
-                            .padding()
+                            .padding(8)
                             .buttonStyle(.plain)
                         }
                         .padding(.vertical, 8)
@@ -93,7 +93,9 @@ struct SendFlowHeaderView: View {
 
                     Spacer()
 
-                    Button(action: { model.dispatch(action: .toggleSensitiveVisibility) }) {
+                    Button(action: {
+                        model.dispatch(action: .toggleSensitiveVisibility)
+                    }) {
                         switch metadata.sensitiveVisible {
                         case true: Image(systemName: "eye.slash")
                         case false: Image(systemName: "eye")
@@ -116,7 +118,8 @@ struct SendFlowHeaderView: View {
         @State var model: WalletViewModel = .init(preview: "preview_only")
 
         var body: some View {
-            SendFlowHeaderView(model: model, amount: Amount.fromSat(sats: 1_385_433))
+            SendFlowHeaderView(
+                model: model, amount: Amount.fromSat(sats: 1_385_433))
         }
     }
 
@@ -128,7 +131,9 @@ struct SendFlowHeaderView: View {
         @State var model: WalletViewModel = .init(preview: "preview_only")
 
         var body: some View {
-            SendFlowHeaderView(model: model, amount: Amount.fromSat(sats: 1_385_433), height: 55)
+            SendFlowHeaderView(
+                model: model, amount: Amount.fromSat(sats: 1_385_433),
+                height: 55)
         }
     }
 

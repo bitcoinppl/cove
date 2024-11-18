@@ -1112,7 +1112,7 @@ private struct EnterAmountSection: View {
                             model.dispatch(action: .updateUnit(.sat))
                             showingMenu = false
                         }
-                        .padding()
+                        .padding(12)
                         .buttonStyle(.plain)
 
                         Divider()
@@ -1121,7 +1121,7 @@ private struct EnterAmountSection: View {
                             model.dispatch(action: .updateUnit(.btc))
                             showingMenu = false
                         }
-                        .padding()
+                        .padding(12)
                         .buttonStyle(.plain)
                     }
                     .padding(.vertical, 8)
