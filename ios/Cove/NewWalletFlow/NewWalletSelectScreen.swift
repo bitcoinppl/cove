@@ -129,6 +129,16 @@ struct NewWalletSelectScreen: View {
                         }
                     }
                 }
+                Button("Paste") {
+                    let text = UIPasteboard.general.string ?? ""
+                    if text.isEmpty {
+                        self.alert = AlertItem(
+                            type: .error("No text found on the clipboard."))
+                        return
+                    }
+
+                    self.newWalletFromXpub(text)
+                }
             }
 
             Spacer()
