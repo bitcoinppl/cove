@@ -53,6 +53,24 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         return try await rust.addressAt(index: 0)
     }
 
+    func amountFmt(_ amount: Amount) -> String {
+        switch walletMetadata.selectedUnit {
+        case .btc:
+            return amount.btcString()
+        case .sat:
+            return amount.satsString()
+        }
+    }
+
+    func amountFmtUnit(_ amount: Amount) -> String {
+        switch walletMetadata.selectedUnit {
+        case .btc:
+            return amount.btcStringWithUnit()
+        case .sat:
+            return amount.satsStringWithUnit()
+        }
+    }
+
     func fiatAmountToString<T: Numeric & LosslessStringConvertible>(_ amount: T) -> String {
         "≈ \(FiatFormatter(amount).fmt()) USD"
     }

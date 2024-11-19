@@ -181,7 +181,6 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
-        print("setMaxSelected \(selectedFeeRate)")
         Task {
             guard
                 let max = try? await model.rust.getMaxSendAmount(
@@ -216,12 +215,17 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             do {
-                let psbt = try await model.rust.buildTransactionWithFeeRate(
+                let confirmDetails = try await model.rust.getConfirmDetails(
                     amount: amount,
                     address: address,
-                    feeRate: feeRate.feeRate())
-                
-                
+                    feeRate: feeRate.feeRate()
+                )
+
+                let route = RouteFactory().sendConfirm(id: id, details: confirmDetails)
+                app.pushRoute(route)
+            } catch {
+                Log.error("unable to get confirm details: \(error)")
+                setAlertState(.unableToBuildTxn(error.localizedDescription))
             }
         }
     }
@@ -520,8 +524,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -609,8 +613,7 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
-    {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
         guard let newValue = newValue else { return }
 
         sheetState = nil
@@ -697,10 +700,10 @@ struct SendFlowSetAmountScreen: View {
 
         guard
             let feeRateOptions = try? await model.rust
-                .feeRateOptionsWithTotalFee(
-                    feeRateOptions: feeRateOptionsBase, amount: amount,
-                    address: address
-                )
+            .feeRateOptionsWithTotalFee(
+                feeRateOptions: feeRateOptionsBase, amount: amount,
+                address: address
+            )
         else { return }
 
         await MainActor.run {
@@ -998,7 +1001,7 @@ struct SendFlowSetAmountScreen: View {
             next()
         }) {
             Text("Next")
-                .font(.title3)
+                .font(.subheadline)
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -1080,7 +1083,7 @@ struct SendFlowSetAmountScreen: View {
                 return "Send amount is too low. Please send atleast 5000 sats"
             case .unableToGetFeeRate:
                 return "Are you connected to the internet?"
-            case .unableToBuildTxn(let msg):
+            case let .unableToBuildTxn(msg):
                 return msg
             }
         }()

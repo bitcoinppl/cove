@@ -561,6 +561,8 @@ private struct FfiConverterDuration: FfiConverterRustBuffer {
 }
 
 public protocol AddressProtocol: AnyObject {
+    func spacedOut() -> String
+
     func string() -> String
 }
 
@@ -616,6 +618,12 @@ open class Address:
         return try! FfiConverterTypeAddress.lift(try! rustCall {
             uniffi_cove_fn_constructor_address_preview_new($0
             )
+        })
+    }
+
+    open func spacedOut() -> String {
+        return try! FfiConverterString.lift(try! rustCall {
+            uniffi_cove_fn_method_address_spaced_out(self.uniffiClonePointer(), $0)
         })
     }
 
@@ -1824,7 +1832,19 @@ public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> Unsaf
     return FfiConverterTypeChainPosition.lower(value)
 }
 
-public protocol ConfirmDetailsProtocol: AnyObject {}
+public protocol ConfirmDetailsProtocol: AnyObject {
+    func feeRate() -> FeeRate
+
+    func feeTotal() -> Amount
+
+    func isEqual(rhs: ConfirmDetails) -> Bool
+
+    func sendingAmount() -> Amount
+
+    func sendingTo() -> Address
+
+    func spendingAmount() -> Amount
+}
 
 open class ConfirmDetails:
     ConfirmDetailsProtocol
@@ -1870,6 +1890,43 @@ open class ConfirmDetails:
         return try! FfiConverterTypeConfirmDetails.lift(try! rustCall {
             uniffi_cove_fn_constructor_confirmdetails_preview_new($0
             )
+        })
+    }
+
+    open func feeRate() -> FeeRate {
+        return try! FfiConverterTypeFeeRate.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmdetails_fee_rate(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func feeTotal() -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmdetails_fee_total(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func isEqual(rhs: ConfirmDetails) -> Bool {
+        return try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmdetails_is_equal(self.uniffiClonePointer(),
+                                                          FfiConverterTypeConfirmDetails.lower(rhs), $0)
+        })
+    }
+
+    open func sendingAmount() -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmdetails_sending_amount(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func sendingTo() -> Address {
+        return try! FfiConverterTypeAddress.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmdetails_sending_to(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func spendingAmount() -> Amount {
+        return try! FfiConverterTypeAmount.lift(try! rustCall {
+            uniffi_cove_fn_method_confirmdetails_spending_amount(self.uniffiClonePointer(), $0)
         })
     }
 }
@@ -5000,6 +5057,8 @@ public protocol RouteFactoryProtocol: AnyObject {
 
     func send(send: SendRoute) -> Route
 
+    func sendConfirm(id: WalletId, details: ConfirmDetails) -> Route
+
     func sendSetAmount(id: WalletId, address: Address?, amount: Amount?) -> Route
 }
 
@@ -5134,6 +5193,14 @@ open class RouteFactory:
         return try! FfiConverterTypeRoute.lift(try! rustCall {
             uniffi_cove_fn_method_routefactory_send(self.uniffiClonePointer(),
                                                     FfiConverterTypeSendRoute.lower(send), $0)
+        })
+    }
+
+    open func sendConfirm(id: WalletId, details: ConfirmDetails) -> Route {
+        return try! FfiConverterTypeRoute.lift(try! rustCall {
+            uniffi_cove_fn_method_routefactory_send_confirm(self.uniffiClonePointer(),
+                                                            FfiConverterTypeWalletId.lower(id),
+                                                            FfiConverterTypeConfirmDetails.lower(details), $0)
         })
     }
 
@@ -5512,6 +5579,8 @@ public protocol RustWalletViewModelProtocol: AnyObject {
 
     func forceWalletScan() async throws
 
+    func getConfirmDetails(amount: Amount, address: Address, feeRate: FeeRate) async throws -> ConfirmDetails
+
     func getFeeOptions() async throws -> FeeRateOptions
 
     func getMaxSendAmount(fee: FeeRateOptionWithTotalFee) async throws -> Amount
@@ -5834,6 +5903,23 @@ open class RustWalletViewModel:
                 completeFunc: ffi_cove_rust_future_complete_void,
                 freeFunc: ffi_cove_rust_future_free_void,
                 liftFunc: { $0 },
+                errorHandler: FfiConverterTypeWalletViewModelError.lift
+            )
+    }
+
+    open func getConfirmDetails(amount: Amount, address: Address, feeRate: FeeRate) async throws -> ConfirmDetails {
+        return
+            try await uniffiRustCallAsync(
+                rustFutureFunc: {
+                    uniffi_cove_fn_method_rustwalletviewmodel_get_confirm_details(
+                        self.uniffiClonePointer(),
+                        FfiConverterTypeAmount.lower(amount), FfiConverterTypeAddress.lower(address), FfiConverterTypeFeeRate.lower(feeRate)
+                    )
+                },
+                pollFunc: ffi_cove_rust_future_poll_pointer,
+                completeFunc: ffi_cove_rust_future_complete_pointer,
+                freeFunc: ffi_cove_rust_future_free_pointer,
+                liftFunc: FfiConverterTypeConfirmDetails.lift,
                 errorHandler: FfiConverterTypeWalletViewModelError.lift
             )
     }
@@ -13435,6 +13521,8 @@ public enum WalletViewModelError {
     )
     case InsufficientFunds(String
     )
+    case GetConfirmDetailsError(String
+    )
 }
 
 public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
@@ -13490,6 +13578,9 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
                 FfiConverterString.read(from: &buf)
             )
         case 18: return try .InsufficientFunds(
+                FfiConverterString.read(from: &buf)
+            )
+        case 19: return try .GetConfirmDetailsError(
                 FfiConverterString.read(from: &buf)
             )
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -13566,6 +13657,10 @@ public struct FfiConverterTypeWalletViewModelError: FfiConverterRustBuffer {
 
         case let .InsufficientFunds(v1):
             writeInt(&buf, Int32(18))
+            FfiConverterString.write(v1, into: &buf)
+
+        case let .GetConfirmDetailsError(v1):
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
         }
     }
@@ -15287,6 +15382,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_func_wallet_state_is_equal() != 27037 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_address_spaced_out() != 29461 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_address_string() != 10597 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15366,6 +15464,24 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_boxedroute_route() != 26050 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmdetails_fee_rate() != 32230 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmdetails_fee_total() != 15069 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmdetails_is_equal() != 16719 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmdetails_sending_amount() != 58788 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmdetails_sending_to() != 43075 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_confirmdetails_spending_amount() != 62205 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_confirmedtransaction_block_height() != 62845 {
@@ -15680,6 +15796,9 @@ private var initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_routefactory_send() != 62083 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_routefactory_send_confirm() != 14299 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_routefactory_send_set_amount() != 33578 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15768,6 +15887,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_force_wallet_scan() != 47434 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_rustwalletviewmodel_get_confirm_details() != 13990 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_rustwalletviewmodel_get_fee_options() != 47126 {

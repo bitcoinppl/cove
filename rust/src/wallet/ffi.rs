@@ -4,7 +4,7 @@ use crate::hardware_export::HardwareExport;
 
 use super::{
     metadata::{DiscoveryState, FoundAddress},
-    Wallet, WalletAddressType, WalletError,
+    Address, Wallet, WalletAddressType, WalletError,
 };
 
 #[uniffi::export]
@@ -30,6 +30,24 @@ fn wallet_address_type_to_string(wallet_address_type: WalletAddressType) -> Stri
     };
 
     str.to_string()
+}
+
+#[uniffi::export]
+impl Address {
+    #[uniffi::method]
+    pub fn spaced_out(&self) -> String {
+        self.to_string()
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                if i > 0 && i % 4 == 0 {
+                    " ".to_string()
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect()
+    }
 }
 
 #[uniffi::export]

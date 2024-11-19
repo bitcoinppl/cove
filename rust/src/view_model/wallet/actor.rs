@@ -154,6 +154,7 @@ impl WalletActor {
 
         let sending_amount = output[0].value;
         let fee = psbt.fee()?;
+
         let spending_amount = sending_amount
             .checked_add(fee)
             .ok_or_else(|| eyre::eyre!("fee overflow, cannot calculate spending amount"))?;

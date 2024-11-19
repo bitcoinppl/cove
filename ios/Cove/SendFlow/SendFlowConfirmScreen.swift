@@ -9,9 +9,22 @@ import Foundation
 import SwiftUI
 
 struct SendFlowConfirmScreen: View {
+    @Environment(MainViewModel.self) private var app
+
     let id: WalletId
     @State var model: WalletViewModel
     let details: ConfirmDetails
+
+    var fiatAmount: String {
+        guard let prices = app.prices else {
+            app.dispatch(action: .updateFiatPrices)
+            return "---"
+        }
+
+        let amount = details.sendingAmount().asBtc() * Double(prices.usd)
+
+        return "≈ \(amount) USD"
+    }
 
     var metadata: WalletMetadata {
         model.walletMetadata
@@ -46,12 +59,15 @@ struct SendFlowConfirmScreen: View {
                             Spacer()
                         }
                     }
+                    .padding(.top)
 
                     // Balance Section
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
-                            Text("573,299")
+                            Text(model.amountFmt(details.sendingAmount()))
                                 .font(.system(size: 48, weight: .bold))
+                                .minimumScaleFactor(0.01)
+                                .lineLimit(1)
 
                             Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                                 .padding(.vertical, 10)
@@ -75,22 +91,28 @@ struct SendFlowConfirmScreen: View {
                                         Text("btc")
                                     }
                                 } preview: {
-                                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                                        .padding(.vertical, 10)
-                                        .padding(.horizontal)
+                                    Text(
+                                        metadata.selectedUnit == .sat
+                                            ? "sats" : "btc"
+                                    )
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal)
                                 }
                                 .offset(y: -5)
                                 .offset(x: -16)
                         }
                         .offset(x: 32)
 
-                        Text("≈ $326.93 USD")
+                        Text(fiatAmount)
                             .font(.title3)
                             .foregroundColor(.secondary)
                     }
                     .padding(.top, 8)
 
                     AccountSection
+                        .padding(.top)
+
+                    Divider()
 
                     // To Address Section
                     HStack {
@@ -100,12 +122,14 @@ struct SendFlowConfirmScreen: View {
                             .foregroundColor(.primary)
 
                         Spacer()
+                        Spacer()
 
                         Text(
-                            "bc1q uyye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a"
+                            details.sendingTo().spacedOut()
                         )
-                        .lineLimit(3, reservesSpace: true)
+                        .lineLimit(2, reservesSpace: true)
                         .font(.system(.callout, design: .none))
+                        .fontWeight(.medium)
                         .padding(.leading, 60)
                     }
                     .padding(.top, 6)
@@ -119,8 +143,8 @@ struct SendFlowConfirmScreen: View {
                         Spacer()
 
                         HStack {
-                            Text("300")
-                            Text("sats")
+                            Text(model.amountFmt(details.sendingAmount()))
+                            Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                         }
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -132,27 +156,31 @@ struct SendFlowConfirmScreen: View {
                             .fontWeight(.medium)
                         Spacer()
                         HStack {
-                            Text("573,000")
+                            Text(model.amountFmt(details.spendingAmount()))
                                 .fontWeight(.semibold)
-                            Text("sats")
+                            Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                         }
                     }
-
-                    SwipeToSendView()
-                        .padding(.top, 28)
                 }
             }
-            .padding()
-            .frame(width: screenWidth)
+            .scrollIndicators(.hidden)
+            .background(Color.coveBg)
+            .padding(.horizontal)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Spacer()
+            SwipeToSendView()
+                .padding(.bottom)
+                .padding(.horizontal)
+                .background(Color.coveBg)
         }
     }
 
     @ViewBuilder
     var AccountSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 16) {
             HStack {
+                Spacer()
+
                 Image(systemName: "bitcoinsign")
                     .font(.title2)
                     .foregroundColor(.orange)
@@ -170,15 +198,18 @@ struct SendFlowConfirmScreen: View {
                         .font(.headline)
                         .fontWeight(.medium)
                 }
+                .padding(.leading, 24)
 
                 Spacer()
+                Spacer()
+                Spacer()
+                Spacer()
+                Spacer()
+                Spacer()
             }
-            .padding()
-            .background(Color(.systemGray6))
             .cornerRadius(12)
         }
     }
-
 }
 
 #Preview {

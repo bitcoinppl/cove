@@ -267,18 +267,7 @@ mod ffi {
         }
         #[uniffi::method]
         pub fn address_spaced_out(&self) -> String {
-            self.address
-                .to_string()
-                .chars()
-                .enumerate()
-                .flat_map(|(i, c)| {
-                    if i > 0 && i % 4 == 0 {
-                        vec![' ', c]
-                    } else {
-                        vec![c]
-                    }
-                })
-                .collect()
+            self.address.spaced_out()
         }
     }
 }
