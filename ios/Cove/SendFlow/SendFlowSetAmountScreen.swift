@@ -27,6 +27,8 @@ private enum AlertState: Equatable {
     case zeroAmount
     case insufficientFunds
     case sendAmountToLow
+    case unableToGetFeeRate
+    case unableToBuildTxn(String)
 
     init(_ error: AddressError, address: String) {
         switch error {
@@ -178,8 +180,6 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    // MARK: HEADER
-
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
         print("setMaxSelected \(selectedFeeRate)")
         Task {
@@ -193,6 +193,35 @@ struct SendFlowSetAmountScreen: View {
             await MainActor.run {
                 setAmount(max)
                 maxSelected = max
+            }
+        }
+    }
+
+    // validate, create final psbt and send to next screen
+    private func next() {
+        guard validate(displayAlert: true) else { return }
+        guard let sendAmountSats = sendAmountSats else {
+            return setAlertState(.invalidNumber)
+        }
+
+        guard let address = try? Address.fromString(address: address) else {
+            return setAlertState(.invalidAddress(address))
+        }
+
+        guard let feeRate = selectedFeeRate else {
+            return setAlertState(.unableToGetFeeRate)
+        }
+
+        let amount = Amount.fromSat(sats: UInt64(sendAmountSats))
+
+        Task {
+            do {
+                let psbt = try await model.rust.buildTransactionWithFeeRate(
+                    amount: amount,
+                    address: address,
+                    feeRate: feeRate.feeRate())
+                
+                
             }
         }
     }
@@ -213,6 +242,8 @@ struct SendFlowSetAmountScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // MARK: HEADER
+
             SendFlowHeaderView(model: model, amount: model.balance.confirmed)
                 .frame(height: max(40, headerHeight - scrollOffset))
 
@@ -389,14 +420,6 @@ struct SendFlowSetAmountScreen: View {
         )
     }
 
-    // doing it this way prevents an alert popping up when the user just goes back
-    private func setAlertState(_ alertState: AlertState) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            guard !self.disappearing else { return }
-            self.alertState = TaggedItem(alertState)
-        }
-    }
-
     private func validate(displayAlert: Bool = false) -> Bool {
         validateAmount(displayAlert: displayAlert)
             && validateAddress(displayAlert: displayAlert)
@@ -469,23 +492,6 @@ struct SendFlowSetAmountScreen: View {
         }
 
         return amount * 100_000_000
-    }
-
-    private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
-        print("setMaxSelected \(selectedFeeRate)")
-        Task {
-            guard
-                let max = try? await model.rust.getMaxSendAmount(
-                    fee: selectedFeeRate)
-            else {
-                return Log.error("unable to get max send amount")
-            }
-
-            await MainActor.run {
-                setAmount(max)
-                maxSelected = max
-            }
-        }
     }
 
     // MARK: OnChange Functions
@@ -603,7 +609,8 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
+    {
         guard let newValue = newValue else { return }
 
         sheetState = nil
@@ -1041,6 +1048,8 @@ struct SendFlowSetAmountScreen: View {
             case .invalidNumber, .zeroAmount: "Invalid Amount"
             case .insufficientFunds, .noBalance: "Insufficient Funds"
             case .sendAmountToLow: "Send Amount Too Low"
+            case .unableToGetFeeRate: "Unable to get fee rate"
+            case .unableToBuildTxn: "Unable to build transaction"
             }
         }()
     }
@@ -1069,6 +1078,10 @@ struct SendFlowSetAmountScreen: View {
                     "You do not have enough bitcoin in your wallet to cover the amount plus fees"
             case .sendAmountToLow:
                 return "Send amount is too low. Please send atleast 5000 sats"
+            case .unableToGetFeeRate:
+                return "Are you connected to the internet?"
+            case .unableToBuildTxn(let msg):
+                return msg
             }
         }()
 
@@ -1079,11 +1092,25 @@ struct SendFlowSetAmountScreen: View {
     private func alertButtons(alert: TaggedItem<AlertState>) -> some View {
         switch alert.item {
         case .emptyAddress, .wrongNetwork, .invalidAddress:
-            Button("OK") { focusField = .address }
+            Button("OK") {
+                alertState = .none
+                focusField = .address
+            }
         case .noBalance:
-            Button("Go Back") { app.popRoute() }
+            Button("Go Back") {
+                alertState = .none
+                app.popRoute()
+            }
         case .invalidNumber, .insufficientFunds, .sendAmountToLow, .zeroAmount:
-            Button("OK") { focusField = .amount }
+            Button("OK") {
+                focusField = .amount
+                alertState = .none
+            }
+        case .unableToGetFeeRate, .unableToBuildTxn:
+            Button("OK") {
+                focusField = .none
+                alertState = .none
+            }
         }
     }
 }

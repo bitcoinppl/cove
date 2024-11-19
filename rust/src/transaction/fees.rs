@@ -3,11 +3,12 @@ pub mod client;
 use std::sync::Arc;
 
 use crate::{color::FfiColor, transaction::Amount};
-use bdk_wallet::bitcoin::FeeRate as BdkFeeRate;
 use derive_more::{AsRef, Deref, Display, From, Into};
 
 // MARK: FeeRate
 //
+pub type BdkFeeRate = bitcoin_units::FeeRate;
+
 #[derive(
     Debug,
     Clone,

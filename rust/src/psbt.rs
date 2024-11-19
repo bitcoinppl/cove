@@ -1,7 +1,7 @@
-use bdk_wallet::bitcoin::Psbt as BdkPsbt;
+use crate::transaction::Amount;
 use derive_more::{AsRef, Deref, From, Into};
 
-use crate::transaction::Amount;
+pub type BdkPsbt = bdk_wallet::bitcoin::Psbt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object, From, Deref, AsRef, Into)]
 pub struct Psbt(BdkPsbt);

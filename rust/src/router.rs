@@ -250,6 +250,11 @@ mod ffi {
             Route::Send(send)
         }
 
+        pub fn send_confirm(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
+            let send = SendRoute::Confirm { id, details };
+            Route::Send(send)
+        }
+
         pub fn send(&self, send: SendRoute) -> Route {
             Route::Send(send)
         }

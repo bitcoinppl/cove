@@ -30,6 +30,7 @@ use crate::{
     },
     wallet::{
         balance::Balance,
+        confirm::ConfirmDetails,
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
@@ -157,6 +158,9 @@ pub enum WalletViewModelError {
 
     #[error("insufficient funds: {0}")]
     InsufficientFunds(String),
+
+    #[error("unable to get confirm details: {0}")]
+    GetConfirmDetailsError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -642,6 +646,24 @@ impl RustWalletViewModel {
             .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
         Ok(psbt.into())
+    }
+
+    pub async fn get_confirm_details(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+        fee_rate: Arc<FeeRate>,
+    ) -> Result<ConfirmDetails, Error> {
+        let psbt = self
+            .build_transaction_with_fee_rate(amount, address, fee_rate.clone())
+            .await?;
+
+        let fee_rate: FeeRate = Arc::unwrap_or_clone(fee_rate);
+        let details = call!(self.actor.get_confirm_details(psbt.into(), fee_rate.into()))
+            .await
+            .map_err(|error| Error::GetConfirmDetailsError(error.to_string()))?;
+
+        Ok(details)
     }
 
     #[uniffi::method]
