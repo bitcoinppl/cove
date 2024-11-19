@@ -178,9 +178,8 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // MARK: HEADER
+    // MARK: HEADER
+
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
         print("setMaxSelected \(selectedFeeRate)")
         Task {
@@ -212,8 +211,8 @@ struct SendFlowSetAmountScreen: View {
         sendAmount = ThousandsFormatter(amountInt).fmt()
     }
 
-
-
+    var body: some View {
+        VStack(spacing: 0) {
             SendFlowHeaderView(model: model, amount: model.balance.confirmed)
                 .frame(height: max(40, headerHeight - scrollOffset))
 
@@ -439,7 +438,7 @@ struct SendFlowSetAmountScreen: View {
         let balance = Double(model.balance.confirmed.asSats())
         let amountSats = amountSats(amount)
 
-        if amountSats < 10_000 {
+        if amountSats < 10000 {
             if displayAlert { setAlertState(.sendAmountToLow) }
             return false
         }
@@ -604,8 +603,7 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?)
-    {
+    private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
         guard let newValue = newValue else { return }
 
         sheetState = nil
@@ -766,7 +764,6 @@ struct SendFlowSetAmountScreen: View {
                         }
 
                         focusField = .none
-                        return
                     }) {
                         Text("Paste")
                     }
