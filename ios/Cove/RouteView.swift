@@ -25,7 +25,7 @@ struct RouteView: View {
             }
         }
         .onChange(of: model.router.default) { _, newRoute in
-            self.route = newRoute
+            route = newRoute
         }
     }
 }
@@ -47,5 +47,7 @@ func routeToView(model: MainViewModel, route: Route) -> some View {
         SecretWordsScreen(id: walletId)
     case let .transactionDetails(id: id, details: details):
         TransactionsDetailScreen(id: id, transactionDetails: details)
+    case let .send(sendRoute):
+        SendRouteContainer(sendRoute: sendRoute)
     }
 }

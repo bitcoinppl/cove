@@ -14,7 +14,7 @@ use macros::impl_default_for;
 
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 
-const FIVE_MINS: u64 = 300;
+const ONE_MIN: u64 = 60;
 
 // Global client for getting prices
 pub static FIAT_CLIENT: LazyLock<FiatClient> = LazyLock::new(FiatClient::new);
@@ -29,7 +29,7 @@ pub struct FiatClient {
     wait_before_new_prices: u64,
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, uniffi::Record)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PriceResponse {
     #[serde(rename = "time")]
@@ -64,7 +64,7 @@ impl FiatClient {
         Self {
             url: CURRENCY_URL.to_string(),
             client: reqwest::Client::new(),
-            wait_before_new_prices: FIVE_MINS,
+            wait_before_new_prices: ONE_MIN,
         }
     }
 
@@ -73,7 +73,7 @@ impl FiatClient {
         Self {
             url,
             client: reqwest::Client::new(),
-            wait_before_new_prices: FIVE_MINS,
+            wait_before_new_prices: ONE_MIN,
         }
     }
 
@@ -93,23 +93,7 @@ impl FiatClient {
         Ok(value_in_currency)
     }
 
-    async fn get_price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
-        let prices = self.get_prices().await?;
-
-        let price = match currency {
-            FiatCurrency::Usd => prices.usd,
-            FiatCurrency::Eur => prices.eur,
-            FiatCurrency::Gbp => prices.gbp,
-            FiatCurrency::Cad => prices.cad,
-            FiatCurrency::Chf => prices.chf,
-            FiatCurrency::Aud => prices.aud,
-            FiatCurrency::Jpy => prices.jpy,
-        };
-
-        Ok(price)
-    }
-
-    async fn get_prices(&self) -> Result<PriceResponse, reqwest::Error> {
+    pub async fn get_prices(&self) -> Result<PriceResponse, reqwest::Error> {
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
             if now_secs - prices.time < self.wait_before_new_prices {
@@ -126,6 +110,22 @@ impl FiatClient {
         }
 
         Ok(prices)
+    }
+
+    async fn get_price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
+        let prices = self.get_prices().await?;
+
+        let price = match currency {
+            FiatCurrency::Usd => prices.usd,
+            FiatCurrency::Eur => prices.eur,
+            FiatCurrency::Gbp => prices.gbp,
+            FiatCurrency::Cad => prices.cad,
+            FiatCurrency::Chf => prices.chf,
+            FiatCurrency::Aud => prices.aud,
+            FiatCurrency::Jpy => prices.jpy,
+        };
+
+        Ok(price)
     }
 }
 
@@ -178,7 +178,7 @@ fn update_prices(prices: PriceResponse) -> Result<()> {
 pub async fn update_prices_if_needed() -> Result<()> {
     if let Some(prices) = PRICES.load().as_ref() {
         let now_secs = Timestamp::now().as_second() as u64;
-        if now_secs - prices.time < FIVE_MINS {
+        if now_secs - prices.time < ONE_MIN {
             return Ok(());
         }
     }

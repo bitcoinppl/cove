@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 public struct ChooseWalletTypeView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @State var model: WalletViewModel
     @State var foundAddresses: [FoundAddress]
 
@@ -18,7 +18,7 @@ public struct ChooseWalletTypeView: View {
     @State private var address: AddressInfo? = nil
 
     var foundAddressesSorted: [FoundAddress] {
-        return foundAddresses.sorted { x1, x2 in x2.type > x1.type }
+        foundAddresses.sorted { x1, x2 in x2.type > x1.type }
     }
 
     func TypeButton(_ foundAddress: FoundAddress) -> some View {
@@ -26,17 +26,18 @@ public struct ChooseWalletTypeView: View {
             Task {
                 // switch the wallet
                 do {
-                    try await model.rust.switchToDifferentWalletAddressType(walletAddressType: foundAddress.type)
+                    try await model.rust.switchToDifferentWalletAddressType(
+                        walletAddressType: foundAddress.type)
                 } catch {
                     Log.error(error.localizedDescription)
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                     return
                 }
 
                 // update the metadata
                 await MainActor.run {
                     model.dispatch(action: .selectDifferentWalletAddressType(foundAddress.type))
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
             }
         }) {
@@ -63,7 +64,7 @@ public struct ChooseWalletTypeView: View {
 
             Button(action: {
                 model.dispatch(action: .selectCurrentWalletAddressType)
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
             }) {
                 VStack {
                     Text("Keep Current")
@@ -71,7 +72,7 @@ public struct ChooseWalletTypeView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.blue)
 
-                    Text(address?.adressString() ?? "bc1")
+                    Text(address?.adressString() ?? "bc1q")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -81,7 +82,7 @@ public struct ChooseWalletTypeView: View {
         }
         .task {
             let address = try? await model.firstAddress()
-            if let address = address {
+            if let address {
                 withAnimation {
                     self.address = address
                 }
@@ -98,6 +99,7 @@ public struct ChooseWalletTypeView: View {
             foundAddresses: [
                 previewNewLegacyFoundAddress(),
                 previewNewWrappedFoundAddress(),
-            ])
+            ]
+        )
     }
 }

@@ -1,5 +1,5 @@
 //
-//  GradientButton.swift
+//  CommonButtonStyles.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/23/24.

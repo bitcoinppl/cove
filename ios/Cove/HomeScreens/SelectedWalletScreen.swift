@@ -29,7 +29,7 @@ struct SelectedWalletScreen: View {
 
     var body: some View {
         Group {
-            if let model = model {
+            if let model {
                 SelectedWalletScreenInner(model: model)
             } else {
                 Text("Loading...")
@@ -40,7 +40,7 @@ struct SelectedWalletScreen: View {
         }
         .task {
             // small delay and then start scanning wallet
-            if let model = self.model {
+            if let model {
                 do {
                     try? await Task.sleep(for: .milliseconds(400))
                     try await model.rust.startWalletScan()
@@ -51,7 +51,7 @@ struct SelectedWalletScreen: View {
         }
         .onChange(of: model?.loadState) { _, loadState in
             if case .loaded = loadState {
-                if let model = model {
+                if let model {
                     app.updateWalletVm(model)
                 }
             }
@@ -60,7 +60,7 @@ struct SelectedWalletScreen: View {
     }
 }
 
-private enum SheetState {
+private enum SheetState: Equatable {
     case receive
     case settings
     case chooseAddressType([FoundAddress])
@@ -76,7 +76,7 @@ struct SelectedWalletScreenInner: View {
     var model: WalletViewModel
 
     // private
-    @State private var sheetState: PresentableItem<SheetState>? = nil
+    @State private var sheetState: TaggedItem<SheetState>? = nil
     @State private var showingCopiedPopup = true
 
     func updater(_ action: WalletViewModelAction) {
@@ -85,10 +85,12 @@ struct SelectedWalletScreenInner: View {
 
     @ViewBuilder
     func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
-        TransactionsCardView(transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata)
-            .background(.thickMaterial)
-            .ignoresSafeArea()
-            .padding(.top, 10)
+        TransactionsCardView(
+            transactions: transactions, scanComplete: scanComplete, metadata: model.walletMetadata
+        )
+        .background(.thickMaterial)
+        .ignoresSafeArea()
+        .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -110,6 +112,14 @@ struct SelectedWalletScreenInner: View {
                 primaryButton: .default(Text("Yes, Change Node"), action: { navigate(.settings) }),
                 secondaryButton: .cancel()
             )
+        case .noBalance:
+            .init(
+                title: Text("No Balance"),
+                message: Text("Can't send a transaction, when you have no funds."),
+                primaryButton: .default(Text("Receive Funds"),
+                                        action: { sheetState = .init(.receive) }),
+                secondaryButton: .cancel()
+            )
         }
     }
 
@@ -119,7 +129,7 @@ struct SelectedWalletScreenInner: View {
         case .loading:
             Loading
         case let .scanning(txns):
-            if !model.walletMetadata.performedFullScan && txns.isEmpty {
+            if !model.walletMetadata.performedFullScan, txns.isEmpty {
                 Loading
             } else {
                 transactionsCard(transactions: txns, scanComplete: false)
@@ -130,7 +140,7 @@ struct SelectedWalletScreenInner: View {
     }
 
     @ViewBuilder
-    private func SheetContent(_ state: PresentableItem<SheetState>) -> some View {
+    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
         case .receive:
             ReceiveView(model: model)
@@ -146,20 +156,22 @@ struct SelectedWalletScreenInner: View {
 
         switch discoveryState {
         case let .foundAddressesFromMnemonic(foundAddresses):
-            sheetState = PresentableItem(.chooseAddressType(foundAddresses))
+            sheetState = TaggedItem(.chooseAddressType(foundAddresses))
         case let .foundAddressesFromJson(foundAddress, _):
-            sheetState = PresentableItem(.chooseAddressType(foundAddress))
+            sheetState = TaggedItem(.chooseAddressType(foundAddress))
         default: ()
         }
     }
 
     func showReceiveSheet() {
-        sheetState = PresentableItem(.receive)
+        sheetState = TaggedItem(.receive)
     }
 
     var body: some View {
         VStack {
-            VerifyReminder(walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified)
+            VerifyReminder(
+                walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
+            )
 
             ScrollView {
                 VStack {
@@ -188,7 +200,7 @@ struct SelectedWalletScreenInner: View {
                         }
 
                         Button(action: {
-                            app.sheetState = PresentableItem(.qr)
+                            app.sheetState = TaggedItem(.qr)
                         }) {
                             HStack {
                                 Image(systemName: "qrcode")
@@ -199,7 +211,7 @@ struct SelectedWalletScreenInner: View {
 
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: {
-                            sheetState = PresentableItem(.settings)
+                            sheetState = TaggedItem(.settings)
                         }) {
                             Image(systemName: "gear")
                                 .foregroundColor(.primary.opacity(0.8))
@@ -217,9 +229,13 @@ struct SelectedWalletScreenInner: View {
                 let _ = try? await model.rust.forceUpdateHeight()
             }
         }
-        .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue) }
-        .onAppear { setSheetState(self.model.walletMetadata.discoveryState) }
-        .alert(item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }), content: DisplayErrorAlert)
+        .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue)
+        }
+        .onAppear { setSheetState(model.walletMetadata.discoveryState) }
+        .alert(
+            item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
+            content: DisplayErrorAlert
+        )
         .environment(model)
     }
 }

@@ -20,7 +20,7 @@ public class BinaryDecoder {
 
         let totalCharacterCount = binaryData.next(bits: numberOfBitsInLengthFiled)
         var bytes: [UInt8] = []
-        for _ in .zero..<totalCharacterCount {
+        for _ in .zero ..< totalCharacterCount {
             let byte = binaryData.next(bits: numberOfBitsPerCharacter)
             bytes.append(UInt8(byte))
         }
@@ -34,12 +34,12 @@ public class BinaryDecoder {
         }
 
         switch symbolType {
-            case .small:
-                return 8
-            case .medium:
-                return 16
-            case .large:
-                return 16
+        case .small:
+            return 8
+        case .medium:
+            return 16
+        case .large:
+            return 16
         }
     }
 }
@@ -81,45 +81,45 @@ extension BinaryDecoder {
             let bytesLength = data.count
             var bytesArray = [UInt8](repeating: .zero, count: bytesLength)
             (data as NSData).getBytes(&bytesArray, length: bytesLength)
-            self.bytes = bytesArray
+            bytes = bytesArray
         }
 
         private func bit(_ position: Int) -> Int {
             let byteSize = 8
             let bytePosition = position / byteSize
             let bitPosition = 7 - (position % byteSize)
-            let byte = self.byte(bytePosition)
+            let byte = byte(bytePosition)
             return (byte >> bitPosition) & 0x01
         }
 
         private func bits(_ range: Range<Int>) -> Int {
             var positions = [Int]()
 
-            for position in range.lowerBound..<range.upperBound {
+            for position in range.lowerBound ..< range.upperBound {
                 positions.append(position)
             }
 
             return positions.reversed().enumerated().reduce(0) {
-                $0 + (self.bit($1.element) << $1.offset)
+                $0 + (bit($1.element) << $1.offset)
             }
         }
 
         private func bits(_ start: Int, _ length: Int) -> Int {
-            return self.bits(start..<(start + length))
+            bits(start ..< (start + length))
         }
 
         private func byte(_ position: Int) -> Int {
-            return Int(self.bytes[position])
+            Int(bytes[position])
         }
 
         private func bitsWithInternalOffsetAvailable(_ length: Int) -> Bool {
-            return (self.bytes.count * 8) >= (self.readingOffset + length)
+            (bytes.count * 8) >= (readingOffset + length)
         }
 
         mutating func next(bits length: Int) -> Int {
-            if self.bitsWithInternalOffsetAvailable(length) {
-                let returnValue = self.bits(self.readingOffset, length)
-                self.readingOffset = self.readingOffset + length
+            if bitsWithInternalOffsetAvailable(length) {
+                let returnValue = bits(readingOffset, length)
+                readingOffset = readingOffset + length
                 return returnValue
             } else {
                 fatalError("Couldn't extract Bits.")
@@ -127,8 +127,8 @@ extension BinaryDecoder {
         }
 
         private func bytesWithInternalOffsetAvailable(_ length: Int) -> Bool {
-            let availableBits = self.bytes.count * 8
-            let requestedBits = self.readingOffset + (length * 8)
+            let availableBits = bytes.count * 8
+            let requestedBits = readingOffset + (length * 8)
             let possible = availableBits >= requestedBits
             return possible
         }

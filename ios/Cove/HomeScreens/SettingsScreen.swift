@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsScreen: View {
     @Environment(MainViewModel.self) private var app
-    @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     @State private var notificationFrequency = 1
     @State private var networkChanged = false
@@ -13,14 +13,16 @@ struct SettingsScreen: View {
     var body: some View {
         Form {
             Section(header: Text("Network")) {
-                Picker("Network",
-                       selection: Binding(
-                           get: { app.selectedNetwork },
-                           set: {
-                               networkChanged.toggle()
-                               app.dispatch(action: .changeNetwork(network: $0))
-                           }
-                       )) {
+                Picker(
+                    "Network",
+                    selection: Binding(
+                        get: { app.selectedNetwork },
+                        set: {
+                            networkChanged.toggle()
+                            app.dispatch(action: .changeNetwork(network: $0))
+                        }
+                    )
+                ) {
                     ForEach(allNetworks(), id: \.self) {
                         Text($0.toString())
                     }
@@ -29,13 +31,15 @@ struct SettingsScreen: View {
             }
 
             Section(header: Text("Appearance")) {
-                Picker("Theme",
-                       selection: Binding(
-                           get: { app.colorSchemeSelection },
-                           set: {
-                               app.dispatch(action: .changeColorScheme($0))
-                           }
-                       )) {
+                Picker(
+                    "Theme",
+                    selection: Binding(
+                        get: { app.colorSchemeSelection },
+                        set: {
+                            app.dispatch(action: .changeColorScheme($0))
+                        }
+                    )
+                ) {
                     ForEach(themes, id: \.self) {
                         Text($0.capitalizedString)
                     }
@@ -57,13 +61,13 @@ struct SettingsScreen: View {
         }
         .navigationBarBackButtonHidden(networkChanged)
         .toolbar {
-            networkChanged ?
-                ToolbarItem(placement: .navigationBarLeading) {
+            networkChanged
+                ? ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: {
                         if networkChanged {
                             showConfirmationAlert = true
                         } else {
-                            presentationMode.wrappedValue.dismiss()
+                            dismiss()
                         }
                     }) {
                         HStack(spacing: 0) {
@@ -83,15 +87,15 @@ struct SettingsScreen: View {
                 message: Text("You've changed your network to \(app.selectedNetwork)"),
                 primaryButton: .destructive(Text("Yes, Change Network")) {
                     app.resetRoute(to: .listWallets)
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 },
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
         .preferredColorScheme(app.colorScheme)
         .gesture(
-            networkChanged ?
-                DragGesture()
+            networkChanged
+                ? DragGesture()
                 .onChanged { gesture in
                     if gesture.startLocation.x < 25, gesture.translation.width > 100 {
                         withAnimation(.spring()) {

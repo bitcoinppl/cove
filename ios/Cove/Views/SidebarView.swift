@@ -21,24 +21,22 @@ struct SidebarView: View {
 
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
-            return
-                LinearGradient(
-                    colors: [
-                        Color.blue,
-                        Color.blue.opacity(0.9),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+            LinearGradient(
+                colors: [
+                    Color.blue,
+                    Color.blue.opacity(0.9),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         } else {
-            return
-                LinearGradient(
-                    colors: [
-                        Color.primary.opacity(0.8), Color.primary.opacity(0.7),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+            LinearGradient(
+                colors: [
+                    Color.primary.opacity(0.8), Color.primary.opacity(0.7),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         }
     }
 
@@ -101,8 +99,9 @@ struct SidebarView: View {
                 .background(
                     LinearGradient(
                         gradient:
-                            Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
-                        startPoint: .bottomTrailing, endPoint: .topLeading)
+                        Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
+                        startPoint: .bottomTrailing, endPoint: .topLeading
+                    )
                 )
                 Spacer()
             }
@@ -146,7 +145,7 @@ struct SidebarView: View {
     func goTo(_ route: Route) {
         isShowing = false
 
-        if !app.hasWallets && route == Route.newWallet(.select) {
+        if !app.hasWallets, route == Route.newWallet(.select) {
             return app.resetRoute(to: RouteFactory().newWalletSelect())
         } else {
             navigate(route)

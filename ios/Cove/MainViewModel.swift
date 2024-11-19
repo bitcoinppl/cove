@@ -10,11 +10,16 @@ import SwiftUI
     var isSidebarVisible = false
     var asyncRuntimeReady = false
 
+    var alertState: TaggedItem<AppAlertState>? = .none
+    var sheetState: TaggedItem<AppSheetState>? = .none
+
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
 
-    var sheetState: PresentableItem<AppSheetState>? = .none
     var nfcReader = NFCReader()
+
+    var prices: PriceResponse?
+    var fees: FeeResponse?
 
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
@@ -29,11 +34,11 @@ import SwiftUI
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
         case .light:
-            return .light
+            .light
         case .dark:
-            return .dark
+            .dark
         case .system:
-            return nil
+            nil
         }
     }
 
@@ -97,7 +102,7 @@ import SwiftUI
     }
 
     func scanQr() {
-        sheetState = PresentableItem(.qr)
+        sheetState = TaggedItem(.qr)
     }
 
     @MainActor
@@ -128,6 +133,12 @@ import SwiftUI
                     self.router.routes = []
                     self.router.default = route
                     self.routeId = UUID()
+
+                case let .fiatPricesChanged(prices):
+                    self.prices = prices
+
+                case let .feesChanged(fees):
+                    self.fees = fees
                 }
             }
         }

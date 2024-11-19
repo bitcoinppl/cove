@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct WalletBalanceHeaderView: View {
-    @Environment(WalletViewModel.self) var model;
+    @Environment(MainViewModel.self) var app
+    @Environment(WalletViewModel.self) var model
 
     // confirmed balance
     let balance: Amount
@@ -38,7 +39,7 @@ struct WalletBalanceHeaderView: View {
 
         // fiat
         if metadata.fiatOrBtc == .fiat {
-            if let fiatAmount = fiatAmount {
+            if let fiatAmount {
                 return model.rust.displayFiatAmount(amount: fiatAmount)
             } else {
                 return ""
@@ -47,8 +48,8 @@ struct WalletBalanceHeaderView: View {
 
         // btc or sats
         return switch metadata.selectedUnit {
-        case .btc: balance.btcString()
-        case .sat: balance.satsString()
+        case .btc: balance.btcStringWithUnit()
+        case .sat: balance.satsStringWithUnit()
         }
     }
 
@@ -75,10 +76,13 @@ struct WalletBalanceHeaderView: View {
     var body: some View {
         VStack {
             HStack {
-                Picker("Currency",
-                       selection: Binding(get: { metadata.selectedUnit },
-                                          set: { updater(.updateUnit($0)) }))
-                {
+                Picker(
+                    "Currency",
+                    selection: Binding(
+                        get: { metadata.selectedUnit },
+                        set: { updater(.updateUnit($0)) }
+                    )
+                ) {
                     Text(String(Unit.btc)).tag(Unit.btc)
                     Text(String(Unit.sat)).tag(Unit.sat)
                 }
@@ -122,7 +126,12 @@ struct WalletBalanceHeaderView: View {
                 }
 
                 Button(action: {
-                    // Send action
+                    if balance.asSats() == 0 {
+                        model.errorAlert = .noBalance
+                        return
+                    }
+
+                    app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.up.right")
@@ -195,13 +204,15 @@ struct WalletBalanceHeaderView: View {
 
     return
         AsyncPreview {
-            WalletBalanceHeaderView(balance:
+            WalletBalanceHeaderView(
+                balance:
                 Amount.fromSat(sats: 1_000_738),
                 metadata: metadata,
                 updater: { _ in () },
-                showReceiveSheet: {})
-                .padding()
-                .environment(WalletViewModel(preview: "preview_only"))
+                showReceiveSheet: {}
+            )
+            .padding()
+            .environment(WalletViewModel(preview: "preview_only"))
         }
 }
 
@@ -212,13 +223,15 @@ struct WalletBalanceHeaderView: View {
 
     return
         AsyncPreview {
-            WalletBalanceHeaderView(balance:
+            WalletBalanceHeaderView(
+                balance:
                 Amount.fromSat(sats: 10_000_000_738),
                 metadata: metadata,
                 updater: { _ in () },
-                showReceiveSheet: {})
-                .padding()
-                .environment(WalletViewModel(preview: "preview_only"))
+                showReceiveSheet: {}
+            )
+            .padding()
+            .environment(WalletViewModel(preview: "preview_only"))
         }
 }
 
@@ -230,12 +243,14 @@ struct WalletBalanceHeaderView: View {
 
     return
         AsyncPreview {
-            WalletBalanceHeaderView(balance:
+            WalletBalanceHeaderView(
+                balance:
                 Amount.fromSat(sats: 10_000_000_738),
                 metadata: metadata,
                 updater: { _ in () },
-                showReceiveSheet: {})
-                .padding()
-                .environment(WalletViewModel(preview: "preview_only"))
+                showReceiveSheet: {}
+            )
+            .padding()
+            .environment(WalletViewModel(preview: "preview_only"))
         }
 }

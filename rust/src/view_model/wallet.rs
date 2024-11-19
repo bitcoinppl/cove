@@ -1,6 +1,9 @@
 mod actor;
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use act_zero::{call, send, Addr};
 use actor::WalletActor;
@@ -15,14 +18,22 @@ use crate::{
     fiat::{client::FIAT_CLIENT, FiatCurrency},
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
+    psbt::Psbt,
     router::Route,
     task::{self, spawn_actor},
-    transaction::{Amount, SentAndReceived, Transaction, TransactionDetails, TxId, Unit},
+    transaction::{
+        fees::{
+            client::{FeeResponse, FEES, FEE_CLIENT},
+            FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
+        },
+        Amount, BdkAmount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
+    },
     wallet::{
         balance::Balance,
+        confirm::ConfirmDetails,
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
-        AddressInfo, Wallet, WalletAddressType, WalletError,
+        Address, AddressInfo, Wallet, WalletAddressType, WalletError,
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -88,6 +99,7 @@ pub enum WalletLoadState {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletErrorAlert {
     NodeConnectionFailed(String),
+    NoBalance,
 }
 
 pub type Error = WalletViewModelError;
@@ -137,6 +149,18 @@ pub enum WalletViewModelError {
 
     #[error("unable to get balance in fiat")]
     FiatError(String),
+
+    #[error("unable to get fees: {0}")]
+    FeesError(String),
+
+    #[error("unable to build transaction: {0}")]
+    BuildTxError(String),
+
+    #[error("insufficient funds: {0}")]
+    InsufficientFunds(String),
+
+    #[error("unable to get confirm details: {0}")]
+    GetConfirmDetailsError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -197,8 +221,39 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
+        let fee_client = &FEE_CLIENT;
+        let fees = fee_client
+            .get_fees()
+            .await
+            .map_err(|error| Error::FeesError(error.to_string()))?;
+
+        Ok(fees.into())
+    }
+
+    #[uniffi::method]
     pub async fn balance(&self) -> Balance {
         call!(self.actor.balance()).await.unwrap_or_default()
+    }
+
+    #[uniffi::method]
+    pub async fn get_max_send_amount(
+        &self,
+        fee: Arc<FeeRateOptionWithTotalFee>,
+    ) -> Result<Arc<Amount>, Error> {
+        let balance = call!(self.actor.balance())
+            .await
+            .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
+
+        let confirmed: BdkAmount = Arc::unwrap_or_clone(balance.confirmed).into();
+        let fee: BdkAmount = fee.total_fee.into();
+
+        let available: Amount = confirmed
+            .checked_sub(fee)
+            .ok_or_else(|| Error::InsufficientFunds("unable to get max send amount".to_string()))?
+            .into();
+
+        Ok(available.into())
     }
 
     #[uniffi::method]
@@ -235,7 +290,7 @@ impl RustWalletViewModel {
         }
 
         let unit = self.metadata.read().selected_unit;
-        amount.fmt_string(unit)
+        amount.fmt_string_with_unit(unit)
     }
 
     #[uniffi::method]
@@ -466,6 +521,149 @@ impl RustWalletViewModel {
         let validator = WordValidator::new(mnemonic);
 
         Ok(validator)
+    }
+
+    pub fn fees(&self) -> Option<FeeResponse> {
+        let cached_fees = *FEES.load().as_ref();
+
+        match cached_fees {
+            Some(cached_fees)
+                if cached_fees.last_fetched > Instant::now() - Duration::from_secs(30) =>
+            {
+                crate::task::spawn(async move {
+                    crate::transaction::fees::client::get_and_update_fees().await
+                });
+            }
+            None => {
+                crate::task::spawn(async move {
+                    crate::transaction::fees::client::get_and_update_fees().await
+                });
+            }
+            _ => {}
+        }
+
+        if let Some(cached_fees) = cached_fees {
+            return Some(cached_fees.fees);
+        }
+
+        None
+    }
+
+    pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
+        let fee_client = &FEE_CLIENT;
+        let fees = fee_client
+            .get_fees()
+            .await
+            .map_err(|error| Error::FeesError(error.to_string()))?;
+
+        Ok(fees.into())
+    }
+
+    pub async fn fee_rate_options_with_total_fee(
+        &self,
+        fee_rate_options: Option<Arc<FeeRateOptions>>,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let fee_rate_options = match fee_rate_options {
+            Some(fee_rate_options) => Arc::unwrap_or_clone(fee_rate_options),
+            None => self.fee_rate_options().await?,
+        };
+
+        let amount = Arc::unwrap_or_clone(amount).into();
+        let address: Address = Arc::unwrap_or_clone(address);
+
+        let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
+        let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
+        let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
+
+        let fast_psbt = call!(self.actor.build_tx(amount, address.clone(), fast_fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        let medium_psbt = call!(self
+            .actor
+            .build_tx(amount, address.clone(), medium_fee_rate))
+        .await
+        .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        let slow_psbt = call!(self.actor.build_tx(amount, address.clone(), slow_fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        let options = FeeRateOptionsWithTotalFee {
+            fast: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.fast,
+                fast_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            medium: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.medium,
+                medium_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            slow: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.slow,
+                slow_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+        };
+
+        Ok(options)
+    }
+
+    pub async fn build_transaction(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+    ) -> Result<Psbt, Error> {
+        let medium_fee = self
+            .fees()
+            .map(|fees| FeeRateOptions::from(fees).medium.fee_rate)
+            .unwrap_or_else(|| FeeRate::from_sat_per_vb(10));
+
+        self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee))
+            .await
+    }
+
+    pub async fn build_transaction_with_fee_rate(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+        fee_rate: Arc<FeeRate>,
+    ) -> Result<Psbt, Error> {
+        let actor = self.actor.clone();
+
+        let amount = Arc::unwrap_or_clone(amount).into();
+        let address = Arc::unwrap_or_clone(address);
+        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
+
+        let psbt = call!(actor.build_tx(amount, address, fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        Ok(psbt.into())
+    }
+
+    pub async fn get_confirm_details(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+        fee_rate: Arc<FeeRate>,
+    ) -> Result<ConfirmDetails, Error> {
+        let psbt = self
+            .build_transaction_with_fee_rate(amount, address, fee_rate.clone())
+            .await?;
+
+        let fee_rate: FeeRate = Arc::unwrap_or_clone(fee_rate);
+        let details = call!(self.actor.get_confirm_details(psbt.into(), fee_rate.into()))
+            .await
+            .map_err(|error| Error::GetConfirmDetailsError(error.to_string()))?;
+
+        Ok(details)
     }
 
     #[uniffi::method]

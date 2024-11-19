@@ -386,9 +386,7 @@ mod tests {
         let _id = parse_id(data, header.id_length).unwrap();
         let payload = parse_payload(data, header.payload_length, &type_).unwrap();
 
-        let NdefPayload::Data(payload) = payload else {
-            panic!("payload is not data")
-        };
+        let NdefPayload::Data(payload) = payload else { panic!("payload is not data") };
 
         let payload_string = String::from_utf8(payload).unwrap();
         let export_string = std::fs::read_to_string("test/data/export.json").unwrap();

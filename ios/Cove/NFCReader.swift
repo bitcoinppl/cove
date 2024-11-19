@@ -59,10 +59,10 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         }
 
         session.connect(to: tag) { error in
-            if let error = error {
+            if let error {
                 session.invalidate(
                     errorMessage:
-                        "Connection error: \(error.localizedDescription), please try again")
+                    "Connection error: \(error.localizedDescription), please try again")
                 return
             }
 
@@ -91,7 +91,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         session.alertMessage = readingMessage
 
         // when readBlocks is called if the old one is in started status then this might be the user trying to scan the same tag again
-        if reader.isStarted() && !readBytes.isEmpty {
+        if reader.isStarted(), !readBytes.isEmpty {
             // read the first block chunk
             tag.readMultipleBlocks(
                 requestFlags: .highDataRate, blockRange: NSRange(location: 0, length: blocksToRead)
@@ -138,7 +138,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 data, error in
                 // if there is an error, add it to the result
                 let result: Result<[Data], any Error> = {
-                    if let error = error {
+                    if let error {
                         return .failure(error)
                     }
 
@@ -159,7 +159,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
                     // has read enough data to get the message
                     if let messageInfo = self.messageInfo,
-                        self.readBytes.count >= messageInfo.fullMessageLength
+                       self.readBytes.count >= messageInfo.fullMessageLength
                     {
                         if case .error = self.parseAndHandleResult(session: session) {
                             return
@@ -189,7 +189,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     }
                 }
             }
-        }  // END: ReadNextBlock
+        } // END: ReadNextBlock
 
         // start calling the readNextBlock() recursive function
         readNextBlock()
@@ -223,12 +223,12 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     }
 
     // fallback function
-    func readNDEF<T: NFCNDEFTag>(from tag: T, session: NFCTagReaderSession) {
+    func readNDEF(from tag: some NFCNDEFTag, session: NFCTagReaderSession) {
         Log.debug("reading NDEF message from tag: \(tag)")
         session.alertMessage = "Reading data please hold still..."
 
         tag.readNDEF { message, error in
-            if let error = error {
+            if let error {
                 if message == nil {
                     Log.error("read error: \(error.localizedDescription)")
                     session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
@@ -236,7 +236,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 }
             }
 
-            guard let message = message else {
+            guard let message else {
                 Log.error("no NDEF message found")
                 session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
                 return

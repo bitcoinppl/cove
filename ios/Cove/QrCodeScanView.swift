@@ -8,12 +8,11 @@
 import SwiftUI
 
 struct QrCodeScanView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     // public
-    @Binding var app: MainViewModel
-    @Binding var alert: PresentableItem<AppAlertState>?
-    @Binding var scannedCode: IdentifiableItem<StringOrData>?
+    @Bindable var app: MainViewModel
+    @Binding var scannedCode: TaggedItem<StringOrData>?
 
     // private
     @State private var multiQr: MultiQr?
@@ -24,6 +23,10 @@ struct QrCodeScanView: View {
     @State private var partsLeft: Int? = nil
 
     private let screenHeight = UIScreen.main.bounds.height
+
+    var alertState: Binding<TaggedItem<AppAlertState>?> {
+        $app.alertState
+    }
 
     var partsScanned: Int {
         if let totalParts, let partsLeft {
@@ -80,11 +83,11 @@ struct QrCodeScanView: View {
     private func handleScan(result: Result<ScanResult, ScanError>) {
         if case let .failure(error) = result {
             if case ScanError.permissionDenied = error {
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
                 app.sheetState = .none
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
-                    alert = PresentableItem(AppAlertState.noCameraPermission)
+                    app.alertState = TaggedItem(AppAlertState.noCameraPermission)
                 }
             }
         }
@@ -94,7 +97,7 @@ struct QrCodeScanView: View {
 
         do {
             let multiQr: MultiQr =
-                try self.multiQr
+                try multiQr
                     ?? {
                         let newMultiQr = try MultiQr.tryNew(qr: qr)
                         self.multiQr = newMultiQr
@@ -105,8 +108,8 @@ struct QrCodeScanView: View {
             // single QR
             if !multiQr.isBbqr() {
                 scanComplete = true
-                scannedCode = IdentifiableItem(qr)
-                presentationMode.wrappedValue.dismiss()
+                scannedCode = TaggedItem(qr)
+                dismiss()
                 return
             }
 
@@ -119,8 +122,8 @@ struct QrCodeScanView: View {
             if result.isComplete() {
                 scanComplete = true
                 let data = try result.finalResult()
-                scannedCode = IdentifiableItem(data)
-                presentationMode.wrappedValue.dismiss()
+                scannedCode = TaggedItem(data)
+                dismiss()
             }
         } catch {
             Log.error("error scanning bbqr part: \(error)")
@@ -131,15 +134,11 @@ struct QrCodeScanView: View {
 #Preview {
     struct PreviewContainer: View {
         @State private var app = MainViewModel()
-        @State private var alert: PresentableItem<AppAlertState>? = nil
-        @State private var scannedCode: IdentifiableItem<StringOrData>? = nil
+        @State private var alert: TaggedItem<AppAlertState>? = nil
+        @State private var scannedCode: TaggedItem<StringOrData>? = nil
 
         var body: some View {
-            QrCodeScanView(
-                app: $app,
-                alert: $alert,
-                scannedCode: $scannedCode
-            )
+            QrCodeScanView(app: app, scannedCode: $scannedCode)
         }
     }
 

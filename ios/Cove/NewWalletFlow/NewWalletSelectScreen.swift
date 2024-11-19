@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 
 struct NewWalletSelectScreen: View {
     @Environment(MainViewModel.self) var app
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     @Environment(\.colorScheme) var colorScheme
     @State var showSelectDialog: Bool = false
@@ -25,10 +25,10 @@ struct NewWalletSelectScreen: View {
     @State private var isImporting = false
 
     // sheets
-    @State private var sheetState: PresentableItem<SheetState>? = nil
+    @State private var sheetState: TaggedItem<SheetState>? = nil
 
     @ViewBuilder
-    private func SheetContent(_ state: PresentableItem<SheetState>) -> some View {
+    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
         case .nfcHelp: NfcHelpView()
         }
@@ -53,13 +53,15 @@ struct NewWalletSelectScreen: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)
-                    .background(.blue.opacity(self.colorScheme == .dark ? 0.85 : 1))
+                    .background(
+                        .blue.opacity(colorScheme == .dark ? 0.85 : 1)
+                    )
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Button(action: { self.showSelectDialog = true }) {
+                Button(action: { showSelectDialog = true }) {
                     HStack {
                         Image(systemName: "externaldrive")
                             .font(.title2)
@@ -68,7 +70,9 @@ struct NewWalletSelectScreen: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)
-                    .background(.green.opacity(self.colorScheme == .dark ? 0.85 : 1))
+                    .background(
+                        .green.opacity(colorScheme == .dark ? 0.85 : 1)
+                    )
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
@@ -77,7 +81,7 @@ struct NewWalletSelectScreen: View {
                 Divider()
 
                 HStack {
-                    Button(action: self.app.nfcReader.scan) {
+                    Button(action: app.nfcReader.scan) {
                         HStack(spacing: 16) {
                             Image(systemName: "wave.3.right")
                                 .font(.system(size: 16))
@@ -92,7 +96,7 @@ struct NewWalletSelectScreen: View {
                     }
                     .buttonStyle(PlainButtonStyle())
 
-                    Button(action: self.app.scanQr) {
+                    Button(action: app.scanQr) {
                         HStack(spacing: 16) {
                             Image(systemName: "qrcode")
                                 .font(.title2)
@@ -111,31 +115,41 @@ struct NewWalletSelectScreen: View {
             .padding(.horizontal)
             .confirmationDialog(
                 "Import hardware wallet using",
-                isPresented: self.$showSelectDialog,
+                isPresented: $showSelectDialog,
                 titleVisibility: .visible
             ) {
-                NavigationLink(value: self.routeFactory.qrImport()) {
+                NavigationLink(value: routeFactory.qrImport()) {
                     Text("QR Code")
                 }
                 Button("File") {
-                    self.isImporting = true
+                    isImporting = true
                 }
                 Button("NFC") {
-                    self.nfcReader.scan()
+                    nfcReader.scan()
 
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         withAnimation {
-                            self.nfcCalled = true
+                            nfcCalled = true
                         }
                     }
+                }
+                Button("Paste") {
+                    let text = UIPasteboard.general.string ?? ""
+                    if text.isEmpty {
+                        alert = AlertItem(
+                            type: .error("No text found on the clipboard."))
+                        return
+                    }
+
+                    newWalletFromXpub(text)
                 }
             }
 
             Spacer()
 
-            if self.nfcCalled {
+            if nfcCalled {
                 Button(action: {
-                    self.sheetState = PresentableItem(.nfcHelp)
+                    sheetState = TaggedItem(.nfcHelp)
                 }) {
                     HStack {
                         Image(systemName: "wave.3.right")
@@ -147,32 +161,36 @@ struct NewWalletSelectScreen: View {
             Spacer()
         }
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: self.$isImporting, allowedContentTypes: [.plainText, .json]) { result in
+        .fileImporter(
+            isPresented: $isImporting,
+            allowedContentTypes: [.plainText, .json]
+        ) { result in
             switch result {
             case let .success(file):
                 do {
                     let fileContents = try readFile(from: file)
-                    self.newWalletFromXpub(fileContents)
+                    newWalletFromXpub(fileContents)
                 } catch {
-                    self.alert = AlertItem(type: .error(error.localizedDescription))
+                    alert = AlertItem(
+                        type: .error(error.localizedDescription))
                 }
             case let .failure(error):
-                self.alert = AlertItem(type: .error(error.localizedDescription))
+                alert = AlertItem(type: .error(error.localizedDescription))
             }
         }
-        .alert(item: self.$alert) { alert in
+        .alert(item: $alert) { alert in
             Alert(
                 title: Text(alert.type.title),
                 message: Text(alert.type.message),
                 dismissButton: .default(Text("OK")) {
-                    self.presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
             )
         }
-        .onChange(of: self.nfcReader.scannedMessage) { _, message in
-            if let message = message { self.newWalletFromXpub(message) }
+        .onChange(of: nfcReader.scannedMessage) { _, message in
+            if let message { newWalletFromXpub(message) }
         }
-        .sheet(item: self.$sheetState, content: self.SheetContent)
+        .sheet(item: $sheetState, content: SheetContent)
     }
 
     private func newWalletFromXpub(_ xpub: String) {
@@ -180,16 +198,18 @@ struct NewWalletSelectScreen: View {
             let wallet = try Wallet.newFromXpub(xpub: xpub)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
-            self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
-            try self.app.rust.selectWallet(id: id)
+            alert = AlertItem(
+                type: .success("Imported Wallet Successfully"))
+            try app.rust.selectWallet(id: id)
         } catch {
-            self.alert = AlertItem(type: .error(error.localizedDescription))
+            alert = AlertItem(type: .error(error.localizedDescription))
         }
     }
 
     func readFile(from url: URL) throws -> String {
         guard url.startAccessingSecurityScopedResource() else {
-            throw FileReadError(message: "Failed to access the file at \(url.path)")
+            throw FileReadError(
+                message: "Failed to access the file at \(url.path)")
         }
 
         defer { url.stopAccessingSecurityScopedResource() }
@@ -212,15 +232,15 @@ private enum AlertType: Equatable {
 
     var message: String {
         switch self {
-        case let .success(message): return message
-        case let .error(message): return message
+        case let .success(message): message
+        case let .error(message): message
         }
     }
 
     var title: String {
         switch self {
-        case .success: return "Success"
-        case .error: return "Error"
+        case .success: "Success"
+        case .error: "Error"
         }
     }
 }

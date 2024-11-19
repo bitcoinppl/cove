@@ -1,5 +1,5 @@
 //
-//  PopupMiddleView.swift
+//  MiddlePopupView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 7/22/24.

@@ -1,15 +1,23 @@
 use crate::{
     database::Database,
     node::client::NodeClient,
-    transaction::{Transaction, TransactionDetails, TxId},
+    transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
     view_model::wallet::Error,
-    wallet::{balance::Balance, metadata::BlockSizeLast, AddressInfo, Wallet, WalletAddressType},
+    wallet::{
+        balance::Balance, confirm::ConfirmDetails, metadata::BlockSizeLast, Address, AddressInfo,
+        Wallet, WalletAddressType,
+    },
 };
 use act_zero::*;
-use bdk_chain::spk_client::{FullScanResult, SyncResult};
+use bdk_chain::{
+    bitcoin::Psbt,
+    spk_client::{FullScanResult, SyncResult},
+};
 use bdk_wallet::KeychainKind;
+use bitcoin::params::Params;
 use bitcoin_units::Amount;
 use crossbeam::channel::Sender;
+use eyre::Context as _;
 use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, info};
 
@@ -87,6 +95,23 @@ impl WalletActor {
         Produces::ok(balance)
     }
 
+    pub async fn build_tx(
+        &mut self,
+        amount: Amount,
+        address: Address,
+        fee_rate: BdkFeeRate,
+    ) -> ActorResult<Psbt> {
+        let script_pubkey = address.script_pubkey();
+
+        let mut tx_builder = self.wallet.build_tx();
+        tx_builder.add_recipient(script_pubkey, amount);
+        tx_builder.fee_rate(fee_rate);
+
+        let psbt = tx_builder.finish()?;
+
+        Produces::ok(psbt)
+    }
+
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
         let zero = Amount::ZERO.into();
         let mut transactions = self
@@ -99,6 +124,50 @@ impl WalletActor {
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
 
         Produces::ok(transactions)
+    }
+
+    pub async fn get_confirm_details(
+        &mut self,
+        psbt: Psbt,
+        fee_rate: BdkFeeRate,
+    ) -> ActorResult<ConfirmDetails> {
+        let output = psbt
+            .unsigned_tx
+            .output
+            .iter()
+            .filter(|output| !self.wallet.is_mine(output.script_pubkey.clone()))
+            .collect::<Vec<&bitcoin::TxOut>>();
+
+        if output.is_empty() {
+            return Err(eyre::eyre!("no addess to send to found").into());
+        }
+
+        if output.len() > 1 {
+            return Err(
+                eyre::eyre!("multiple address to send to found, not currently supported").into(),
+            );
+        }
+
+        let params = Params::from(self.wallet.network());
+        let sending_to = bitcoin::Address::from_script(&output[0].script_pubkey, params)
+            .context("unable to get address from script")?;
+
+        let sending_amount = output[0].value;
+        let fee = psbt.fee()?;
+
+        let spending_amount = sending_amount
+            .checked_add(fee)
+            .ok_or_else(|| eyre::eyre!("fee overflow, cannot calculate spending amount"))?;
+
+        let details = ConfirmDetails {
+            spending_amount: spending_amount.into(),
+            sending_amount: sending_amount.into(),
+            fee_total: fee.into(),
+            fee_rate: fee_rate.into(),
+            sending_to: sending_to.into(),
+        };
+
+        Produces::ok(details)
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {

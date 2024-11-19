@@ -46,10 +46,8 @@ where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
 {
-    TOKIO
-        .get()
-        .expect("tokio runtime not initalized")
-        .block_on(task)
+    let handle = TOKIO.get().expect("tokio runtime not initalized");
+    handle.block_on(task)
 }
 
 /// Provides an infallible way to spawn an actor onto the Tokio runtime,

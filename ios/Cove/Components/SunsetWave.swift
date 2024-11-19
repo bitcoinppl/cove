@@ -1,5 +1,5 @@
 //
-//  OrangeBackgroundGradientView.swift
+//  SunsetWave.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/21/24.
@@ -17,7 +17,7 @@ struct SunsetWave<Content: View>: View {
             LinearGradient(gradient: Gradient(colors: [
                 Color(red: 0.98, green: 0.4, blue: 0.3), // Soft red
                 Color(red: 0.98, green: 0.6, blue: 0.3), // Soft orange
-                Color(red: 0.95, green: 0.8, blue: 0.6) // Soft light orange
+                Color(red: 0.95, green: 0.8, blue: 0.6), // Soft light orange
             ]), startPoint: .topLeading, endPoint: .bottomTrailing)
 
             // Overlapping waves

@@ -3,7 +3,7 @@ import SwiftUI
 struct WalletSettingsSheet: View {
     let model: WalletViewModel
     @Environment(\.navigate) private var navigate
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
 
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
@@ -49,7 +49,7 @@ struct WalletSettingsSheet: View {
 
                 Section(header: Text("App Settings")) {
                     Button(action: {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                         navigate(Route.settings)
                     }) {
                         HStack {
@@ -91,7 +91,7 @@ struct WalletSettingsSheet: View {
             .navigationTitle("Wallet Settings")
             .navigationBarItems(leading:
                 Button {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                     navigate(Route.settings)
                 } label: {
                     Label("App Settings", systemImage: "gear")
@@ -99,14 +99,14 @@ struct WalletSettingsSheet: View {
                 }
             )
             .navigationBarItems(trailing: Button("Done") {
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
             })
             .foregroundColor(.primary)
             .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
                     do {
                         try model.rust.deleteWallet()
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     } catch {
                         Log.error("Unable to delete wallet: \(error)")
                     }
@@ -117,7 +117,7 @@ struct WalletSettingsSheet: View {
             }
             .confirmationDialog("Are you sure?", isPresented: $showingSecretWordsConfirmation) {
                 Button("Show Me") {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                     navigate(Route.secretWords(model.walletMetadata.id))
                 }
                 Button("Cancel", role: .cancel) {}

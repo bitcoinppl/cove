@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    app::FfiApp, database::Database, mnemonic::NumberOfBip39Words, transaction::TransactionDetails,
-    wallet::metadata::WalletId,
+    app::FfiApp,
+    database::Database,
+    mnemonic::NumberOfBip39Words,
+    transaction::{Amount, TransactionDetails},
+    wallet::{confirm::ConfirmDetails, metadata::WalletId, Address},
 };
 
 use derive_more::From;
@@ -14,6 +17,7 @@ pub enum Route {
         reset_to: Arc<BoxedRoute>,
         after_millis: u32,
     },
+
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
@@ -23,6 +27,7 @@ pub enum Route {
         id: WalletId,
         details: Arc<TransactionDetails>,
     },
+    Send(SendRoute),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -55,6 +60,19 @@ pub enum ImportType {
     Manual,
     Nfc,
     Qr,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SendRoute {
+    SetAmount {
+        id: WalletId,
+        address: Option<Arc<Address>>,
+        amount: Option<Arc<Amount>>,
+    },
+    Confirm {
+        id: WalletId,
+        details: Arc<ConfirmDetails>,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -214,6 +232,31 @@ mod ffi {
 
         pub fn load_and_reset_to_after(&self, reset_to: Route, time: u32) -> Route {
             reset_to.load_and_reset_after(time)
+        }
+
+        #[uniffi::method(default(address = None, amount = None))]
+        pub fn send_set_amount(
+            &self,
+            id: WalletId,
+            address: Option<Arc<Address>>,
+            amount: Option<Arc<Amount>>,
+        ) -> Route {
+            let send = SendRoute::SetAmount {
+                id,
+                address,
+                amount,
+            };
+
+            Route::Send(send)
+        }
+
+        pub fn send_confirm(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
+            let send = SendRoute::Confirm { id, details };
+            Route::Send(send)
+        }
+
+        pub fn send(&self, send: SendRoute) -> Route {
+            Route::Send(send)
         }
     }
 

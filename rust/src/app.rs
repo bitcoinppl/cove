@@ -7,9 +7,11 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
+    fiat::client::{PriceResponse, FIAT_CLIENT},
     network::Network,
     node::Node,
     router::{Route, Router},
+    transaction::fees::client::{FeeResponse, FEE_CLIENT},
     wallet::metadata::WalletId,
 };
 use crossbeam::channel::{Receiver, Sender};
@@ -42,13 +44,24 @@ pub struct App {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-#[allow(clippy::enum_variant_names)]
 pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
     SetSelectedNode(Node),
+    UpdateFiatPrices,
+    UpdateFees,
 }
+
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error, derive_more::Display,
+)]
+pub enum AppError {
+    PricesError(String),
+    FeesError(String),
+}
+
+type Error = AppError;
 
 impl_default_for!(App);
 impl App {
@@ -142,6 +155,36 @@ impl App {
                         error!("Unable to set selected node: {error}");
                     }
                 }
+            }
+
+            AppAction::UpdateFiatPrices => {
+                debug!("Updating fiat prices");
+
+                crate::task::spawn(async move {
+                    match FIAT_CLIENT.get_prices().await {
+                        Ok(prices) => Updater::send_update(
+                            AppStateReconcileMessage::FiatPricesChanged(prices),
+                        ),
+                        Err(error) => {
+                            error!("unable to update prices: {error:?}");
+                        }
+                    }
+                });
+            }
+
+            AppAction::UpdateFees => {
+                debug!("Updating fees");
+
+                crate::task::spawn(async move {
+                    match FEE_CLIENT.get_fees().await {
+                        Ok(fees) => {
+                            Updater::send_update(AppStateReconcileMessage::FeesChanged(fees));
+                        }
+                        Err(error) => {
+                            error!("unable to get fees: {error:?}");
+                        }
+                    }
+                });
             }
         }
     }
@@ -249,6 +292,26 @@ impl FfiApp {
         Database::global().global_config.selected_network()
     }
 
+    #[uniffi::method]
+    pub async fn prices(&self) -> Result<PriceResponse, Error> {
+        let prices = FIAT_CLIENT
+            .get_prices()
+            .await
+            .map_err(|e| Error::PricesError(e.to_string()))?;
+
+        Ok(prices)
+    }
+
+    #[uniffi::method]
+    pub async fn fees(&self) -> Result<FeeResponse, Error> {
+        let fees = FEE_CLIENT
+            .get_fees()
+            .await
+            .map_err(|error| Error::FeesError(error.to_string()))?;
+
+        Ok(fees)
+    }
+
     /// Frontend calls this method to send events to the rust application logic
     pub fn dispatch(&self, action: AppAction) {
         self.inner().handle_action(action);
@@ -263,8 +326,15 @@ impl FfiApp {
         crate::task::init_tokio();
 
         // get / update prices
-        crate::task::spawn(async {
+        let _state = self.inner().state.clone();
+        crate::task::spawn(async move {
+            // init prices and update the client state
             if crate::fiat::client::init_prices().await.is_ok() {
+                let prices = FIAT_CLIENT.get_prices().await;
+                if let Ok(prices) = prices {
+                    Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
+                }
+
                 return;
             }
 
@@ -284,6 +354,21 @@ impl FfiApp {
                         warn!("unable to init prices: {error}, trying again");
                     }
                 }
+
+                let prices = FIAT_CLIENT.get_prices().await;
+                if let Ok(prices) = prices {
+                    Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
+                }
+            }
+        });
+
+        // get / update fees
+        crate::task::spawn(async move {
+            crate::transaction::fees::client::init_fees().await;
+
+            let fees = FEE_CLIENT.get_fees().await;
+            if let Ok(fees) = fees {
+                Updater::send_update(AppStateReconcileMessage::FeesChanged(fees));
             }
         });
     }

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -28,7 +28,8 @@
 		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
-		AC2B13532CA1EC1000C5C708 /* IdentifiableItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13522CA1EC0200C5C708 /* IdentifiableItem.swift */; };
+		AC2822F92CDD59E700C403E0 /* Address+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2822F82CDD59E000C403E0 /* Address+Ext.swift */; };
+		AC2B13532CA1EC1000C5C708 /* TaggedItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */; };
 		AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */; };
 		AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */; };
 		AC2B135A2CA1F49A00C5C708 /* CodeScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */; };
@@ -42,11 +43,11 @@
 		AC5F3CDF2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CDE2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift */; };
 		AC5F3CE12C99EBD600469EBA /* TransactionDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */; };
 		AC5F3CE52C9A188300469EBA /* FfiColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */; };
+		AC6043882CDD23E000AEF0CA /* PlaceholderTextEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6043872CDD23D900AEF0CA /* PlaceholderTextEditor.swift */; };
 		AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */; };
 		AC61B8FA2C7E6976001B649A /* TransactionsDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */; };
 		AC6F4CD92CC554FE008D26C0 /* ChooseWalletTypeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CD82CC554F1008D26C0 /* ChooseWalletTypeView.swift */; };
 		AC6F4CDB2CC55981008D26C0 /* General+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */; };
-		AC6F4CE12CC5DAAB008D26C0 /* PresentableItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */; };
 		AC6F4CE32CC6BC30008D26C0 /* LoadAndResetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */; };
 		AC6F4CE52CC6F56F008D26C0 /* NfcHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F4CE42CC6F569008D26C0 /* NfcHelpView.swift */; };
 		AC6F511C2CA205EE00D4D27A /* StringOrData+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */; };
@@ -55,6 +56,7 @@
 		AC73B5952CCEFC5A0003F537 /* QrCodeScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */; };
 		AC73B5972CCF289A0003F537 /* AppAlertState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5962CCF28960003F537 /* AppAlertState.swift */; };
 		AC73B5992CCF2D6F0003F537 /* AppSheetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */; };
+		AC73B5A12CD154BE0003F537 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC73B5A02CD154BA0003F537 /* Constants.swift */; };
 		AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC757CBA2C6D277400F3F41C /* ReceiveView.swift */; };
 		AC7DAC9A2C5ACA2800F9DDDB /* String+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */; };
 		AC8189542C4023F0004DCDF5 /* CustomCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */; };
@@ -127,7 +129,8 @@
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
-		AC2B13522CA1EC0200C5C708 /* IdentifiableItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifiableItem.swift; sourceTree = "<group>"; };
+		AC2822F82CDD59E000C403E0 /* Address+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Address+Ext.swift"; sourceTree = "<group>"; };
+		AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaggedItem.swift; sourceTree = "<group>"; };
 		AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AVCaptureDevice+bestForBuiltInCamera.swift"; sourceTree = "<group>"; };
 		AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeScanner.swift; sourceTree = "<group>"; };
 		AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerViewController.swift; sourceTree = "<group>"; };
@@ -142,11 +145,11 @@
 		AC5F3CDE2C99EB9D00469EBA /* ReceivedDetailsExpandedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceivedDetailsExpandedView.swift; sourceTree = "<group>"; };
 		AC5F3CE02C99EBD600469EBA /* TransactionDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailsView.swift; sourceTree = "<group>"; };
 		AC5F3CE42C9A188300469EBA /* FfiColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FfiColorScheme.swift; sourceTree = "<group>"; };
+		AC6043872CDD23D900AEF0CA /* PlaceholderTextEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTextEditor.swift; sourceTree = "<group>"; };
 		AC61B8F72C7D223A001B649A /* MakeIdentifiable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeIdentifiable.swift; sourceTree = "<group>"; };
 		AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsDetailScreen.swift; sourceTree = "<group>"; };
 		AC6F4CD82CC554F1008D26C0 /* ChooseWalletTypeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChooseWalletTypeView.swift; sourceTree = "<group>"; };
 		AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "General+Ext.swift"; sourceTree = "<group>"; };
-		AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentableItem.swift; sourceTree = "<group>"; };
 		AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadAndResetView.swift; sourceTree = "<group>"; };
 		AC6F4CE42CC6F569008D26C0 /* NfcHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcHelpView.swift; sourceTree = "<group>"; };
 		AC6F511B2CA205E900D4D27A /* StringOrData+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StringOrData+Ext.swift"; sourceTree = "<group>"; };
@@ -156,6 +159,7 @@
 		AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeScanView.swift; sourceTree = "<group>"; };
 		AC73B5962CCF28960003F537 /* AppAlertState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAlertState.swift; sourceTree = "<group>"; };
 		AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSheetState.swift; sourceTree = "<group>"; };
+		AC73B5A02CD154BA0003F537 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		AC757CBA2C6D277400F3F41C /* ReceiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveView.swift; sourceTree = "<group>"; };
 		AC7DAC992C5ACA2800F9DDDB /* String+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Ext.swift"; sourceTree = "<group>"; };
 		AC8189532C4023F0004DCDF5 /* CustomCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomCompletionView.swift; sourceTree = "<group>"; };
@@ -196,6 +200,10 @@
 		D0245F562C0F7B500042B447 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		AC73B59A2CD14EDD0003F537 /* SendFlow */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SendFlow; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		D0245F492C0F7B4E0042B447 /* Frameworks */ = {
@@ -316,6 +324,7 @@
 		ACC301662C20C11D006790DF /* Extention */ = {
 			isa = PBXGroup;
 			children = (
+				AC2822F82CDD59E000C403E0 /* Address+Ext.swift */,
 				AC6F4CDA2CC55974008D26C0 /* General+Ext.swift */,
 				ACC301692C20C9D4006790DF /* Routes+Ext.swift */,
 				ACF44D0C2C26131A008C5034 /* Color+Ext.swift */,
@@ -405,6 +414,7 @@
 				AC8459C22CA5F13A00A3083F /* Cove.entitlements */,
 				AC739D542CA09AD6006B5FF1 /* Info.plist */,
 				AC4343612C6AF87B00105C03 /* SettingsScreen */,
+				AC73B59A2CD14EDD0003F537 /* SendFlow */,
 				AC4343602C6AF80000105C03 /* HomeScreens */,
 				ACF479F62C59D76E008A9362 /* FFI */,
 				D000B2F12C0F7BB100E32143 /* Cove.swift */,
@@ -420,15 +430,16 @@
 				AC8459C02CA5ED7700A3083F /* NFCReader.swift */,
 				ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */,
 				AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */,
-				AC2B13522CA1EC0200C5C708 /* IdentifiableItem.swift */,
+				AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */,
 				AC73B5962CCF28960003F537 /* AppAlertState.swift */,
 				AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
+				AC73B5A02CD154BA0003F537 /* Constants.swift */,
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
 				048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */,
+				AC6043872CDD23D900AEF0CA /* PlaceholderTextEditor.swift */,
 				AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */,
-				AC6F4CE02CC5DAA9008D26C0 /* PresentableItem.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
 				AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */,
@@ -465,6 +476,9 @@
 			buildRules = (
 			);
 			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AC73B59A2CD14EDD0003F537 /* SendFlow */,
 			);
 			name = Cove;
 			packageProductDependencies = (
@@ -546,17 +560,18 @@
 				AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */,
 				ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */,
 				ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */,
-				AC6F4CE12CC5DAAB008D26C0 /* PresentableItem.swift in Sources */,
 				AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */,
 				AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */,
 				AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */,
+				AC6043882CDD23E000AEF0CA /* PlaceholderTextEditor.swift in Sources */,
 				AC2B135A2CA1F49A00C5C708 /* CodeScanner.swift in Sources */,
 				ACC301742C211281006790DF /* HotWalletSelectScreen.swift in Sources */,
 				AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */,
 				AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */,
+				AC2822F92CDD59E700C403E0 /* Address+Ext.swift in Sources */,
 				AC49121B2C77B8A100ED8ED7 /* SecretWordsScreen.swift in Sources */,
 				ACCB02CE2C97572100FB2EDF /* AsyncView.swift in Sources */,
-				AC2B13532CA1EC1000C5C708 /* IdentifiableItem.swift in Sources */,
+				AC2B13532CA1EC1000C5C708 /* TaggedItem.swift in Sources */,
 				AC5F3CDB2C99E96000469EBA /* SentDetailsExpandedView.swift in Sources */,
 				AC5F3CE12C99EBD600469EBA /* TransactionDetailsView.swift in Sources */,
 				ACA4CBEC2C2328BE0008F63E /* Security.swift in Sources */,
@@ -611,6 +626,7 @@
 				AC6F4CD92CC554FE008D26C0 /* ChooseWalletTypeView.swift in Sources */,
 				9BEA921FB93FC209CF7A8CA2 /* NewWalletContainer.swift in Sources */,
 				69455D17216AD109B6EE2F25 /* WalletMetadata+Ext.swift in Sources */,
+				AC73B5A12CD154BE0003F537 /* Constants.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

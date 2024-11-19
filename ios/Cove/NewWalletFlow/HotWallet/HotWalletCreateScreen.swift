@@ -16,9 +16,7 @@ struct HotWalletCreateScreen: View {
 
     var body: some View {
         WordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
-    
     }
-
 }
 
 struct WordsView: View {
@@ -26,11 +24,11 @@ struct WordsView: View {
     var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.navigate) private var navigate
 
     var lastIndex: Int {
-        return groupedWords.count - 1
+        groupedWords.count - 1
     }
 
     var body: some View {
@@ -102,14 +100,12 @@ struct WordsView: View {
                 title: Text("⚠️ Wallet Not Saved ⚠️"),
                 message: Text("You will have to write down a new set of words."),
                 primaryButton: .destructive(Text("Yes, Go Back")) {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 },
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
-
     }
-
 }
 
 struct WordCardView: View {
@@ -132,9 +128,7 @@ struct WordCardView: View {
         }
         .padding()
         .foregroundColor(.white)
-
     }
-
 }
 
 struct StyledWordCard<Content: View>: View {
@@ -149,9 +143,7 @@ struct StyledWordCard<Content: View>: View {
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
         }
         .padding()
-
     }
-
 }
 
 #Preview("12 Words") {

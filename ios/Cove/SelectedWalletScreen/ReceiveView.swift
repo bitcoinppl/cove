@@ -28,7 +28,7 @@ struct ReceiveView: View {
     func copyText() {
         dismiss()
 
-        if let addressInfo = addressInfo {
+        if let addressInfo {
             pasteboard.string = addressInfo.adressString()
             FloaterPopup(text: "Address Copied")
                 .showAndStack()
@@ -125,7 +125,7 @@ private struct AddressView: View {
 
     var body: some View {
         Group {
-            if let addressInfo = addressInfo {
+            if let addressInfo {
                 GroupBox {
                     VStack {
                         Image(uiImage: generateQRCode(from: addressInfo.adressString()))

@@ -71,7 +71,7 @@ struct ScannerView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                if viewLoaded && !showingPermissionAlert && scanError == nil {
+                if viewLoaded, !showingPermissionAlert, scanError == nil {
                     CodeScannerView(
                         codeTypes: codeTypes,
                         scanMode: scanMode,

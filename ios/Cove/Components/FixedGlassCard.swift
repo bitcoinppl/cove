@@ -33,9 +33,7 @@ struct FixedGlassCard<Content: View>: View {
             // content
             content
         }
-
     }
-
 }
 
 #Preview {

@@ -3,7 +3,7 @@ mod ffi;
 mod sent_and_received;
 mod unit;
 
-pub mod fee_rate;
+pub mod fees;
 pub mod transaction_details;
 
 use std::{cmp::Ordering, sync::Arc};
@@ -17,7 +17,6 @@ use bdk_wallet::bitcoin::{
     OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
-use bitcoin_units::Amount as BdkAmount;
 use rand::Rng as _;
 
 use crate::{fiat::FiatAmount, wallet::Wallet};
@@ -26,7 +25,9 @@ pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
 pub type Unit = unit::Unit;
 pub type TransactionDetails = transaction_details::TransactionDetails;
-pub type FeeRate = fee_rate::FeeRate;
+pub type FeeRate = fees::FeeRate;
+
+pub type BdkAmount = bitcoin_units::Amount;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionDirection {

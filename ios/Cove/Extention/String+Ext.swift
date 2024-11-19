@@ -16,7 +16,43 @@ extension String {
         self = walletAddressTypeToString(walletAddressType: walletAddressType)
     }
 
-    init(_ adress: Address) {
-        self = adress.string()
+    init(_ address: Address) {
+        self = address.string()
+    }
+
+    init(_ fingeprint: Fingerprint) {
+        self = fingeprint.asUppercase()
+    }
+
+    init(_ feeSpeed: FeeSpeed) {
+        self = feeSpeedToString(feeSpeed: feeSpeed)
+    }
+
+    func removingLeadingZeros() -> String {
+        guard self != "0" else { return self }
+        if contains(".") {
+            if hasSuffix("0") {
+                return normalizeZero()
+            } else {
+                return self
+            }
+        }
+
+        let int = Int(self) ?? 0
+        return String(int)
+    }
+
+    func normalizeZero() -> String {
+        let pattern = "^0+\\.0$"
+        if range(of: pattern, options: .regularExpression) != nil {
+            return "0.0"
+        }
+        return self
+    }
+}
+
+extension String? {
+    init(_ fingeprint: Fingerprint?) {
+        if let fingeprint { self = String(fingeprint) } else { self = .none }
     }
 }

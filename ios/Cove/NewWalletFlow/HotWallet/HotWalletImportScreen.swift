@@ -34,11 +34,11 @@ struct HotWalletImportScreen: View {
     @State var filteredSuggestions: [String] = []
 
     // qr code scanning
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) var dismiss
     @State private var multiQr: MultiQr?
-    @State private var scannedCode: IdentifiableString?
+    @State private var scannedCode: TaggedString?
     @State private var scanComplete: Bool = false
-    @State private var scanError: IdentifiableString?
+    @State private var scanError: TaggedString?
 
     // nfc scanning
     @State private var nfcReader: NFCReader = .init()
@@ -74,12 +74,12 @@ struct HotWalletImportScreen: View {
     }
 
     var buttonIsDisabled: Bool {
-        return enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(
+        enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(
             false)
     }
 
     var isAllWordsValid: Bool {
-        return !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(
+        !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(
             false)
     }
 
@@ -101,7 +101,7 @@ struct HotWalletImportScreen: View {
     private func handleScan(result: Result<ScanResult, ScanError>) {
         if case let .failure(error) = result {
             Log.error("Scan error: \(error.localizedDescription)")
-            presentationMode.wrappedValue.dismiss()
+            dismiss()
             return
         }
 
@@ -110,12 +110,12 @@ struct HotWalletImportScreen: View {
 
         do {
             let multiQr: MultiQr =
-                try self.multiQr
-                ?? {
-                    let newMultiQr = try MultiQr.tryNew(qr: qr)
-                    self.multiQr = newMultiQr
-                    return newMultiQr
-                }()
+                try multiQr
+                    ?? {
+                        let newMultiQr = try MultiQr.tryNew(qr: qr)
+                        self.multiQr = newMultiQr
+                        return newMultiQr
+                    }()
 
             // see if its single qr or seed qr
             if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(6)) {
@@ -123,7 +123,7 @@ struct HotWalletImportScreen: View {
             }
         } catch {
             Log.error("Seed QR failed to scan: \(error.localizedDescription)")
-            scanError = IdentifiableString(error.localizedDescription)
+            scanError = TaggedString(error.localizedDescription)
             isPresentingScanner = false
 
             // reset multiqr on error
@@ -175,8 +175,7 @@ struct HotWalletImportScreen: View {
                         outerIndex = outerIndex - 1
                     }
 
-                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0
-                    {
+                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
                         Log.error(
                             "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)"
                         )
@@ -193,7 +192,7 @@ struct HotWalletImportScreen: View {
                 Spacer()
 
                 // only show divider in the middle
-                if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
+                if filteredSuggestions.count > 1, filteredSuggestions.last != word {
                     Divider()
                 }
             }
@@ -253,6 +252,7 @@ struct HotWalletImportScreen: View {
             .frame(height: cardHeight)
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
             .navigationTitle("Import Wallet")
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .navigationBarTitleDisplayMode(navDisplay)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
@@ -365,8 +365,8 @@ struct HotWalletImportScreen: View {
         .onChange(of: enteredWords) {
             // if its the last word on the non last card and all words are valid words, then go to next tab
             // focusField will already have changed by now
-            if let focusField = self.focusField,
-                !buttonIsDisabled && tabIndex < lastIndex && focusField % 6 == 1
+            if let focusField,
+               !buttonIsDisabled, tabIndex < lastIndex, focusField % 6 == 1
             {
                 withAnimation {
                     tabIndex += 1
@@ -374,7 +374,7 @@ struct HotWalletImportScreen: View {
             }
         }
         .onChange(of: nfcReader.scannedMessage) { _, msg in
-            guard let msg = msg else { return }
+            guard let msg else { return }
             do {
                 let words = try groupedPlainWordsOf(mnemonic: msg, groups: 6)
                 setWords(words)
@@ -385,7 +385,7 @@ struct HotWalletImportScreen: View {
 
         .onChange(of: nfcReader.scannedMessageData) { _, data in
             // received data, probably a SeedQR in NFC
-            guard let data = data else { return }
+            guard let data else { return }
             do {
                 let seedQR = try SeedQr.newFromData(data: data)
                 let words = seedQR.groupedPlainWords()
@@ -395,8 +395,8 @@ struct HotWalletImportScreen: View {
             }
         }
         .onDisappear {
-            self.nfcReader.resetReader()
-            self.nfcReader.session = nil
+            nfcReader.resetReader()
+            nfcReader.session = nil
 
             for task in tasks {
                 task.cancel()
@@ -411,7 +411,7 @@ struct HotWalletImportScreen: View {
         case 24: self.numberOfWords = .twentyFour
         default:
             Log.warn("Invalid number of words: \(numberOfWords)")
-            scanError = IdentifiableString(
+            scanError = TaggedString(
                 "Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
             isPresentingScanner = false
             return
@@ -460,7 +460,7 @@ private struct CardTab: View {
                     numberOfWords: numberOfWords,
                     text: $fields[index],
                     filteredSuggestions: $filteredSuggestions,
-                    focusField: self.$focusField
+                    focusField: $focusField
                 )
             }
         }
@@ -525,7 +525,7 @@ private struct AutocompleteField: View {
             }
         )
         .onAppear {
-            if !text.isEmpty && autocomplete.isBip39Word(word: text) {
+            if !text.isEmpty, autocomplete.isBip39Word(word: text) {
                 state = .valid
             }
         }
@@ -533,7 +533,7 @@ private struct AutocompleteField: View {
 
     func submitFocusField() {
         filteredSuggestions = []
-        guard let focusField = focusField else {
+        guard let focusField else {
             return
         }
 
@@ -560,8 +560,8 @@ private struct AutocompleteField: View {
         .keyboardType(.asciiCapable)
         .focused($isFocused)
         .onChange(of: isFocused) {
-            if !self.isFocused {
-                self.showSuggestions = false
+            if !isFocused {
+                showSuggestions = false
                 return
             }
 
@@ -575,7 +575,7 @@ private struct AutocompleteField: View {
             submitFocusField()
         }
         .onChange(of: focusField) { _, fieldNumber in
-            guard let fieldNumber = fieldNumber else { return }
+            guard let fieldNumber else { return }
             if number == fieldNumber {
                 isFocused = true
             }
@@ -606,20 +606,20 @@ private struct AutocompleteField: View {
             // then auto select the first selection, because we want auto selection
             // but also allow the user to fix a wrong word
             if let word = filteredSuggestions.last,
-                filteredSuggestions.count == 1 && oldText.count < newText.count
+               filteredSuggestions.count == 1, oldText.count < newText.count
             {
                 state = .valid
                 filteredSuggestions = []
 
-                if self.text != word {
-                    self.text = word
+                if text != word {
+                    text = word
                     submitFocusField()
                     return
                 }
             }
         }
         .onAppear {
-            if let focusField = self.focusField, focusField == number {
+            if let focusField, focusField == number {
                 isFocused = true
             }
         }
@@ -632,11 +632,15 @@ private struct DuplicateWalletItem: Identifiable {
 }
 
 #Preview("12 Words") {
-    HotWalletImportScreen(numberOfWords: .twelve)
-        .environment(MainViewModel())
+    NavigationStack {
+        HotWalletImportScreen(numberOfWords: .twelve)
+            .environment(MainViewModel())
+    }
 }
 
 #Preview("24 Words") {
-    HotWalletImportScreen(numberOfWords: .twentyFour)
-        .environment(MainViewModel())
+    NavigationStack {
+        HotWalletImportScreen(numberOfWords: .twentyFour)
+            .environment(MainViewModel())
+    }
 }

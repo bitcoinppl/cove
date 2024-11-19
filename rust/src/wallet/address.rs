@@ -10,6 +10,7 @@ use bdk_chain::ConfirmationBlockTime;
 use bdk_wallet::{bitcoin::Transaction as BdkTransaction, AddressInfo as BdkAddressInfo};
 
 use crate::network::Network;
+use crate::transaction::Amount;
 use crate::transaction::TransactionDirection;
 
 #[derive(
@@ -20,6 +21,8 @@ use crate::transaction::TransactionDirection;
     Hash,
     derive_more::Display,
     derive_more::From,
+    derive_more::Deref,
+    derive_more::AsRef,
     derive_more::Into,
     uniffi::Object,
 )]
@@ -41,9 +44,11 @@ pub struct AddressInfo(BdkAddressInfo);
 pub struct AddressWithNetwork {
     pub address: Address,
     pub network: Network,
+    pub amount: Option<Amount>,
 }
 
 type Error = AddressError;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum AddressError {
@@ -58,6 +63,12 @@ pub enum AddressError {
 
     #[error("valid address, but for an unsupported network")]
     UnsupportedNetwork,
+
+    #[error("address for wrong network, current network is {current}")]
+    WrongNetwork { current: Network },
+
+    #[error("empty address")]
+    EmptyAddress,
 }
 
 impl Clone for AddressInfo {
@@ -115,14 +126,20 @@ impl Address {
 
 impl AddressWithNetwork {
     pub fn try_new(str: &str) -> Result<Self, Error> {
+        let str = str.trim();
+        let str = str.trim_start_matches("bitcoin:");
+
+        let (address_str, amount) = extract_amount(str);
+
         let address: BdkAddress<NetworkUnchecked> =
-            str.parse().map_err(|_| Error::InvalidAddress)?;
+            address_str.parse().map_err(|_| Error::InvalidAddress)?;
 
         let network = Network::Bitcoin;
         if let Ok(address) = address.clone().require_network(network.into()) {
             return Ok(Self {
                 address: address.into(),
                 network,
+                amount,
             });
         }
 
@@ -131,6 +148,7 @@ impl AddressWithNetwork {
             return Ok(Self {
                 address: address.into(),
                 network,
+                amount,
             });
         }
 
@@ -138,15 +156,49 @@ impl AddressWithNetwork {
     }
 }
 
+fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
+    let Some(pos) = full_qr.find("?amount=") else { return (full_qr, None) };
+
+    let address = &full_qr[..pos];
+
+    let number_start = pos + 8;
+    let mut number_end = number_start;
+    for char in full_qr[number_start..].chars() {
+        if char.is_ascii_digit() || char == '.' {
+            number_end += 1;
+        } else {
+            break;
+        }
+    }
+
+    let number = &full_qr[number_start..number_end];
+    let Ok(amount_float) = number.parse::<f64>() else { return (address, None) };
+    let Ok(amount) = Amount::from_btc(amount_float) else { return (address, None) };
+
+    (address, Some(amount))
+}
+
 mod ffi {
     use std::str::FromStr as _;
 
     use bdk_chain::bitcoin::address::NetworkChecked;
 
+    use crate::database::Database;
+
     use super::*;
 
     #[uniffi::export]
+    fn address_is_equal(lhs: Arc<Address>, rhs: Arc<Address>) -> bool {
+        lhs == rhs
+    }
+
+    #[uniffi::export]
     impl AddressWithNetwork {
+        #[uniffi::constructor(name = "new")]
+        pub fn new(address: String) -> Result<Self, Error> {
+            Self::try_new(&address)
+        }
+
         fn address(&self) -> Address {
             self.address.clone()
         }
@@ -154,16 +206,29 @@ mod ffi {
         fn network(&self) -> Network {
             self.network
         }
+
+        fn amount(&self) -> Option<Arc<Amount>> {
+            self.amount.map(Arc::new)
+        }
     }
 
     #[uniffi::export]
     impl Address {
+        #[uniffi::constructor]
+        pub fn from_string(address: String) -> Result<Self> {
+            let network = Database::global().global_config.selected_network();
+            let bdk_address = BdkAddress::from_str(&address)
+                .map_err(|_| Error::InvalidAddress)?
+                .require_network(network.into())
+                .map_err(|_| Error::WrongNetwork { current: network })?;
+
+            Ok(Self(bdk_address))
+        }
+
         #[uniffi::constructor(name = "preview_new")]
         pub fn preview_new() -> Self {
-            let address = BdkAddress::from_str(
-                "bc1p0000304alk4tg3vxcu7l9m4xf4cvauzml5608cssvz5f60jwg68q83lyn9",
-            )
-            .unwrap();
+            let address =
+                BdkAddress::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap();
 
             let address: BdkAddress<NetworkChecked> =
                 address.require_network(Network::Bitcoin.into()).unwrap();
@@ -189,5 +254,107 @@ mod ffi {
         fn index(&self) -> u32 {
             self.index
         }
+    }
+
+    #[uniffi::export]
+    fn address_is_valid(address: String) -> Result<(), Error> {
+        let network = Database::global().global_config.selected_network();
+        address_is_valid_for_network(address, network)
+    }
+
+    #[uniffi::export]
+    fn address_is_valid_for_network(address: String, network: Network) -> Result<(), Error> {
+        let address = address.trim();
+        let address = BdkAddress::from_str(address).map_err(|_| Error::InvalidAddress)?;
+
+        address
+            .require_network(network.into())
+            .map_err(|_| Error::WrongNetwork { current: network })?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_amount_no_amount() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, None);
+    }
+
+    #[test]
+    fn test_extract_amount_with_amount() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
+    }
+
+    #[test]
+    fn test_extract_amount_with_amount_and_spaces() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001  ";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
+    }
+
+    #[test]
+    fn test_extract_amount_with_amount_and_other_query_params() {
+        let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.002&foo=bar";
+        let (a, amount) = extract_amount(a);
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, Some(Amount::from_btc(0.002).unwrap()));
+    }
+
+    #[test]
+    fn test_address_with_network() {
+        let assert = |address_with_network: AddressWithNetwork, amount: Option<Amount>| {
+            assert_eq!(
+                address_with_network.address.to_string(),
+                "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm"
+            );
+            assert_eq!(address_with_network.network, Network::Bitcoin);
+            assert_eq!(address_with_network.amount, amount);
+        };
+
+        let address_with_network =
+            AddressWithNetwork::try_new("bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
+
+        assert!(address_with_network.is_ok());
+        assert(address_with_network.unwrap(), None);
+
+        let address_with_network =
+            AddressWithNetwork::try_new("bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001");
+
+        assert!(address_with_network.is_ok());
+        assert(
+            address_with_network.unwrap(),
+            Some(Amount::from_btc(0.001).unwrap()),
+        );
+
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001",
+        );
+
+        assert!(address_with_network.is_ok());
+        assert(
+            address_with_network.unwrap(),
+            Some(Amount::from_btc(0.001).unwrap()),
+        );
+
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.002&foo=bar",
+        );
+
+        assert!(address_with_network.is_ok());
+        assert(
+            address_with_network.unwrap(),
+            Some(Amount::from_btc(0.002).unwrap()),
+        );
     }
 }

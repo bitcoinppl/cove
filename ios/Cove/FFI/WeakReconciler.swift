@@ -1,5 +1,5 @@
 //
-//  WeakReconciller.swift
+//  WeakReconciler.swift
 //  Cove
 //
 //  Created by Praveen Perera on 2024-07-30.
