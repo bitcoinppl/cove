@@ -34,7 +34,7 @@ struct NodeSelectionView: View {
     }
 
     func cancelCheckUrlTask() {
-        if let checkUrlTask = checkUrlTask {
+        if let checkUrlTask {
             checkUrlTask.cancel()
         }
     }
@@ -93,7 +93,7 @@ struct NodeSelectionView: View {
                 }
             }
 
-            if let node = node {
+            if let node {
                 Task {
                     showLoadingPopup()
                     let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
@@ -131,12 +131,12 @@ struct NodeSelectionView: View {
         .onChange(of: selectedNodeName) { _, newSelectedNodeName in
             if selectedNodeName.hasPrefix("Custom") {
                 if case let .custom(savedSelectedNode) = nodeSelector.selectedNode() {
-                    if savedSelectedNode.apiType == .electrum && selectedNodeName.contains("Electrum") {
+                    if savedSelectedNode.apiType == .electrum, selectedNodeName.contains("Electrum") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
                     }
 
-                    if savedSelectedNode.apiType == .esplora && selectedNodeName.contains("Esplora") {
+                    if savedSelectedNode.apiType == .esplora, selectedNodeName.contains("Esplora") {
                         customUrl = savedSelectedNode.url
                         customNodeName = savedSelectedNode.name
                     }
@@ -156,7 +156,7 @@ struct NodeSelectionView: View {
                     completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
                 }
             }
-            self.checkUrlTask = task
+            checkUrlTask = task
         }
         .alert(isPresented: $showParseUrlAlert) {
             Alert(

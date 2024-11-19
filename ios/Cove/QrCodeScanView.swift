@@ -97,7 +97,7 @@ struct QrCodeScanView: View {
 
         do {
             let multiQr: MultiQr =
-                try self.multiQr
+                try multiQr
                     ?? {
                         let newMultiQr = try MultiQr.tryNew(qr: qr)
                         self.multiQr = newMultiQr

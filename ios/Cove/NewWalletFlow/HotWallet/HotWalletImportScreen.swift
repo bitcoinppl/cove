@@ -74,12 +74,12 @@ struct HotWalletImportScreen: View {
     }
 
     var buttonIsDisabled: Bool {
-        return enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(
+        enteredWords[tabIndex].map { word in autocomplete.isValidWord(word: word) }.contains(
             false)
     }
 
     var isAllWordsValid: Bool {
-        return !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(
+        !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(
             false)
     }
 
@@ -110,7 +110,7 @@ struct HotWalletImportScreen: View {
 
         do {
             let multiQr: MultiQr =
-                try self.multiQr
+                try multiQr
                     ?? {
                         let newMultiQr = try MultiQr.tryNew(qr: qr)
                         self.multiQr = newMultiQr
@@ -192,7 +192,7 @@ struct HotWalletImportScreen: View {
                 Spacer()
 
                 // only show divider in the middle
-                if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
+                if filteredSuggestions.count > 1, filteredSuggestions.last != word {
                     Divider()
                 }
             }
@@ -365,8 +365,8 @@ struct HotWalletImportScreen: View {
         .onChange(of: enteredWords) {
             // if its the last word on the non last card and all words are valid words, then go to next tab
             // focusField will already have changed by now
-            if let focusField = self.focusField,
-               !buttonIsDisabled && tabIndex < lastIndex && focusField % 6 == 1
+            if let focusField,
+               !buttonIsDisabled, tabIndex < lastIndex, focusField % 6 == 1
             {
                 withAnimation {
                     tabIndex += 1
@@ -374,7 +374,7 @@ struct HotWalletImportScreen: View {
             }
         }
         .onChange(of: nfcReader.scannedMessage) { _, msg in
-            guard let msg = msg else { return }
+            guard let msg else { return }
             do {
                 let words = try groupedPlainWordsOf(mnemonic: msg, groups: 6)
                 setWords(words)
@@ -385,7 +385,7 @@ struct HotWalletImportScreen: View {
 
         .onChange(of: nfcReader.scannedMessageData) { _, data in
             // received data, probably a SeedQR in NFC
-            guard let data = data else { return }
+            guard let data else { return }
             do {
                 let seedQR = try SeedQr.newFromData(data: data)
                 let words = seedQR.groupedPlainWords()
@@ -395,8 +395,8 @@ struct HotWalletImportScreen: View {
             }
         }
         .onDisappear {
-            self.nfcReader.resetReader()
-            self.nfcReader.session = nil
+            nfcReader.resetReader()
+            nfcReader.session = nil
 
             for task in tasks {
                 task.cancel()
@@ -460,7 +460,7 @@ private struct CardTab: View {
                     numberOfWords: numberOfWords,
                     text: $fields[index],
                     filteredSuggestions: $filteredSuggestions,
-                    focusField: self.$focusField
+                    focusField: $focusField
                 )
             }
         }
@@ -525,7 +525,7 @@ private struct AutocompleteField: View {
             }
         )
         .onAppear {
-            if !text.isEmpty && autocomplete.isBip39Word(word: text) {
+            if !text.isEmpty, autocomplete.isBip39Word(word: text) {
                 state = .valid
             }
         }
@@ -533,7 +533,7 @@ private struct AutocompleteField: View {
 
     func submitFocusField() {
         filteredSuggestions = []
-        guard let focusField = focusField else {
+        guard let focusField else {
             return
         }
 
@@ -560,8 +560,8 @@ private struct AutocompleteField: View {
         .keyboardType(.asciiCapable)
         .focused($isFocused)
         .onChange(of: isFocused) {
-            if !self.isFocused {
-                self.showSuggestions = false
+            if !isFocused {
+                showSuggestions = false
                 return
             }
 
@@ -575,7 +575,7 @@ private struct AutocompleteField: View {
             submitFocusField()
         }
         .onChange(of: focusField) { _, fieldNumber in
-            guard let fieldNumber = fieldNumber else { return }
+            guard let fieldNumber else { return }
             if number == fieldNumber {
                 isFocused = true
             }
@@ -606,20 +606,20 @@ private struct AutocompleteField: View {
             // then auto select the first selection, because we want auto selection
             // but also allow the user to fix a wrong word
             if let word = filteredSuggestions.last,
-               filteredSuggestions.count == 1 && oldText.count < newText.count
+               filteredSuggestions.count == 1, oldText.count < newText.count
             {
                 state = .valid
                 filteredSuggestions = []
 
-                if self.text != word {
-                    self.text = word
+                if text != word {
+                    text = word
                     submitFocusField()
                     return
                 }
             }
         }
         .onAppear {
-            if let focusField = self.focusField, focusField == number {
+            if let focusField, focusField == number {
                 isFocused = true
             }
         }

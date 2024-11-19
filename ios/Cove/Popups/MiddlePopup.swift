@@ -36,7 +36,7 @@ struct MiddlePopup: CentrePopup {
     }
 
     func configurePopup(popup: CentrePopupConfig) -> CentrePopupConfig {
-        if let configure = configure {
+        if let configure {
             return configure(popup)
         }
 

@@ -20,9 +20,9 @@ extension Transaction: Identifiable {
     func sentAndReceived() -> SentAndReceived {
         switch self {
         case let .confirmed(transaction):
-            return transaction.sentAndReceived()
+            transaction.sentAndReceived()
         case let .unconfirmed(transaction):
-            return transaction.sentAndReceived()
+            transaction.sentAndReceived()
         }
     }
 }

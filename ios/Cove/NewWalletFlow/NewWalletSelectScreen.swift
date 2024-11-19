@@ -54,14 +54,14 @@ struct NewWalletSelectScreen: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)
                     .background(
-                        .blue.opacity(self.colorScheme == .dark ? 0.85 : 1)
+                        .blue.opacity(colorScheme == .dark ? 0.85 : 1)
                     )
                     .foregroundColor(.white)
                     .cornerRadius(12)
                 }
                 .buttonStyle(PlainButtonStyle())
 
-                Button(action: { self.showSelectDialog = true }) {
+                Button(action: { showSelectDialog = true }) {
                     HStack {
                         Image(systemName: "externaldrive")
                             .font(.title2)
@@ -71,7 +71,7 @@ struct NewWalletSelectScreen: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)
                     .background(
-                        .green.opacity(self.colorScheme == .dark ? 0.85 : 1)
+                        .green.opacity(colorScheme == .dark ? 0.85 : 1)
                     )
                     .foregroundColor(.white)
                     .cornerRadius(12)
@@ -81,7 +81,7 @@ struct NewWalletSelectScreen: View {
                 Divider()
 
                 HStack {
-                    Button(action: self.app.nfcReader.scan) {
+                    Button(action: app.nfcReader.scan) {
                         HStack(spacing: 16) {
                             Image(systemName: "wave.3.right")
                                 .font(.system(size: 16))
@@ -96,7 +96,7 @@ struct NewWalletSelectScreen: View {
                     }
                     .buttonStyle(PlainButtonStyle())
 
-                    Button(action: self.app.scanQr) {
+                    Button(action: app.scanQr) {
                         HStack(spacing: 16) {
                             Image(systemName: "qrcode")
                                 .font(.title2)
@@ -115,41 +115,41 @@ struct NewWalletSelectScreen: View {
             .padding(.horizontal)
             .confirmationDialog(
                 "Import hardware wallet using",
-                isPresented: self.$showSelectDialog,
+                isPresented: $showSelectDialog,
                 titleVisibility: .visible
             ) {
-                NavigationLink(value: self.routeFactory.qrImport()) {
+                NavigationLink(value: routeFactory.qrImport()) {
                     Text("QR Code")
                 }
                 Button("File") {
-                    self.isImporting = true
+                    isImporting = true
                 }
                 Button("NFC") {
-                    self.nfcReader.scan()
+                    nfcReader.scan()
 
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         withAnimation {
-                            self.nfcCalled = true
+                            nfcCalled = true
                         }
                     }
                 }
                 Button("Paste") {
                     let text = UIPasteboard.general.string ?? ""
                     if text.isEmpty {
-                        self.alert = AlertItem(
+                        alert = AlertItem(
                             type: .error("No text found on the clipboard."))
                         return
                     }
 
-                    self.newWalletFromXpub(text)
+                    newWalletFromXpub(text)
                 }
             }
 
             Spacer()
 
-            if self.nfcCalled {
+            if nfcCalled {
                 Button(action: {
-                    self.sheetState = TaggedItem(.nfcHelp)
+                    sheetState = TaggedItem(.nfcHelp)
                 }) {
                     HStack {
                         Image(systemName: "wave.3.right")
@@ -169,13 +169,13 @@ struct NewWalletSelectScreen: View {
             case let .success(file):
                 do {
                     let fileContents = try readFile(from: file)
-                    self.newWalletFromXpub(fileContents)
+                    newWalletFromXpub(fileContents)
                 } catch {
-                    self.alert = AlertItem(
+                    alert = AlertItem(
                         type: .error(error.localizedDescription))
                 }
             case let .failure(error):
-                self.alert = AlertItem(type: .error(error.localizedDescription))
+                alert = AlertItem(type: .error(error.localizedDescription))
             }
         }
         .alert(item: $alert) { alert in
@@ -183,12 +183,12 @@ struct NewWalletSelectScreen: View {
                 title: Text(alert.type.title),
                 message: Text(alert.type.message),
                 dismissButton: .default(Text("OK")) {
-                    self.dismiss()
+                    dismiss()
                 }
             )
         }
         .onChange(of: nfcReader.scannedMessage) { _, message in
-            if let message = message { self.newWalletFromXpub(message) }
+            if let message { newWalletFromXpub(message) }
         }
         .sheet(item: $sheetState, content: SheetContent)
     }
@@ -232,15 +232,15 @@ private enum AlertType: Equatable {
 
     var message: String {
         switch self {
-        case let .success(message): return message
-        case let .error(message): return message
+        case let .success(message): message
+        case let .error(message): message
         }
     }
 
     var title: String {
         switch self {
-        case .success: return "Success"
-        case .error: return "Error"
+        case .success: "Success"
+        case .error: "Error"
         }
     }
 }

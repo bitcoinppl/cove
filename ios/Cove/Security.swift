@@ -25,7 +25,7 @@ class KeychainAccessor: KeychainAccess {
     }
 
     func get(key: String) -> String? {
-        return keychain.get(key)
+        keychain.get(key)
     }
 
     func delete(key: String) -> Bool {

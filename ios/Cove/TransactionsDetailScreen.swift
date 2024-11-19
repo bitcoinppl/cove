@@ -35,7 +35,7 @@ struct TransactionsDetailScreen: View {
 
     var body: some View {
         Group {
-            if let model = model {
+            if let model {
                 TransactionDetailsView(id: id, transactionDetails: transactionDetails, model: model)
             } else {
                 Text("Loading...")

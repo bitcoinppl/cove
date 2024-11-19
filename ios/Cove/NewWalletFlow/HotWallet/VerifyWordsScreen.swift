@@ -117,7 +117,7 @@ struct VerifyWordsScreen: View {
     }
 
     var body: some View {
-        if let model = model, let validator = validator {
+        if let model, let validator {
             SunsetWave {
                 VStack {
                     Spacer()
@@ -153,7 +153,7 @@ struct VerifyWordsScreen: View {
                                 ForEach(filteredSuggestions, id: \.self) { word in
                                     Spacer()
                                     Button(word) {
-                                        guard let focusField = focusField else { return }
+                                        guard let focusField else { return }
                                         let (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
                                         let innerIndex = remainder - 1
                                         enteredWords[outerIndex][innerIndex] = word
@@ -163,7 +163,7 @@ struct VerifyWordsScreen: View {
                                     Spacer()
 
                                     // only show divider in the middle
-                                    if filteredSuggestions.count > 1 && filteredSuggestions.last != word {
+                                    if filteredSuggestions.count > 1, filteredSuggestions.last != word {
                                         Divider()
                                     }
                                 }
@@ -247,12 +247,12 @@ private struct CardTab: View {
 
     var body: some View {
         VStack(spacing: cardSpacing) {
-            ForEach(Array(self.wordGroup.enumerated()), id: \.offset) { index, word in
+            ForEach(Array(wordGroup.enumerated()), id: \.offset) { index, word in
                 AutocompleteField(autocomplete: Bip39AutoComplete(),
                                   word: word,
-                                  text: self.$fields[index],
+                                  text: $fields[index],
                                   filteredSuggestions: $filteredSuggestions,
-                                  focusField: self.$focusField)
+                                  focusField: $focusField)
             }
         }
     }
@@ -282,12 +282,12 @@ private struct AutocompleteField: View {
         }
 
         // focused and not the only suggestion
-        if isFocused && filteredSuggestions.count > 1 {
+        if isFocused, filteredSuggestions.count > 1 {
             return .none
         }
 
         // focused, but no other possibilities left
-        if isFocused && filteredSuggestions.isEmpty {
+        if isFocused, filteredSuggestions.isEmpty {
             return Color.red.opacity(0.8)
         }
 
@@ -301,7 +301,7 @@ private struct AutocompleteField: View {
 
     var body: some View {
         HStack {
-            Text("\(String(format: "%02d", self.word.number)). ")
+            Text("\(String(format: "%02d", word.number)). ")
                 .foregroundColor(.secondary)
 
             textField
@@ -319,7 +319,7 @@ private struct AutocompleteField: View {
 
     func submitFocusField() {
         filteredSuggestions = []
-        guard let focusField = focusField else {
+        guard let focusField else {
             return
         }
 
@@ -338,7 +338,7 @@ private struct AutocompleteField: View {
             .keyboardType(.asciiCapable)
             .focused($isFocused)
             .onChange(of: isFocused) {
-                if !self.isFocused { return self.showSuggestions = false }
+                if !isFocused { return showSuggestions = false }
 
                 if isFocused {
                     focusField = Int(word.number)
@@ -348,7 +348,7 @@ private struct AutocompleteField: View {
                 submitFocusField()
             }
             .onChange(of: focusField) { _, fieldNumber in
-                guard let fieldNumber = fieldNumber else { return }
+                guard let fieldNumber else { return }
                 if word.number == fieldNumber {
                     isFocused = true
                 }
@@ -356,8 +356,8 @@ private struct AutocompleteField: View {
             .onChange(of: text) {
                 filteredSuggestions = autocomplete.autocomplete(word: text)
 
-                if self.filteredSuggestions.count == 1 && self.filteredSuggestions.first == word.word {
-                    self.text = self.filteredSuggestions.first!
+                if filteredSuggestions.count == 1, filteredSuggestions.first == word.word {
+                    text = filteredSuggestions.first!
 
                     submitFocusField()
                     return

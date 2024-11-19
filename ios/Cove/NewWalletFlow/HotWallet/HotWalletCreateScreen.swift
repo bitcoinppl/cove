@@ -28,7 +28,7 @@ struct WordsView: View {
     @Environment(\.navigate) private var navigate
 
     var lastIndex: Int {
-        return groupedWords.count - 1
+        groupedWords.count - 1
     }
 
     var body: some View {

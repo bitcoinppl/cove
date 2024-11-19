@@ -25,7 +25,7 @@ struct FloaterPopup: TopPopup {
     }
 
     func configurePopup(popup: TopPopupConfig) -> TopPopupConfig {
-        if let configure = configure {
+        if let configure {
             return configure(popup)
         }
 

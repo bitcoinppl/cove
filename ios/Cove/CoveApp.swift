@@ -30,37 +30,33 @@ struct CoveApp: App {
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
-        let text = {
-            switch alert.item {
-            case .invalidWordGroup:
-                return
-                    "The words from the file does not create a valid wallet. Please check the words and try again."
-            case .duplicateWallet:
-                return "This wallet has already been imported! Taking you there now..."
-            case .errorImportingHotWallet:
-                return "Error Importing Wallet"
-            case .importedSuccessfully:
-                return "Wallet Imported Successfully"
-            case .unableToSelectWallet:
-                return "Unable to select wallet, please try again"
-            case let .errorImportingHardwareWallet(error):
-                return "Error: \(error)"
-            case .invalidFileFormat:
-                return "The file or scanned code did not match any formats that Cove supports."
-            case let .addressWrongNetwork(
-                address: address, network: network, currentNetwork: currentNetwork
-            ):
-                return
-                    "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
-            case let .noWalletSelected(address),
-                 let .foundAddress(address, _):
-                return String(address)
-            case .noCameraPermission:
-                return "Please allow camera access in Settings to use this feature."
-            case let .failedToScanQr(error):
-                return "Error: \(error)"
-            }
-        }()
+        let text = switch alert.item {
+        case .invalidWordGroup:
+            "The words from the file does not create a valid wallet. Please check the words and try again."
+        case .duplicateWallet:
+            "This wallet has already been imported! Taking you there now..."
+        case .errorImportingHotWallet:
+            "Error Importing Wallet"
+        case .importedSuccessfully:
+            "Wallet Imported Successfully"
+        case .unableToSelectWallet:
+            "Unable to select wallet, please try again"
+        case let .errorImportingHardwareWallet(error):
+            "Error: \(error)"
+        case .invalidFileFormat:
+            "The file or scanned code did not match any formats that Cove supports."
+        case let .addressWrongNetwork(
+            address: address, network: network, currentNetwork: currentNetwork
+        ):
+            "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
+        case let .noWalletSelected(address),
+             let .foundAddress(address, _):
+            String(address)
+        case .noCameraPermission:
+            "Please allow camera access in Settings to use this feature."
+        case let .failedToScanQr(error):
+            "Error: \(error)"
+        }
 
         Text(text)
     }
@@ -342,7 +338,7 @@ struct CoveApp: App {
     }
 
     func onChangeRoute(_ old: [Route], _ new: [Route]) {
-        if !old.isEmpty && new.isEmpty {
+        if !old.isEmpty, new.isEmpty {
             id = UUID()
         }
 

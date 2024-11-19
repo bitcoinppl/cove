@@ -15,7 +15,7 @@ struct SecretWordsScreen: View {
     @State var errorMessage: String?
 
     var cardPadding: CGFloat {
-        if let words = words, words.allWords().count > 12 {
+        if let words, words.allWords().count > 12 {
             8
         } else {
             50
@@ -28,7 +28,7 @@ struct SecretWordsScreen: View {
 
     var body: some View {
         Group {
-            if let words = words {
+            if let words {
                 VStack {
                     GroupBox {
                         HStack(alignment: .top, spacing: 20) {

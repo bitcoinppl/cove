@@ -18,7 +18,7 @@ public struct ChooseWalletTypeView: View {
     @State private var address: AddressInfo? = nil
 
     var foundAddressesSorted: [FoundAddress] {
-        return foundAddresses.sorted { x1, x2 in x2.type > x1.type }
+        foundAddresses.sorted { x1, x2 in x2.type > x1.type }
     }
 
     func TypeButton(_ foundAddress: FoundAddress) -> some View {
@@ -82,7 +82,7 @@ public struct ChooseWalletTypeView: View {
         }
         .task {
             let address = try? await model.firstAddress()
-            if let address = address {
+            if let address {
                 withAnimation {
                     self.address = address
                 }

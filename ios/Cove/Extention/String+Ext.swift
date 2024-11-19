@@ -51,7 +51,7 @@ extension String {
     }
 }
 
-extension Optional where Wrapped == String {
+extension String? {
     init(_ fingeprint: Fingerprint?) {
         if let fingeprint { self = String(fingeprint) } else { self = .none }
     }

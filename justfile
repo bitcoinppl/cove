@@ -31,7 +31,7 @@ clean:
 
 fmt:
     cd rust && cargo fmt --all
-    swiftformat .
+    swiftformat . --swiftversion 6
 
 clippy *flags="":
     cd rust && cargo clippy {{flags}}

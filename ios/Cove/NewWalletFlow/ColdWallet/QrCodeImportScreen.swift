@@ -37,15 +37,15 @@ private enum AlertType: Equatable {
     var alert: Alert {
         switch self {
         case let .success(message):
-            return .init(
+            .init(
                 title: Text("Success"), message: Text(message), dismissButton: .default(Text("OK"))
             )
         case let .error(message):
-            return .init(
+            .init(
                 title: Text("Error"), message: Text(message), dismissButton: .default(Text("OK"))
             )
         case let .custom(alert):
-            return alert.alert
+            alert.alert
         }
     }
 }
@@ -133,12 +133,12 @@ struct QrCodeImportScreen: View {
             alert.type.alert
         }
         .onChange(of: scannedCode) { _, scannedCode in
-            guard let scannedCode = scannedCode else { return }
+            guard let scannedCode else { return }
             do {
                 let wallet = try Wallet.newFromXpub(xpub: scannedCode.value)
                 let id = wallet.id()
                 Log.debug("Imported Wallet: \(id)")
-                self.alert = AlertItem(type: .success("Imported Wallet Successfully"))
+                alert = AlertItem(type: .success("Imported Wallet Successfully"))
                 try app.rust.selectWallet(id: id)
             } catch let WalletError.WalletAlreadyExists(id) {
                 self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
@@ -146,7 +146,7 @@ struct QrCodeImportScreen: View {
                     self.alert = AlertItem(type: .error("Unable to select wallet"))
                 }
             } catch {
-                self.alert = AlertItem(type: .error(error.localizedDescription))
+                alert = AlertItem(type: .error(error.localizedDescription))
             }
         }
         .navigationTitle("Scan QR")

@@ -34,11 +34,11 @@ import SwiftUI
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
         case .light:
-            return .light
+            .light
         case .dark:
-            return .dark
+            .dark
         case .system:
-            return nil
+            nil
         }
     }
 

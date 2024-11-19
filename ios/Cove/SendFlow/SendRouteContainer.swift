@@ -31,7 +31,7 @@ public struct SendRouteContainer: View {
     }
 
     public var body: some View {
-        if let model = model {
+        if let model {
             switch sendRoute {
             case let .setAmount(id: id, address: address, amount: amount):
                 SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "", amount: amount)

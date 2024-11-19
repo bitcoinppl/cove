@@ -29,7 +29,7 @@ struct SelectedWalletScreen: View {
 
     var body: some View {
         Group {
-            if let model = model {
+            if let model {
                 SelectedWalletScreenInner(model: model)
             } else {
                 Text("Loading...")
@@ -40,7 +40,7 @@ struct SelectedWalletScreen: View {
         }
         .task {
             // small delay and then start scanning wallet
-            if let model = self.model {
+            if let model {
                 do {
                     try? await Task.sleep(for: .milliseconds(400))
                     try await model.rust.startWalletScan()
@@ -51,7 +51,7 @@ struct SelectedWalletScreen: View {
         }
         .onChange(of: model?.loadState) { _, loadState in
             if case .loaded = loadState {
-                if let model = model {
+                if let model {
                     app.updateWalletVm(model)
                 }
             }
@@ -129,7 +129,7 @@ struct SelectedWalletScreenInner: View {
         case .loading:
             Loading
         case let .scanning(txns):
-            if !model.walletMetadata.performedFullScan && txns.isEmpty {
+            if !model.walletMetadata.performedFullScan, txns.isEmpty {
                 Loading
             } else {
                 transactionsCard(transactions: txns, scanComplete: false)
@@ -231,7 +231,7 @@ struct SelectedWalletScreenInner: View {
         }
         .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue)
         }
-        .onAppear { setSheetState(self.model.walletMetadata.discoveryState) }
+        .onAppear { setSheetState(model.walletMetadata.discoveryState) }
         .alert(
             item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
             content: DisplayErrorAlert

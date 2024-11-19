@@ -122,7 +122,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpentInBtc: Double? {
-        let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
+        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
 
         switch metadata.selectedUnit {
         case .btc:
@@ -157,7 +157,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSending: String {
-        let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
+        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
 
         switch metadata.selectedUnit {
         case .btc:
@@ -199,7 +199,7 @@ struct SendFlowSetAmountScreen: View {
     // validate, create final psbt and send to next screen
     private func next() {
         guard validate(displayAlert: true) else { return }
-        guard let sendAmountSats = sendAmountSats else {
+        guard let sendAmountSats else {
             return setAlertState(.invalidNumber)
         }
 
@@ -233,7 +233,7 @@ struct SendFlowSetAmountScreen: View {
     // doing it this way prevents an alert popping up when the user just goes back
     private func setAlertState(_ alertState: AlertState) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            guard !self.disappearing else { return }
+            guard !disappearing else { return }
             self.alertState = TaggedItem(alertState)
         }
     }
@@ -273,9 +273,9 @@ struct SendFlowSetAmountScreen: View {
                         // Account Section
                         AccountSection
 
-                        if feeRateOptions != nil && selectedFeeRate != nil
+                        if feeRateOptions != nil, selectedFeeRate != nil,
 
-                            && Address.isValid(address)
+                           Address.isValid(address)
                         {
                             // Total Sending Section
                             TotalSendingSection
@@ -338,7 +338,7 @@ struct SendFlowSetAmountScreen: View {
             guard let feeRateOptions = try? await model.rust.getFeeOptions()
             else { return }
             await MainActor.run {
-                self.feeRateOptionsBase = feeRateOptions
+                feeRateOptionsBase = feeRateOptions
             }
         }
         .task {
@@ -356,12 +356,12 @@ struct SendFlowSetAmountScreen: View {
 
             await MainActor.run {
                 if address == "" {
-                    self.focusField = .address
+                    focusField = .address
                     return
                 }
 
                 if sendAmount == "0" || sendAmount == "" {
-                    self.focusField = .amount
+                    focusField = .amount
                     return
                 }
             }
@@ -371,7 +371,7 @@ struct SendFlowSetAmountScreen: View {
             if model.balance.confirmed.asSats() == 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
-                        self.focusField = .none
+                        focusField = .none
                     }
                 }
 
@@ -380,14 +380,14 @@ struct SendFlowSetAmountScreen: View {
             }
 
             // amount
-            if let amount = amount {
+            if let amount {
                 switch metadata.selectedUnit {
                 case .btc: sendAmount = String(amount.btcString())
                 case .sat: sendAmount = String(amount.asSats())
                 }
 
                 if !validateAmount(displayAlert: true) {
-                    self.focusField = .amount
+                    focusField = .amount
                 } else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         setFormattedAmount(sendAmount)
@@ -398,14 +398,14 @@ struct SendFlowSetAmountScreen: View {
             // address
             if address != "" {
                 if !validateAddress(displayAlert: true) {
-                    self.focusField = .address
+                    focusField = .address
                 }
             }
 
             if validate() {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
-                        self.focusField = .none
+                        focusField = .none
                         scrollPosition.scrollTo(edge: .bottom)
                     }
                 }
@@ -413,7 +413,7 @@ struct SendFlowSetAmountScreen: View {
         }
         .sheet(item: $sheetState, content: SheetContent)
         .onDisappear {
-            self.disappearing = true
+            disappearing = true
         }
         .alert(
             alertTitle,
@@ -451,7 +451,7 @@ struct SendFlowSetAmountScreen: View {
     private func validateAmount(
         _ amount: String? = nil, displayAlert: Bool = false
     ) -> Bool {
-        let sendAmountRaw = amount ?? self.sendAmount
+        let sendAmountRaw = amount ?? sendAmount
         if displayAlert {
             Log.debug("validating amount: \(sendAmount)")
         }
@@ -475,7 +475,7 @@ struct SendFlowSetAmountScreen: View {
             return false
         }
 
-        if let selectedFeeRate = selectedFeeRate {
+        if let selectedFeeRate {
             let totalFeeSats = Double(selectedFeeRate.totalFee().asSats())
             if (amountSats + totalFeeSats) > balance {
                 if displayAlert { setAlertState(.insufficientFunds) }
@@ -531,7 +531,7 @@ struct SendFlowSetAmountScreen: View {
 
         // if we had max selected before, but then start entering a different amount
         // cancel max selected
-        if let maxSelected = maxSelected {
+        if let maxSelected {
             switch metadata.selectedUnit {
             case .sat:
                 if amount < Double(maxSelected.asSats()) {
@@ -560,7 +560,7 @@ struct SendFlowSetAmountScreen: View {
 
         sendAmountFiat = model.fiatAmountToString(fiatAmount)
 
-        if oldValue.contains(",") && metadata.selectedUnit == .sat {
+        if oldValue.contains(","), metadata.selectedUnit == .sat {
             setFormattedAmount(String(amountSats))
         }
     }
@@ -599,12 +599,12 @@ struct SendFlowSetAmountScreen: View {
             if !validateAddress(displayAlert: true) { return }
         }
 
-        let sendAmount = self.sendAmount.replacingOccurrences(of: ",", with: "")
+        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
         setFormattedAmount(sendAmount)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
-                if newField == .none && validate() {
+                if newField == .none, validate() {
                     scrollPosition.scrollTo(edge: .bottom)
                 } else {
                     scrollPosition.scrollTo(id: newField)
@@ -614,13 +614,13 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
-        guard let newValue = newValue else { return }
+        guard let newValue else { return }
 
         sheetState = nil
 
         let addressWithNetwork = try? AddressWithNetwork(address: newValue.item)
 
-        guard let addressWithNetwork = addressWithNetwork else {
+        guard let addressWithNetwork else {
             setAlertState(.invalidAddress(newValue.item))
             return
         }
@@ -694,7 +694,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }()
 
-        guard let address = address else { return }
+        guard let address else { return }
         let amount =
             amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
 
@@ -708,8 +708,8 @@ struct SendFlowSetAmountScreen: View {
 
         await MainActor.run {
             self.feeRateOptions = feeRateOptions
-            if self.selectedFeeRate == nil {
-                self.selectedFeeRate = feeRateOptions.medium()
+            if selectedFeeRate == nil {
+                selectedFeeRate = feeRateOptions.medium()
             }
         }
     }
@@ -734,7 +734,7 @@ struct SendFlowSetAmountScreen: View {
 
             Spacer()
 
-            if let selectedFeeRate = selectedFeeRate {
+            if let selectedFeeRate {
                 Button(action: { setMaxSelected(selectedFeeRate) }) {
                     Text("Max")
                         .font(.callout)
@@ -783,8 +783,8 @@ struct SendFlowSetAmountScreen: View {
             .tint(.primary)
 
             Group {
-                if (sendAmount != "" || sendAmount != "0"
-                    || !validateAmount()) && validateAddress()
+                if sendAmount != "" || sendAmount != "0"
+                    || !validateAmount(), validateAddress()
                 {
                     Button(action: { focusField = .amount }) {
                         Text("Next")
@@ -863,7 +863,7 @@ struct SendFlowSetAmountScreen: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
-                    self.sheetState = TaggedItem(.fee)
+                    sheetState = TaggedItem(.fee)
                 }
                 .font(.caption)
                 .foregroundColor(.blue)
@@ -877,7 +877,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onTapGesture {
-            self.sheetState = TaggedItem(.fee)
+            sheetState = TaggedItem(.fee)
         }
     }
 
@@ -1042,7 +1042,7 @@ struct SendFlowSetAmountScreen: View {
     // MARK: Alerts
 
     private var alertTitle: String {
-        guard let alertState = alertState else { return "" }
+        guard let alertState else { return "" }
 
         return {
             switch alertState.item {
@@ -1059,34 +1059,28 @@ struct SendFlowSetAmountScreen: View {
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AlertState>) -> some View {
-        let text = {
-            switch alert.item {
-            case .emptyAddress:
-                return "Please enter an address"
-            case .invalidNumber:
-                return "Please enter a valid number for the amout to send"
-            case .zeroAmount:
-                return
-                    "Can't send an empty transaction. Please enter a valid amount"
-            case .noBalance:
-                return
-                    "You do not have any bitcoin in your wallet. Please add some to send a transaction"
-            case let .invalidAddress(address):
-                return "The address \(address) is invalid"
-            case let .wrongNetwork(address):
-                return
-                    "The address \(address) is on the wrong network. You are on \(metadata.network)"
-            case .insufficientFunds:
-                return
-                    "You do not have enough bitcoin in your wallet to cover the amount plus fees"
-            case .sendAmountToLow:
-                return "Send amount is too low. Please send atleast 5000 sats"
-            case .unableToGetFeeRate:
-                return "Are you connected to the internet?"
-            case let .unableToBuildTxn(msg):
-                return msg
-            }
-        }()
+        let text = switch alert.item {
+        case .emptyAddress:
+            "Please enter an address"
+        case .invalidNumber:
+            "Please enter a valid number for the amout to send"
+        case .zeroAmount:
+            "Can't send an empty transaction. Please enter a valid amount"
+        case .noBalance:
+            "You do not have any bitcoin in your wallet. Please add some to send a transaction"
+        case let .invalidAddress(address):
+            "The address \(address) is invalid"
+        case let .wrongNetwork(address):
+            "The address \(address) is on the wrong network. You are on \(metadata.network)"
+        case .insufficientFunds:
+            "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+        case .sendAmountToLow:
+            "Send amount is too low. Please send atleast 5000 sats"
+        case .unableToGetFeeRate:
+            "Are you connected to the internet?"
+        case let .unableToBuildTxn(msg):
+            msg
+        }
 
         Text(text)
     }

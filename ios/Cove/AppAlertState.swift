@@ -22,28 +22,28 @@ public enum AppAlertState: Equatable {
     func title() -> String {
         switch self {
         case .invalidWordGroup:
-            return "Words Not Valid"
+            "Words Not Valid"
         case .duplicateWallet:
-            return "Duplicate Wallet"
+            "Duplicate Wallet"
         case .errorImportingHotWallet:
-            return "Error"
+            "Error"
         case .importedSuccessfully:
-            return "Success"
+            "Success"
         case .unableToSelectWallet:
-            return "Error"
+            "Error"
         case .errorImportingHardwareWallet:
-            return "Error Importing Hardware Wallet"
+            "Error Importing Hardware Wallet"
         case .invalidFileFormat:
-            return "Invalid File Format"
+            "Invalid File Format"
         case .addressWrongNetwork:
-            return "Wrong Network"
+            "Wrong Network"
         case .noWalletSelected,
              .foundAddress:
-            return "Found Address"
+            "Found Address"
         case .noCameraPermission:
-            return "Camera Access is Required"
+            "Camera Access is Required"
         case .failedToScanQr:
-            return "Failed to Scan QR"
+            "Failed to Scan QR"
         }
     }
 }

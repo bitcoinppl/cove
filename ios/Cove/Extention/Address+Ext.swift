@@ -9,7 +9,7 @@ extension Address {
     static func checkValid(_ address: String, network: Network? = nil) -> Result<Void, AddressError> {
         if address.isEmpty { return .failure(AddressError.EmptyAddress) }
 
-        if let network = network {
+        if let network {
             return Result { try addressIsValidForNetwork(address: address, network: network) }
                 .mapError { $0 as! AddressError }
         }

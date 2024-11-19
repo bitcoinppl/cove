@@ -38,21 +38,21 @@ extension WalletColor {
     func toColor() -> Color {
         switch self {
         case .red:
-            return .red
+            .red
         case .blue:
-            return .blue
+            .blue
         case .green:
-            return .green
+            .green
         case .yellow:
-            return .yellow
+            .yellow
         case .orange:
-            return .orange
+            .orange
         case .purple:
-            return .purple
+            .purple
         case .pink:
-            return .pink
+            .pink
         case let .custom(r, g, b):
-            return Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
+            Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
         }
     }
 }

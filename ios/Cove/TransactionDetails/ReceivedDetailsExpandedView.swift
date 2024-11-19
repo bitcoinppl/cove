@@ -39,7 +39,7 @@ struct ReceivedDetailsExpandedView: View {
                     .multilineTextAlignment(.leading)
 
                 Group {
-                    if let numberOfConfirmations = self.numberOfConfirmations {
+                    if let numberOfConfirmations {
                         Text(ThousandsFormatter(numberOfConfirmations).fmt())
                             .fontWeight(.semibold)
                             .multilineTextAlignment(.leading)

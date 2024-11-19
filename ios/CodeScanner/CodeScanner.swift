@@ -70,9 +70,9 @@
         var isManual: Bool {
             switch self {
             case .manual:
-                return true
+                true
             case .once, .oncePerCode, .continuous, .continuousExcept:
-                return false
+                false
             }
         }
     }
@@ -128,7 +128,7 @@
         }
 
         public func makeUIViewController(context _: Context) -> ScannerViewController {
-            return ScannerViewController(showViewfinder: showViewfinder, parentView: self)
+            ScannerViewController(showViewfinder: showViewfinder, parentView: self)
         }
 
         public func updateUIViewController(

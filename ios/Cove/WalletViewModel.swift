@@ -35,7 +35,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     }
 
     var unit: String {
-        return switch walletMetadata.selectedUnit {
+        switch walletMetadata.selectedUnit {
         case .btc: "btc"
         case .sat: "sats"
         }
@@ -50,40 +50,40 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     }
 
     func firstAddress() async throws -> AddressInfo {
-        return try await rust.addressAt(index: 0)
+        try await rust.addressAt(index: 0)
     }
 
     func amountFmt(_ amount: Amount) -> String {
         switch walletMetadata.selectedUnit {
         case .btc:
-            return amount.btcString()
+            amount.btcString()
         case .sat:
-            return amount.satsString()
+            amount.satsString()
         }
     }
 
     func amountFmtUnit(_ amount: Amount) -> String {
         switch walletMetadata.selectedUnit {
         case .btc:
-            return amount.btcStringWithUnit()
+            amount.btcStringWithUnit()
         case .sat:
-            return amount.satsStringWithUnit()
+            amount.satsStringWithUnit()
         }
     }
 
-    func fiatAmountToString<T: Numeric & LosslessStringConvertible>(_ amount: T) -> String {
+    func fiatAmountToString(_ amount: some Numeric & LosslessStringConvertible) -> String {
         "≈ \(FiatFormatter(amount).fmt()) USD"
     }
 
     func reconcile(message: WalletViewModelReconcileMessage) {
         Task { [weak self] in
-            guard let self = self else {
+            guard let self else {
                 Log.error("WalletViewModel no longer available")
                 return
             }
 
-            let rust = self.rust
-            self.logger.debug("WalletViewModelReconcileMessage: \(message)")
+            let rust = rust
+            logger.debug("WalletViewModelReconcileMessage: \(message)")
 
             await MainActor.run {
                 switch message {

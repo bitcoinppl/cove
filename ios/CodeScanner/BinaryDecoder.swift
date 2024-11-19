@@ -88,7 +88,7 @@ extension BinaryDecoder {
             let byteSize = 8
             let bytePosition = position / byteSize
             let bitPosition = 7 - (position % byteSize)
-            let byte = self.byte(bytePosition)
+            let byte = byte(bytePosition)
             return (byte >> bitPosition) & 0x01
         }
 
@@ -100,20 +100,20 @@ extension BinaryDecoder {
             }
 
             return positions.reversed().enumerated().reduce(0) {
-                $0 + (self.bit($1.element) << $1.offset)
+                $0 + (bit($1.element) << $1.offset)
             }
         }
 
         private func bits(_ start: Int, _ length: Int) -> Int {
-            return bits(start ..< (start + length))
+            bits(start ..< (start + length))
         }
 
         private func byte(_ position: Int) -> Int {
-            return Int(bytes[position])
+            Int(bytes[position])
         }
 
         private func bitsWithInternalOffsetAvailable(_ length: Int) -> Bool {
-            return (bytes.count * 8) >= (readingOffset + length)
+            (bytes.count * 8) >= (readingOffset + length)
         }
 
         mutating func next(bits length: Int) -> Int {
