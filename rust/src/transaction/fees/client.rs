@@ -78,26 +78,51 @@ pub struct CachedFeeResponse {
 /// Convert fee response to fee rate options
 impl From<FeeResponse> for FeeRateOptions {
     fn from(fees: FeeResponse) -> Self {
-        let fast = FeeRateOption {
-            fee_speed: FeeSpeed::Fast,
-            fee_rate: FeeRate::from_sat_per_vb(fees.fastest_fee),
+        let fast = {
+            let rate = if fees.fastest_fee == fees.half_hour_fee {
+                fees.fastest_fee + 1
+            } else {
+                fees.fastest_fee
+            }
+            .max(fees.half_hour_fee);
+
+            FeeRateOption {
+                fee_speed: FeeSpeed::Fast,
+                fee_rate: FeeRate::from_sat_per_vb(rate),
+            }
         };
 
-        let medium = FeeRateOption {
-            fee_speed: FeeSpeed::Medium,
-            fee_rate: FeeRate::from_sat_per_vb(fees.half_hour_fee),
+        let medium = {
+            let rate = if fees.half_hour_fee == fees.hour_fee {
+                fees.half_hour_fee + 1
+            } else {
+                fees.half_hour_fee
+            }
+            .max(fees.hour_fee);
+
+            FeeRateOption {
+                fee_speed: FeeSpeed::Medium,
+                fee_rate: FeeRate::from_sat_per_vb(rate),
+            }
         };
 
         let slow = {
             // slow rate is the between economy and hour fees
-            let slow_rate = (fees.economy_fee + fees.hour_fee) / 2;
+            let rate = (fees.economy_fee + fees.hour_fee) / 2;
 
             // rate should never be more than the hour fee
-            let slow_rate = slow_rate.min(fees.hour_fee);
+            let rate = rate.min(fees.hour_fee);
+
+            // slow rate should never be less than or the same as the minimum fee
+            let rate = if rate <= fees.minimum_fee {
+                rate + 1
+            } else {
+                rate
+            };
 
             FeeRateOption {
                 fee_speed: FeeSpeed::Slow,
-                fee_rate: FeeRate::from_sat_per_vb(slow_rate),
+                fee_rate: FeeRate::from_sat_per_vb(rate),
             }
         };
 

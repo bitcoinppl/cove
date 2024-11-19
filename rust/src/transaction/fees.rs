@@ -113,11 +113,6 @@ impl FeeRateOption {
         self.fee_rate.sat_per_vb()
     }
 
-    pub fn total_fee(&self, txn_size: u64) -> Option<Arc<Amount>> {
-        let amount = self.fee_rate.fee_vb(txn_size)?.into();
-        Some(Arc::new(amount))
-    }
-
     pub fn duration(&self) -> String {
         self.fee_speed.duration()
     }
