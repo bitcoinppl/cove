@@ -167,6 +167,8 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    // MARK: Actions
+
     private func setAmount(_ amount: Amount) {
         switch metadata.selectedUnit {
         case .btc:
@@ -179,6 +181,38 @@ struct SendFlowSetAmountScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
+    private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
+        print("setMaxSelected \(selectedFeeRate)")
+        Task {
+            guard
+                let max = try? await model.rust.getMaxSendAmount(
+                    fee: selectedFeeRate)
+            else {
+                return Log.error("unable to get max send amount")
+            }
+
+            await MainActor.run {
+                setAmount(max)
+                maxSelected = max
+            }
+        }
+    }
+
+    // doing it this way prevents an alert popping up when the user just goes back
+    private func setAlertState(_ alertState: AlertState) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard !self.disappearing else { return }
+            self.alertState = TaggedItem(alertState)
+        }
+    }
+
+    private func setFormattedAmount(_ amount: String) {
+        guard metadata.selectedUnit == .sat else { return }
+        guard let amountInt = Int(amount) else { return }
+        sendAmount = ThousandsFormatter(amountInt).fmt()
+    }
+
+
 
             SendFlowHeaderView(model: model, amount: model.balance.confirmed)
                 .frame(height: max(40, headerHeight - scrollOffset))
@@ -672,12 +706,6 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func setFormattedAmount(_ amount: String) {
-        guard metadata.selectedUnit == .sat else { return }
-        guard let amountInt = Int(amount) else { return }
-        sendAmount = ThousandsFormatter(amountInt).fmt()
-    }
-
     @ViewBuilder
     var AmountKeyboardToolbar: some View {
         HStack {
@@ -963,7 +991,7 @@ struct SendFlowSetAmountScreen: View {
     @ViewBuilder
     var NextButtonBottom: some View {
         Button(action: {
-            // Action
+            next()
         }) {
             Text("Next")
                 .font(.title3)
