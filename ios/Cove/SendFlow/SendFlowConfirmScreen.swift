@@ -144,7 +144,7 @@ struct SendFlowConfirmScreen: View {
                         Spacer()
 
                         HStack {
-                            Text(model.amountFmt(details.sendingAmount()))
+                            Text(model.amountFmt(details.feeTotal()))
                             Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                         }
                         .font(.callout)
