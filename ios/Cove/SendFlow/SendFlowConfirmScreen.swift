@@ -49,7 +49,7 @@ struct SendFlowConfirmScreen: View {
 
                             Spacer()
                         }
-                        .padding(.top, 10)
+                        .padding(.top, 6)
 
                         HStack {
                             Text("The amount they will receive")
@@ -59,7 +59,7 @@ struct SendFlowConfirmScreen: View {
                             Spacer()
                         }
                     }
-                    .padding(.top)
+                    .padding(.top, 10)
 
                     // Balance Section
                     VStack(spacing: 8) {
@@ -127,7 +127,7 @@ struct SendFlowConfirmScreen: View {
                         Text(
                             details.sendingTo().spacedOut()
                         )
-                        .lineLimit(2, reservesSpace: true)
+                        .lineLimit(4, reservesSpace: false)
                         .font(.system(.callout, design: .none))
                         .fontWeight(.medium)
                         .padding(.leading, 60)
@@ -165,12 +165,13 @@ struct SendFlowConfirmScreen: View {
             }
             .scrollIndicators(.hidden)
             .background(Color.coveBg)
-            .padding(.horizontal)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal)
 
             SwipeToSendView()
-                .padding(.bottom)
                 .padding(.horizontal)
+                .padding(.bottom, 6)
+                .padding(.top, 20)
                 .background(Color.coveBg)
         }
     }
