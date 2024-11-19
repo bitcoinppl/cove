@@ -14,16 +14,17 @@ struct SendFlowConfirmScreen: View {
     let id: WalletId
     @State var model: WalletViewModel
     let details: ConfirmDetails
+    let prices: PriceResponse? = nil
 
     var fiatAmount: String {
-        guard let prices = app.prices else {
+        guard let prices = prices ?? app.prices else {
             app.dispatch(action: .updateFiatPrices)
             return "---"
         }
 
         let amount = details.sendingAmount().asBtc() * Double(prices.usd)
 
-        return "≈ \(amount) USD"
+        return model.fiatAmountToString(amount)
     }
 
     var metadata: WalletMetadata {

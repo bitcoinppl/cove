@@ -763,7 +763,7 @@ struct SendFlowSetAmountScreen: View {
     var AddressKeyboardToolbar: some View {
         HStack {
             Group {
-                if address.isEmpty {
+                if address.isEmpty || !validateAddress() {
                     Button(action: {
                         address = UIPasteboard.general.string ?? ""
                         if address.isEmpty { return }
@@ -783,8 +783,8 @@ struct SendFlowSetAmountScreen: View {
             .tint(.primary)
 
             Group {
-                if validateAddress() && sendAmount != "" || sendAmount != "0"
-                    || !validateAmount()
+                if (sendAmount != "" || sendAmount != "0"
+                    || !validateAmount()) && validateAddress()
                 {
                     Button(action: { focusField = .amount }) {
                         Text("Next")
@@ -1147,6 +1147,7 @@ private struct EnterAmountSection: View {
                     .padding(.horizontal, 30)
                     .minimumScaleFactor(0.01)
                     .lineLimit(1)
+                    .scrollDisabled(true)
 
                 HStack(spacing: 0) {
                     Button(action: { showingMenu.toggle() }) {
