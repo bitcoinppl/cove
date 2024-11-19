@@ -1,5 +1,5 @@
 //
-//  TransactionCapsuleView.swift
+//  TransactionCapsule.swift
 //  Cove
 //
 //  Created by Praveen Perera on 9/15/24.

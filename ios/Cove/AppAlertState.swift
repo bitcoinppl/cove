@@ -38,7 +38,7 @@ public enum AppAlertState: Equatable {
         case .addressWrongNetwork:
             return "Wrong Network"
         case .noWalletSelected,
-            .foundAddress:
+             .foundAddress:
             return "Found Address"
         case .noCameraPermission:
             return "Camera Access is Required"

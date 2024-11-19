@@ -119,7 +119,8 @@ struct SendFlowHeaderView: View {
 
         var body: some View {
             SendFlowHeaderView(
-                model: model, amount: Amount.fromSat(sats: 1_385_433))
+                model: model, amount: Amount.fromSat(sats: 1_385_433)
+            )
         }
     }
 
@@ -133,7 +134,8 @@ struct SendFlowHeaderView: View {
         var body: some View {
             SendFlowHeaderView(
                 model: model, amount: Amount.fromSat(sats: 1_385_433),
-                height: 55)
+                height: 55
+            )
         }
     }
 

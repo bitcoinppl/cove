@@ -98,12 +98,12 @@ struct QrCodeScanView: View {
         do {
             let multiQr: MultiQr =
                 try self.multiQr
-                ?? {
-                    let newMultiQr = try MultiQr.tryNew(qr: qr)
-                    self.multiQr = newMultiQr
-                    totalParts = Int(newMultiQr.totalParts())
-                    return newMultiQr
-                }()
+                    ?? {
+                        let newMultiQr = try MultiQr.tryNew(qr: qr)
+                        self.multiQr = newMultiQr
+                        totalParts = Int(newMultiQr.totalParts())
+                        return newMultiQr
+                    }()
 
             // single QR
             if !multiQr.isBbqr() {

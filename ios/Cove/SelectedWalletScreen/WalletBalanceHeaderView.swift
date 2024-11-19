@@ -130,7 +130,7 @@ struct WalletBalanceHeaderView: View {
                         model.errorAlert = .noBalance
                         return
                     }
-                    
+
                     app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
                 }) {
                     HStack(spacing: 10) {

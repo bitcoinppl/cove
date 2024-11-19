@@ -10,18 +10,18 @@ import Foundation
 extension Transaction: Identifiable {
     public var id: TxId {
         switch self {
-        case .confirmed(let confirmedTransaction):
+        case let .confirmed(confirmedTransaction):
             confirmedTransaction.id()
-        case .unconfirmed(let unconfirmedTransaction):
+        case let .unconfirmed(unconfirmedTransaction):
             unconfirmedTransaction.id()
         }
     }
 
     func sentAndReceived() -> SentAndReceived {
         switch self {
-        case .confirmed(let transaction):
+        case let .confirmed(transaction):
             return transaction.sentAndReceived()
-        case .unconfirmed(let transaction):
+        case let .unconfirmed(transaction):
             return transaction.sentAndReceived()
         }
     }
@@ -33,6 +33,6 @@ extension TxId: Hashable, Equatable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(self.asHashString())
+        hasher.combine(asHashString())
     }
 }

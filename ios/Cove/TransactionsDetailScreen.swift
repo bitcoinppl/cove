@@ -46,4 +46,3 @@ struct TransactionsDetailScreen: View {
         }
     }
 }
-

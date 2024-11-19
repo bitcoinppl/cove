@@ -62,7 +62,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             if let error = error {
                 session.invalidate(
                     errorMessage:
-                        "Connection error: \(error.localizedDescription), please try again")
+                    "Connection error: \(error.localizedDescription), please try again")
                 return
             }
 
@@ -159,7 +159,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
                     // has read enough data to get the message
                     if let messageInfo = self.messageInfo,
-                        self.readBytes.count >= messageInfo.fullMessageLength
+                       self.readBytes.count >= messageInfo.fullMessageLength
                     {
                         if case .error = self.parseAndHandleResult(session: session) {
                             return
@@ -189,7 +189,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     }
                 }
             }
-        }  // END: ReadNextBlock
+        } // END: ReadNextBlock
 
         // start calling the readNextBlock() recursive function
         readNextBlock()

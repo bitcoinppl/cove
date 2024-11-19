@@ -1,5 +1,5 @@
 //
-//  Settings2.swift
+//  SettingsScreen2.swift
 //  Cove
 //
 //  Created by Praveen Perera on 7/10/24.

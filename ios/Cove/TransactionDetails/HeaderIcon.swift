@@ -72,8 +72,9 @@ struct HeaderIcon: View {
             state: txnState,
             direction: direction,
             colorScheme: colorScheme,
-            confirmationCount: confirmationCount)
-            .toColor()
+            confirmationCount: confirmationCount
+        )
+        .toColor()
     }
 
     private var iconColor: Color {
@@ -82,8 +83,9 @@ struct HeaderIcon: View {
             direction: direction,
             colorScheme: colorScheme,
             confirmationCount:
-            confirmationCount)
-            .toColor()
+            confirmationCount
+        )
+        .toColor()
     }
 
     private func ringColor(_ ringNumber: Int) -> Color {
@@ -92,8 +94,9 @@ struct HeaderIcon: View {
             colorScheme: colorScheme,
             direction: direction,
             confirmations: confirmationCount,
-            ringNumber: Int32(ringNumber))
-            .toColor()
+            ringNumber: Int32(ringNumber)
+        )
+        .toColor()
     }
 
     var body: some View {

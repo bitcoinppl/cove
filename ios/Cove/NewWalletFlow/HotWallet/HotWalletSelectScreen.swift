@@ -1,5 +1,5 @@
 //
-//  HotWalletSelectView.swift
+//  HotWalletSelectScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/17/24.

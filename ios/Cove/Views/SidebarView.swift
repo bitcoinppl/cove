@@ -101,8 +101,9 @@ struct SidebarView: View {
                 .background(
                     LinearGradient(
                         gradient:
-                            Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
-                        startPoint: .bottomTrailing, endPoint: .topLeading)
+                        Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
+                        startPoint: .bottomTrailing, endPoint: .topLeading
+                    )
                 )
                 Spacer()
             }

@@ -96,20 +96,20 @@ struct SettingsScreen: View {
         .gesture(
             networkChanged
                 ? DragGesture()
-                    .onChanged { gesture in
-                        if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                            withAnimation(.spring()) {
-                                showConfirmationAlert = true
-                            }
+                .onChanged { gesture in
+                    if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                        withAnimation(.spring()) {
+                            showConfirmationAlert = true
                         }
                     }
-                    .onEnded { gesture in
-                        if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                            withAnimation(.spring()) {
-                                showConfirmationAlert = true
-                            }
+                }
+                .onEnded { gesture in
+                    if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                        withAnimation(.spring()) {
+                            showConfirmationAlert = true
                         }
-                    } : nil
+                    }
+                } : nil
         )
     }
 }

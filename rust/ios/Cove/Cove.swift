@@ -2333,8 +2333,6 @@ public protocol FeeRateOptionProtocol: AnyObject {
     func isEqual(rhs: FeeRateOption) -> Bool
 
     func satPerVb() -> Double
-
-    func totalFee(txnSize: UInt64) -> Amount?
 }
 
 open class FeeRateOption:
@@ -2414,13 +2412,6 @@ open class FeeRateOption:
     open func satPerVb() -> Double {
         return try! FfiConverterDouble.lift(try! rustCall {
             uniffi_cove_fn_method_feerateoption_sat_per_vb(self.uniffiClonePointer(), $0)
-        })
-    }
-
-    open func totalFee(txnSize: UInt64) -> Amount? {
-        return try! FfiConverterOptionTypeAmount.lift(try! rustCall {
-            uniffi_cove_fn_method_feerateoption_total_fee(self.uniffiClonePointer(),
-                                                          FfiConverterUInt64.lower(txnSize), $0)
         })
     }
 }
@@ -15533,9 +15524,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_feerateoption_sat_per_vb() != 60748 {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if uniffi_cove_checksum_method_feerateoption_total_fee() != 29575 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_method_feerateoptionwithtotalfee_duration() != 26593 {

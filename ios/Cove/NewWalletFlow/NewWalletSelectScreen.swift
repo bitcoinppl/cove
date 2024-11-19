@@ -162,7 +162,7 @@ struct NewWalletSelectScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
-            isPresented: self.$isImporting,
+            isPresented: $isImporting,
             allowedContentTypes: [.plainText, .json]
         ) { result in
             switch result {
@@ -178,7 +178,7 @@ struct NewWalletSelectScreen: View {
                 self.alert = AlertItem(type: .error(error.localizedDescription))
             }
         }
-        .alert(item: self.$alert) { alert in
+        .alert(item: $alert) { alert in
             Alert(
                 title: Text(alert.type.title),
                 message: Text(alert.type.message),
@@ -187,10 +187,10 @@ struct NewWalletSelectScreen: View {
                 }
             )
         }
-        .onChange(of: self.nfcReader.scannedMessage) { _, message in
+        .onChange(of: nfcReader.scannedMessage) { _, message in
             if let message = message { self.newWalletFromXpub(message) }
         }
-        .sheet(item: self.$sheetState, content: self.SheetContent)
+        .sheet(item: $sheetState, content: SheetContent)
     }
 
     private func newWalletFromXpub(_ xpub: String) {
@@ -198,11 +198,11 @@ struct NewWalletSelectScreen: View {
             let wallet = try Wallet.newFromXpub(xpub: xpub)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
-            self.alert = AlertItem(
+            alert = AlertItem(
                 type: .success("Imported Wallet Successfully"))
-            try self.app.rust.selectWallet(id: id)
+            try app.rust.selectWallet(id: id)
         } catch {
-            self.alert = AlertItem(type: .error(error.localizedDescription))
+            alert = AlertItem(type: .error(error.localizedDescription))
         }
     }
 

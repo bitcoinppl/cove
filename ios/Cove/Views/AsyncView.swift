@@ -19,7 +19,7 @@ struct AsyncView<Success, Content: View>: View {
             switch result {
             case .none:
                 ProgressView()
-            case .success(let value):
+            case let .success(value):
                 content(value)
             case .failure:
                 errorView
