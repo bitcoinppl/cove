@@ -129,7 +129,7 @@ pub async fn init_fees() {
         return;
     }
 
-    let result = tryhard::retry_fn(move || (&FEE_CLIENT).get_fees())
+    let result = tryhard::retry_fn(move || FEE_CLIENT.get_fees())
         .retries(20)
         .exponential_backoff(std::time::Duration::from_millis(10))
         .max_delay(std::time::Duration::from_secs(5))

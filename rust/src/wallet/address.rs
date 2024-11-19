@@ -165,7 +165,7 @@ fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
     let mut number_end = number_start;
     for char in full_qr[number_start..].chars() {
         if char.is_ascii_digit() || char == '.' {
-            number_end = number_end + 1;
+            number_end += 1;
         } else {
             break;
         }

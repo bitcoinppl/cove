@@ -524,7 +524,7 @@ impl RustWalletViewModel {
     }
 
     pub fn fees(&self) -> Option<FeeResponse> {
-        let cached_fees = FEES.load().as_ref().clone();
+        let cached_fees = *FEES.load().as_ref();
 
         match cached_fees {
             Some(cached_fees)
@@ -571,7 +571,7 @@ impl RustWalletViewModel {
         };
 
         let amount = Arc::unwrap_or_clone(amount).into();
-        let address: Address = Arc::unwrap_or_clone(address).into();
+        let address: Address = Arc::unwrap_or_clone(address);
 
         let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
         let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
@@ -638,7 +638,7 @@ impl RustWalletViewModel {
         let actor = self.actor.clone();
 
         let amount = Arc::unwrap_or_clone(amount).into();
-        let address = Arc::unwrap_or_clone(address).into();
+        let address = Arc::unwrap_or_clone(address);
         let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
 
         let psbt = call!(actor.build_tx(amount, address, fee_rate))

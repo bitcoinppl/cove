@@ -182,7 +182,6 @@ impl App {
                         }
                         Err(error) => {
                             error!("unable to get fees: {error:?}");
-                            return;
                         }
                     }
                 });
@@ -310,7 +309,7 @@ impl FfiApp {
             .await
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
-        Ok(fees.into())
+        Ok(fees)
     }
 
     /// Frontend calls this method to send events to the rust application logic
