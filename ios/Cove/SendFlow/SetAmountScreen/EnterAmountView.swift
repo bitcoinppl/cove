@@ -6,16 +6,16 @@
 //
 import SwiftUI
 
-private typealias FocusField = SendFlowSetAmountFocusField
-
 struct EnterAmountView: View {
-    let model: WalletViewModel
+    @Environment(SendFlowSetAmountPresenter.self) private var presenter
+    @Environment(WalletViewModel.self) private var model
 
+    // args
     @Binding var sendAmount: String
-    @FocusState var focusField: SendFlowSetAmountFocusField?
     let sendAmountFiat: String
 
     // private
+    @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
     @State private var showingMenu: Bool = false
 
     var metadata: WalletMetadata { model.walletMetadata }
@@ -52,6 +52,7 @@ struct EnterAmountView: View {
                     }
                     .foregroundStyle(.primary)
                 }
+                .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button("sats") {

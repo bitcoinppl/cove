@@ -8,47 +8,14 @@
 import Foundation
 import SwiftUI
 
-enum SendFlowSetAmountFocusField: Hashable {
-    case amount
-    case address
-}
-
-enum SendFlowSetAmountSheetState: Equatable {
-    case qr
-    case fee
-}
-
-enum SendFlowSetAmountAlertState: Equatable {
-    case emptyAddress
-    case invalidNumber
-    case invalidAddress(String)
-    case wrongNetwork(String)
-    case noBalance
-    case zeroAmount
-    case insufficientFunds
-    case sendAmountToLow
-    case unableToGetFeeRate
-    case unableToBuildTxn(String)
-
-    init(_ error: AddressError, address: String) {
-        switch error {
-        case .EmptyAddress: self = .emptyAddress
-        case .InvalidAddress: self = .invalidAddress(address)
-        case .WrongNetwork: self = .wrongNetwork(address)
-        default: self = .invalidAddress(address)
-        }
-    }
-}
-
-// MARK: Aliases
-
-private typealias SheetState = SendFlowSetAmountSheetState
-private typealias FocusField = SendFlowSetAmountFocusField
-private typealias AlertState = SendFlowSetAmountAlertState
-
 // MARK: SendFlowSetAmountScreen
 
+private typealias FocusField = SendFlowSetAmountPresenter.FocusField
+private typealias SheetState = SendFlowSetAmountPresenter.SheetState
+private typealias AlertState = SendFlowSetAmountPresenter.AlertState
+
 struct SendFlowSetAmountScreen: View {
+    @Environment(SendFlowSetAmountPresenter.self) private var presenter
     @Environment(MainViewModel.self) private var app
     @Environment(\.colorScheme) private var colorScheme
 
@@ -60,9 +27,10 @@ struct SendFlowSetAmountScreen: View {
     // private
     @State private var isLoading: Bool = true
 
-    @FocusState private var focusField: FocusField?
+    @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
     @State private var scrollPosition: ScrollPosition = .init(
-        idType: FocusField.self)
+        idType: SendFlowSetAmountPresenter.FocusField.self)
+
     @State private var scannedCode: TaggedString? = .none
 
     // fees
@@ -71,10 +39,6 @@ struct SendFlowSetAmountScreen: View {
     @State private var feeRateOptions: FeeRateOptionsWithTotalFee? = .none
     @State private var feeRateOptionsBase: FeeRateOptions? = .none
 
-    // alert & sheet
-    @State private var sheetState: TaggedItem<SheetState>? = .none
-    @State private var alertState: TaggedItem<AlertState>? = .none
-
     // text inputs
     @State private var sendAmount: String = "0"
     @State private var sendAmountFiat: String = "≈ $0.00 USD"
@@ -82,26 +46,8 @@ struct SendFlowSetAmountScreen: View {
     // max
     @State private var maxSelected: Amount? = nil
 
-    // shrinking header
-    @State private var headerHeight: CGFloat = screenHeight * 0.12
-    @State private var scrollOffset: CGFloat = 0
-
-    // back
-    @State private var disappearing: Bool = false
-
     private var metadata: WalletMetadata {
         model.walletMetadata
-    }
-
-    private var showingAlert: Binding<Bool> {
-        Binding(
-            get: { alertState != nil && !disappearing },
-            set: { newValue in
-                if !newValue {
-                    alertState = .none
-                }
-            }
-        )
     }
 
     private var sendAmountSats: Int? {
@@ -238,10 +184,7 @@ struct SendFlowSetAmountScreen: View {
 
     // doing it this way prevents an alert popping up when the user just goes back
     private func setAlertState(_ alertState: AlertState) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            guard !disappearing else { return }
-            self.alertState = TaggedItem(alertState)
-        }
+        presenter.setAlertState(alertState)
     }
 
     private func setFormattedAmount(_ amount: String) {
@@ -255,7 +198,6 @@ struct SendFlowSetAmountScreen: View {
             // MARK: HEADER
 
             SendFlowHeaderView(model: model, amount: model.balance.confirmed)
-                .frame(height: max(40, headerHeight - scrollOffset))
 
             // MARK: CONTENT
 
@@ -266,15 +208,10 @@ struct SendFlowSetAmountScreen: View {
                         AmountInfoSection
 
                         // Amount input
-                        EnterAmountView(
-                            model: model,
-                            sendAmount: $sendAmount,
-                            focusField: _focusField,
-                            sendAmountFiat: sendAmountFiat
-                        )
+                        EnterAmountView(sendAmount: $sendAmount, sendAmountFiat: sendAmountFiat)
 
                         // Address Section
-                        EnterAddressView(address: $address, sheetState: $sheetState, focusField: _focusField)
+                        EnterAddressView(address: $address)
 
                         // Account Section
                         AccountSection
@@ -308,11 +245,6 @@ struct SendFlowSetAmountScreen: View {
                 .background(colorScheme == .light ? .white : .black)
                 .scrollIndicators(.hidden)
                 .scrollPosition($scrollPosition, anchor: .top)
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.contentOffset.y + geometry.contentInsets.top
-                } action: { newOffset, _ in
-                    scrollOffset = max(0, newOffset)
-                }
 
                 if isLoading {
                     ZStack {
@@ -331,7 +263,7 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: sendAmount, initial: true, sendAmountChanged)
         .onChange(of: address, initial: true, addressChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
-        .environment(model)
+        .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text("Send")
@@ -417,16 +349,13 @@ struct SendFlowSetAmountScreen: View {
                 }
             }
         }
-        .sheet(item: $sheetState, content: SheetContent)
-        .onDisappear {
-            disappearing = true
-        }
+        .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .alert(
-            alertTitle,
-            isPresented: showingAlert,
-            presenting: alertState,
-            actions: alertButtons,
-            message: alertMessage
+            presenter.alertTitle,
+            isPresented: presenter.showingAlert,
+            presenting: presenter.alertState,
+            actions: presenter.alertButtons,
+            message: presenter.alertMessage
         )
     }
 
@@ -446,7 +375,7 @@ struct SendFlowSetAmountScreen: View {
 
         if case let .failure(error) = Address.checkValid(address) {
             if displayAlert {
-                setAlertState(AlertState(error, address: address))
+                setAlertState(.init(error, address: address))
             }
             return false
         }
@@ -621,8 +550,7 @@ struct SendFlowSetAmountScreen: View {
 
     private func scannedCodeChanged(_: TaggedString?, _ newValue: TaggedString?) {
         guard let newValue else { return }
-
-        sheetState = nil
+        presenter.sheetState = nil
 
         let addressWithNetwork = try? AddressWithNetwork(address: newValue.item)
 
@@ -800,7 +728,7 @@ struct SendFlowSetAmountScreen: View {
             .buttonStyle(.bordered)
             .tint(.primary)
 
-            Button(action: { sheetState = TaggedItem(.qr) }) {
+            Button(action: { presenter.sheetState = TaggedItem(.qr) }) {
                 Label("QR", systemImage: "qrcode")
             }
             .buttonStyle(.bordered)
@@ -869,7 +797,7 @@ struct SendFlowSetAmountScreen: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
-                    sheetState = TaggedItem(.fee)
+                    presenter.sheetState = TaggedItem(.fee)
                 }
                 .font(.caption)
                 .foregroundColor(.blue)
@@ -883,7 +811,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onTapGesture {
-            sheetState = TaggedItem(.fee)
+            presenter.sheetState = TaggedItem(.fee)
         }
     }
 
@@ -912,7 +840,6 @@ struct SendFlowSetAmountScreen: View {
                 Spacer()
             }
             .padding()
-            //                        .background(Color(.systemGray6))
             .cornerRadius(12)
         }
     }
@@ -1002,78 +929,6 @@ struct SendFlowSetAmountScreen: View {
                 )
             )
             .presentationDetents([.height(400)])
-        }
-    }
-
-    // MARK: Alerts
-
-    private var alertTitle: String {
-        guard let alertState else { return "" }
-
-        return {
-            switch alertState.item {
-            case .emptyAddress, .invalidAddress, .wrongNetwork:
-                "Invalid Address"
-            case .invalidNumber, .zeroAmount: "Invalid Amount"
-            case .insufficientFunds, .noBalance: "Insufficient Funds"
-            case .sendAmountToLow: "Send Amount Too Low"
-            case .unableToGetFeeRate: "Unable to get fee rate"
-            case .unableToBuildTxn: "Unable to build transaction"
-            }
-        }()
-    }
-
-    @ViewBuilder
-    private func alertMessage(alert: TaggedItem<AlertState>) -> some View {
-        let text = switch alert.item {
-        case .emptyAddress:
-            "Please enter an address"
-        case .invalidNumber:
-            "Please enter a valid number for the amout to send"
-        case .zeroAmount:
-            "Can't send an empty transaction. Please enter a valid amount"
-        case .noBalance:
-            "You do not have any bitcoin in your wallet. Please add some to send a transaction"
-        case let .invalidAddress(address):
-            "The address \(address) is invalid"
-        case let .wrongNetwork(address):
-            "The address \(address) is on the wrong network. You are on \(metadata.network)"
-        case .insufficientFunds:
-            "You do not have enough bitcoin in your wallet to cover the amount plus fees"
-        case .sendAmountToLow:
-            "Send amount is too low. Please send atleast 5000 sats"
-        case .unableToGetFeeRate:
-            "Are you connected to the internet?"
-        case let .unableToBuildTxn(msg):
-            msg
-        }
-
-        Text(text)
-    }
-
-    @ViewBuilder
-    private func alertButtons(alert: TaggedItem<AlertState>) -> some View {
-        switch alert.item {
-        case .emptyAddress, .wrongNetwork, .invalidAddress:
-            Button("OK") {
-                alertState = .none
-                focusField = .address
-            }
-        case .noBalance:
-            Button("Go Back") {
-                alertState = .none
-                app.popRoute()
-            }
-        case .invalidNumber, .insufficientFunds, .sendAmountToLow, .zeroAmount:
-            Button("OK") {
-                focusField = .amount
-                alertState = .none
-            }
-        case .unableToGetFeeRate, .unableToBuildTxn:
-            Button("OK") {
-                focusField = .none
-                alertState = .none
-            }
         }
     }
 }

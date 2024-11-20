@@ -8,14 +8,16 @@ import SwiftUI
 
 // MARK: Aliases
 
-private typealias SheetState = SendFlowSetAmountSheetState
-private typealias FocusField = SendFlowSetAmountFocusField
-private typealias AlertState = SendFlowSetAmountAlertState
+private typealias FocusField = SendFlowSetAmountPresenter.FocusField
 
 struct EnterAddressView: View {
+    @Environment(SendFlowSetAmountPresenter.self) private var presenter
+
+    // args
     @Binding var address: String
-    @Binding var sheetState: TaggedItem<SendFlowSetAmountSheetState>?
-    @FocusState var focusField: SendFlowSetAmountFocusField?
+
+    // private
+    @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -36,7 +38,7 @@ struct EnterAddressView: View {
                     .fontWeight(.medium)
                 Spacer()
 
-                Button(action: { sheetState = TaggedItem(.qr) }) {
+                Button(action: { presenter.sheetState = TaggedItem(.qr) }) {
                     Image(systemName: "qrcode")
                 }
                 .foregroundStyle(.secondary)
@@ -54,14 +56,16 @@ struct EnterAddressView: View {
                     .offset(x: -2)
             }
         }
+        .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
         .padding(.top, 14)
     }
 }
 
 #Preview {
-    EnterAddressView(
-        address: Binding.constant("bc1qdgxdn046v8tvxtx2k6ml7q7mcanj6dy63atva9"),
-        sheetState: Binding.constant(nil)
-    )
-    .padding()
+    EnterAddressView(address: Binding.constant("bc1qdgxdn046v8tvxtx2k6ml7q7mcanj6dy63atva9"))
+        .environment(SendFlowSetAmountPresenter(
+            app: MainViewModel(),
+            model: WalletViewModel(preview: "preview_only"))
+        )
+        .padding()
 }

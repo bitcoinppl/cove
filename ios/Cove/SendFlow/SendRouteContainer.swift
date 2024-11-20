@@ -16,6 +16,7 @@ public struct SendRouteContainer: View {
 
     // private
     @State private var model: WalletViewModel? = nil
+    @State private var presenter: SendFlowSetAmountPresenter? = nil
 
     func initOnAppear() {
         let id = sendRoute.id()
@@ -23,7 +24,10 @@ public struct SendRouteContainer: View {
 
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
-            model = try app.getWalletViewModel(id: id)
+            let model = try app.getWalletViewModel(id: id)
+
+            self.model = model
+            presenter = SendFlowSetAmountPresenter(app: app, model: model)
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -31,13 +35,21 @@ public struct SendRouteContainer: View {
     }
 
     public var body: some View {
-        if let model {
-            switch sendRoute {
-            case let .setAmount(id: id, address: address, amount: amount):
-                SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "", amount: amount)
-            case let .confirm(id: id, details: details):
-                SendFlowConfirmScreen(id: id, model: model, details: details)
+        if let model, let presenter {
+            Group {
+                switch sendRoute {
+                case let .setAmount(id: id, address: address, amount: amount):
+                    SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "", amount: amount)
+                case let .confirm(id: id, details: details):
+                    SendFlowConfirmScreen(id: id, model: model, details: details)
+                }
             }
+            .environment(model)
+            .environment(presenter)
+            .onDisappear {
+                presenter.disappearing = true
+            }
+
         } else {
             ProgressView()
                 .onAppear(perform: initOnAppear)
