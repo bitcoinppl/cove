@@ -19,21 +19,30 @@ default = ["uniffi/cli"]
 macros = { path = "./crates/macros" }
 
 # bdk / bitcoin
-bdk_wallet = { version = "1.0.0-beta.5", features = ["keys-bip39", "file_store"], git = "https://github.com/bitcoinppl/bdk" }
+bdk_wallet = { version = "1.0.0-beta.5", features = [
+    "keys-bip39",
+    "file_store",
+], git = "https://github.com/bitcoinppl/bdk" }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
 # bdk_esplora = {  version = "0.19", features = ["async-https"] }
-bdk_esplora = {  version = "0.19", git = "https://github.com/bitcoinppl/bdk",  features = ["async-https", "tokio" ] }
-bdk_electrum = { version = "0.19", features = ["use-rustls-ring"], default-features = false, git = "https://github.com/bitcoinppl/bdk" }
+bdk_esplora = { version = "0.19", git = "https://github.com/bitcoinppl/bdk", features = [
+    "async-https",
+    "tokio",
+] }
+bdk_electrum = { version = "0.19", features = [
+    "use-rustls-ring",
+], default-features = false, git = "https://github.com/bitcoinppl/bdk" }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # store bdk wallet data
-bdk_file_store = { version =  "0.17.0", git = "http://github.com/bitcoinppl/bdk"}
-bdk_chain = { version = "0.20.0", git = "https://github.com/bitcoinppl/bdk"}
+bdk_file_store = { version = "0.17.0", git = "http://github.com/bitcoinppl/bdk" }
+bdk_chain = { version = "0.20.0", git = "https://github.com/bitcoinppl/bdk" }
 
 # import / export hardware wallet public keys
-pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = []}
+pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = [
+] }
 
 bitcoin = "0.32"
 bitcoin-units = "0.1"
@@ -41,7 +50,7 @@ bitcoin_hashes = "0.14.0"
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }
-act-zero = {version = "0.4.0", features = ["default-tokio"]}
+act-zero = { version = "0.4.0", features = ["default-tokio"] }
 async-trait = "0.1.81"
 futures = "0.3.30"
 tryhard = "0.5"
@@ -52,12 +61,12 @@ zeroize = "1.8.1"
 
 # concurrency
 crossbeam = "0.8.4"
-parking_lot = {version = "0.12.1", features = ["deadlock_detection"]}
+parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
 once_cell = "1.19.0"
 
 # error handling
 eyre = "0.6"
-thiserror = "1.0"
+thiserror = "2.0"
 
 # logging
 tracing = "0.1"
@@ -74,22 +83,30 @@ redb = "2.1"
 nid = "3.0"
 
 # derive stuff
-derive_more = {version = "1.0", features = ["display", "from", "into", "as_ref", "from_str", "deref", "deref_mut"]}
-strum = {version = "0.26", features = ["derive"]}
+derive_more = { version = "1.0", features = [
+    "display",
+    "from",
+    "into",
+    "as_ref",
+    "from_str",
+    "deref",
+    "deref_mut",
+] }
+strum = { version = "0.26", features = ["derive"] }
 
 # helpers / utils / exts
 tap = "1.0.1"
 itertools = "0.13"
 
 # time 
-jiff = { version ="0.1", features = ["tz-system"] }
+jiff = { version = "0.1", features = ["tz-system"] }
 
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0"
 
 # bindings
-uniffi = { version = "=0.28.1", features = ["tokio"] }
+uniffi = { version = "=0.28.3", features = ["tokio"] }
 
 # hashing
 sha2 = "0.10.8"
@@ -117,7 +134,7 @@ reqwest = { version = "0.12", features = ["json"] }
 # qr
 # static link libz-sys
 libz-sys = { version = "1.1", features = ["static"] }
-bbqr = {version = "0.3", default-features = false}
+bbqr = { version = "0.3", default-features = false }
 
 # hex
 hex = "0.4.3"
@@ -129,11 +146,11 @@ winnow = "0.6.0"
 arc-swap = "1.7"
 
 [build-dependencies]
-uniffi = { version = "=0.28.1", features = ["build"] }
+uniffi = { version = "=0.28.3", features = ["build"] }
 
 [dev-dependencies]
 tokio = { version = "1.38", features = ["rt", "test-util", "macros"] }
-uniffi = { version = "=0.28.1", features = ["bindgen-tests"] }
+uniffi = { version = "=0.28.3", features = ["bindgen-tests"] }
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.
@@ -141,8 +158,8 @@ strip = "debuginfo"
 
 [profile.release-smaller]
 inherits = "release"
-opt-level = 'z'     # Optimize for size.
-lto = true          # Enable Link Time Optimization
-codegen-units = 1   # Reduce number of codegen units to increase optimizations.
-panic = "abort"     # Abort on panic
-strip = "debuginfo" 
+opt-level = 'z'      # Optimize for size.
+lto = true           # Enable Link Time Optimization
+codegen-units = 1    # Reduce number of codegen units to increase optimizations.
+panic = "abort"      # Abort on panic
+strip = "debuginfo"

@@ -4,17 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = [ "./macros" ]
+members = ["./macros"]
 
 [workspace.dependencies]
 # bindings
-uniffi = {  version = "=0.28.1", features = ["tokio"] }
+uniffi = { version = "=0.28.3", features = ["tokio"] }
 
 # error handling
 thiserror = "1.0"
 
 # derive macros
-derive_more = { version = "1", features = ["display", "from", "error"]}
+derive_more = { version = "1", features = ["display", "from", "error"] }
 
 # logging
 tracing = "0.1"
