@@ -45,7 +45,7 @@ struct SendFlowConfirmScreen: View {
                     VStack(spacing: 8) {
                         HStack {
                             Text("You're sending")
-                                .font(.title3)
+                                .font(.headline)
                                 .fontWeight(.bold)
 
                             Spacer()
@@ -54,7 +54,7 @@ struct SendFlowConfirmScreen: View {
 
                         HStack {
                             Text("The amount they will receive")
-                                .font(.callout)
+                                .font(.footnote)
                                 .foregroundStyle(.secondary.opacity(0.80))
                                 .fontWeight(.medium)
                             Spacer()
@@ -117,11 +117,14 @@ struct SendFlowConfirmScreen: View {
 
                     // To Address Section
                     HStack {
-                        Text("To Address")
-                            .font(.callout)
+                        Text("Address")
+                            .font(.footnote)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                             .foregroundColor(.primary)
 
+                        Spacer()
+                        Spacer()
                         Spacer()
                         Spacer()
 
@@ -129,8 +132,8 @@ struct SendFlowConfirmScreen: View {
                             details.sendingTo().spacedOut()
                         )
                         .lineLimit(4, reservesSpace: false)
-                        .font(.system(.callout, design: .none))
-                        .fontWeight(.medium)
+                        .font(.system(.footnote, design: .none))
+                        .fontWeight(.semibold)
                         .padding(.leading, 60)
                     }
                     .padding(.top, 6)
@@ -138,7 +141,8 @@ struct SendFlowConfirmScreen: View {
                     // Network Fee Section
                     HStack {
                         Text("Network Fee")
-                            .font(.callout)
+                            .font(.footnote)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
 
                         Spacer()
@@ -147,20 +151,35 @@ struct SendFlowConfirmScreen: View {
                             Text(model.amountFmt(details.feeTotal()))
                             Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                         }
-                        .font(.callout)
+                        .font(.footnote)
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                     }
 
-                    // Total Amount Section
-                    HStack {
-                        Text("You'll pay")
-                            .fontWeight(.medium)
-                        Spacer()
+                    VStack(spacing: 15) {
+                        // Total Amount Section
                         HStack {
-                            Text(model.amountFmt(details.spendingAmount()))
-                                .fontWeight(.semibold)
-                            Text(metadata.selectedUnit == .sat ? "sats" : "btc")
+                            Text("You'll pay")
+                            Spacer()
+                            HStack {
+                                Text(model.amountFmt(details.spendingAmount()))
+                                Text(metadata.selectedUnit == .sat ? "sats" : "btc")
+                            }
                         }
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+
+                        // They receive section
+                        HStack {
+                            Text("They'll receive")
+                            Spacer()
+                            HStack {
+                                Text(model.amountFmt(details.sendingAmount()))
+                                Text(metadata.selectedUnit == .sat ? "sats" : "btc")
+                            }
+                        }
+                        .font(.footnote)
+                        .fontWeight(.semibold)
                     }
                 }
             }
@@ -194,11 +213,12 @@ struct SendFlowConfirmScreen: View {
                             ?? "No Fingerprint"
                     )
                     .font(.footnote)
+                    .fontWeight(.medium)
                     .foregroundColor(.secondary)
 
                     Text(metadata.name)
-                        .font(.headline)
-                        .fontWeight(.medium)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
                 }
                 .padding(.leading, 24)
 

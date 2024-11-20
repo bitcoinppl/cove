@@ -14,7 +14,7 @@ struct SendFlowHeaderView: View {
     @Bindable var model: WalletViewModel
     let amount: Amount
 
-    @State var height: CGFloat = screenHeight * 0.12
+    @State var height: CGFloat = screenHeight * 0.145
 
     // private
     @State var showingMenu: Bool = false
@@ -45,15 +45,16 @@ struct SendFlowHeaderView: View {
             VStack {
                 HStack {
                     Text("Balance")
-                        .font(.callout)
+                        .font(.footnote)
                         .foregroundStyle(.white.opacity(0.82))
 
                     Spacer()
                 }
+                .padding(.top, 35)
 
                 HStack {
                     Text(balanceString)
-                        .font(.title2)
+                        .font(.title3)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
 
@@ -108,7 +109,6 @@ struct SendFlowHeaderView: View {
             .padding()
         }
         .frame(height: height)
-        .padding(.bottom, 20)
         .background(Color.midnightBlue)
     }
 }
