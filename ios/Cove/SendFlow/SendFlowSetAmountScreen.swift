@@ -8,17 +8,17 @@
 import Foundation
 import SwiftUI
 
-private enum FocusField: Hashable {
+enum SendFlowSetAmountFocusField: Hashable {
     case amount
     case address
 }
 
-private enum SheetState: Equatable {
+enum SendFlowSetAmountSheetState: Equatable {
     case qr
     case fee
 }
 
-private enum AlertState: Equatable {
+enum SendFlowSetAmountAlertState: Equatable {
     case emptyAddress
     case invalidNumber
     case invalidAddress(String)
@@ -39,6 +39,12 @@ private enum AlertState: Equatable {
         }
     }
 }
+
+// MARK: Aliases
+
+private typealias SheetState = SendFlowSetAmountSheetState
+private typealias FocusField = SendFlowSetAmountFocusField
+private typealias AlertState = SendFlowSetAmountAlertState
 
 // MARK: SendFlowSetAmountScreen
 
@@ -260,7 +266,7 @@ struct SendFlowSetAmountScreen: View {
                         AmountInfoSection
 
                         // Amount input
-                        EnterAmountSection(
+                        EnterAmountView(
                             model: model,
                             sendAmount: $sendAmount,
                             focusField: _focusField,
@@ -268,7 +274,7 @@ struct SendFlowSetAmountScreen: View {
                         )
 
                         // Address Section
-                        EnterAddressSection
+                        EnterAddressView(address: $address, sheetState: $sheetState, focusField: _focusField)
 
                         // Account Section
                         AccountSection
@@ -882,46 +888,6 @@ struct SendFlowSetAmountScreen: View {
     }
 
     @ViewBuilder
-    var EnterAddressSection: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Text("Set address")
-                    .font(.headline)
-                    .fontWeight(.bold)
-
-                Spacer()
-            }
-            .id(FocusField.address)
-            .padding(.top, 10)
-
-            HStack {
-                Text("Where do you want to send to?")
-                    .font(.callout)
-                    .foregroundStyle(.secondary.opacity(0.80))
-                    .fontWeight(.medium)
-                Spacer()
-
-                Button(action: { sheetState = TaggedItem(.qr) }) {
-                    Image(systemName: "qrcode")
-                }
-                .foregroundStyle(.secondary)
-                .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                PlaceholderTextEditor(text: $address, placeholder: "bc1q.....")
-                    .focused($focusField, equals: .address)
-                    .frame(height: 50)
-                    .font(.system(size: 16, design: .none))
-                    .foregroundStyle(.primary.opacity(0.9))
-                    .autocorrectionDisabled(true)
-                    .keyboardType(.asciiCapable)
-            }
-        }
-        .padding(.top, 14)
-    }
-
-    @ViewBuilder
     var AccountSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -1109,85 +1075,6 @@ struct SendFlowSetAmountScreen: View {
                 alertState = .none
             }
         }
-    }
-}
-
-private struct EnterAmountSection: View {
-    let model: WalletViewModel
-
-    @Binding var sendAmount: String
-    @FocusState var focusField: FocusField?
-    let sendAmountFiat: String
-
-    // private
-    @State private var showingMenu: Bool = false
-
-    var metadata: WalletMetadata { model.walletMetadata }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack(alignment: .bottom) {
-                TextField("", text: $sendAmount)
-                    .focused($focusField, equals: .amount)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 48, weight: .bold))
-                    .keyboardType(
-                        metadata.selectedUnit == .btc ? .decimalPad : .numberPad
-                    )
-                    .offset(
-                        x: metadata.selectedUnit == .btc
-                            ? screenWidth * 0.10 : screenWidth * 0.11
-                    )
-                    .padding(.horizontal, 30)
-                    .minimumScaleFactor(0.01)
-                    .lineLimit(1)
-                    .scrollDisabled(true)
-
-                HStack(spacing: 0) {
-                    Button(action: { showingMenu.toggle() }) {
-                        Text(model.unit)
-                            .padding(.vertical, 10)
-
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .padding(.top, 2)
-                            .padding(.leading, 4)
-                    }
-                    .foregroundStyle(.primary)
-                }
-                .popover(isPresented: $showingMenu) {
-                    VStack(alignment: .center, spacing: 0) {
-                        Button("sats") {
-                            model.dispatch(action: .updateUnit(.sat))
-                            showingMenu = false
-                        }
-                        .padding(12)
-                        .buttonStyle(.plain)
-
-                        Divider()
-
-                        Button("btc") {
-                            model.dispatch(action: .updateUnit(.btc))
-                            showingMenu = false
-                        }
-                        .padding(12)
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                    .frame(minWidth: 120, maxWidth: 200)
-                    .presentationCompactAdaptation(.popover)
-                    .foregroundStyle(.primary.opacity(0.8))
-                }
-            }
-
-            Text(sendAmountFiat)
-                .font(.title3)
-                .foregroundColor(.secondary)
-        }
-
-        .padding(.vertical, 4)
     }
 }
 
