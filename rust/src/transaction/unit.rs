@@ -15,19 +15,16 @@ impl Default for Unit {
     }
 }
 
-mod ffi {
-    use super::Unit;
-    use strum::IntoEnumIterator;
+use strum::IntoEnumIterator;
 
-    #[uniffi::export]
-    pub fn all_units() -> Vec<Unit> {
-        Unit::iter().collect()
-    }
+#[uniffi::export]
+fn all_units() -> Vec<Unit> {
+    Unit::iter().collect()
+}
 
-    #[uniffi::export]
-    pub fn unit_to_string(unit: Unit) -> String {
-        unit.to_string()
-    }
+#[uniffi::export]
+fn unit_to_string(unit: Unit) -> String {
+    unit.to_string()
 }
 
 impl Display for Unit {

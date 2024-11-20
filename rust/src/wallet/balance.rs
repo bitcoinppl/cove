@@ -16,15 +16,6 @@ impl Default for Balance {
     }
 }
 
-mod ffi {
-    use super::*;
-
-    #[uniffi::export]
-    pub fn balance_zero() -> Balance {
-        Balance::default()
-    }
-}
-
 impl From<bdk_wallet::Balance> for Balance {
     fn from(balance: bdk_wallet::Balance) -> Self {
         Self {
@@ -34,4 +25,9 @@ impl From<bdk_wallet::Balance> for Balance {
             confirmed: Arc::new(balance.confirmed.into()),
         }
     }
+}
+
+#[uniffi::export]
+fn balance_zero() -> Balance {
+    Balance::default()
 }

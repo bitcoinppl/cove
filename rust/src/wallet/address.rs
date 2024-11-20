@@ -178,101 +178,96 @@ fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
     (address, Some(amount))
 }
 
-mod ffi {
-    use std::str::FromStr as _;
+use std::str::FromStr as _;
 
-    use bdk_chain::bitcoin::address::NetworkChecked;
+use bdk_chain::bitcoin::address::NetworkChecked;
 
-    use crate::database::Database;
+use crate::database::Database;
 
-    use super::*;
+#[uniffi::export]
+fn address_is_equal(lhs: Arc<Address>, rhs: Arc<Address>) -> bool {
+    lhs == rhs
+}
 
-    #[uniffi::export]
-    fn address_is_equal(lhs: Arc<Address>, rhs: Arc<Address>) -> bool {
-        lhs == rhs
+#[uniffi::export]
+impl AddressWithNetwork {
+    #[uniffi::constructor(name = "new")]
+    pub fn new(address: String) -> Result<Self, Error> {
+        Self::try_new(&address)
     }
 
-    #[uniffi::export]
-    impl AddressWithNetwork {
-        #[uniffi::constructor(name = "new")]
-        pub fn new(address: String) -> Result<Self, Error> {
-            Self::try_new(&address)
-        }
-
-        fn address(&self) -> Address {
-            self.address.clone()
-        }
-
-        fn network(&self) -> Network {
-            self.network
-        }
-
-        fn amount(&self) -> Option<Arc<Amount>> {
-            self.amount.map(Arc::new)
-        }
+    fn address(&self) -> Address {
+        self.address.clone()
     }
 
-    #[uniffi::export]
-    impl Address {
-        #[uniffi::constructor]
-        pub fn from_string(address: String) -> Result<Self> {
-            let network = Database::global().global_config.selected_network();
-            let bdk_address = BdkAddress::from_str(&address)
-                .map_err(|_| Error::InvalidAddress)?
-                .require_network(network.into())
-                .map_err(|_| Error::WrongNetwork { current: network })?;
-
-            Ok(Self(bdk_address))
-        }
-
-        #[uniffi::constructor(name = "preview_new")]
-        pub fn preview_new() -> Self {
-            let address =
-                BdkAddress::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap();
-
-            let address: BdkAddress<NetworkChecked> =
-                address.require_network(Network::Bitcoin.into()).unwrap();
-
-            Self::new(address)
-        }
-
-        fn string(&self) -> String {
-            self.to_string()
-        }
+    fn network(&self) -> Network {
+        self.network
     }
 
-    #[uniffi::export]
-    impl AddressInfo {
-        fn adress_string(&self) -> String {
-            self.address.to_string()
-        }
-
-        fn address(&self) -> Address {
-            self.address.clone().into()
-        }
-
-        fn index(&self) -> u32 {
-            self.index
-        }
+    fn amount(&self) -> Option<Arc<Amount>> {
+        self.amount.map(Arc::new)
     }
+}
 
-    #[uniffi::export]
-    fn address_is_valid(address: String) -> Result<(), Error> {
+#[uniffi::export]
+impl Address {
+    #[uniffi::constructor]
+    pub fn from_string(address: String) -> Result<Self> {
         let network = Database::global().global_config.selected_network();
-        address_is_valid_for_network(address, network)
-    }
-
-    #[uniffi::export]
-    fn address_is_valid_for_network(address: String, network: Network) -> Result<(), Error> {
-        let address = address.trim();
-        let address = BdkAddress::from_str(address).map_err(|_| Error::InvalidAddress)?;
-
-        address
+        let bdk_address = BdkAddress::from_str(&address)
+            .map_err(|_| Error::InvalidAddress)?
             .require_network(network.into())
             .map_err(|_| Error::WrongNetwork { current: network })?;
 
-        Ok(())
+        Ok(Self(bdk_address))
     }
+
+    #[uniffi::constructor(name = "preview_new")]
+    pub fn preview_new() -> Self {
+        let address = BdkAddress::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap();
+
+        let address: BdkAddress<NetworkChecked> =
+            address.require_network(Network::Bitcoin.into()).unwrap();
+
+        Self::new(address)
+    }
+
+    fn string(&self) -> String {
+        self.to_string()
+    }
+}
+
+#[uniffi::export]
+impl AddressInfo {
+    fn adress_string(&self) -> String {
+        self.address.to_string()
+    }
+
+    fn address(&self) -> Address {
+        self.address.clone().into()
+    }
+
+    fn index(&self) -> u32 {
+        self.index
+    }
+}
+
+#[uniffi::export]
+fn address_is_valid(address: String) -> Result<(), Error> {
+    let network = Database::global().global_config.selected_network();
+    address_is_valid_for_network(address, network)
+}
+
+#[uniffi::export]
+fn address_is_valid_for_network(address: String, network: Network) -> Result<(), Error> {
+    let address = address.trim();
+    let address = BdkAddress::from_str(address).map_err(|_| Error::InvalidAddress)?;
+
+    address
+        .require_network(network.into())
+        .map_err(|_| Error::WrongNetwork { current: network })?;
+
+    Ok(())
 }
 
 #[cfg(test)]

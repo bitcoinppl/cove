@@ -20,19 +20,16 @@ pub enum Network {
     Testnet,
 }
 
-mod ffi {
-    use super::Network;
-    use strum::IntoEnumIterator;
+use strum::IntoEnumIterator;
 
-    #[uniffi::export]
-    pub fn network_to_string(network: Network) -> String {
-        network.to_string()
-    }
+#[uniffi::export]
+fn network_to_string(network: Network) -> String {
+    network.to_string()
+}
 
-    #[uniffi::export]
-    pub fn all_networks() -> Vec<Network> {
-        Network::iter().collect()
-    }
+#[uniffi::export]
+fn all_networks() -> Vec<Network> {
+    Network::iter().collect()
 }
 
 impl TryFrom<&str> for Network {
@@ -70,7 +67,7 @@ impl From<Network> for Params {
     fn from(network: Network) -> Self {
         match network {
             Network::Bitcoin => Params::MAINNET,
-            Network::Testnet => Params::TESTNET,
+            Network::Testnet => Params::TESTNET3,
         }
     }
 }

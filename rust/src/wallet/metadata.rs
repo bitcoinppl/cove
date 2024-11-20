@@ -131,15 +131,6 @@ pub enum FiatOrBtc {
     Fiat,
 }
 
-mod ffi {
-    use super::*;
-
-    #[uniffi::export]
-    pub fn wallet_metadata_preview() -> WalletMetadata {
-        WalletMetadata::preview_new()
-    }
-}
-
 impl WalletMetadata {
     pub fn new(name: impl Into<String>, fingerprint: impl Into<Arc<Fingerprint>>) -> Self {
         let network = Database::global().global_config.selected_network();
@@ -295,4 +286,11 @@ fn default_false() -> bool {
 
 fn default_address_type() -> WalletAddressType {
     Default::default()
+}
+
+// MARK: PREVIEW ONLY
+
+#[uniffi::export]
+fn wallet_metadata_preview() -> WalletMetadata {
+    WalletMetadata::preview_new()
 }

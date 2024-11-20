@@ -47,13 +47,9 @@ impl FiatAmount {
     }
 }
 
-mod ffi {
-    use super::FiatAmount;
-
-    #[uniffi::export]
-    pub fn fiat_amount_preview_new() -> FiatAmount {
-        FiatAmount::preview_new()
-    }
+#[uniffi::export]
+fn fiat_amount_preview_new() -> FiatAmount {
+    FiatAmount::preview_new()
 }
 
 impl Eq for FiatAmount {}
