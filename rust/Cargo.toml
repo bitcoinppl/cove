@@ -106,7 +106,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0"
 
 # bindings
-uniffi = { version = "=0.28.3", features = ["tokio"] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
 
 # hashing
 sha2 = "0.10.8"
@@ -146,11 +146,13 @@ winnow = "0.6.0"
 arc-swap = "1.7"
 
 [build-dependencies]
-uniffi = { version = "=0.28.3", features = ["build"] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["build"] }
 
 [dev-dependencies]
 tokio = { version = "1.38", features = ["rt", "test-util", "macros"] }
-uniffi = { version = "=0.28.3", features = ["bindgen-tests"] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = [
+    "bindgen-tests",
+] }
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.
