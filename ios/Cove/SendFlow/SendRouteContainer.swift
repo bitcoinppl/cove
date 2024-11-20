@@ -46,6 +46,19 @@ public struct SendRouteContainer: View {
             }
             .environment(model)
             .environment(presenter)
+            .onAppear {
+                // if zero balance, show alert and send back
+                if model.balance.confirmed.asSats() == 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            presenter.focusField = .none
+                        }
+                    }
+
+                    presenter.setAlertState(.noBalance)
+                    return
+                }
+            }
             .onDisappear {
                 presenter.disappearing = true
             }

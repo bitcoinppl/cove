@@ -305,18 +305,6 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
-            // if zero balance, show alert and send back
-            if model.balance.confirmed.asSats() == 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        focusField = .none
-                    }
-                }
-
-                setAlertState(.noBalance)
-                return
-            }
-
             // amount
             if let amount {
                 switch metadata.selectedUnit {
@@ -340,6 +328,7 @@ struct SendFlowSetAmountScreen: View {
                 }
             }
 
+            // all valid, scroll to bottom
             if validate() {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
@@ -934,27 +923,39 @@ struct SendFlowSetAmountScreen: View {
 }
 
 #Preview("with address") {
-    NavigationStack {
-        AsyncPreview {
-            SendFlowSetAmountScreen(
-                id: WalletId(),
-                model: WalletViewModel(preview: "preview_only"),
-                address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
-            )
-            .environment(MainViewModel())
+    AsyncPreview {
+        NavigationStack {
+            let model = WalletViewModel(preview: "preview_only")
+
+            AsyncPreview {
+                SendFlowSetAmountScreen(
+                    id: WalletId(),
+                    model: model,
+                    address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
+                )
+                .environment(model)
+                .environment(MainViewModel())
+                .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
+            }
         }
     }
 }
 
 #Preview("no address") {
-    NavigationStack {
-        AsyncPreview {
-            SendFlowSetAmountScreen(
-                id: WalletId(),
-                model: WalletViewModel(preview: "preview_only"),
-                address: ""
-            )
-            .environment(MainViewModel())
+    AsyncPreview {
+        NavigationStack {
+            let model = WalletViewModel(preview: "preview_only")
+
+            AsyncPreview {
+                SendFlowSetAmountScreen(
+                    id: WalletId(),
+                    model: model,
+                    address: ""
+                )
+                .environment(model)
+                .environment(MainViewModel())
+                .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
+            }
         }
     }
 }
