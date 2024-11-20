@@ -220,8 +220,8 @@ struct SendFlowSetAmountScreen: View {
                         // Account Section
                         AccountSection
 
-                        if feeRateOptions != nil, selectedFeeRate != nil,
-
+                        if feeRateOptions != nil,
+                           selectedFeeRate != nil,
                            Address.isValid(address)
                         {
                             // Network Fee Section
@@ -874,9 +874,7 @@ struct SendFlowSetAmountScreen: View {
 
     @ViewBuilder
     var NextButtonBottom: some View {
-        Button(action: {
-            next()
-        }) {
+        Button(action: next) {
             Text("Next")
                 .font(.footnote)
                 .fontWeight(.semibold)
@@ -887,7 +885,7 @@ struct SendFlowSetAmountScreen: View {
                 .cornerRadius(10)
                 .disabled(!validate())
         }
-        .padding(.vertical)
+        .padding(.vertical, 10)
     }
 
     @ViewBuilder
