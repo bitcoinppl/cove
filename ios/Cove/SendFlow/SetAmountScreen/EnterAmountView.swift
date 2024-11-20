@@ -53,6 +53,7 @@ struct EnterAmountView: View {
                     .foregroundStyle(.primary)
                 }
                 .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
+                .onChange(of: focusField, initial: false) { _, new in presenter.focusField = new }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button("sats") {
@@ -80,10 +81,8 @@ struct EnterAmountView: View {
             }
 
             Text(sendAmountFiat)
-                .font(.title3)
+                .font(.subheadline)
                 .foregroundColor(.secondary)
         }
-
-        .padding(.vertical, 4)
     }
 }

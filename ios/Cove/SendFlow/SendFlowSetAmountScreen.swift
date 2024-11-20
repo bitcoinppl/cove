@@ -211,7 +211,11 @@ struct SendFlowSetAmountScreen: View {
                         EnterAmountView(sendAmount: $sendAmount, sendAmountFiat: sendAmountFiat)
 
                         // Address Section
-                        EnterAddressView(address: $address)
+                        VStack {
+                            Divider()
+                            EnterAddressView(address: $address)
+                            Divider()
+                        }
 
                         // Account Section
                         AccountSection
@@ -220,9 +224,6 @@ struct SendFlowSetAmountScreen: View {
 
                            Address.isValid(address)
                         {
-                            // Total Sending Section
-                            TotalSendingSection
-
                             // Network Fee Section
                             NetworkFeeSection
 
@@ -256,22 +257,16 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .padding(.top, 0)
-        .onChange(of: focusField, initial: false, focusFieldChanged)
+        .onChange(of: focusField, initial: true) { _, new in
+            presenter.focusField = new
+        }
+        .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
         .onChange(
             of: metadata.selectedUnit, initial: false, selectedUnitChanged
         )
         .onChange(of: sendAmount, initial: true, sendAmountChanged)
         .onChange(of: address, initial: true, addressChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
-        .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Send")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-            }
-        }
         .task {
             guard let feeRateOptions = try? await model.rust.getFeeOptions()
             else { return }
@@ -294,12 +289,12 @@ struct SendFlowSetAmountScreen: View {
 
             await MainActor.run {
                 if address == "" {
-                    focusField = .address
+                    presenter.focusField = .address
                     return
                 }
 
                 if sendAmount == "0" || sendAmount == "" {
-                    focusField = .amount
+                    presenter.focusField = .amount
                     return
                 }
             }
@@ -313,7 +308,7 @@ struct SendFlowSetAmountScreen: View {
                 }
 
                 if !validateAmount(displayAlert: true) {
-                    focusField = .amount
+                    presenter.focusField = .amount
                 } else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         setFormattedAmount(sendAmount)
@@ -324,7 +319,7 @@ struct SendFlowSetAmountScreen: View {
             // address
             if address != "" {
                 if !validateAddress(displayAlert: true) {
-                    focusField = .address
+                    presenter.focusField = .address
                 }
             }
 
@@ -332,7 +327,7 @@ struct SendFlowSetAmountScreen: View {
             if validate() {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     withAnimation(.easeInOut(duration: 0.4)) {
-                        focusField = .none
+                        presenter.focusField = .none
                         scrollPosition.scrollTo(edge: .bottom)
                     }
                 }
@@ -437,9 +432,13 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
-        let value = newValue.replacingOccurrences(of: ",", with: "")
+        let value = newValue
+            .replacingOccurrences(of: ",", with: "")
             .removingLeadingZeros()
-        sendAmount = value
+
+        if presenter.focusField == .amount {
+            sendAmount = value
+        }
 
         guard let amount = Double(value) else {
             sendAmount = oldValue
@@ -485,6 +484,7 @@ struct SendFlowSetAmountScreen: View {
         sendAmountFiat = model.fiatAmountToString(fiatAmount)
 
         if oldValue.contains(","), metadata.selectedUnit == .sat {
+            print("old value: \(oldValue) CONTIANS ,")
             setFormattedAmount(String(amountSats))
         }
     }
@@ -508,12 +508,15 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    // presenter focus field changed
     private func focusFieldChanged(
         _ oldField: FocusField?, _ newField: FocusField?
     ) {
         Log.debug(
             "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))"
         )
+
+        focusField = newField
 
         if oldField == .amount {
             if !validateAmount(displayAlert: true) { return }
@@ -524,7 +527,11 @@ struct SendFlowSetAmountScreen: View {
         }
 
         let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
-        setFormattedAmount(sendAmount)
+        if newField == .amount {
+            self.sendAmount = sendAmount
+        } else {
+            setFormattedAmount(sendAmount)
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
@@ -554,20 +561,20 @@ struct SendFlowSetAmountScreen: View {
         if let amount = addressWithNetwork.amount() {
             setAmount(amount)
             if !validateAmount(displayAlert: true) {
-                focusField = .amount
+                presenter.focusField = .amount
                 return
             }
         }
 
         if sendAmount == "0" || sendAmount == "" || !validateAmount() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                focusField = .amount
+                presenter.focusField = .amount
             }
             return
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            focusField = .none
+            presenter.focusField = .none
         }
     }
 
@@ -587,7 +594,7 @@ struct SendFlowSetAmountScreen: View {
         // address and amount is valid, dismiss the keyboard
         if validateAmount() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                focusField = .none
+                presenter.focusField = .none
             }
         }
 
@@ -642,12 +649,12 @@ struct SendFlowSetAmountScreen: View {
         HStack {
             Group {
                 if address.isEmpty {
-                    Button(action: { focusField = .address }) {
+                    Button(action: { presenter.focusField = .address }) {
                         Text("Next")
                     }
 
                 } else {
-                    Button(action: { focusField = .none }) {
+                    Button(action: { presenter.focusField = .none }) {
                         Text("Done")
                     }
                 }
@@ -672,7 +679,7 @@ struct SendFlowSetAmountScreen: View {
             .buttonStyle(.bordered)
             .tint(.primary)
 
-            Button(action: { focusField = .none }) {
+            Button(action: { presenter.focusField = .none }) {
                 Label("Done", systemImage: "keyboard.chevron.compact.down")
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.primary)
@@ -692,11 +699,11 @@ struct SendFlowSetAmountScreen: View {
                         if address.isEmpty { return }
                         if !validateAddress() { return }
                         if !validateAmount() {
-                            focusField = .amount
+                            presenter.focusField = .amount
                             return
                         }
 
-                        focusField = .none
+                        presenter.focusField = .none
                     }) {
                         Text("Paste")
                     }
@@ -709,7 +716,7 @@ struct SendFlowSetAmountScreen: View {
                 if sendAmount != "" || sendAmount != "0"
                     || !validateAmount(), validateAddress()
                 {
-                    Button(action: { focusField = .amount }) {
+                    Button(action: { presenter.focusField = .amount }) {
                         Text("Next")
                     }
                 }
@@ -731,7 +738,7 @@ struct SendFlowSetAmountScreen: View {
             .buttonStyle(.bordered)
             .tint(.primary)
 
-            Button(action: { focusField = .none }) {
+            Button(action: { presenter.focusField = .none }) {
                 Label("Done", systemImage: "keyboard.chevron.compact.down")
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.primary)
@@ -753,18 +760,17 @@ struct SendFlowSetAmountScreen: View {
     var AmountInfoSection: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Set amount")
-                    .font(.title3)
+                Text("Enter amount")
+                    .font(.headline)
                     .fontWeight(.bold)
 
                 Spacer()
             }
             .id(FocusField.amount)
-            .padding(.top, 10)
 
             HStack {
                 Text("How much would you like to send?")
-                    .font(.callout)
+                    .font(.footnote)
                     .foregroundStyle(.secondary.opacity(0.80))
                     .fontWeight(.medium)
                 Spacer()
@@ -777,24 +783,24 @@ struct SendFlowSetAmountScreen: View {
     var NetworkFeeSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Network Fee")
-                .font(.callout)
+                .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fontWeight(.medium)
 
             HStack {
                 Text(selectedFeeRate?.duration() ?? "2 hours")
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
                     presenter.sheetState = TaggedItem(.fee)
                 }
-                .font(.caption)
+                .font(.caption2)
                 .foregroundColor(.blue)
 
                 Spacer()
 
                 Text(totalFeeString)
-                    .font(.callout)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fontWeight(.medium)
             }
@@ -808,6 +814,13 @@ struct SendFlowSetAmountScreen: View {
     var AccountSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
+                Text("Account")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fontWeight(.medium)
+
+                Spacer()
+
                 Image(systemName: "bitcoinsign")
                     .font(.title2)
                     .foregroundColor(.orange)
@@ -820,33 +833,16 @@ struct SendFlowSetAmountScreen: View {
                     )
                     .font(.footnote)
                     .foregroundColor(.secondary)
+                    .fontWeight(.medium)
 
                     Text(metadata.name)
-                        .font(.headline)
-                        .fontWeight(.medium)
+                        .font(.footnote)
+                        .fontWeight(.semibold)
                 }
 
                 Spacer()
             }
-            .padding()
             .cornerRadius(12)
-        }
-    }
-
-    @ViewBuilder
-    var TotalSendingSection: some View {
-        HStack {
-            Text("Total Sending")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fontWeight(.medium)
-
-            Spacer()
-
-            Text(totalSending)
-                .font(.callout)
-                .foregroundColor(.secondary)
-                .fontWeight(.medium)
         }
     }
 
@@ -855,22 +851,21 @@ struct SendFlowSetAmountScreen: View {
         VStack {
             HStack {
                 Text("Total Spending")
-                    .font(.title3)
-                    .fontWeight(.medium)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
 
                 Spacer()
 
                 Text(totalSpent)
                     .multilineTextAlignment(.center)
-                    .font(.title3)
-                    .fontWeight(.medium)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
             }
-            .padding(.top, 12)
 
             HStack {
                 Spacer()
                 Text(totalSpentInFiat)
-                    .font(.callout)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 1)
@@ -883,7 +878,7 @@ struct SendFlowSetAmountScreen: View {
             next()
         }) {
             Text("Next")
-                .font(.subheadline)
+                .font(.footnote)
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
                 .padding()

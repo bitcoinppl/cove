@@ -36,18 +36,17 @@ fn wallet_address_type_to_string(wallet_address_type: WalletAddressType) -> Stri
 impl Address {
     #[uniffi::method]
     pub fn spaced_out(&self) -> String {
-        self.to_string()
-            .chars()
-            .enumerate()
-            .map(|(i, c)| {
-                if i > 0 && i % 4 == 0 {
-                    " ".to_string()
-                } else {
-                    c.to_string()
-                }
-            })
-            .collect()
+        address_string_spaced_out(self.to_string())
     }
+}
+
+#[uniffi::export]
+fn address_string_spaced_out(address: String) -> String {
+    address
+        .chars()
+        .enumerate()
+        .map(|(i, c)| if i > 0 && i % 5 == 0 { ' ' } else { c })
+        .collect()
 }
 
 #[uniffi::export]

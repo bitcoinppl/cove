@@ -49,6 +49,10 @@ extension String {
         }
         return self
     }
+
+    func addressSpacedOut() -> String {
+        addressStringSpacedOut(address: self)
+    }
 }
 
 extension String? {
