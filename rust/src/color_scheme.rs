@@ -68,17 +68,14 @@ impl Display for ColorSchemeSelection {
     }
 }
 
-mod ffi {
-    use super::ColorSchemeSelection;
-    use strum::IntoEnumIterator as _;
+use strum::IntoEnumIterator as _;
 
-    #[uniffi::export]
-    pub fn all_color_schemes() -> Vec<ColorSchemeSelection> {
-        ColorSchemeSelection::iter().collect()
-    }
+#[uniffi::export]
+fn all_color_schemes() -> Vec<ColorSchemeSelection> {
+    ColorSchemeSelection::iter().collect()
+}
 
-    #[uniffi::export]
-    pub fn color_scheme_selection_capitalized_string(color_scheme: ColorSchemeSelection) -> String {
-        color_scheme.as_capitalized_string().to_string()
-    }
+#[uniffi::export]
+fn color_scheme_selection_capitalized_string(color_scheme: ColorSchemeSelection) -> String {
+    color_scheme.as_capitalized_string().to_string()
 }

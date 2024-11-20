@@ -23,28 +23,25 @@ pub enum FingerprintError {
     WalletNotFound,
 }
 
-mod ffi {
-    use super::*;
+#[uniffi::export]
+impl Fingerprint {
+    #[uniffi::constructor(name = "new")]
+    pub fn new(id: WalletId) -> Result<Self, FingerprintError> {
+        Self::try_new(&id)
+    }
 
-    #[uniffi::export]
-    impl Fingerprint {
-        #[uniffi::constructor(name = "new")]
-        pub fn new(id: WalletId) -> Result<Self, FingerprintError> {
-            Self::try_new(&id)
-        }
+    #[uniffi::method]
+    pub fn as_uppercase(&self) -> String {
+        self.0.to_string().to_ascii_uppercase()
+    }
 
-        #[uniffi::method]
-        pub fn as_uppercase(&self) -> String {
-            self.0.to_string().to_ascii_uppercase()
-        }
-
-        #[uniffi::method]
-        pub fn as_lowercase(&self) -> String {
-            self.0.to_string().to_ascii_lowercase()
-        }
+    #[uniffi::method]
+    pub fn as_lowercase(&self) -> String {
+        self.0.to_string().to_ascii_lowercase()
     }
 }
 
+// rust only
 impl Fingerprint {
     pub fn try_new(id: &WalletId) -> Result<Self, FingerprintError> {
         let xpub = Keychain::global()

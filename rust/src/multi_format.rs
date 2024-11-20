@@ -93,13 +93,9 @@ impl TryFrom<StringOrData> for MultiFormat {
     }
 }
 
-mod ffi {
-    use super::{MultiFormat, MultiFormatError, StringOrData};
-
-    #[uniffi::export]
-    pub fn string_or_data_try_into_multi_format(
-        string_or_data: StringOrData,
-    ) -> Result<MultiFormat, MultiFormatError> {
-        string_or_data.try_into()
-    }
+#[uniffi::export]
+fn string_or_data_try_into_multi_format(
+    string_or_data: StringOrData,
+) -> Result<MultiFormat, MultiFormatError> {
+    string_or_data.try_into()
 }

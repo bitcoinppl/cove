@@ -199,7 +199,7 @@ mod ffi {
     use tracing::error;
 
     #[uniffi::export]
-    pub async fn update_prices_if_needed() {
+    async fn update_prices_if_needed() {
         if let Err(error) = crate::fiat::client::update_prices_if_needed().await {
             error!("unable to update prices: {error:?}");
         }

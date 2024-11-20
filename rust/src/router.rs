@@ -159,116 +159,112 @@ impl Route {
     }
 }
 
-mod ffi {
-    use std::hash::{Hash as _, Hasher as _};
+use std::hash::{Hash as _, Hasher as _};
 
-    use super::*;
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
+pub struct RouteFactory;
 
-    #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
-    pub struct RouteFactory;
-
-    #[uniffi::export]
-    impl RouteFactory {
-        #[uniffi::constructor]
-        pub fn new() -> Self {
-            Self
-        }
-
-        pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {
-            if route == route_to_check {
-                return true;
-            }
-
-            matches!(
-                (route, route_to_check),
-                (Route::ListWallets, Route::ListWallets)
-                    | (Route::SelectedWallet(_), Route::SelectedWallet(_))
-                    | (Route::NewWallet(_), Route::NewWallet(_))
-            )
-        }
-
-        pub fn new_wallet_select(&self) -> Route {
-            Route::NewWallet(Default::default())
-        }
-
-        pub fn new_hot_wallet(&self) -> Route {
-            Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
-        }
-
-        pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
-            Route::NewWallet(NewWalletRoute::HotWallet(route))
-        }
-
-        pub fn hot_wallet_import_from_scan(&self) -> Route {
-            Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::Import(
-                NumberOfBip39Words::Twelve,
-                ImportType::Manual,
-            )))
-        }
-
-        pub fn secret_words(&self, wallet_id: WalletId) -> Route {
-            Route::SecretWords(wallet_id)
-        }
-
-        pub fn cold_wallet_import(&self, route: ColdWalletRoute) -> Route {
-            route.into()
-        }
-
-        pub fn qr_import(&self) -> Route {
-            ColdWalletRoute::QrCode.into()
-        }
-
-        pub fn file_import(&self) -> Route {
-            ColdWalletRoute::File.into()
-        }
-
-        pub fn nfc_import(&self) -> Route {
-            ColdWalletRoute::Nfc.into()
-        }
-
-        pub fn load_and_reset_to(&self, reset_to: Route) -> Route {
-            Self::load_and_reset_to_after(self, reset_to, 500)
-        }
-
-        pub fn load_and_reset_to_after(&self, reset_to: Route, time: u32) -> Route {
-            reset_to.load_and_reset_after(time)
-        }
-
-        #[uniffi::method(default(address = None, amount = None))]
-        pub fn send_set_amount(
-            &self,
-            id: WalletId,
-            address: Option<Arc<Address>>,
-            amount: Option<Arc<Amount>>,
-        ) -> Route {
-            let send = SendRoute::SetAmount {
-                id,
-                address,
-                amount,
-            };
-
-            Route::Send(send)
-        }
-
-        pub fn send_confirm(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
-            let send = SendRoute::Confirm { id, details };
-            Route::Send(send)
-        }
-
-        pub fn send(&self, send: SendRoute) -> Route {
-            Route::Send(send)
-        }
+#[uniffi::export]
+impl RouteFactory {
+    #[uniffi::constructor]
+    pub fn new() -> Self {
+        Self
     }
 
-    #[uniffi::export]
-    fn is_route_equal(route: Route, route_to_check: Route) -> bool {
-        route == route_to_check
+    pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {
+        if route == route_to_check {
+            return true;
+        }
+
+        matches!(
+            (route, route_to_check),
+            (Route::ListWallets, Route::ListWallets)
+                | (Route::SelectedWallet(_), Route::SelectedWallet(_))
+                | (Route::NewWallet(_), Route::NewWallet(_))
+        )
     }
 
-    #[uniffi::export]
-    fn hash_route(route: Route) -> u64 {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        route.hash(&mut hasher);
-        hasher.finish()
+    pub fn new_wallet_select(&self) -> Route {
+        Route::NewWallet(Default::default())
     }
+
+    pub fn new_hot_wallet(&self) -> Route {
+        Route::NewWallet(NewWalletRoute::HotWallet(Default::default()))
+    }
+
+    pub fn hot_wallet(&self, route: HotWalletRoute) -> Route {
+        Route::NewWallet(NewWalletRoute::HotWallet(route))
+    }
+
+    pub fn hot_wallet_import_from_scan(&self) -> Route {
+        Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::Import(
+            NumberOfBip39Words::Twelve,
+            ImportType::Manual,
+        )))
+    }
+
+    pub fn secret_words(&self, wallet_id: WalletId) -> Route {
+        Route::SecretWords(wallet_id)
+    }
+
+    pub fn cold_wallet_import(&self, route: ColdWalletRoute) -> Route {
+        route.into()
+    }
+
+    pub fn qr_import(&self) -> Route {
+        ColdWalletRoute::QrCode.into()
+    }
+
+    pub fn file_import(&self) -> Route {
+        ColdWalletRoute::File.into()
+    }
+
+    pub fn nfc_import(&self) -> Route {
+        ColdWalletRoute::Nfc.into()
+    }
+
+    pub fn load_and_reset_to(&self, reset_to: Route) -> Route {
+        Self::load_and_reset_to_after(self, reset_to, 500)
+    }
+
+    pub fn load_and_reset_to_after(&self, reset_to: Route, time: u32) -> Route {
+        reset_to.load_and_reset_after(time)
+    }
+
+    #[uniffi::method(default(address = None, amount = None))]
+    pub fn send_set_amount(
+        &self,
+        id: WalletId,
+        address: Option<Arc<Address>>,
+        amount: Option<Arc<Amount>>,
+    ) -> Route {
+        let send = SendRoute::SetAmount {
+            id,
+            address,
+            amount,
+        };
+
+        Route::Send(send)
+    }
+
+    pub fn send_confirm(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
+        let send = SendRoute::Confirm { id, details };
+        Route::Send(send)
+    }
+
+    pub fn send(&self, send: SendRoute) -> Route {
+        Route::Send(send)
+    }
+}
+
+#[uniffi::export]
+fn is_route_equal(route: Route, route_to_check: Route) -> bool {
+    route == route_to_check
+}
+
+#[uniffi::export]
+fn hash_route(route: Route) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    route.hash(&mut hasher);
+    hasher.finish()
 }

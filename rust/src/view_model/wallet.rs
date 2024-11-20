@@ -851,11 +851,7 @@ impl Drop for RustWalletViewModel {
     }
 }
 
-mod ffi {
-    use super::*;
-
-    #[uniffi::export]
-    fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
-        lhs == rhs
-    }
+#[uniffi::export]
+fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
+    lhs == rhs
 }

@@ -256,18 +256,13 @@ fn parse_node_url(url: &str) -> Result<Url, url::ParseError> {
     Ok(url)
 }
 
-mod ffi {
-    use super::NodeSelection;
-    use crate::node::Node;
-
-    #[uniffi::export]
-    pub fn node_selection_to_node(node: NodeSelection) -> Node {
-        node.into()
-    }
+#[uniffi::export]
+fn node_selection_to_node(node: NodeSelection) -> Node {
+    node.into()
 }
 
 #[uniffi::export]
-pub fn default_node_selection() -> NodeSelection {
+fn default_node_selection() -> NodeSelection {
     let network = Database::global().global_config.selected_network();
 
     let (name, url) = match network {
