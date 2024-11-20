@@ -27,7 +27,7 @@ struct SendFlowSetAmountScreen: View {
     // private
     @State private var isLoading: Bool = true
 
-    @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
+    @FocusState private var _privateFocusField: SendFlowSetAmountPresenter.FocusField?
     @State private var scrollPosition: ScrollPosition = .init(
         idType: SendFlowSetAmountPresenter.FocusField.self)
 
@@ -257,7 +257,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .padding(.top, 0)
-        .onChange(of: focusField, initial: true) { _, new in
+        .onChange(of: _privateFocusField, initial: true) { _, new in
             presenter.focusField = new
         }
         .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
@@ -500,7 +500,7 @@ struct SendFlowSetAmountScreen: View {
             self.sendAmount = Double(amount / 100_000_000).btcFmt()
         case .sat:
             let sendAmount = Int(amount * 100_000_000)
-            if focusField == .address || focusField == .none {
+            if presenter.focusField == .address || presenter.focusField == .none {
                 self.sendAmount = ThousandsFormatter(sendAmount).fmt()
             } else {
                 self.sendAmount = String(sendAmount)
@@ -516,7 +516,7 @@ struct SendFlowSetAmountScreen: View {
             "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))"
         )
 
-        focusField = newField
+        _privateFocusField = newField
 
         if oldField == .amount {
             if !validateAmount(displayAlert: true) { return }
@@ -750,7 +750,7 @@ struct SendFlowSetAmountScreen: View {
 
     @ViewBuilder
     var ToolBarView: some View {
-        switch focusField {
+        switch presenter.focusField {
         case .amount, .none: AmountKeyboardToolbar
         case .address: AddressKeyboardToolbar
         }
