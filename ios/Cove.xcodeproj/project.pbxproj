@@ -201,6 +201,7 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AC73B59A2CD14EDD0003F537 /* SendFlow */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SendFlow; sourceTree = "<group>"; };
+		ACD1857A2CEED1AA003601DC /* Icons */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Icons; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -432,6 +433,7 @@
 				AC73B5962CCF28960003F537 /* AppAlertState.swift */,
 				AC73B5982CCF2D6C0003F537 /* AppSheetState.swift */,
 				D0BE2EBD2C1614150055FCBE /* MainViewModel.swift */,
+				ACD1857A2CEED1AA003601DC /* Icons */,
 				AC73B5A02CD154BA0003F537 /* Constants.swift */,
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
@@ -476,6 +478,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AC73B59A2CD14EDD0003F537 /* SendFlow */,
+				ACD1857A2CEED1AA003601DC /* Icons */,
 			);
 			name = Cove;
 			packageProductDependencies = (
