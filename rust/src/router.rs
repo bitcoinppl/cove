@@ -69,6 +69,10 @@ pub enum SendRoute {
         address: Option<Arc<Address>>,
         amount: Option<Arc<Amount>>,
     },
+    HardwareExport {
+        id: WalletId,
+        details: Arc<ConfirmDetails>,
+    },
     Confirm {
         id: WalletId,
         details: Arc<ConfirmDetails>,

@@ -1,4 +1,7 @@
-use crate::transaction::{Amount, FeeRate};
+use crate::{
+    psbt::Psbt,
+    transaction::{Amount, FeeRate},
+};
 
 use super::Address;
 
@@ -9,6 +12,7 @@ pub struct ConfirmDetails {
     pub fee_total: Amount,
     pub fee_rate: FeeRate,
     pub sending_to: Address,
+    pub psbt: Psbt,
 }
 
 use crate::transaction::fees::BdkFeeRate;
@@ -45,16 +49,32 @@ impl ConfirmDetails {
 }
 
 // MARK: CONFIRM DETAILS PREVIEW
-#[uniffi::export]
-impl ConfirmDetails {
-    #[uniffi::constructor]
-    pub fn preview_new() -> Self {
-        Self {
-            spending_amount: Amount::from_sat(1_000_000),
-            sending_amount: Amount::from_sat(1_000_000 - 658),
-            fee_total: Amount::from_sat(658),
-            fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(658).into(),
-            sending_to: Address::preview_new(),
+mod ffi_preview {
+    use crate::psbt::BdkPsbt;
+
+    use super::*;
+
+    #[uniffi::export]
+    impl ConfirmDetails {
+        #[uniffi::constructor]
+        pub fn preview_new() -> Self {
+            Self {
+                spending_amount: Amount::from_sat(1_000_000),
+                sending_amount: Amount::from_sat(1_000_000 - 658),
+                fee_total: Amount::from_sat(658),
+                fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(658).into(),
+                sending_to: Address::preview_new(),
+                psbt: psbt_preview_new(),
+            }
         }
+    }
+
+    fn psbt_preview_new() -> Psbt {
+        let psbt_hex = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
+        let psbt_bytes = hex::decode(psbt_hex).expect("unable to decode psbt hex");
+
+        BdkPsbt::deserialize(&psbt_bytes)
+            .expect("unable to deserialize psbt")
+            .into()
     }
 }

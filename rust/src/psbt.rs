@@ -30,11 +30,6 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 impl Psbt {
     /// The virtual size of the transaction.
     pub fn weight(&self) -> u64 {
-        println!("weight {}", self.0.unsigned_tx.vsize());
-        println!("total f: {}", self.0.unsigned_tx.weight().to_vbytes_floor());
-        println!("total c: {}", self.0.unsigned_tx.weight().to_vbytes_ceil());
-        println!("total size: {}", self.0.unsigned_tx.total_size());
-
         self.0.unsigned_tx.vsize() as u64
     }
 
