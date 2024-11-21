@@ -22,7 +22,7 @@ struct EnterAddressView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Enter Address")
+                Text("Enter address")
                     .font(.headline)
                     .fontWeight(.bold)
 

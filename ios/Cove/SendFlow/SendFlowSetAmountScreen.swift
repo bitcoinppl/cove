@@ -821,11 +821,17 @@ struct SendFlowSetAmountScreen: View {
 
                 Spacer()
 
-                Image(systemName: "bitcoinsign")
-                    .font(.title2)
-                    .foregroundColor(.orange)
-                    .padding(.trailing, 6)
-
+                if metadata.walletType == .hot {
+                    Image(systemName: "bitcoinsign")
+                        .font(.title2)
+                        .foregroundColor(.orange)
+                        .padding(.trailing, 6)
+                }
+                
+                if metadata.walletType == .cold {
+                    BitcoinShieldIcon(width: 24, color: .orange)
+                }
+                    
                 VStack(alignment: .leading, spacing: 6) {
                     Text(
                         metadata.masterFingerprint?.asUppercase()
@@ -840,9 +846,7 @@ struct SendFlowSetAmountScreen: View {
                         .fontWeight(.semibold)
                 }
 
-                Spacer()
             }
-            .cornerRadius(12)
         }
     }
 

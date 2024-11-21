@@ -26,7 +26,7 @@ struct BitcoinShieldIcon: View {
 
     // this is the base size of the icon, everything is scaled from this
     private let staticSize = CGSize(width: 103, height: 125)
-    private let defaultWidth: CGFloat = 32.0
+    private let defaultWidth: CGFloat = 17.0
 
     private var size: CGSize {
         if let width, let height {
