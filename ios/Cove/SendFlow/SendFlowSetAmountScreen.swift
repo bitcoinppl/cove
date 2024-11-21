@@ -173,7 +173,12 @@ struct SendFlowSetAmountScreen: View {
                     feeRate: feeRate.feeRate()
                 )
 
-                let route = RouteFactory().sendConfirm(id: id, details: confirmDetails)
+                let route =
+                    switch metadata.walletType {
+                    case .hot: RouteFactory().sendConfirm(id: id, details: confirmDetails)
+                    case .cold: RouteFactory().sendHardwareExport(id: id, details: confirmDetails)
+                    }
+
                 app.pushRoute(route)
             } catch {
                 Log.error("unable to get confirm details: \(error)")
@@ -827,11 +832,11 @@ struct SendFlowSetAmountScreen: View {
                         .foregroundColor(.orange)
                         .padding(.trailing, 6)
                 }
-                
+
                 if metadata.walletType == .cold {
                     BitcoinShieldIcon(width: 24, color: .orange)
                 }
-                    
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text(
                         metadata.masterFingerprint?.asUppercase()
@@ -845,7 +850,6 @@ struct SendFlowSetAmountScreen: View {
                         .font(.footnote)
                         .fontWeight(.semibold)
                 }
-
             }
         }
     }

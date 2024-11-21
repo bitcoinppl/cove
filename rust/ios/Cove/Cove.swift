@@ -6335,6 +6335,8 @@ public protocol RouteFactoryProtocol : AnyObject {
     
     func sendConfirm(id: WalletId, details: ConfirmDetails)  -> Route
     
+    func sendHardwareExport(id: WalletId, details: ConfirmDetails)  -> Route
+    
     func sendSetAmount(id: WalletId, address: Address?, amount: Amount?)  -> Route
     
 }
@@ -6499,6 +6501,15 @@ open func send(send: SendRoute) -> Route  {
 open func sendConfirm(id: WalletId, details: ConfirmDetails) -> Route  {
     return try!  FfiConverterTypeRoute.lift(try! rustCall() {
     uniffi_cove_fn_method_routefactory_send_confirm(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId.lower(id),
+        FfiConverterTypeConfirmDetails.lower(details),$0
+    )
+})
+}
+    
+open func sendHardwareExport(id: WalletId, details: ConfirmDetails) -> Route  {
+    return try!  FfiConverterTypeRoute.lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_send_hardware_export(self.uniffiClonePointer(),
         FfiConverterTypeWalletId.lower(id),
         FfiConverterTypeConfirmDetails.lower(details),$0
     )
@@ -20066,6 +20077,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_confirm() != 14299) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_send_hardware_export() != 34735) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_set_amount() != 33578) {
