@@ -295,10 +295,8 @@ struct BitcoinShieldIcon: View {
 
     @ViewBuilder
     var icon: some View {
-        ShieldShape()
-            .fill(_shieldColor)
-        BitcoinShape()
-            .fill(_bitcoinColor)
+        ShieldShape().fill(_shieldColor)
+        BitcoinShape().fill(_bitcoinColor)
     }
 
     var body: some View {
