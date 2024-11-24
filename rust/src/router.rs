@@ -17,7 +17,6 @@ pub enum Route {
         reset_to: Arc<BoxedRoute>,
         after_millis: u32,
     },
-
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
@@ -263,6 +262,15 @@ impl RouteFactory {
 
     pub fn send(&self, send: SendRoute) -> Route {
         Route::Send(send)
+    }
+}
+
+impl Route {
+    pub fn to_debug_log(&self) -> String {
+        match self {
+            Self::Send(send_route) => format!("SendRoute: {:?}", send_route),
+            other => format!("{:?}", other),
+        }
     }
 }
 

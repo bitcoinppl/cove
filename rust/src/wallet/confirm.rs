@@ -50,6 +50,10 @@ impl ConfirmDetails {
     pub fn psbt_to_hex(&self) -> String {
         self.psbt.serialize_hex()
     }
+
+    pub fn psbt_bytes(&self) -> Vec<u8> {
+        self.psbt.serialize()
+    }
 }
 
 // MARK: CONFIRM DETAILS PREVIEW

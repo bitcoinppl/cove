@@ -1,19 +1,15 @@
-//
-//  NFCWriter.swift
-//  Cove
-//
-//  Created by Praveen Perera on 11/24/24.
-//
-
 import CoreNFC
 import SwiftUI
 
 class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
-    var text: String?
+    var data: Data?
     var session: NFCNDEFReaderSession?
     
-    func writeToTag(text: String) {
-        self.text = text
+    private var task: Task<Void, Never>?
+    
+    func writeToTag(data: Data) {
+        Log.debug("Writing to NFC tag, with data of size: \(data.count)")
+        self.data = data
         guard NFCNDEFReaderSession.readingAvailable else { return }
          
         session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
@@ -24,8 +20,8 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
     func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {}
     
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
-        guard let text, text.isEmpty == false else {
-            session.invalidate(errorMessage: "No text to write to NFC tag")
+        guard let data, !data.isEmpty else {
+            session.invalidate(errorMessage: "No data to write to NFC tag")
             return
         }
         
@@ -35,6 +31,9 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
         }
         
         session.connect(to: tag) { error in
+            let message = "Writing to tag, please hold still..."
+            session.alertMessage = message
+            
             if let error {
                 session.invalidate(errorMessage: error.localizedDescription)
                 return
@@ -46,12 +45,17 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
                     return
                 }
                 
-                let payload = NFCNDEFPayload.wellKnownTypeTextPayload(
-                    string: text,
-                    locale: Locale(identifier: "en")
-                )!
+                // Use a single payload with chunkSize parameter
+                let payload = NFCNDEFPayload(
+                    format: .media,
+                    type: "application/octet-stream".data(using: .utf8)!,
+                    identifier: Data(),
+                    payload: data
+//                    chunkSize: 1024
+                )
                 
                 let message = NFCNDEFMessage(records: [payload])
+                Log.debug("Writing message with \(message.records.count) records")
                 
                 tag.writeNDEF(message) { error in
                     if let error {
@@ -59,6 +63,7 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
                     } else {
                         session.alertMessage = "Successfully wrote to tag!"
                         session.invalidate()
+                        self.task?.cancel()
                     }
                 }
             }
@@ -67,5 +72,10 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
     
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
         session.invalidate()
+    }
+    
+    func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: any Error) {
+        Log.error("Tag reader session did invalidate with error: \(error.localizedDescription)")
+        task?.cancel()
     }
 }

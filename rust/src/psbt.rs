@@ -1,9 +1,10 @@
 use crate::transaction::Amount;
 use derive_more::{AsRef, Deref, From, Into};
+use std::fmt::Debug;
 
 pub type BdkPsbt = bdk_wallet::bitcoin::Psbt;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object, From, Deref, AsRef, Into)]
+#[derive(Clone, PartialEq, Eq, Hash, uniffi::Object, From, Deref, AsRef, Into)]
 pub struct Psbt(BdkPsbt);
 
 #[derive(
@@ -45,5 +46,16 @@ impl Psbt {
         })?;
 
         Ok(fee.into())
+    }
+}
+
+impl Debug for Psbt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Psbt")
+            .field("weight", &self.weight())
+            .field("fee", &self.fee())
+            .field("num_inputs", &self.0.inputs.len())
+            .field("num_outputs", &self.0.outputs.len())
+            .finish()
     }
 }

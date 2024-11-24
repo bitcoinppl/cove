@@ -279,25 +279,21 @@ struct SendFlowHardwareScreen: View {
 
     @ViewBuilder
     var ExportTransactionDialog: some View {
-        let text = details.psbtToHex()
-
-        VStack {
-            Button("NFC") {
-                nfcWriter.writeToTag(text: text)
-            }
-
-            Button("QR Code") {
-                // TODO: export to qr
-            }
-
-            ShareLink(
-                item: text,
-                preview: SharePreview(
-                    "Partially Signed Bitcoin Transaction (PSBT)",
-                    image: Image(.bitcoinShield)
-                )
-            )
+        Button("NFC") {
+            nfcWriter.writeToTag(data: details.psbtBytes())
         }
+
+        Button("QR Code") {
+            // TODO: export to qr
+        }
+
+        ShareLink(
+            item: details.psbtToHex(),
+            preview: SharePreview(
+                "Partially Signed Bitcoin Transaction (PSBT)",
+                image: Image(.bitcoinShield)
+            )
+        )
     }
 
     @ViewBuilder

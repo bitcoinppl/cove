@@ -2249,6 +2249,8 @@ public protocol ConfirmDetailsProtocol : AnyObject {
     
     func isEqual(rhs: ConfirmDetails)  -> Bool
     
+    func psbtBytes()  -> Data
+    
     func psbtToHex()  -> String
     
     func sendingAmount()  -> Amount
@@ -2334,6 +2336,13 @@ open func isEqual(rhs: ConfirmDetails) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_method_confirmdetails_is_equal(self.uniffiClonePointer(),
         FfiConverterTypeConfirmDetails.lower(rhs),$0
+    )
+})
+}
+    
+open func psbtBytes() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_cove_fn_method_confirmdetails_psbt_bytes(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -19765,6 +19774,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_confirmdetails_is_equal() != 16719) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_confirmdetails_psbt_bytes() != 48686) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_confirmdetails_psbt_to_hex() != 3021) {

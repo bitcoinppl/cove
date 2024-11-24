@@ -56,7 +56,6 @@ struct SelectedWalletScreen: View {
                 }
             }
         }
-        .tint(.white)
     }
 }
 
@@ -116,8 +115,10 @@ struct SelectedWalletScreenInner: View {
             .init(
                 title: Text("No Balance"),
                 message: Text("Can't send a transaction, when you have no funds."),
-                primaryButton: .default(Text("Receive Funds"),
-                                        action: { sheetState = .init(.receive) }),
+                primaryButton: .default(
+                    Text("Receive Funds"),
+                    action: { sheetState = .init(.receive) }
+                ),
                 secondaryButton: .cancel()
             )
         }
