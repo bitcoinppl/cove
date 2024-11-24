@@ -12,6 +12,11 @@ private enum SheetState: Equatable {
     case details
 }
 
+private enum ConfirmationState: Equatable {
+    case exportTxn
+    case importSignature
+}
+
 struct SendFlowHardwareScreen: View {
     @Environment(MainViewModel.self) private var app
 
@@ -21,7 +26,9 @@ struct SendFlowHardwareScreen: View {
     let prices: PriceResponse? = nil
 
     // private
+    let nfcWriter = NFCWriter()
     @State private var sheetState: TaggedItem<SheetState>? = .none
+    @State private var confirmationState: TaggedItem<ConfirmationState>? = .none
 
     var metadata: WalletMetadata {
         model.walletMetadata
@@ -164,6 +171,10 @@ struct SendFlowHardwareScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
             .sheet(item: $sheetState, content: SheetContent)
+            .confirmationDialog(
+                confirmationDialogTitle, isPresented: confirmationDialogIsPresented,
+                actions: ConfirmationDialogView
+            )
         }
     }
 
@@ -207,7 +218,7 @@ struct SendFlowHardwareScreen: View {
 
             HStack {
                 Button(action: {
-                    // Export transaction action
+                    confirmationState = .init(.exportTxn)
                 }) {
                     Label("Export Transaction", systemImage: "square.and.arrow.up")
                         .padding(.horizontal, 18)
@@ -221,7 +232,7 @@ struct SendFlowHardwareScreen: View {
                 Spacer()
 
                 Button(action: {
-                    // Import signature action
+                    confirmationState = .init(.importSignature)
                 }) {
                     Label("Import Signature", systemImage: "square.and.arrow.down")
                         .padding(.horizontal, 18)
@@ -233,6 +244,62 @@ struct SendFlowHardwareScreen: View {
                 }
             }
         }
+    }
+
+    // MARK: Confirmation Dialog
+
+    var confirmationDialogIsPresented: Binding<Bool> {
+        Binding(
+            get: { confirmationState != .none },
+            set: { presented in
+                if !presented { confirmationState = .none }
+            }
+        )
+    }
+
+    var confirmationDialogTitle: Text {
+        switch confirmationState?.item {
+        case .exportTxn: Text("Export Transaction")
+        case .importSignature: Text("Import Signature")
+        case .none: Text("")
+        }
+    }
+
+    @ViewBuilder
+    func ConfirmationDialogView() -> some View {
+        switch confirmationState?.item {
+        case .exportTxn: ExportTransactionDialog
+        case .importSignature: ImportTransactionDialog
+        case .none: EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    var ExportTransactionDialog: some View {
+        let text = details.psbtToHex()
+
+        VStack {
+            Button("NFC") {
+                nfcWriter.writeToTag(text: text)
+            }
+
+            Button("QR Code") {
+                // TODO: export to qr
+            }
+
+            ShareLink(
+                item: text,
+                preview: SharePreview(
+                    "Partially Signed Bitcoin Transaction (PSBT)",
+                    image: Image(.bitcoinShield)
+                )
+            )
+        }
+    }
+
+    @ViewBuilder
+    var ImportTransactionDialog: some View {
+        Text("TODO")
     }
 
     @ViewBuilder

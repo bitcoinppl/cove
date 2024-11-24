@@ -46,6 +46,10 @@ impl ConfirmDetails {
             && self.fee_rate == rhs.fee_rate
             && self.sending_to == rhs.sending_to
     }
+
+    pub fn psbt_to_hex(&self) -> String {
+        self.psbt.serialize_hex()
+    }
 }
 
 // MARK: CONFIRM DETAILS PREVIEW

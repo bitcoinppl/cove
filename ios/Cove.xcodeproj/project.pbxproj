@@ -26,6 +26,7 @@
 		AC07617D2C31A527007B4540 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617C2C31A527007B4540 /* GlassCard.swift */; };
 		AC07617F2C31BAA9007B4540 /* ListWalletsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617E2C31BAA9007B4540 /* ListWalletsScreen.swift */; };
 		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
+		AC08E3EE2CF3B40E00DF307D /* NFCWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */; };
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
 		AC2822F92CDD59E700C403E0 /* Address+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2822F82CDD59E000C403E0 /* Address+Ext.swift */; };
@@ -126,6 +127,7 @@
 		AC07617C2C31A527007B4540 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		AC07617E2C31BAA9007B4540 /* ListWalletsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListWalletsScreen.swift; sourceTree = "<group>"; };
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCWriter.swift; sourceTree = "<group>"; };
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
 		AC2822F82CDD59E000C403E0 /* Address+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Address+Ext.swift"; sourceTree = "<group>"; };
@@ -427,6 +429,7 @@
 				ACC301662C20C11D006790DF /* Extention */,
 				D0245F4F2C0F7B4E0042B447 /* CoveApp.swift */,
 				AC8459C02CA5ED7700A3083F /* NFCReader.swift */,
+				AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */,
 				ACCD58D32C5A89FC00CF06F9 /* AsyncPreview.swift */,
 				AC6F4CE22CC6BC24008D26C0 /* LoadAndResetView.swift */,
 				AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */,
@@ -607,6 +610,7 @@
 				2C3000E623FFF7A92EB7F02D /* ColorSchemeSelection+Ext.swift in Sources */,
 				AC6F4CDB2CC55981008D26C0 /* General+Ext.swift in Sources */,
 				AC5F3CDD2C99E99800469EBA /* HeaderIcon.swift in Sources */,
+				AC08E3EE2CF3B40E00DF307D /* NFCWriter.swift in Sources */,
 				4998F4A296FA2217EC2BD80F /* WalletSettingsSheet.swift in Sources */,
 				1BE5607DDD79FE6FA8A6B6F0 /* ImportWalletViewModel.swift in Sources */,
 				AC93DAE32C4572C3002E5AF2 /* NumberOfWords+Ext.swift in Sources */,

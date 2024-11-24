@@ -2249,6 +2249,8 @@ public protocol ConfirmDetailsProtocol : AnyObject {
     
     func isEqual(rhs: ConfirmDetails)  -> Bool
     
+    func psbtToHex()  -> String
+    
     func sendingAmount()  -> Amount
     
     func sendingTo()  -> Address
@@ -2332,6 +2334,13 @@ open func isEqual(rhs: ConfirmDetails) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_method_confirmdetails_is_equal(self.uniffiClonePointer(),
         FfiConverterTypeConfirmDetails.lower(rhs),$0
+    )
+})
+}
+    
+open func psbtToHex() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_confirmdetails_psbt_to_hex(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -19756,6 +19765,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_confirmdetails_is_equal() != 16719) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_confirmdetails_psbt_to_hex() != 3021) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_confirmdetails_sending_amount() != 58788) {
