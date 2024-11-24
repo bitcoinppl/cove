@@ -17,6 +17,15 @@ pub struct ConfirmDetails {
 
 use crate::transaction::fees::BdkFeeRate;
 
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum ConfirmDetailsError {
+    #[error("unable to represent PSBT as QR code: {0}")]
+    QrCodeCreation(String),
+}
+
+type Error = ConfirmDetailsError;
+type Result<T, E = Error> = std::result::Result<T, E>;
+
 #[uniffi::export]
 impl ConfirmDetails {
     pub fn spending_amount(&self) -> Amount {
@@ -53,6 +62,32 @@ impl ConfirmDetails {
 
     pub fn psbt_bytes(&self) -> Vec<u8> {
         self.psbt.serialize()
+    }
+
+    pub fn psbt_to_bbqr(&self) -> Result<Vec<String>> {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            qr::Version,
+            split::{Split, SplitOptions},
+        };
+
+        let data = self.psbt.serialize();
+
+        let split = Split::try_from_data(
+            data.as_slice(),
+            FileType::Psbt,
+            SplitOptions {
+                encoding: Encoding::Zlib,
+                min_split_number: 1,
+                max_split_number: 100,
+                min_version: Version::V05,
+                max_version: Version::V20,
+            },
+        )
+        .map_err(|e| ConfirmDetailsError::QrCodeCreation(e.to_string()))?;
+
+        Ok(split.parts)
     }
 }
 
