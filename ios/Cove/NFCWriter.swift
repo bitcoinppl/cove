@@ -51,7 +51,6 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
                     type: "application/octet-stream".data(using: .utf8)!,
                     identifier: Data(),
                     payload: data
-//                    chunkSize: 1024
                 )
                 
                 let message = NFCNDEFMessage(records: [payload])

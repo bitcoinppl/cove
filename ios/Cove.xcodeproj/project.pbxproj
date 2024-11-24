@@ -27,6 +27,7 @@
 		AC07617F2C31BAA9007B4540 /* ListWalletsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC07617E2C31BAA9007B4540 /* ListWalletsScreen.swift */; };
 		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
 		AC08E3EE2CF3B40E00DF307D /* NFCWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */; };
+		AC08E3F52CF3E24F00DF307D /* PSBTFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3F42CF3E24F00DF307D /* PSBTFile.swift */; };
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
 		AC2822F92CDD59E700C403E0 /* Address+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2822F82CDD59E000C403E0 /* Address+Ext.swift */; };
@@ -128,6 +129,7 @@
 		AC07617E2C31BAA9007B4540 /* ListWalletsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListWalletsScreen.swift; sourceTree = "<group>"; };
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCWriter.swift; sourceTree = "<group>"; };
+		AC08E3F42CF3E24F00DF307D /* PSBTFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PSBTFile.swift; sourceTree = "<group>"; };
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
 		AC2822F82CDD59E000C403E0 /* Address+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Address+Ext.swift"; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AC08E3F02CF3C2BA00DF307D /* ViewModifier */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = ViewModifier; sourceTree = "<group>"; };
 		AC73B59A2CD14EDD0003F537 /* SendFlow */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = SendFlow; sourceTree = "<group>"; };
 		ACD1857A2CEED1AA003601DC /* Icons */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Icons; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -412,6 +415,7 @@
 		D0245F4E2C0F7B4E0042B447 /* Cove */ = {
 			isa = PBXGroup;
 			children = (
+				AC08E3F02CF3C2BA00DF307D /* ViewModifier */,
 				AC8459C22CA5F13A00A3083F /* Cove.entitlements */,
 				AC739D542CA09AD6006B5FF1 /* Info.plist */,
 				AC4343612C6AF87B00105C03 /* SettingsScreen */,
@@ -446,6 +450,7 @@
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
 				AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */,
 				80049549984BDDA80E72D91C /* WalletSettingsSheet.swift */,
+				AC08E3F42CF3E24F00DF307D /* PSBTFile.swift */,
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
 				D0245F552C0F7B500042B447 /* Preview Content */,
 				AC45C4A42C991F3C002C5AEB /* Format.swift */,
@@ -480,6 +485,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				AC08E3F02CF3C2BA00DF307D /* ViewModifier */,
 				AC73B59A2CD14EDD0003F537 /* SendFlow */,
 				ACD1857A2CEED1AA003601DC /* Icons */,
 			);
@@ -600,6 +606,7 @@
 				AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */,
 				ACC1CD5A2C6D415400C7AD89 /* FloaterPopupView.swift in Sources */,
 				52AEF2D14ADE7D9CDF81C276 /* RouteView.swift in Sources */,
+				AC08E3F52CF3E24F00DF307D /* PSBTFile.swift in Sources */,
 				AC6F511C2CA205EE00D4D27A /* StringOrData+Ext.swift in Sources */,
 				AC8C1FAC2C4D5D6600158283 /* NodeSelection+Ext.swift in Sources */,
 				AC6F4CE32CC6BC30008D26C0 /* LoadAndResetView.swift in Sources */,

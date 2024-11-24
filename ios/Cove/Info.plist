@@ -27,5 +27,26 @@
             </array>
         </dict>
     </array>
+
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>org.bitcoin.psbt</string>
+            <key>UTTypeDescription</key>
+            <string>Partially Signed Bitcoin Transaction</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>psbt</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
 </dict>
 </plist>

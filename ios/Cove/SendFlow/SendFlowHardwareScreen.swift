@@ -288,9 +288,9 @@ struct SendFlowHardwareScreen: View {
         }
 
         ShareLink(
-            item: details.psbtToHex(),
+            item: PSBTFile(data: details.psbtBytes(), filename: "transaction.psbt"),
             preview: SharePreview(
-                "Partially Signed Bitcoin Transaction (PSBT)",
+                "transaction.psbt - A Partially Signed Bitcoin Transaction",
                 image: Image(.bitcoinShield)
             )
         )
