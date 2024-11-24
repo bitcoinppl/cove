@@ -10,6 +10,7 @@ import SwiftUI
 
 private enum SheetState: Equatable {
     case details
+    case exportQr
 }
 
 private enum ConfirmationState: Equatable {
@@ -279,12 +280,12 @@ struct SendFlowHardwareScreen: View {
 
     @ViewBuilder
     var ExportTransactionDialog: some View {
-        Button("NFC") {
-            nfcWriter.writeToTag(data: details.psbtBytes())
-        }
-
         Button("QR Code") {
             // TODO: export to qr
+        }
+
+        Button("NFC") {
+            nfcWriter.writeToTag(data: details.psbtBytes())
         }
 
         ShareLink(
@@ -308,6 +309,9 @@ struct SendFlowHardwareScreen: View {
             SendFlowDetailsSheetView(model: model, details: details)
                 .presentationDetents([.height(425), .height(600), .large])
                 .padding()
+        case .exportQr:
+            // TODO:
+            EmptyView()
         }
     }
 }

@@ -28,6 +28,7 @@
 		AC0761812C32E3BA007B4540 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0761802C32E3BA007B4540 /* SidebarView.swift */; };
 		AC08E3EE2CF3B40E00DF307D /* NFCWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */; };
 		AC08E3F52CF3E24F00DF307D /* PSBTFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3F42CF3E24F00DF307D /* PSBTFile.swift */; };
+		AC08E3F72CF3E7CF00DF307D /* QrCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3F62CF3E7CF00DF307D /* QrCodeView.swift */; };
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
 		AC2822F92CDD59E700C403E0 /* Address+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2822F82CDD59E000C403E0 /* Address+Ext.swift */; };
@@ -130,6 +131,7 @@
 		AC0761802C32E3BA007B4540 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCWriter.swift; sourceTree = "<group>"; };
 		AC08E3F42CF3E24F00DF307D /* PSBTFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PSBTFile.swift; sourceTree = "<group>"; };
+		AC08E3F62CF3E7CF00DF307D /* QrCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeView.swift; sourceTree = "<group>"; };
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
 		AC2822F82CDD59E000C403E0 /* Address+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Address+Ext.swift"; sourceTree = "<group>"; };
@@ -454,6 +456,7 @@
 				D0245F532C0F7B500042B447 /* Assets.xcassets */,
 				D0245F552C0F7B500042B447 /* Preview Content */,
 				AC45C4A42C991F3C002C5AEB /* Format.swift */,
+				AC08E3F62CF3E7CF00DF307D /* QrCodeView.swift */,
 			);
 			indentWidth = 4;
 			path = Cove;
@@ -602,6 +605,7 @@
 				AC8459BF2CA5DF4800A3083F /* ScannerView.swift in Sources */,
 				6B2189B893A545A2F4E3107E /* WalletColor+Ext.swift in Sources */,
 				AC757CBB2C6D277400F3F41C /* ReceiveView.swift in Sources */,
+				AC08E3F72CF3E7CF00DF307D /* QrCodeView.swift in Sources */,
 				0995B2382B1A8AA3208B6097 /* WalletViewModel.swift in Sources */,
 				AC61B8F82C7D223A001B649A /* MakeIdentifiable.swift in Sources */,
 				ACC1CD5A2C6D415400C7AD89 /* FloaterPopupView.swift in Sources */,
