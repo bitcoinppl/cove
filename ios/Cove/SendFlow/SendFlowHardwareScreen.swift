@@ -164,6 +164,7 @@ struct SendFlowHardwareScreen: View {
                     }
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .fontWeight(.medium)
                 }
             }
             .scrollIndicators(.hidden)
@@ -227,6 +228,7 @@ struct SendFlowHardwareScreen: View {
                         .background(.buttonPrimary)
                         .cornerRadius(8)
                         .font(.caption)
+                        .fontWeight(.medium)
                 }
 
                 Spacer()
@@ -241,6 +243,7 @@ struct SendFlowHardwareScreen: View {
                         .background(.buttonPrimary)
                         .cornerRadius(8)
                         .font(.caption)
+                        .fontWeight(.medium)
                 }
             }
         }
