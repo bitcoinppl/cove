@@ -2251,6 +2251,8 @@ public protocol ConfirmDetailsProtocol : AnyObject {
     
     func psbtBytes()  -> Data
     
+    func psbtToBbqr() throws  -> [String]
+    
     func psbtToHex()  -> String
     
     func sendingAmount()  -> Amount
@@ -2343,6 +2345,13 @@ open func isEqual(rhs: ConfirmDetails) -> Bool  {
 open func psbtBytes() -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_cove_fn_method_confirmdetails_psbt_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func psbtToBbqr()throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError.lift) {
+    uniffi_cove_fn_method_confirmdetails_psbt_to_bbqr(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -11922,6 +11931,61 @@ extension ColorSchemeSelection: Equatable, Hashable {}
 
 
 
+public enum ConfirmDetailsError {
+
+    
+    
+    case QrCodeCreation(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConfirmDetailsError: FfiConverterRustBuffer {
+    typealias SwiftType = ConfirmDetailsError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ConfirmDetailsError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .QrCodeCreation(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ConfirmDetailsError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .QrCodeCreation(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+extension ConfirmDetailsError: Equatable, Hashable {}
+
+extension ConfirmDetailsError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
 public enum DatabaseError {
 
     
@@ -19777,6 +19841,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_confirmdetails_psbt_bytes() != 48686) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_confirmdetails_psbt_to_bbqr() != 44579) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_confirmdetails_psbt_to_hex() != 3021) {

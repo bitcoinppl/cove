@@ -10,7 +10,7 @@ import SwiftUI
 
 private enum SheetState: Equatable {
     case details
-    case exportQr
+    case exportQr([String])
 }
 
 private enum ConfirmationState: Equatable {
@@ -281,7 +281,13 @@ struct SendFlowHardwareScreen: View {
     @ViewBuilder
     var ExportTransactionDialog: some View {
         Button("QR Code") {
-            // TODO: export to qr
+            do {
+                let qrs = try details.psbtToBbqr()
+                sheetState = .init(.exportQr(qrs))
+            } catch {
+                print("Failed to convert PSBT to BBQR: \(error)")
+                // TODO: show alert
+            }
         }
 
         Button("NFC") {
@@ -309,9 +315,10 @@ struct SendFlowHardwareScreen: View {
             SendFlowDetailsSheetView(model: model, details: details)
                 .presentationDetents([.height(425), .height(600), .large])
                 .padding()
-        case .exportQr:
-            // TODO:
-            EmptyView()
+        case let .exportQr(qrs):
+            SendFlowBbqrExport(qrs: qrs.map { QrCodeView(text: $0) })
+                .presentationDetents([.height(425), .height(600), .large])
+                .padding()
         }
     }
 }
