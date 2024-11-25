@@ -29,6 +29,7 @@
 		AC08E3EE2CF3B40E00DF307D /* NFCWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */; };
 		AC08E3F52CF3E24F00DF307D /* PSBTFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3F42CF3E24F00DF307D /* PSBTFile.swift */; };
 		AC08E3F72CF3E7CF00DF307D /* QrCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3F62CF3E7CF00DF307D /* QrCodeView.swift */; };
+		AC08E3FD2CF4AD1A00DF307D /* AlertBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC08E3FC2CF4AD1700DF307D /* AlertBuilder.swift */; };
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
 		AC2822F92CDD59E700C403E0 /* Address+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2822F82CDD59E000C403E0 /* Address+Ext.swift */; };
@@ -132,6 +133,7 @@
 		AC08E3ED2CF3B40A00DF307D /* NFCWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NFCWriter.swift; sourceTree = "<group>"; };
 		AC08E3F42CF3E24F00DF307D /* PSBTFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PSBTFile.swift; sourceTree = "<group>"; };
 		AC08E3F62CF3E7CF00DF307D /* QrCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCodeView.swift; sourceTree = "<group>"; };
+		AC08E3FC2CF4AD1700DF307D /* AlertBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertBuilder.swift; sourceTree = "<group>"; };
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
 		AC2822F82CDD59E000C403E0 /* Address+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Address+Ext.swift"; sourceTree = "<group>"; };
@@ -447,6 +449,7 @@
 				2B6032F09EA34DFDCB18090A /* RouteView.swift */,
 				AC49121A2C77B8A100ED8ED7 /* SecretWordsScreen.swift */,
 				048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */,
+				AC08E3FC2CF4AD1700DF307D /* AlertBuilder.swift */,
 				AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
@@ -569,6 +572,7 @@
 				ACF44D122C2642DD008C5034 /* SunsetWave.swift in Sources */,
 				ACC1CD622C6D5ABC00C7AD89 /* FloaterPopup.swift in Sources */,
 				ACC3016A2C20C9D4006790DF /* Routes+Ext.swift in Sources */,
+				AC08E3FD2CF4AD1A00DF307D /* AlertBuilder.swift in Sources */,
 				AC739D502CA09573006B5FF1 /* QrCodeImportScreen.swift in Sources */,
 				ACB17FBD2C5ABDD20079A96A /* WalletBalanceHeaderView.swift in Sources */,
 				ACCD58D42C5A89FC00CF06F9 /* AsyncPreview.swift in Sources */,

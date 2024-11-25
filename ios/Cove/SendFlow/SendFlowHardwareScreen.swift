@@ -18,6 +18,10 @@ private enum ConfirmationState: Equatable {
     case importSignature
 }
 
+private enum AlertState: Equatable {
+    case bbqrError(String)
+}
+
 struct SendFlowHardwareScreen: View {
     @Environment(MainViewModel.self) private var app
 
@@ -28,6 +32,8 @@ struct SendFlowHardwareScreen: View {
 
     // private
     let nfcWriter = NFCWriter()
+
+    @State private var alertState: TaggedItem<AlertState>? = .none
     @State private var sheetState: TaggedItem<SheetState>? = .none
     @State private var confirmationState: TaggedItem<ConfirmationState>? = .none
 
@@ -173,6 +179,13 @@ struct SendFlowHardwareScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
             .sheet(item: $sheetState, content: SheetContent)
+            .alert(
+                alertTitle,
+                isPresented: showingAlert,
+                presenting: alertState,
+                actions: { MyAlert($0).actions },
+                message: { MyAlert($0).message }
+            )
             .confirmationDialog(
                 confirmationDialogTitle, isPresented: confirmationDialogIsPresented,
                 actions: ConfirmationDialogView
@@ -285,7 +298,7 @@ struct SendFlowHardwareScreen: View {
                 let qrs = try details.psbtToBbqr()
                 sheetState = .init(.exportQr(qrs))
             } catch {
-                print("Failed to convert PSBT to BBQR: \(error)")
+                Log.error("Failed to convert PSBT to BBQR: \(error)")
                 // TODO: show alert
             }
         }
@@ -300,13 +313,17 @@ struct SendFlowHardwareScreen: View {
                 "transaction.psbt - A Partially Signed Bitcoin Transaction",
                 image: Image(.bitcoinShield)
             )
-        )
+        ) {
+            Text("More...")
+        }
     }
 
     @ViewBuilder
     var ImportTransactionDialog: some View {
         Text("TODO")
     }
+
+    // MARK: Sheet
 
     @ViewBuilder
     private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
@@ -320,6 +337,35 @@ struct SendFlowHardwareScreen: View {
                 .presentationDetents([.height(425), .height(600), .large])
                 .padding()
                 .padding(.top, 10)
+        }
+    }
+
+    // MARK: Alerts
+
+    var showingAlert: Binding<Bool> {
+        Binding(
+            get: { alertState != nil },
+            set: { if !$0 { alertState = .none } }
+        )
+    }
+
+    private var alertTitle: String {
+        guard let alertState else { return "Error" }
+        return MyAlert(alertState).title
+    }
+
+    private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
+        switch alert.item {
+        case let .bbqrError(message):
+            return AlertBuilder(
+                title: "QR Error",
+                message: "Unable to create BBQr: \(message)",
+                actions: {
+                    Button("Ok", role: .cancel) {
+                        alertState = .none
+                    }
+                }
+            )
         }
     }
 }
