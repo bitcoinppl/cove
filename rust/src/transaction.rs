@@ -70,7 +70,19 @@ pub struct UnconfirmedTransaction {
     pub fiat: Option<FiatAmount>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, uniffi::Object)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    uniffi::Object,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct TxId(pub BdkTxid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]

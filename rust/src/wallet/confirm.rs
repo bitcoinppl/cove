@@ -5,7 +5,9 @@ use crate::{
 
 use super::Address;
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, serde::Serialize, serde::Deserialize,
+)]
 pub struct ConfirmDetails {
     pub spending_amount: Amount,
     pub sending_amount: Amount,

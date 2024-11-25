@@ -4,8 +4,20 @@ use std::fmt::Debug;
 
 pub type BdkPsbt = bdk_wallet::bitcoin::Psbt;
 
-#[derive(Clone, PartialEq, Eq, Hash, uniffi::Object, From, Deref, AsRef, Into)]
-pub struct Psbt(BdkPsbt);
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    uniffi::Object,
+    From,
+    Deref,
+    AsRef,
+    Into,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct Psbt(pub BdkPsbt);
 
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, uniffi::Error, thiserror::Error, derive_more::Display,
