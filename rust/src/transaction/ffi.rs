@@ -22,7 +22,25 @@ use super::*;
     Deref,
     uniffi::Object,
 )]
-pub struct BitcoinTransaction(bitcoin::Transaction);
+pub struct BitcoinTransaction(pub bitcoin::Transaction);
+
+#[uniffi::export]
+impl BitcoinTransaction {
+    #[uniffi::method]
+    pub fn tx_id(&self) -> TxId {
+        self.0.compute_txid().into()
+    }
+
+    #[uniffi::method]
+    pub fn tx_id_hash(&self) -> String {
+        self.tx_id().0.to_raw_hash().to_string()
+    }
+
+    #[uniffi::method]
+    pub fn normalize_tx_id(&self) -> String {
+        self.0.compute_ntxid().to_string()
+    }
+}
 
 #[uniffi::export]
 impl TxId {

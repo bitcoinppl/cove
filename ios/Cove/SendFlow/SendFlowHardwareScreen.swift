@@ -299,7 +299,7 @@ struct SendFlowHardwareScreen: View {
                 sheetState = .init(.exportQr(qrs))
             } catch {
                 Log.error("Failed to convert PSBT to BBQR: \(error)")
-                // TODO: show alert
+                alertState = .init(.bbqrError(error.localizedDescription))
             }
         }
 

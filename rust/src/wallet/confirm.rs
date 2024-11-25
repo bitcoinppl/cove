@@ -1,6 +1,6 @@
 use crate::{
     psbt::Psbt,
-    transaction::{Amount, FeeRate},
+    transaction::{Amount, FeeRate, TxId},
 };
 
 use super::Address;
@@ -30,6 +30,18 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[uniffi::export]
 impl ConfirmDetails {
+    pub fn id(&self) -> TxId {
+        self.psbt.0.unsigned_tx.compute_txid().into()
+    }
+
+    pub fn id_hash(&self) -> String {
+        self.id().0.to_raw_hash().to_string()
+    }
+
+    pub fn normalized_id(&self) -> String {
+        self.psbt.0.unsigned_tx.compute_ntxid().to_string()
+    }
+
     pub fn spending_amount(&self) -> Amount {
         self.spending_amount
     }
@@ -84,7 +96,7 @@ impl ConfirmDetails {
                 min_split_number: 1,
                 max_split_number: 100,
                 min_version: Version::V01,
-                max_version: Version::V23,
+                max_version: Version::V15,
             },
         )
         .map_err(|e| ConfirmDetailsError::QrCodeCreation(e.to_string()))?;
