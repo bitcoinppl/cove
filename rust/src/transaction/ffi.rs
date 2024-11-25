@@ -1,8 +1,28 @@
+use derive_more::{
+    derive::{From, Into},
+    AsRef, Deref,
+};
 use jiff::ToSpan as _;
 use numfmt::Formatter;
 use rand::Rng as _;
 
 use super::*;
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    From,
+    Into,
+    AsRef,
+    Deref,
+    uniffi::Object,
+)]
+pub struct BitcoinTransaction(bitcoin::Transaction);
 
 #[uniffi::export]
 impl TxId {

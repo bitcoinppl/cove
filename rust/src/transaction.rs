@@ -1,9 +1,9 @@
 mod amount;
-mod ffi;
 mod sent_and_received;
 mod unit;
 
 pub mod fees;
+pub mod ffi;
 pub mod transaction_details;
 
 use std::{cmp::Ordering, sync::Arc};
