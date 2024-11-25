@@ -319,6 +319,7 @@ struct SendFlowHardwareScreen: View {
             SendFlowBbqrExport(qrs: qrs.map { QrCodeView(text: $0) })
                 .presentationDetents([.height(425), .height(600), .large])
                 .padding()
+                .padding(.top, 10)
         }
     }
 }

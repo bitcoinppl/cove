@@ -13,6 +13,7 @@ struct SendFlowBbqrExport: View {
     let startedAt: Date = .now
 
     // private
+    let every: TimeInterval = 0.250
     @State private var currentIndex = 0
 
     var body: some View {
@@ -27,8 +28,8 @@ struct SendFlowBbqrExport: View {
                 .padding(.top, 2)
                 .padding(.horizontal, 40)
 
-            TimelineView(.periodic(from: startedAt, by: 0.2)) { context in
-                let index = abs(Int(context.date.distance(to: startedAt) / 0.2) % qrs.count)
+            TimelineView(.periodic(from: startedAt, by: every)) { context in
+                let index = abs(Int(context.date.distance(to: startedAt) / every) % qrs.count)
                 qrs[index]
                     .onChange(of: index) { _, newIndex in
                         currentIndex = newIndex

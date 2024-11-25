@@ -81,8 +81,8 @@ impl ConfirmDetails {
                 encoding: Encoding::Zlib,
                 min_split_number: 1,
                 max_split_number: 100,
-                min_version: Version::V05,
-                max_version: Version::V20,
+                min_version: Version::V01,
+                max_version: Version::V23,
             },
         )
         .map_err(|e| ConfirmDetailsError::QrCodeCreation(e.to_string()))?;

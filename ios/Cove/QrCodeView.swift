@@ -27,7 +27,7 @@ struct QrCodeView: View {
         }
         
         filter.setValue(data, forKey: "inputMessage")
-        filter.setValue("L", forKey: "inputCorrectionLevel") // L = 7% error correction
+        filter.setValue("L", forKey: "inputCorrectionLevel")
         
         if let outputImage = filter.outputImage {
             if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
