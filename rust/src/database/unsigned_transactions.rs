@@ -17,7 +17,9 @@ pub const MAIN_TABLE: TableDefinition<TxId, Json<UnsignedTransactionRecord>> =
 pub const BY_WALLET_TABLE: TableDefinition<WalletId, Vec<TxId>> =
     TableDefinition::new("unsigned_transactions_by_wallet");
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize, uniffi::Object,
+)]
 pub struct UnsignedTransactionRecord {
     pub wallet_id: WalletId,
     pub tx_id: TxId,
@@ -25,7 +27,7 @@ pub struct UnsignedTransactionRecord {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Object)]
 pub struct UnsignedTransactionsTable {
     db: Arc<redb::Database>,
 }
@@ -37,6 +39,9 @@ pub enum UnsignedTransactionsTableError {
 
     #[error("failed to get unconfirmed transaction: {0}")]
     Read(String),
+
+    #[error("no record found")]
+    NoRecordFound,
 }
 
 impl UnsignedTransactionsTable {
@@ -45,6 +50,7 @@ impl UnsignedTransactionsTable {
         write_txn
             .open_table(MAIN_TABLE)
             .expect("failed to create table");
+
         write_txn
             .open_table(BY_WALLET_TABLE)
             .expect("failed to create table");
@@ -52,7 +58,86 @@ impl UnsignedTransactionsTable {
         Self { db }
     }
 
-    pub fn get(&self, key: TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
+    pub fn save_tx(&self, tx_id: TxId, record: UnsignedTransactionRecord) -> Result<(), Error> {
+        let wallet_id = record.wallet_id.clone();
+
+        // get all the tx ids for the wallet
+        let mut wallet_tx_ids = self.get_tx_ids_for_wallet_id(&wallet_id)?;
+
+        // save the tx id for the wallet
+        wallet_tx_ids.push(tx_id);
+
+        // save the wallet tx ids
+        self.set_by_wallet_id(wallet_id, wallet_tx_ids)?;
+
+        // save the tx id
+        self.set(tx_id, record)?;
+
+        Ok(())
+    }
+
+    pub fn delete_tx(&self, tx_id: &TxId) -> Result<(), Error> {
+        let record = self
+            .get(tx_id)?
+            .ok_or(UnsignedTransactionsTableError::NoRecordFound)?;
+
+        // remove the tx id from the wallet
+        {
+            let wallet_id = &record.wallet_id;
+            let mut wallet_tx_ids = self.get_tx_ids_for_wallet_id(wallet_id)?;
+            wallet_tx_ids.retain(|id| &id != &tx_id);
+            self.set_by_wallet_id(wallet_id.clone(), wallet_tx_ids)?;
+        }
+
+        // delete the actual tx id
+        self.delete_tx_id(tx_id)?;
+
+        Ok(())
+    }
+
+    pub fn get_by_wallet_id(
+        &self,
+        key: &WalletId,
+    ) -> Result<Vec<UnsignedTransactionRecord>, Error> {
+        let ids = self.get_tx_ids_for_wallet_id(key)?;
+
+        let records = ids
+            .into_iter()
+            .map(|id| self.get(&id))
+            .filter_map(|record| match record {
+                Ok(Some(record)) => Some(Ok(record)),
+                Ok(None) => None,
+                Err(e) => Some(Err(e)),
+            })
+            .collect::<Result<Vec<UnsignedTransactionRecord>, _>>()?;
+
+        Ok(records)
+    }
+
+    fn delete_tx_id(&self, key: &TxId) -> Result<(), Error> {
+        let write_txn = self
+            .db
+            .begin_write()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        {
+            let mut table = write_txn
+                .open_table(MAIN_TABLE)
+                .map_err(|error| Error::TableAccess(error.to_string()))?;
+
+            table
+                .remove(key)
+                .map_err(|error| UnsignedTransactionsTableError::Save(error.to_string()))?;
+        }
+
+        write_txn
+            .commit()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        Ok(())
+    }
+
+    fn get(&self, key: &TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
         let read_txn = self
             .db
             .begin_read()
@@ -68,6 +153,25 @@ impl UnsignedTransactionsTable {
             .map(|value| value.value());
 
         Ok(value)
+    }
+
+    fn get_tx_ids_for_wallet_id(&self, key: &WalletId) -> Result<Vec<TxId>, Error> {
+        let read_txn = self
+            .db
+            .begin_read()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        let table = read_txn
+            .open_table(BY_WALLET_TABLE)
+            .map_err(|error| Error::TableAccess(error.to_string()))?;
+
+        let ids = table
+            .get(key)
+            .map_err(|error| UnsignedTransactionsTableError::Read(error.to_string()))?
+            .map(|value| value.value())
+            .unwrap_or_default();
+
+        Ok(ids)
     }
 
     pub fn set(&self, key: TxId, value: UnsignedTransactionRecord) -> Result<(), Error> {
@@ -92,7 +196,32 @@ impl UnsignedTransactionsTable {
 
         Ok(())
     }
+
+    fn set_by_wallet_id(&self, key: WalletId, value: Vec<TxId>) -> Result<(), Error> {
+        let write_txn = self
+            .db
+            .begin_write()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        {
+            let mut table = write_txn
+                .open_table(BY_WALLET_TABLE)
+                .map_err(|error| Error::TableAccess(error.to_string()))?;
+
+            table
+                .insert(key, value)
+                .map_err(|error| UnsignedTransactionsTableError::Save(error.to_string()))?;
+        }
+
+        write_txn
+            .commit()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        Ok(())
+    }
 }
+
+// MARK: redb serd/de impls
 
 impl redb::Key for TxId {
     fn compare(data1: &[u8], data2: &[u8]) -> Ordering {

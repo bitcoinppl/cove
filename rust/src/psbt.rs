@@ -1,4 +1,4 @@
-use crate::transaction::Amount;
+use crate::transaction::{Amount, TxId};
 use derive_more::{AsRef, Deref, From, Into};
 use std::fmt::Debug;
 
@@ -58,6 +58,11 @@ impl Psbt {
         })?;
 
         Ok(fee.into())
+    }
+
+    /// Get the transaction id of the unsigned transaction
+    pub fn tx_id(&self) -> TxId {
+        self.0.unsigned_tx.compute_txid().into()
     }
 }
 

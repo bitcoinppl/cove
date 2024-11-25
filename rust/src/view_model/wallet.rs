@@ -14,7 +14,7 @@ use tracing::{debug, error};
 
 use crate::{
     app::FfiApp,
-    database::{error::DatabaseError, Database},
+    database::{error::DatabaseError, unsigned_transactions::UnsignedTransactionRecord, Database},
     fiat::{client::FIAT_CLIENT, FiatCurrency},
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
@@ -229,6 +229,53 @@ impl RustWalletViewModel {
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
         Ok(fees.into())
+    }
+
+    #[uniffi::method]
+    pub fn save_unconfirmed_transaction(&self, details: Arc<ConfirmDetails>) -> Result<(), Error> {
+        let wallet_id = self.id.clone();
+        let tx_id = details.psbt.tx_id();
+        let db = Database::global();
+
+        let confirm_details = Arc::unwrap_or_clone(details);
+
+        // save the tx to the database
+        db.unconfirmed_transactions().save_tx(
+            tx_id,
+            UnsignedTransactionRecord {
+                wallet_id,
+                tx_id,
+                confirm_details,
+                created_at: jiff::Timestamp::now().as_second() as u64,
+            },
+        )?;
+
+        todo!()
+    }
+
+    #[uniffi::method]
+    pub fn get_unconfirmed_transactions(
+        &self,
+    ) -> Result<Vec<Arc<UnsignedTransactionRecord>>, Error> {
+        let wallet_id = &self.id;
+
+        let db = Database::global();
+        let txns = db.unconfirmed_transactions().get_by_wallet_id(&wallet_id)?;
+
+        let txns = txns
+            .into_iter()
+            .map(|txn| Arc::new(txn))
+            .collect::<Vec<Arc<UnsignedTransactionRecord>>>();
+
+        Ok(txns)
+    }
+
+    #[uniffi::method]
+    pub fn delete_unconfirmed_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
+        let db = Database::global();
+        db.unconfirmed_transactions().delete_tx(tx_id.as_ref())?;
+
+        Ok(())
     }
 
     #[uniffi::method]

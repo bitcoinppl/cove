@@ -172,6 +172,9 @@ struct SendFlowSetAmountScreen: View {
                     address: address,
                     feeRate: feeRate.feeRate()
                 )
+                
+                if case .cold = metadata.walletType {
+                }
 
                 let route =
                     switch metadata.walletType {
