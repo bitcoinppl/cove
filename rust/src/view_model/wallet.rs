@@ -255,7 +255,8 @@ impl RustWalletViewModel {
                 tx_id,
                 confirm_details,
                 created_at: jiff::Timestamp::now().as_second() as u64,
-            },
+            }
+            .into(),
         )?;
 
         Ok(())
@@ -270,7 +271,7 @@ impl RustWalletViewModel {
 
         let txns = txns
             .into_iter()
-            .map(|txn| Arc::new(txn))
+            .map(|txn| Arc::new(txn.into()))
             .collect::<Vec<Arc<UnsignedTransaction>>>();
 
         Ok(txns)

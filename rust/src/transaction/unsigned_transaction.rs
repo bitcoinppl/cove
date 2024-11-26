@@ -1,4 +1,7 @@
-use crate::wallet::{confirm::ConfirmDetails, metadata::WalletId};
+use crate::{
+    database::unsigned_transactions::UnsignedTransactionRecord,
+    wallet::{confirm::ConfirmDetails, metadata::WalletId},
+};
 
 use super::{Amount, TxId};
 
@@ -32,6 +35,28 @@ impl UnsignedTransaction {
 
     pub fn sending_amount(&self) -> Amount {
         self.confirm_details.sending_amount()
+    }
+}
+
+impl From<UnsignedTransactionRecord> for UnsignedTransaction {
+    fn from(record: UnsignedTransactionRecord) -> Self {
+        Self {
+            wallet_id: record.wallet_id,
+            tx_id: record.tx_id,
+            confirm_details: record.confirm_details,
+            created_at: record.created_at,
+        }
+    }
+}
+
+impl From<UnsignedTransaction> for UnsignedTransactionRecord {
+    fn from(txn: UnsignedTransaction) -> Self {
+        Self {
+            wallet_id: txn.wallet_id,
+            tx_id: txn.tx_id,
+            confirm_details: txn.confirm_details,
+            created_at: txn.created_at,
+        }
     }
 }
 

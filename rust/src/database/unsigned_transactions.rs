@@ -5,13 +5,13 @@ use redb::TableDefinition;
 
 use crate::{
     redb::Json,
-    transaction::{unsigned_transaction::UnsignedTransaction, TxId},
-    wallet::metadata::WalletId,
+    transaction::TxId,
+    wallet::{confirm::ConfirmDetails, metadata::WalletId},
 };
 
 use super::Error;
 
-pub const MAIN_TABLE: TableDefinition<TxId, Json<UnsignedTransaction>> =
+pub const MAIN_TABLE: TableDefinition<TxId, Json<UnsignedTransactionRecord>> =
     TableDefinition::new("unsigned_transactions");
 
 pub const BY_WALLET_TABLE: TableDefinition<WalletId, Vec<TxId>> =
@@ -34,6 +34,14 @@ pub enum UnsignedTransactionsTableError {
     NoRecordFound,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct UnsignedTransactionRecord {
+    pub wallet_id: WalletId,
+    pub tx_id: TxId,
+    pub confirm_details: ConfirmDetails,
+    pub created_at: u64,
+}
+
 impl UnsignedTransactionsTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create table if it doesn't exist
@@ -48,11 +56,11 @@ impl UnsignedTransactionsTable {
         Self { db }
     }
 
-    pub fn get_tx(&self, tx_id: &TxId) -> Result<Option<UnsignedTransaction>, Error> {
+    pub fn get_tx(&self, tx_id: &TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
         self.get(tx_id)
     }
 
-    pub fn save_tx(&self, tx_id: TxId, record: UnsignedTransaction) -> Result<(), Error> {
+    pub fn save_tx(&self, tx_id: TxId, record: UnsignedTransactionRecord) -> Result<(), Error> {
         let wallet_id = record.wallet_id.clone();
 
         // get all the tx ids for the wallet
@@ -89,7 +97,10 @@ impl UnsignedTransactionsTable {
         Ok(())
     }
 
-    pub fn get_by_wallet_id(&self, key: &WalletId) -> Result<Vec<UnsignedTransaction>, Error> {
+    pub fn get_by_wallet_id(
+        &self,
+        key: &WalletId,
+    ) -> Result<Vec<UnsignedTransactionRecord>, Error> {
         let ids = self.get_tx_ids_for_wallet_id(key)?;
 
         let records = ids
@@ -100,7 +111,7 @@ impl UnsignedTransactionsTable {
                 Ok(None) => None,
                 Err(e) => Some(Err(e)),
             })
-            .collect::<Result<Vec<UnsignedTransaction>, _>>()?;
+            .collect::<Result<Vec<UnsignedTransactionRecord>, _>>()?;
 
         Ok(records)
     }
@@ -128,7 +139,7 @@ impl UnsignedTransactionsTable {
         Ok(())
     }
 
-    fn get(&self, key: &TxId) -> Result<Option<UnsignedTransaction>, Error> {
+    fn get(&self, key: &TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
         let read_txn = self
             .db
             .begin_read()
@@ -165,7 +176,7 @@ impl UnsignedTransactionsTable {
         Ok(ids)
     }
 
-    pub fn set(&self, key: TxId, value: UnsignedTransaction) -> Result<(), Error> {
+    pub fn set(&self, key: TxId, value: UnsignedTransactionRecord) -> Result<(), Error> {
         let write_txn = self
             .db
             .begin_write()
