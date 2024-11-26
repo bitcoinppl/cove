@@ -9,6 +9,8 @@ import MijickPopupView
 import SwiftUI
 
 struct TransactionsCardView: View {
+    @Environment(WalletViewModel.self) var model
+
     let transactions: [Transaction]
     let unsignedTransactions: [UnsignedTransaction]
     let scanComplete: Bool
@@ -37,10 +39,20 @@ struct TransactionsCardView: View {
                 LazyVStack(alignment: .leading) {
                     ForEach(unsignedTransactions) { txn in
                         VStack(alignment: .leading) {
-                            Group {
-                                UnsignedTransactionView(txn: txn, metadata: metadata)
-                            }
-                            .padding(.vertical, 6)
+                            UnsignedTransactionView(txn: txn, metadata: metadata)
+                                .contentShape(
+                                    .contextMenuPreview,
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .inset(by: -6)
+                                )
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        try? model.rust.deleteUnsignedTransaction(txId: txn.id())
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                .padding(.vertical, 6)
 
                             Divider().opacity(0.7)
                         }
@@ -313,7 +325,13 @@ struct UnsignedTransactionView: View {
                 )
         }
         .onTapGesture {
-            navigate(RouteFactory().sendConfirm(id: metadata.id, details: txn.details()))
+            let hardwareExportRoute =
+                RouteFactory().sendHardwareExport(
+                    id: metadata.id,
+                    details: txn.details()
+                )
+
+            navigate(hardwareExportRoute)
         }
     }
 }
