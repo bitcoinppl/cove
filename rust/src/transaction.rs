@@ -5,6 +5,7 @@ mod unit;
 pub mod fees;
 pub mod ffi;
 pub mod transaction_details;
+pub mod unsigned_transaction;
 
 use std::{cmp::Ordering, sync::Arc};
 

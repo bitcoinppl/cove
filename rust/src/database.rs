@@ -57,7 +57,7 @@ impl Database {
         self.global_config.clone()
     }
 
-    pub fn unconfirmed_transactions(&self) -> UnsignedTransactionsTable {
+    pub fn unsigned_transactions(&self) -> UnsignedTransactionsTable {
         self.unsigned_transactions.clone()
     }
 }

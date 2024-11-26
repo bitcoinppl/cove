@@ -172,8 +172,9 @@ struct SendFlowSetAmountScreen: View {
                     address: address,
                     feeRate: feeRate.feeRate()
                 )
-                
+
                 if case .cold = metadata.walletType {
+                    try? model.rust.saveUnsignedTransaction(details: confirmDetails)
                 }
 
                 let route =
@@ -229,8 +230,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                           selectedFeeRate != nil,
-                           Address.isValid(address)
+                            selectedFeeRate != nil,
+                            Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -440,7 +441,8 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
-        let value = newValue
+        let value =
+            newValue
             .replacingOccurrences(of: ",", with: "")
             .removingLeadingZeros()
 
@@ -455,8 +457,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -638,10 +640,10 @@ struct SendFlowSetAmountScreen: View {
 
         guard
             let feeRateOptions = try? await model.rust
-            .feeRateOptionsWithTotalFee(
-                feeRateOptions: feeRateOptionsBase, amount: amount,
-                address: address
-            )
+                .feeRateOptionsWithTotalFee(
+                    feeRateOptions: feeRateOptionsBase, amount: amount,
+                    address: address
+                )
         else { return }
 
         await MainActor.run {
@@ -931,16 +933,14 @@ struct SendFlowSetAmountScreen: View {
         NavigationStack {
             let model = WalletViewModel(preview: "preview_only")
 
-            AsyncPreview {
-                SendFlowSetAmountScreen(
-                    id: WalletId(),
-                    model: model,
-                    address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
-                )
-                .environment(model)
-                .environment(MainViewModel())
-                .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
-            }
+            SendFlowSetAmountScreen(
+                id: WalletId(),
+                model: model,
+                address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
+            )
+            .environment(model)
+            .environment(MainViewModel())
+            .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
         }
     }
 }
@@ -950,16 +950,14 @@ struct SendFlowSetAmountScreen: View {
         NavigationStack {
             let model = WalletViewModel(preview: "preview_only")
 
-            AsyncPreview {
-                SendFlowSetAmountScreen(
-                    id: WalletId(),
-                    model: model,
-                    address: ""
-                )
-                .environment(model)
-                .environment(MainViewModel())
-                .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
-            }
+            SendFlowSetAmountScreen(
+                id: WalletId(),
+                model: model,
+                address: ""
+            )
+            .environment(model)
+            .environment(MainViewModel())
+            .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
         }
     }
 }
