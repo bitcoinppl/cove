@@ -53,12 +53,14 @@ struct SendFlowBbqrExport: View {
 }
 
 #Preview {
-    SendFlowBbqrExport(qrs: [
-        QrCodeView(text: "hello"),
-        QrCodeView(text: "world"),
-        QrCodeView(text: "signal"),
-        QrCodeView(text: "baby"),
-        QrCodeView(text: "speaker")
-    ])
-    .padding()
+    AsyncPreview {
+        SendFlowBbqrExport(qrs: [
+            QrCodeView(text: "hello"),
+            QrCodeView(text: "world"),
+            QrCodeView(text: "signal"),
+            QrCodeView(text: "baby"),
+            QrCodeView(text: "speaker")
+        ])
+        .padding()
+    }
 }

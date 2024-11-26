@@ -90,6 +90,12 @@ public extension SendRoute {
     }
 }
 
+extension UnsignedTransaction: Identifiable {
+    var ID: TxId {
+        id()
+    }
+}
+
 #if canImport(UIKit)
     extension View {
         func hideKeyboard() {
