@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch: {}
   push:
     branches:
       - master
@@ -20,6 +21,16 @@ jobs:
 
       - name: Run rustfmt
         run: cd rust && cargo fmt --all -- --check
+
+  swiftformat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run SwiftFormat
+        uses: docker://ghcr.io/nicklockwood/swiftformat:main
+        with:
+          args: --lint . --swiftversion 6
 
   test:
     strategy:
