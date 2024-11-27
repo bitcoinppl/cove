@@ -92,7 +92,7 @@ impl UnsignedTransactionsTable {
         {
             let wallet_id = &record.wallet_id;
             let mut wallet_tx_ids = self.get_tx_ids_for_wallet_id(wallet_id)?;
-            wallet_tx_ids.retain(|id| &id != &tx_id);
+            wallet_tx_ids.retain(|id| id != tx_id);
             self.set_by_wallet_id(wallet_id.clone(), wallet_tx_ids)?;
         }
 
@@ -256,7 +256,7 @@ impl UnsignedTransactionRecord {
 
     #[uniffi::method]
     pub fn tx_id(&self) -> TxId {
-        self.tx_id.clone()
+        self.tx_id
     }
 
     #[uniffi::method]
@@ -310,6 +310,6 @@ impl redb::Value for TxId {
     }
 
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new(&format!("{}", std::any::type_name::<TxId>()))
+        redb::TypeName::new(std::any::type_name::<TxId>())
     }
 }

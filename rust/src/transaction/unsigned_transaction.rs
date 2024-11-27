@@ -18,7 +18,7 @@ pub struct UnsignedTransaction {
 #[uniffi::export]
 impl UnsignedTransaction {
     pub fn id(&self) -> TxId {
-        self.tx_id.clone()
+        self.tx_id
     }
 
     pub fn label(&self) -> String {

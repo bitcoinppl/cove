@@ -267,7 +267,7 @@ impl RustWalletViewModel {
         let wallet_id = &self.id;
 
         let db = Database::global();
-        let txns = db.unsigned_transactions().get_by_wallet_id(&wallet_id)?;
+        let txns = db.unsigned_transactions().get_by_wallet_id(wallet_id)?;
 
         let txns = txns
             .into_iter()
