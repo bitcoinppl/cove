@@ -5,6 +5,7 @@ pub mod error;
 pub mod global_cache;
 pub mod global_config;
 pub mod global_flag;
+pub mod unsigned_transactions;
 pub mod wallet;
 pub mod wallet_data;
 
@@ -13,6 +14,7 @@ use std::{path::PathBuf, sync::Arc};
 use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
+use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
 use once_cell::sync::OnceCell;
@@ -31,6 +33,7 @@ pub struct Database {
     pub global_config: GlobalConfigTable,
     pub global_cache: GlobalCacheTable,
     pub wallets: WalletsTable,
+    pub unsigned_transactions: UnsignedTransactionsTable,
 }
 
 impl Default for Database {
@@ -53,6 +56,10 @@ impl Database {
     pub fn global_config(&self) -> GlobalConfigTable {
         self.global_config.clone()
     }
+
+    pub fn unsigned_transactions(&self) -> UnsignedTransactionsTable {
+        self.unsigned_transactions.clone()
+    }
 }
 
 impl Database {
@@ -67,6 +74,7 @@ impl Database {
             let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
             let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
             let global_cache = GlobalCacheTable::new(db.clone(), &write_txn);
+            let unsigned_transactions = UnsignedTransactionsTable::new(db.clone(), &write_txn);
 
             write_txn
                 .commit()
@@ -77,6 +85,7 @@ impl Database {
                 global_flag,
                 global_config,
                 global_cache,
+                unsigned_transactions,
             }
         })
     }

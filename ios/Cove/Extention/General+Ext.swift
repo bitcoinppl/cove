@@ -85,7 +85,14 @@ public extension SendRoute {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
         case let .confirm(id: id, details: _): id
+        case let .hardwareExport(id: id, details: _): id
         }
+    }
+}
+
+extension UnsignedTransaction: Identifiable {
+    var ID: TxId {
+        id()
     }
 }
 

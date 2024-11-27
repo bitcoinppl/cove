@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc};
+use std::{cmp::Ordering, fmt::Display, sync::Arc};
 
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 use tracing::debug;
@@ -202,5 +202,11 @@ impl WalletsTable {
             .map_err(|error| Error::TableAccess(error.to_string()))?;
 
         Ok(table)
+    }
+}
+
+impl redb::Key for WalletId {
+    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
+        data1.cmp(data2)
     }
 }

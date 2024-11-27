@@ -110,77 +110,12 @@ struct SendFlowConfirmScreen: View {
                     }
                     .padding(.top, 8)
 
-                    AccountSection
+                    SendFlowAccountSection(model: model)
                         .padding(.top)
 
                     Divider()
 
-                    // To Address Section
-                    HStack {
-                        Text("Address")
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                            .foregroundColor(.primary)
-
-                        Spacer()
-                        Spacer()
-                        Spacer()
-                        Spacer()
-
-                        Text(
-                            details.sendingTo().spacedOut()
-                        )
-                        .lineLimit(4, reservesSpace: false)
-                        .font(.system(.footnote, design: .none))
-                        .fontWeight(.semibold)
-                        .padding(.leading, 60)
-                    }
-                    .padding(.top, 6)
-
-                    // Network Fee Section
-                    HStack {
-                        Text("Network Fee")
-                            .font(.footnote)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        HStack {
-                            Text(model.amountFmt(details.feeTotal()))
-                            Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                        }
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    }
-
-                    VStack(spacing: 15) {
-                        // Total Amount Section
-                        HStack {
-                            Text("You'll pay")
-                            Spacer()
-                            HStack {
-                                Text(model.amountFmt(details.spendingAmount()))
-                                Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                            }
-                        }
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-
-                        // They receive section
-                        HStack {
-                            Text("They'll receive")
-                            Spacer()
-                            HStack {
-                                Text(model.amountFmt(details.sendingAmount()))
-                                Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                            }
-                        }
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                    }
+                    SendFlowDetailsView(model: model, details: details)
                 }
             }
             .scrollIndicators(.hidden)
@@ -193,43 +128,6 @@ struct SendFlowConfirmScreen: View {
                 .padding(.bottom, 6)
                 .padding(.top, 20)
                 .background(Color.coveBg)
-        }
-    }
-
-    @ViewBuilder
-    var AccountSection: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Spacer()
-
-                Image(systemName: "bitcoinsign")
-                    .font(.title2)
-                    .foregroundColor(.orange)
-                    .padding(.trailing, 6)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(
-                        metadata.masterFingerprint?.asUppercase()
-                            ?? "No Fingerprint"
-                    )
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-
-                    Text(metadata.name)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-                }
-                .padding(.leading, 24)
-
-                Spacer()
-                Spacer()
-                Spacer()
-                Spacer()
-                Spacer()
-                Spacer()
-            }
-            .cornerRadius(12)
         }
     }
 }

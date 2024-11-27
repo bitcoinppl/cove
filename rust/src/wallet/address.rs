@@ -8,6 +8,7 @@ use bdk_chain::bitcoin::Address as BdkAddress;
 use bdk_chain::tx_graph::CanonicalTx;
 use bdk_chain::ConfirmationBlockTime;
 use bdk_wallet::{bitcoin::Transaction as BdkTransaction, AddressInfo as BdkAddressInfo};
+use serde::Deserialize;
 
 use crate::network::Network;
 use crate::transaction::Amount;
@@ -25,6 +26,7 @@ use crate::transaction::TransactionDirection;
     derive_more::AsRef,
     derive_more::Into,
     uniffi::Object,
+    serde::Serialize,
 )]
 pub struct Address(BdkAddress);
 
@@ -268,6 +270,20 @@ fn address_is_valid_for_network(address: String, network: Network) -> Result<(),
         .map_err(|_| Error::WrongNetwork { current: network })?;
 
     Ok(())
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let bdk_address = BdkAddress::from_str(&s)
+            .map_err(serde::de::Error::custom)?
+            .assume_checked();
+
+        Ok(Address(bdk_address))
+    }
 }
 
 #[cfg(test)]

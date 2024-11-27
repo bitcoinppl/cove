@@ -78,8 +78,6 @@ pub struct CachedFeeResponse {
 /// Convert fee response to fee rate options
 impl From<FeeResponse> for FeeRateOptions {
     fn from(fees: FeeResponse) -> Self {
-        println!("fee resp: {fees:?}");
-
         let (slow_rate, slow) = {
             // slow rate is the between economy and hour fees
             let rate = (fees.economy_fee + fees.hour_fee) / 2;

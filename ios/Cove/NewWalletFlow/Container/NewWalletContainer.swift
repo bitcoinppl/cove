@@ -19,10 +19,6 @@ struct NewWalletContainer: View {
             NewHotWalletContainer(route: route)
         case .coldWallet(.qrCode):
             QrCodeImportScreen()
-        case .coldWallet(.nfc):
-            Text("NFC import coming soon..")
-        case .coldWallet(.file):
-            Text("File import coming soon..")
         }
     }
 }

@@ -1,10 +1,11 @@
 mod amount;
-mod ffi;
 mod sent_and_received;
 mod unit;
 
 pub mod fees;
+pub mod ffi;
 pub mod transaction_details;
+pub mod unsigned_transaction;
 
 use std::{cmp::Ordering, sync::Arc};
 
@@ -70,7 +71,19 @@ pub struct UnconfirmedTransaction {
     pub fiat: Option<FiatAmount>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, uniffi::Object)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    uniffi::Object,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct TxId(pub BdkTxid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]

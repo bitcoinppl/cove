@@ -1,10 +1,23 @@
-use crate::transaction::Amount;
+use crate::transaction::{Amount, TxId};
 use derive_more::{AsRef, Deref, From, Into};
+use std::fmt::Debug;
 
 pub type BdkPsbt = bdk_wallet::bitcoin::Psbt;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object, From, Deref, AsRef, Into)]
-pub struct Psbt(BdkPsbt);
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    uniffi::Object,
+    From,
+    Deref,
+    AsRef,
+    Into,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct Psbt(pub BdkPsbt);
 
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, uniffi::Error, thiserror::Error, derive_more::Display,
@@ -28,13 +41,14 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[uniffi::export]
 impl Psbt {
+    #[uniffi::constructor(name = "new")]
+    pub fn try_new(data: Vec<u8>) -> Result<Self> {
+        let psbt = BdkPsbt::deserialize(&data).map_err(|e| PsbtError::Other(e.to_string()))?;
+        Ok(psbt.into())
+    }
+
     /// The virtual size of the transaction.
     pub fn weight(&self) -> u64 {
-        println!("weight {}", self.0.unsigned_tx.vsize());
-        println!("total f: {}", self.0.unsigned_tx.weight().to_vbytes_floor());
-        println!("total c: {}", self.0.unsigned_tx.weight().to_vbytes_ceil());
-        println!("total size: {}", self.0.unsigned_tx.total_size());
-
         self.0.unsigned_tx.vsize() as u64
     }
 
@@ -50,5 +64,21 @@ impl Psbt {
         })?;
 
         Ok(fee.into())
+    }
+
+    /// Get the transaction id of the unsigned transaction
+    pub fn tx_id(&self) -> TxId {
+        self.0.unsigned_tx.compute_txid().into()
+    }
+}
+
+impl Debug for Psbt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Psbt")
+            .field("weight", &self.weight())
+            .field("fee", &self.fee())
+            .field("num_inputs", &self.0.inputs.len())
+            .field("num_outputs", &self.0.outputs.len())
+            .finish()
     }
 }

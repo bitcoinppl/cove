@@ -1,5 +1,6 @@
 use bdk_wallet::bitcoin::Amount as BdkAmount;
 use numfmt::{Formatter, Precision};
+use serde::{Deserialize, Serialize};
 
 use super::Unit;
 #[derive(
@@ -11,6 +12,8 @@ use super::Unit;
     PartialOrd,
     Ord,
     Hash,
+    Serialize,
+    Deserialize,
     uniffi::Object,
     derive_more::From,
     derive_more::Into,

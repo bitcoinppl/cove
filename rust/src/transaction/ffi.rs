@@ -1,8 +1,97 @@
+use derive_more::{
+    derive::{From, Into},
+    AsRef, Deref,
+};
 use jiff::ToSpan as _;
 use numfmt::Formatter;
 use rand::Rng as _;
 
 use super::*;
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    From,
+    Into,
+    AsRef,
+    Deref,
+    uniffi::Object,
+)]
+pub struct BitcoinTransaction(pub bitcoin::Transaction);
+
+type Error = BitcoinTransactionError;
+type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum BitcoinTransactionError {
+    #[error("Failed to decode hex: {0}")]
+    HexDecodeError(String),
+
+    #[error("Failed to parse transaction: {0}")]
+    ParseTransactionError(String),
+}
+
+impl BitcoinTransaction {
+    pub fn try_from_data(data: &[u8]) -> Result<Self> {
+        // try dropping the first 64 bytes and try again, coldcard nfc transaction
+        // 32 bytes for the txid
+        // 32 bytes for the sha256 hash
+        let tx_bytes = &data[64..];
+        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(tx_bytes)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()));
+
+        if let Ok(transaction) = transaction {
+            return Ok(transaction.into());
+        }
+
+        // try again with the full data
+        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(data)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+
+        Ok(transaction.into())
+    }
+}
+
+#[uniffi::export]
+impl BitcoinTransaction {
+    #[uniffi::constructor(name = "new")]
+    pub fn try_from(tx_hex: String) -> Result<Self> {
+        let tx_hex = tx_hex.trim();
+
+        let tx_bytes = hex::decode(tx_hex.trim())
+            .map_err(|e| BitcoinTransactionError::HexDecodeError(e.to_string()))?;
+
+        let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&tx_bytes)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+
+        Ok(transaction.into())
+    }
+
+    #[uniffi::constructor(name = "tryFromData")]
+    pub fn _try_from_data(data: Vec<u8>) -> Result<Self> {
+        Self::try_from_data(&data)
+    }
+
+    #[uniffi::method]
+    pub fn tx_id(&self) -> TxId {
+        self.0.compute_txid().into()
+    }
+
+    #[uniffi::method]
+    pub fn tx_id_hash(&self) -> String {
+        self.tx_id().0.to_raw_hash().to_string()
+    }
+
+    #[uniffi::method]
+    pub fn normalize_tx_id(&self) -> String {
+        self.0.compute_ntxid().to_string()
+    }
+}
 
 #[uniffi::export]
 impl TxId {

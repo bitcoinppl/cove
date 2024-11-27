@@ -42,6 +42,8 @@ public struct SendRouteContainer: View {
                     SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "", amount: amount)
                 case let .confirm(id: id, details: details):
                     SendFlowConfirmScreen(id: id, model: model, details: details)
+                case let .hardwareExport(id: id, details: details):
+                    SendFlowHardwareScreen(id: id, model: model, details: details)
                 }
             }
             .environment(model)

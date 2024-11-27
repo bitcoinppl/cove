@@ -17,7 +17,6 @@ pub enum Route {
         reset_to: Arc<BoxedRoute>,
         after_millis: u32,
     },
-
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
@@ -50,8 +49,6 @@ pub enum HotWalletRoute {
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum ColdWalletRoute {
     QrCode,
-    File,
-    Nfc,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
@@ -68,6 +65,10 @@ pub enum SendRoute {
         id: WalletId,
         address: Option<Arc<Address>>,
         amount: Option<Arc<Amount>>,
+    },
+    HardwareExport {
+        id: WalletId,
+        details: Arc<ConfirmDetails>,
     },
     Confirm {
         id: WalletId,
@@ -215,14 +216,6 @@ impl RouteFactory {
         ColdWalletRoute::QrCode.into()
     }
 
-    pub fn file_import(&self) -> Route {
-        ColdWalletRoute::File.into()
-    }
-
-    pub fn nfc_import(&self) -> Route {
-        ColdWalletRoute::Nfc.into()
-    }
-
     pub fn load_and_reset_to(&self, reset_to: Route) -> Route {
         Self::load_and_reset_to_after(self, reset_to, 500)
     }
@@ -252,8 +245,22 @@ impl RouteFactory {
         Route::Send(send)
     }
 
+    pub fn send_hardware_export(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
+        let send = SendRoute::HardwareExport { id, details };
+        Route::Send(send)
+    }
+
     pub fn send(&self, send: SendRoute) -> Route {
         Route::Send(send)
+    }
+}
+
+impl Route {
+    pub fn to_debug_log(&self) -> String {
+        match self {
+            Self::Send(send_route) => format!("SendRoute: {:?}", send_route),
+            other => format!("{:?}", other),
+        }
     }
 }
 

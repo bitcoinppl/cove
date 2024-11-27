@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{
     hardware_export::HardwareExport,
     mnemonic::ParseMnemonic as _,
+    transaction::ffi::BitcoinTransaction,
     wallet::{address::AddressError, AddressWithNetwork},
 };
 
@@ -17,6 +18,7 @@ pub enum MultiFormat {
     Address(Arc<AddressWithNetwork>),
     HardwareExport(Arc<HardwareExport>),
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
+    Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
 }
 
 #[derive(Debug, uniffi::Error, thiserror::Error, derive_more::Display)]
@@ -35,9 +37,18 @@ type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
 
 impl MultiFormat {
     pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
-        let seed_qr = crate::seed_qr::SeedQr::try_from_data(data)?;
-        let mnemonic = seed_qr.into_mnemonic();
-        Ok(Self::Mnemonic(Arc::new(mnemonic.into())))
+        // try parsing a signed transaction
+        if let Ok(txn) = BitcoinTransaction::try_from_data(&data) {
+            return Ok(Self::Transaction(Arc::new(txn)));
+        }
+
+        // try parsing a seed qr
+        if let Ok(seed_qr) = crate::seed_qr::SeedQr::try_from_data(data) {
+            let mnemonic = seed_qr.into_mnemonic();
+            return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
+        }
+
+        Err(MultiFormatError::UnrecognizedFormat)
     }
 
     pub fn try_from_string(string: String) -> Result<Self> {
@@ -64,8 +75,14 @@ impl MultiFormat {
             return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
         }
 
+        // try to parse a mnemonic
         if let Ok(mnemonic) = string.as_str().parse_mnemonic() {
             return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
+        }
+
+        // try to parse a transaction
+        if let Ok(txn) = BitcoinTransaction::try_from(string) {
+            return Ok(Self::Transaction(Arc::new(txn)));
         }
 
         Err(MultiFormatError::UnrecognizedFormat)

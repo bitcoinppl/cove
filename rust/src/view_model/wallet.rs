@@ -10,7 +10,7 @@ use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::{
     app::FfiApp,
@@ -26,6 +26,7 @@ use crate::{
             client::{FeeResponse, FEES, FEE_CLIENT},
             FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
         },
+        unsigned_transaction::UnsignedTransaction,
         Amount, BdkAmount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
     },
     wallet::{
@@ -229,6 +230,59 @@ impl RustWalletViewModel {
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
         Ok(fees.into())
+    }
+
+    #[uniffi::method]
+    pub fn save_unsigned_transaction(&self, details: Arc<ConfirmDetails>) -> Result<(), Error> {
+        let wallet_id = self.id.clone();
+        let tx_id = details.psbt.tx_id();
+        let db = Database::global();
+
+        let confirm_details = Arc::unwrap_or_clone(details);
+
+        let db = db.unsigned_transactions();
+
+        if db.get_tx(&tx_id)?.is_some() {
+            warn!("tx {} already exists", tx_id.0.to_raw_hash().to_string());
+            return Ok(());
+        }
+
+        // save the tx to the database
+        db.save_tx(
+            tx_id,
+            UnsignedTransaction {
+                wallet_id,
+                tx_id,
+                confirm_details,
+                created_at: jiff::Timestamp::now().as_second() as u64,
+            }
+            .into(),
+        )?;
+
+        Ok(())
+    }
+
+    #[uniffi::method]
+    pub fn get_unsigned_transactions(&self) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
+        let wallet_id = &self.id;
+
+        let db = Database::global();
+        let txns = db.unsigned_transactions().get_by_wallet_id(wallet_id)?;
+
+        let txns = txns
+            .into_iter()
+            .map(|txn| Arc::new(txn.into()))
+            .collect::<Vec<Arc<UnsignedTransaction>>>();
+
+        Ok(txns)
+    }
+
+    #[uniffi::method]
+    pub fn delete_unsigned_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
+        let db = Database::global();
+        db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
+
+        Ok(())
     }
 
     #[uniffi::method]

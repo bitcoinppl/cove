@@ -173,7 +173,16 @@ struct SendFlowSetAmountScreen: View {
                     feeRate: feeRate.feeRate()
                 )
 
-                let route = RouteFactory().sendConfirm(id: id, details: confirmDetails)
+                if case .cold = metadata.walletType {
+                    try? model.rust.saveUnsignedTransaction(details: confirmDetails)
+                }
+
+                let route =
+                    switch metadata.walletType {
+                    case .hot: RouteFactory().sendConfirm(id: id, details: confirmDetails)
+                    case .cold: RouteFactory().sendHardwareExport(id: id, details: confirmDetails)
+                    }
+
                 app.pushRoute(route)
             } catch {
                 Log.error("unable to get confirm details: \(error)")
@@ -432,9 +441,10 @@ struct SendFlowSetAmountScreen: View {
             return
         }
 
-        let value = newValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+        let value =
+            newValue
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -821,10 +831,16 @@ struct SendFlowSetAmountScreen: View {
 
                 Spacer()
 
-                Image(systemName: "bitcoinsign")
-                    .font(.title2)
-                    .foregroundColor(.orange)
-                    .padding(.trailing, 6)
+                if metadata.walletType == .hot {
+                    Image(systemName: "bitcoinsign")
+                        .font(.title2)
+                        .foregroundColor(.orange)
+                        .padding(.trailing, 6)
+                }
+
+                if metadata.walletType == .cold {
+                    BitcoinShieldIcon(width: 24, color: .orange)
+                }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(
@@ -839,10 +855,7 @@ struct SendFlowSetAmountScreen: View {
                         .font(.footnote)
                         .fontWeight(.semibold)
                 }
-
-                Spacer()
             }
-            .cornerRadius(12)
         }
     }
 
@@ -920,16 +933,14 @@ struct SendFlowSetAmountScreen: View {
         NavigationStack {
             let model = WalletViewModel(preview: "preview_only")
 
-            AsyncPreview {
-                SendFlowSetAmountScreen(
-                    id: WalletId(),
-                    model: model,
-                    address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
-                )
-                .environment(model)
-                .environment(MainViewModel())
-                .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
-            }
+            SendFlowSetAmountScreen(
+                id: WalletId(),
+                model: model,
+                address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
+            )
+            .environment(model)
+            .environment(MainViewModel())
+            .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
         }
     }
 }
@@ -939,16 +950,14 @@ struct SendFlowSetAmountScreen: View {
         NavigationStack {
             let model = WalletViewModel(preview: "preview_only")
 
-            AsyncPreview {
-                SendFlowSetAmountScreen(
-                    id: WalletId(),
-                    model: model,
-                    address: ""
-                )
-                .environment(model)
-                .environment(MainViewModel())
-                .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
-            }
+            SendFlowSetAmountScreen(
+                id: WalletId(),
+                model: model,
+                address: ""
+            )
+            .environment(model)
+            .environment(MainViewModel())
+            .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
         }
     }
 }

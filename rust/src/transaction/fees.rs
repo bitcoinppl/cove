@@ -23,6 +23,8 @@ pub type BdkFeeRate = bitcoin_units::FeeRate;
     Deref,
     AsRef,
     Into,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 pub struct FeeRate(BdkFeeRate);
 

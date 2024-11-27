@@ -27,6 +27,8 @@ struct RouteView: View {
         .onChange(of: model.router.default) { _, newRoute in
             route = newRoute
         }
+        .tint(.blue)
+        .accentColor(.blue)
     }
 }
 

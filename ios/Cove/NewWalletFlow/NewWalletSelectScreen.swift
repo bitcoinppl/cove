@@ -165,17 +165,13 @@ struct NewWalletSelectScreen: View {
             isPresented: $isImporting,
             allowedContentTypes: [.plainText, .json]
         ) { result in
-            switch result {
-            case let .success(file):
-                do {
-                    let fileContents = try readFile(from: file)
-                    newWalletFromXpub(fileContents)
-                } catch {
-                    alert = AlertItem(
-                        type: .error(error.localizedDescription))
-                }
-            case let .failure(error):
-                alert = AlertItem(type: .error(error.localizedDescription))
+            do {
+                let file = try result.get()
+                let fileContents = try FileReader(for: file).read()
+                newWalletFromXpub(fileContents)
+            } catch {
+                alert = AlertItem(
+                    type: .error(error.localizedDescription))
             }
         }
         .alert(item: $alert) { alert in
@@ -205,20 +201,6 @@ struct NewWalletSelectScreen: View {
             alert = AlertItem(type: .error(error.localizedDescription))
         }
     }
-
-    func readFile(from url: URL) throws -> String {
-        guard url.startAccessingSecurityScopedResource() else {
-            throw FileReadError(
-                message: "Failed to access the file at \(url.path)")
-        }
-
-        defer { url.stopAccessingSecurityScopedResource() }
-        return try String(contentsOf: url, encoding: .utf8)
-    }
-}
-
-private struct FileReadError: Error {
-    let message: String
 }
 
 private struct AlertItem: Identifiable {

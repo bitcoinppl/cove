@@ -9,7 +9,10 @@ import MijickPopupView
 import SwiftUI
 
 struct TransactionsCardView: View {
+    @Environment(WalletViewModel.self) var model
+
     let transactions: [Transaction]
+    let unsignedTransactions: [UnsignedTransaction]
     let scanComplete: Bool
     let metadata: WalletMetadata
 
@@ -34,6 +37,27 @@ struct TransactionsCardView: View {
                 }
 
                 LazyVStack(alignment: .leading) {
+                    ForEach(unsignedTransactions) { txn in
+                        VStack(alignment: .leading) {
+                            UnsignedTransactionView(txn: txn, metadata: metadata)
+                                .contentShape(
+                                    .contextMenuPreview,
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .inset(by: -6)
+                                )
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        try? model.rust.deleteUnsignedTransaction(txId: txn.id())
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                                .padding(.vertical, 6)
+
+                            Divider().opacity(0.7)
+                        }
+                    }
+
                     ForEach(transactions) { txn in
                         TransactionRow(txn: txn, metadata: metadata)
                     }
@@ -55,6 +79,9 @@ struct TransactionsCardView: View {
             }
             .padding()
             .padding(.top, 5)
+        }
+        .onDisappear {
+            PopupManager.dismiss()
         }
     }
 }
@@ -109,11 +136,8 @@ struct ConfirmedTransactionView: View {
         }
 
         // fiat
-        if let fiatAmount = txn.fiatAmount() {
-            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
-        } else {
-            return privateShow("---")
-        }
+        guard let fiatAmount = txn.fiatAmount() else { return privateShow("---") }
+        return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
     }
 
     private func privateShow(_ text: String, placeholder: String = "*******") -> String {
@@ -127,6 +151,7 @@ struct ConfirmedTransactionView: View {
     var body: some View {
         HStack {
             TxnIcon(direction: txn.sentAndReceived().direction())
+
             VStack(alignment: .leading, spacing: 5) {
                 Text(txn.label())
                     .font(.subheadline)
@@ -156,12 +181,11 @@ struct ConfirmedTransactionView: View {
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
                     }
                 } catch {
-                    Log.error("Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())")
+                    Log.error(
+                        "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
+                    )
                 }
             }
-        }
-        .onDisappear {
-            PopupManager.dismiss()
         }
     }
 }
@@ -222,12 +246,92 @@ struct UnconfirmedTransactionView: View {
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
                     }
                 } catch {
-                    Log.error("Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())")
+                    Log.error(
+                        "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
+                    )
                 }
             }
         }
-        .onDisappear {
-            PopupManager.dismiss()
+    }
+}
+
+struct UnsignedTransactionView: View {
+    @Environment(\.navigate) private var navigate
+    @Environment(WalletViewModel.self) var model
+    @Environment(\.colorScheme) var colorScheme
+
+    // args
+    let txn: UnsignedTransaction
+    let metadata: WalletMetadata
+
+    // private
+    @State private var fiatAmount: Double? = nil
+
+    func privateShow(_ text: String, placeholder: String = "*******") -> String {
+        if !metadata.sensitiveVisible {
+            placeholder
+        } else {
+            text
+        }
+    }
+
+    private var amount: String {
+        // btc or sats
+        if case .btc = metadata.fiatOrBtc {
+            return privateShow(model.amountFmtUnit(txn.spendingAmount()))
+        }
+
+        // fiat
+        guard let fiatAmount else { return privateShow("$XX.XX USD") }
+        return privateShow(model.rust.displayFiatAmount(amount: fiatAmount))
+    }
+
+    var body: some View {
+        HStack {
+            Image(systemName: "lock.open.trianglebadge.exclamationmark")
+                .symbolRenderingMode(.multicolor)
+                .foregroundColor(.white)
+                .padding()
+                .frame(width: 50, height: 50)
+                .background(colorScheme == .dark ? .gray.opacity(0.35) : .primary.opacity(0.75))
+                .cornerRadius(6)
+                .padding(.trailing, 5)
+                .opacity(0.6)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(txn.label())
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary.opacity(0.4))
+
+                Text("Pending Signature")
+                    .font(.caption)
+                    .fontWeight(.regular)
+                    .foregroundStyle(.orange)
+                    .opacity(0.8)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing) {
+                Text(amount)
+            }
+        }
+        .task {
+            fiatAmount =
+                try? await model.rust.amountInFiat(
+                    amount: txn.spendingAmount(),
+                    currency: .usd
+                )
+        }
+        .onTapGesture {
+            let hardwareExportRoute =
+                RouteFactory().sendHardwareExport(
+                    id: metadata.id,
+                    details: txn.details()
+                )
+
+            navigate(hardwareExportRoute)
         }
     }
 }
@@ -259,6 +363,7 @@ private struct TxnIcon: View {
         Image(systemName: arrow)
             .foregroundColor(.white)
             .padding()
+            .frame(width: 50, height: 50)
             .background(iconColor)
             .cornerRadius(6)
             .padding(.trailing, 5)
@@ -269,6 +374,7 @@ private struct TxnIcon: View {
     AsyncPreview {
         TransactionsCardView(
             transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(0)),
+            unsignedTransactions: [],
             scanComplete: true,
             metadata: walletMetadataPreview()
         )
@@ -281,6 +387,7 @@ private struct TxnIcon: View {
         ScrollView {
             TransactionsCardView(
                 transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(1)),
+                unsignedTransactions: [],
                 scanComplete: false,
                 metadata: walletMetadataPreview()
             )
@@ -292,8 +399,13 @@ private struct TxnIcon: View {
 
 #Preview("Empty - Scanning") {
     AsyncPreview {
-        TransactionsCardView(transactions: [], scanComplete: false, metadata: walletMetadataPreview())
-            .environment(WalletViewModel(preview: "preview_only"))
+        TransactionsCardView(
+            transactions: [],
+            unsignedTransactions: [],
+            scanComplete: false,
+            metadata: walletMetadataPreview()
+        )
+        .environment(WalletViewModel(preview: "preview_only"))
     }
 }
 
@@ -301,6 +413,19 @@ private struct TxnIcon: View {
     AsyncPreview {
         TransactionsCardView(
             transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
+            unsignedTransactions: [],
+            scanComplete: true,
+            metadata: walletMetadataPreview()
+        )
+        .environment(WalletViewModel(preview: "preview_only"))
+    }
+}
+
+#Preview("With Unsigned Txns") {
+    AsyncPreview {
+        TransactionsCardView(
+            transactions: transactionsPreviewNew(confirmed: UInt8(3), unconfirmed: UInt8(1)),
+            unsignedTransactions: [UnsignedTransaction.previewNew(), UnsignedTransaction.previewNew()],
             scanComplete: true,
             metadata: walletMetadataPreview()
         )
@@ -315,6 +440,7 @@ private struct TxnIcon: View {
     return AsyncPreview {
         TransactionsCardView(
             transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
+            unsignedTransactions: [],
             scanComplete: true,
             metadata: metadata
         )
@@ -330,6 +456,7 @@ private struct TxnIcon: View {
         AsyncPreview {
             TransactionsCardView(
                 transactions: transactionsPreviewNew(confirmed: UInt8(10), unconfirmed: UInt8(2)),
+                unsignedTransactions: [],
                 scanComplete: true,
                 metadata: metadata
             )
@@ -344,19 +471,24 @@ private struct TxnIcon: View {
 
             Spacer()
             ScrollView {
-                TransactionsCardView(transactions: [], scanComplete: true, metadata: walletMetadataPreview())
-                    .background(
-                        UnevenRoundedRectangle(
-                            cornerRadii: .init(
-                                topLeading: 40,
-                                bottomLeading: 0,
-                                bottomTrailing: 0,
-                                topTrailing: 40
-                            )
+                TransactionsCardView(
+                    transactions: [],
+                    unsignedTransactions: [],
+                    scanComplete: true,
+                    metadata: walletMetadataPreview()
+                )
+                .background(
+                    UnevenRoundedRectangle(
+                        cornerRadii: .init(
+                            topLeading: 40,
+                            bottomLeading: 0,
+                            bottomTrailing: 0,
+                            topTrailing: 40
                         )
-                        .fill(.thickMaterial)
-                        .ignoresSafeArea()
                     )
+                    .fill(.thickMaterial)
+                    .ignoresSafeArea()
+                )
             }
             .ignoresSafeArea()
         }

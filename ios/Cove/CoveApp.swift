@@ -30,33 +30,36 @@ struct CoveApp: App {
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
-        let text = switch alert.item {
-        case .invalidWordGroup:
-            "The words from the file does not create a valid wallet. Please check the words and try again."
-        case .duplicateWallet:
-            "This wallet has already been imported! Taking you there now..."
-        case .errorImportingHotWallet:
-            "Error Importing Wallet"
-        case .importedSuccessfully:
-            "Wallet Imported Successfully"
-        case .unableToSelectWallet:
-            "Unable to select wallet, please try again"
-        case let .errorImportingHardwareWallet(error):
-            "Error: \(error)"
-        case .invalidFileFormat:
-            "The file or scanned code did not match any formats that Cove supports."
-        case let .addressWrongNetwork(
-            address: address, network: network, currentNetwork: currentNetwork
-        ):
-            "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
-        case let .noWalletSelected(address),
-             let .foundAddress(address, _):
-            String(address)
-        case .noCameraPermission:
-            "Please allow camera access in Settings to use this feature."
-        case let .failedToScanQr(error):
-            "Error: \(error)"
-        }
+        let text =
+            switch alert.item {
+            case .invalidWordGroup:
+                "The words from the file does not create a valid wallet. Please check the words and try again."
+            case .duplicateWallet:
+                "This wallet has already been imported! Taking you there now..."
+            case .errorImportingHotWallet:
+                "Error Importing Wallet"
+            case .importedSuccessfully:
+                "Wallet Imported Successfully"
+            case .unableToSelectWallet:
+                "Unable to select wallet, please try again"
+            case let .errorImportingHardwareWallet(error):
+                "Error: \(error)"
+            case .invalidFileFormat:
+                "The file or scanned code did not match any formats that Cove supports."
+            case let .addressWrongNetwork(
+                address: address, network: network, currentNetwork: currentNetwork
+            ):
+                "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
+            case let .noWalletSelected(address),
+                 let .foundAddress(address, _):
+                String(address)
+            case .noCameraPermission:
+                "Please allow camera access in Settings to use this feature."
+            case let .failedToScanQr(error):
+                "Error: \(error)"
+            case let .noUnsignedTransactionFound(txId):
+                "No unsigned transaction found for transaction \(txId.asHashString())"
+            }
 
         Text(text)
     }
@@ -101,7 +104,9 @@ struct CoveApp: App {
 
             if let id = Database().globalConfig().selectedWallet() {
                 Button("Send To Address") {
-                    let route = RouteFactory().sendSetAmount(id: id, address: address, amount: amount)
+                    let route = RouteFactory().sendSetAmount(
+                        id: id, address: address, amount: amount
+                    )
                     model.pushRoute(route)
                     model.alertState = .none
                 }
@@ -116,7 +121,7 @@ struct CoveApp: App {
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
-        case .failedToScanQr:
+        case .failedToScanQr, .noUnsignedTransactionFound:
             Button("OK") {
                 model.alertState = .none
             }
@@ -224,6 +229,26 @@ struct CoveApp: App {
         model.alertState = TaggedItem(.foundAddress(address, amount))
     }
 
+    func handleTransaction(_ transaction: BitcoinTransaction) {
+        Log.debug(
+            "Received BitcoinTransaction: \(transaction): \(transaction.txIdHash())"
+        )
+
+        let db = Database().unsignedTransactions()
+        let txnRecord = db.getTx(txId: transaction.txId())
+
+        guard let txnRecord else {
+            model.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            return
+        }
+
+        let route = RouteFactory().sendConfirm(
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails()
+        )
+
+        model.pushRoute(route)
+    }
+
     func handleFileOpen(_ url: URL) {
         let fileHandler = FileHandler(filePath: url.absoluteString)
 
@@ -236,6 +261,8 @@ struct CoveApp: App {
                 importColdWallet(export)
             case let .address(addressWithNetwork):
                 handleAddress(addressWithNetwork)
+            case let .transaction(txn):
+                handleTransaction(txn)
             }
         } catch {
             switch error {
@@ -263,7 +290,6 @@ struct CoveApp: App {
     func handleScannedCode(_ stringOrData: StringOrData) {
         do {
             let multiFormat = try stringOrData.toMultiFormat()
-            print("MULTI FORMAT: \(multiFormat)")
             switch multiFormat {
             case let .mnemonic(mnemonic):
                 importHotWallet(mnemonic.words())
@@ -271,6 +297,8 @@ struct CoveApp: App {
                 importColdWallet(export)
             case let .address(addressWithNetwork):
                 handleAddress(addressWithNetwork)
+            case let .transaction(transaction):
+                handleTransaction(transaction)
             }
         } catch {
             switch error {
@@ -359,6 +387,12 @@ struct CoveApp: App {
         handleScannedCode(StringOrData(scannedMessage))
     }
 
+    func onChangeNfcData(_: Data?, _ scannedMessage: Data?) {
+        guard let scannedMessage else { return }
+        if scannedMessage.isEmpty { return }
+        handleScannedCode(StringOrData(scannedMessage))
+    }
+
     var body: some Scene {
         WindowGroup {
             BodyView
@@ -375,6 +409,7 @@ struct CoveApp: App {
                 .onChange(of: scannedCode, onChangeQr)
                 // NFC scanning
                 .onChange(of: model.nfcReader.scannedMessage, onChangeNfc)
+                .onChange(of: model.nfcReader.scannedMessageData, onChangeNfcData)
                 .alert(
                     model.alertState?.item.title() ?? "Alert",
                     isPresented: showingAlert,

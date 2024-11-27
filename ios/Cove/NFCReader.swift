@@ -46,7 +46,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
     func resetReader() {
         Log.debug("reset reader")
-        scannedMessage = nil
         reader = FfiNfcReader()
         readBytes = Data()
         currentBlock = 0
@@ -111,7 +110,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 self.retries = 0
 
                 // is resumable set the currentBlock to how much data we already have
-                let data = data.flatMap { $0 }
+                let data = data.flatMap(\.self)
                 if (try? self.reader.isResumeable(data: Data(data))) != nil {
                     Log.info("Resuming from block: \(self.currentBlock)")
                 } else {
@@ -151,7 +150,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     self.readingMessage = self.readingMessage.appending(".")
                     session.alertMessage = self.readingMessage
 
-                    let dataChunk = data.flatMap { $0 }
+                    let dataChunk = data.flatMap(\.self)
                     self.currentBlock = self.currentBlock + self.blocksToRead
 
                     self.retries = 0
@@ -198,17 +197,27 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     private func parseAndHandleResult(session: NFCTagReaderSession) -> ParsingState {
         switch Result(catching: { try self.reader.parse(data: self.readBytes) }) {
         case let .success(.incomplete(result)):
+            Log.debug("succesfully scanned incomplete record")
             messageInfo = result.messageInfo
             readBytes = result.leftOverBytes
             return .incomplete
 
         case let .success(.complete(_, records)):
+            Log.debug("succesfully scanned records \(records)")
             resetReader()
+
             scannedMessage = reader.stringFromRecord(record: records.first!)
             if scannedMessage == nil {
+                Log.debug("scannedMessage string is empty")
                 if case let .data(data) = records.first?.payload {
+                    Log.debug("found scanned message data \(data)")
                     scannedMessageData = data
                 }
+            }
+
+            if records.count > 1 {
+                Log.debug("more than one record found, take all non text data")
+                scannedMessageData = reader.dataFromRecords(records: records)
             }
 
             session.invalidate()
@@ -256,22 +265,22 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         Log.debug("processing NDEF message, \(message)")
         var _message = ""
 
-        print("num of records: \(message.records.count)")
+        Log.debug("num of records: \(message.records.count)")
 
         for record in message.records {
-            print("Record type: \(record.typeNameFormat)")
+            Log.debug("Record type: \(record.typeNameFormat)")
             if let type = String(data: record.type, encoding: .utf8) {
                 _message += "\(type): "
-                print("Type: \(type)")
+                Log.debug("Type: \(type)")
             }
             if let payload = String(data: record.payload, encoding: .utf8) {
                 _message += "\(payload)\n"
-                print("Payload: \(payload)")
+                Log.debug("Payload: \(payload)")
             }
 
-            print("ID: \(record.identifier)")
+            Log.debug("ID: \(record.identifier)")
             _message += "----\n"
-            print("---")
+            Log.debug("---")
         }
 
         scannedMessage = _message
