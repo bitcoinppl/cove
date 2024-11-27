@@ -42,12 +42,24 @@ impl FfiNfcReader {
     }
 
     #[uniffi::method]
-    // TODO: need to handle messages with multiple records
     pub fn string_from_record(&self, record: NdefRecord) -> Option<String> {
         match record.payload {
             crate::cove_nfc::payload::NdefPayload::Text(text_payload) => Some(text_payload.text),
             crate::cove_nfc::payload::NdefPayload::Data(data) => String::from_utf8(data).ok(),
         }
+    }
+
+    #[uniffi::method]
+    pub fn data_from_records(&self, records: Vec<NdefRecord>) -> Vec<u8> {
+        records
+            .into_iter()
+            .map(|record| record.payload)
+            .filter_map(|payload| match payload {
+                crate::cove_nfc::payload::NdefPayload::Data(data) => Some(data),
+                _ => None,
+            })
+            .flatten()
+            .collect::<Vec<u8>>()
     }
 }
 

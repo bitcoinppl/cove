@@ -215,6 +215,11 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 }
             }
 
+            if records.count > 1 {
+                Log.debug("more than one record found, take all non text data")
+                scannedMessageData = reader.dataFromRecords(records: records)
+            }
+
             session.invalidate()
             return .complete
 

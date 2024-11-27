@@ -2068,6 +2068,14 @@ public convenience init(txHex: String)throws  {
     }
 
     
+public static func tryFromData(data: Data)throws  -> BitcoinTransaction  {
+    return try  FfiConverterTypeBitcoinTransaction.lift(try rustCallWithError(FfiConverterTypeBitcoinTransactionError.lift) {
+    uniffi_cove_fn_constructor_bitcointransaction_try_from_data(
+        FfiConverterData.lower(data),$0
+    )
+})
+}
+    
 
     
 open func normalizeTxId() -> String  {
@@ -4062,6 +4070,8 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
 
 public protocol FfiNfcReaderProtocol : AnyObject {
     
+    func dataFromRecords(records: [NdefRecord])  -> Data
+    
     func isResumeable(data: Data) throws 
     
     func isStarted()  -> Bool
@@ -4130,6 +4140,14 @@ public convenience init() {
 
     
 
+    
+open func dataFromRecords(records: [NdefRecord]) -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffinfcreader_data_from_records(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeNdefRecord.lower(records),$0
+    )
+})
+}
     
 open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTypeResumeError.lift) {
     uniffi_cove_fn_method_ffinfcreader_is_resumeable(self.uniffiClonePointer(),
@@ -20852,6 +20870,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_state() != 19551) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffinfcreader_data_from_records() != 32962) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffinfcreader_is_resumeable() != 21759) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21351,6 +21372,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_bitcointransaction_new() != 54397) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_bitcointransaction_try_from_data() != 37337) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_boxedroute_new() != 62486) {

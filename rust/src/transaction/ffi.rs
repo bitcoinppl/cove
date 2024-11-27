@@ -5,7 +5,6 @@ use derive_more::{
 use jiff::ToSpan as _;
 use numfmt::Formatter;
 use rand::Rng as _;
-use tracing::debug;
 
 use super::*;
 
@@ -43,13 +42,18 @@ impl BitcoinTransaction {
     pub fn try_from(tx_hex: String) -> Result<Self> {
         let tx_hex = tx_hex.trim();
 
-        // clean up coinkite nfc transaction
-        let tx_hex = tx_hex.replace("Signed Transaction: ", "");
-
         let tx_bytes = hex::decode(tx_hex.trim())
             .map_err(|e| BitcoinTransactionError::HexDecodeError(e.to_string()))?;
 
         let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&tx_bytes)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+
+        Ok(transaction.into())
+    }
+
+    #[uniffi::constructor]
+    pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
+        let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&data)
             .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
 
         Ok(transaction.into())
