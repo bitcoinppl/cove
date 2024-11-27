@@ -18,6 +18,7 @@ public enum AppAlertState: Equatable {
     case foundAddress(Address, Amount?)
     case noCameraPermission
     case failedToScanQr(error: String)
+    case noUnsignedTransactionFound(TxId)
 
     func title() -> String {
         switch self {
@@ -44,6 +45,8 @@ public enum AppAlertState: Equatable {
             "Camera Access is Required"
         case .failedToScanQr:
             "Failed to Scan QR"
+        case .noUnsignedTransactionFound:
+            "No Unsigned Transaction Found"
         }
     }
 }

@@ -57,6 +57,8 @@ struct CoveApp: App {
                 "Please allow camera access in Settings to use this feature."
             case let .failedToScanQr(error):
                 "Error: \(error)"
+            case let .noUnsignedTransactionFound(txId):
+                "No unsigned transaction found for transaction \(txId.asHashString())"
             }
 
         Text(text)
@@ -119,7 +121,7 @@ struct CoveApp: App {
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
-        case .failedToScanQr:
+        case .failedToScanQr, .noUnsignedTransactionFound:
             Button("OK") {
                 model.alertState = .none
             }
@@ -231,6 +233,20 @@ struct CoveApp: App {
         Log.debug(
             "Received BitcoinTransaction: \(transaction): \(transaction.txIdHash())"
         )
+
+        let db = Database().unsignedTransactions()
+        let txnRecord = db.getTx(txId: transaction.txId())
+
+        guard let txnRecord else {
+            model.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            return
+        }
+
+        let route = RouteFactory().sendConfirm(
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails()
+        )
+
+        model.pushRoute(route)
     }
 
     func handleFileOpen(_ url: URL) {

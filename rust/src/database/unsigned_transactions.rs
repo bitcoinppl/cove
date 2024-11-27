@@ -34,7 +34,9 @@ pub enum UnsignedTransactionsTableError {
     NoRecordFound,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize, uniffi::Object,
+)]
 pub struct UnsignedTransactionRecord {
     pub wallet_id: WalletId,
     pub tx_id: TxId,
@@ -176,7 +178,7 @@ impl UnsignedTransactionsTable {
         Ok(ids)
     }
 
-    pub fn set(&self, key: TxId, value: UnsignedTransactionRecord) -> Result<(), Error> {
+    fn set(&self, key: TxId, value: UnsignedTransactionRecord) -> Result<(), Error> {
         let write_txn = self
             .db
             .begin_write()
@@ -220,6 +222,38 @@ impl UnsignedTransactionsTable {
             .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Ok(())
+    }
+}
+
+// MARK: uniffi impls
+#[uniffi::export]
+impl UnsignedTransactionsTable {
+    #[uniffi::method(name = "getTx")]
+    pub fn _get_tx(&self, tx_id: Arc<TxId>) -> Option<Arc<UnsignedTransactionRecord>> {
+        self.get(&tx_id).ok().flatten().map(Arc::new)
+    }
+}
+
+#[uniffi::export]
+impl UnsignedTransactionRecord {
+    #[uniffi::method]
+    pub fn wallet_id(&self) -> WalletId {
+        self.wallet_id.clone()
+    }
+
+    #[uniffi::method]
+    pub fn tx_id(&self) -> TxId {
+        self.tx_id.clone()
+    }
+
+    #[uniffi::method]
+    pub fn confirm_details(&self) -> ConfirmDetails {
+        self.confirm_details.clone()
+    }
+
+    #[uniffi::method]
+    pub fn created_at(&self) -> u64 {
+        self.created_at
     }
 }
 
