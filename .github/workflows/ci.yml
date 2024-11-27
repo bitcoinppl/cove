@@ -23,14 +23,11 @@ jobs:
         run: cd rust && cargo fmt --all -- --check
 
   swiftformat:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Run SwiftFormat
-        uses: docker://ghcr.io/nicklockwood/swiftformat:main
-        with:
-          args: --lint . --swiftversion 6
+      - name: SwiftFormat
+        run: swiftformat --lint . --reporter github-actions-log --swiftversion 6
 
   test:
     strategy:
