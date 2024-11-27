@@ -22,6 +22,7 @@ private enum AlertState: Equatable {
     case bbqrError(String)
     case fileError(String)
     case nfcError(String)
+    case pasteError(String)
 }
 
 struct SendFlowHardwareScreen: View {
@@ -390,6 +391,23 @@ struct SendFlowHardwareScreen: View {
             isPresentingFilePicker = true
         }
 
+        Button("Paste") {
+            let code = UIPasteboard.general.string ?? ""
+            guard !code.isEmpty else {
+                alertState = .init(.pasteError("No text found on the clipboard."))
+                return
+            }
+
+            do {
+                let txnRecord = try getTxnRecordFromHex(code)
+                let route = RouteFactory()
+                    .sendConfirm(id: txnRecord.walletId(), details: txnRecord.confirmDetails())
+                app.pushRoute(route)
+            } catch {
+                alertState = .init(.pasteError(error.localizedDescription))
+            }
+        }
+
         Button("NFC") {
             nfcReader.scan()
         }
@@ -449,6 +467,12 @@ struct SendFlowHardwareScreen: View {
         case let .nfcError(error):
             return AlertBuilder(
                 title: "NFC Error",
+                message: error,
+                actions: singleOkCancel
+            )
+        case let .pasteError(error):
+            return AlertBuilder(
+                title: "Paste Error",
                 message: error,
                 actions: singleOkCancel
             )
