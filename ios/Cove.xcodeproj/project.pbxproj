@@ -33,6 +33,7 @@
 		AC1290312C4EE8A500E72ECF /* Result+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290302C4EE8A500E72ECF /* Result+Ext.swift */; };
 		AC1290332C4EF4EA00E72ECF /* MiddlePopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */; };
 		AC2822F92CDD59E700C403E0 /* Address+Ext.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2822F82CDD59E000C403E0 /* Address+Ext.swift */; };
+		AC286C0B2CF6E0DB00C6F47E /* FileReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC286C0A2CF6E0D700C6F47E /* FileReader.swift */; };
 		AC2B13532CA1EC1000C5C708 /* TaggedItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */; };
 		AC2B13582CA1F49A00C5C708 /* ScannerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13562CA1F49A00C5C708 /* ScannerViewController.swift */; };
 		AC2B13592CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */; };
@@ -137,6 +138,7 @@
 		AC1290302C4EE8A500E72ECF /* Result+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Result+Ext.swift"; sourceTree = "<group>"; };
 		AC1290322C4EF4EA00E72ECF /* MiddlePopupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddlePopupView.swift; sourceTree = "<group>"; };
 		AC2822F82CDD59E000C403E0 /* Address+Ext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Address+Ext.swift"; sourceTree = "<group>"; };
+		AC286C0A2CF6E0D700C6F47E /* FileReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileReader.swift; sourceTree = "<group>"; };
 		AC2B13522CA1EC0200C5C708 /* TaggedItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaggedItem.swift; sourceTree = "<group>"; };
 		AC2B13542CA1F49A00C5C708 /* AVCaptureDevice+bestForBuiltInCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AVCaptureDevice+bestForBuiltInCamera.swift"; sourceTree = "<group>"; };
 		AC2B13552CA1F49A00C5C708 /* CodeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeScanner.swift; sourceTree = "<group>"; };
@@ -451,6 +453,7 @@
 				048B2E5F01EEF26233C1161C /* ImportWalletViewModel.swift */,
 				AC08E3FC2CF4AD1700DF307D /* AlertBuilder.swift */,
 				AC73B5942CCEFC4C0003F537 /* QrCodeScanView.swift */,
+				AC286C0A2CF6E0D700C6F47E /* FileReader.swift */,
 				ACA4CBEB2C2328BE0008F63E /* Security.swift */,
 				AC34AC5B6A6EF5288E8B34DC /* WalletViewModel.swift */,
 				AC61B8F92C7E6976001B649A /* TransactionsDetailScreen.swift */,
@@ -636,6 +639,7 @@
 				AD998F28BCDE0FFFCEF64986 /* SettingsScreen.swift in Sources */,
 				1333E89ACE42F5331C4B7AEB /* SelectedWalletScreen.swift in Sources */,
 				D6C648A0942CE7443B0D52D3 /* NewWalletSelectScreen.swift in Sources */,
+				AC286C0B2CF6E0DB00C6F47E /* FileReader.swift in Sources */,
 				1F185905CB256BB39BA87EE1 /* NewHotWalletContainer.swift in Sources */,
 				E205EBB1A70E784E13268A5C /* HotWalletCreateScreen.swift in Sources */,
 				2344E4672757BE424B888B58 /* HotWalletImportScreen.swift in Sources */,

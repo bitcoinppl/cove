@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use eyre::Context as _;
-
 use crate::{
     hardware_export::HardwareExport,
     mnemonic::ParseMnemonic as _,
@@ -74,7 +72,7 @@ impl MultiFormat {
         }
 
         // try to parse a transaction
-        if let Ok(txn) = deserialize_transaction(&string) {
+        if let Ok(txn) = BitcoinTransaction::try_from(string) {
             return Ok(Self::Transaction(Arc::new(txn)));
         }
 
@@ -101,14 +99,6 @@ impl TryFrom<StringOrData> for MultiFormat {
             StringOrData::Data(data) => Self::try_from_data(data),
         }
     }
-}
-
-fn deserialize_transaction(tx_hex: &str) -> Result<BitcoinTransaction, eyre::Report> {
-    let tx_bytes = hex::decode(tx_hex).context("Failed to decode hex")?;
-    let transaction: bitcoin::Transaction =
-        bitcoin::consensus::deserialize(&tx_bytes).context("Failed to parse transaction")?;
-
-    Ok(transaction.into())
 }
 
 #[uniffi::export]

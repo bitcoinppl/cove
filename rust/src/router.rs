@@ -49,8 +49,6 @@ pub enum HotWalletRoute {
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
 pub enum ColdWalletRoute {
     QrCode,
-    File,
-    Nfc,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, From, uniffi::Enum)]
@@ -216,14 +214,6 @@ impl RouteFactory {
 
     pub fn qr_import(&self) -> Route {
         ColdWalletRoute::QrCode.into()
-    }
-
-    pub fn file_import(&self) -> Route {
-        ColdWalletRoute::File.into()
-    }
-
-    pub fn nfc_import(&self) -> Route {
-        ColdWalletRoute::Nfc.into()
     }
 
     pub fn load_and_reset_to(&self, reset_to: Route) -> Route {

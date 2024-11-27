@@ -2,6 +2,7 @@ use std::{cmp::Ordering, sync::Arc};
 
 use bitcoin_hashes::{sha256d::Hash, Hash as _};
 use redb::TableDefinition;
+use tracing::debug;
 
 use crate::{
     redb::Json,
@@ -21,6 +22,8 @@ pub const BY_WALLET_TABLE: TableDefinition<WalletId, Vec<TxId>> =
 pub struct UnsignedTransactionsTable {
     db: Arc<redb::Database>,
 }
+
+type Result<T, E = UnsignedTransactionsTableError> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum UnsignedTransactionsTableError {
@@ -230,7 +233,17 @@ impl UnsignedTransactionsTable {
 impl UnsignedTransactionsTable {
     #[uniffi::method(name = "getTx")]
     pub fn _get_tx(&self, tx_id: Arc<TxId>) -> Option<Arc<UnsignedTransactionRecord>> {
+        debug!("getTx: {tx_id:?}");
         self.get(&tx_id).ok().flatten().map(Arc::new)
+    }
+
+    #[uniffi::method(name = "getTxThrow")]
+    pub fn _get_tx_throw(&self, tx_id: Arc<TxId>) -> Result<Arc<UnsignedTransactionRecord>> {
+        debug!("getTxThrow: {tx_id:?}");
+        self.get(&tx_id)
+            .map_err(|e| UnsignedTransactionsTableError::Read(e.to_string()))?
+            .ok_or(UnsignedTransactionsTableError::NoRecordFound)
+            .map(Arc::new)
     }
 }
 

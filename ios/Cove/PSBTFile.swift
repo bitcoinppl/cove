@@ -34,4 +34,8 @@ extension UTType {
     static var psbt: UTType {
         UTType(exportedAs: "org.bitcoin.psbt")
     }
+
+    static var txn: UTType {
+        UTType(exportedAs: "org.bitcoin.transaction")
+    }
 }

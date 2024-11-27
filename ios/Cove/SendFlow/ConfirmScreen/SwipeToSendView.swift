@@ -8,6 +8,8 @@ import Foundation
 import SwiftUI
 
 struct SwipeToSendView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     @State private var offset: CGFloat = 0
     @State private var isDragging = false
     @State private var containerWidth = screenWidth
@@ -51,7 +53,7 @@ struct SwipeToSendView: View {
             HStack {
                 Spacer()
                 Text("Swipe to Send")
-                    .foregroundColor(.midnightBlue)
+                    .foregroundColor(colorScheme == .dark ? .white : .midnightBlue)
                     .fontWeight(.medium)
                     .opacity(fontOpacity)
 
@@ -81,7 +83,8 @@ struct SwipeToSendView: View {
                                 withAnimation {
                                     offset = maxOffset
                                 }
-                                // Add your send action here
+
+                                // TODO: Add your send action here
                             } else {
                                 withAnimation {
                                     offset = 0

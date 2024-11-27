@@ -5,6 +5,7 @@ use derive_more::{
 use jiff::ToSpan as _;
 use numfmt::Formatter;
 use rand::Rng as _;
+use tracing::debug;
 
 use super::*;
 
@@ -24,8 +25,36 @@ use super::*;
 )]
 pub struct BitcoinTransaction(pub bitcoin::Transaction);
 
+type Error = BitcoinTransactionError;
+type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum BitcoinTransactionError {
+    #[error("Failed to decode hex: {0}")]
+    HexDecodeError(String),
+
+    #[error("Failed to parse transaction: {0}")]
+    ParseTransactionError(String),
+}
+
 #[uniffi::export]
 impl BitcoinTransaction {
+    #[uniffi::constructor(name = "new")]
+    pub fn try_from(tx_hex: String) -> Result<Self> {
+        let tx_hex = tx_hex.trim();
+
+        // clean up coinkite nfc transaction
+        let tx_hex = tx_hex.replace("Signed Transaction: ", "");
+
+        let tx_bytes = hex::decode(tx_hex.trim())
+            .map_err(|e| BitcoinTransactionError::HexDecodeError(e.to_string()))?;
+
+        let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&tx_bytes)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+
+        Ok(transaction.into())
+    }
+
     #[uniffi::method]
     pub fn tx_id(&self) -> TxId {
         self.0.compute_txid().into()
