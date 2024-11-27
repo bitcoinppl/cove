@@ -41,6 +41,12 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[uniffi::export]
 impl Psbt {
+    #[uniffi::constructor(name = "new")]
+    pub fn try_new(data: Vec<u8>) -> Result<Self> {
+        let psbt = BdkPsbt::deserialize(&data).map_err(|e| PsbtError::Other(e.to_string()))?;
+        Ok(psbt.into())
+    }
+
     /// The virtual size of the transaction.
     pub fn weight(&self) -> u64 {
         self.0.unsigned_tx.vsize() as u64

@@ -6447,7 +6447,15 @@ open class Psbt:
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_cove_fn_clone_psbt(self.pointer, $0) }
     }
-    // No primary constructor declared for this class.
+public convenience init(data: Data)throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypePsbtError.lift) {
+    uniffi_cove_fn_constructor_psbt_new(
+        FfiConverterData.lower(data),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
 
     deinit {
         guard let pointer = pointer else {
@@ -21435,6 +21443,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_nodeselector_new() != 61659) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_psbt_new() != 25544) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_routefactory_new() != 4959) {

@@ -53,7 +53,16 @@ impl BitcoinTransaction {
 
     #[uniffi::constructor]
     pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
-        let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&data)
+        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(&data)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()));
+
+        if let Ok(transaction) = transaction {
+            return Ok(transaction.into());
+        }
+
+        // try dropping the first 64 bytes and try again, coldcard nfc transaction
+        let data = &data[64..];
+        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(data)
             .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
 
         Ok(transaction.into())

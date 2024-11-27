@@ -198,6 +198,9 @@ struct SendFlowHardwareScreen: View {
                 isPresented: confirmationDialogIsPresented,
                 actions: ConfirmationDialogView
             )
+            .onChange(of: nfcReader.scannedMessageData) { _, txn in
+                handleScannedData(txn)
+            }
             .fileImporter(
                 isPresented: $isPresentingFilePicker,
                 allowedContentTypes: [.plainText, .psbt, .txn],
@@ -221,11 +224,33 @@ struct SendFlowHardwareScreen: View {
         }
     }
     
+    func handleScannedData(_ txn: Data?) {
+        guard let txn else {
+            alertState = .init(.nfcError("No transaction found"))
+            return
+        }
+        
+        if txn.isEmpty {
+            alertState = .init(.nfcError("No transaction found, empty string"))
+            return
+        }
+        
+        do {
+            let bitcoinTransaction = try BitcoinTransaction.tryFromData(data: txn)
+            let db = Database().unsignedTransactions()
+            let txnRecord = try db.getTxThrow(txId: bitcoinTransaction.txId())
+            
+            let route = RouteFactory()
+                .sendConfirm(id: txnRecord.walletId(), details: txnRecord.confirmDetails())
+            
+            app.pushRoute(route)
+        } catch {
+            alertState = .init(.nfcError(error.localizedDescription))
+        }
+    }
     
     func getTxnRecordFromHex(_ hex: String) throws -> UnsignedTransactionRecord {
-        Log.debug("getTxnRecordFromHex: \(hex)")
         let bitcoinTransaction = try BitcoinTransaction(txHex: hex)
-        Log.debug("bitcoinTransaction: \(bitcoinTransaction)")
         let db = Database().unsignedTransactions()
         return try db.getTxThrow(txId: bitcoinTransaction.txId())
     }
