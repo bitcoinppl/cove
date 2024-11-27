@@ -84,11 +84,9 @@ struct SelectedWalletScreenInner: View {
 
     @ViewBuilder
     func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
-        let unsignedTxns = try? model.rust.getUnsignedTransactions()
-
         TransactionsCardView(
             transactions: transactions,
-            unsignedTransactions: unsignedTxns ?? [],
+            unsignedTransactions: model.unsignedTransactions,
             scanComplete: scanComplete,
             metadata: model.walletMetadata
         )

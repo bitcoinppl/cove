@@ -54,27 +54,8 @@ pub enum WalletViewModelReconcileMessage {
     UnknownError(String),
 
     WalletScannerResponse(ScannerResponse),
-}
 
-#[uniffi::export(callback_interface)]
-pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
-    /// Tells the frontend to reconcile the view model changes
-    fn reconcile(&self, message: WalletViewModelReconcileMessage);
-}
-
-#[derive(Clone, Debug, uniffi::Object)]
-pub struct RustWalletViewModel {
-    pub id: WalletId,
-    pub actor: Addr<WalletActor>,
-
-    // cache, metadata already exists in the database and in the actor state,  this cache makes it
-    // faster to access, but adds complexity to the code because we have to make sure its updated
-    // in all the places
-    pub metadata: Arc<RwLock<WalletMetadata>>,
-    pub reconciler: Sender<WalletViewModelReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
-    #[allow(dead_code)]
-    pub scanner: Option<Addr<WalletScanner>>,
+    UnsignedTransactionsChanged,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -101,6 +82,27 @@ pub enum WalletLoadState {
 pub enum WalletErrorAlert {
     NodeConnectionFailed(String),
     NoBalance,
+}
+
+#[uniffi::export(callback_interface)]
+pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
+    /// Tells the frontend to reconcile the view model changes
+    fn reconcile(&self, message: WalletViewModelReconcileMessage);
+}
+
+#[derive(Clone, Debug, uniffi::Object)]
+pub struct RustWalletViewModel {
+    pub id: WalletId,
+    pub actor: Addr<WalletActor>,
+
+    // cache, metadata already exists in the database and in the actor state,  this cache makes it
+    // faster to access, but adds complexity to the code because we have to make sure its updated
+    // in all the places
+    pub metadata: Arc<RwLock<WalletMetadata>>,
+    pub reconciler: Sender<WalletViewModelReconcileMessage>,
+    pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+    #[allow(dead_code)]
+    pub scanner: Option<Addr<WalletScanner>>,
 }
 
 pub type Error = WalletViewModelError;
@@ -259,6 +261,10 @@ impl RustWalletViewModel {
             .into(),
         )?;
 
+        self.reconciler
+            .send(WalletViewModelReconcileMessage::UnsignedTransactionsChanged)
+            .expect("failed to send update");
+
         Ok(())
     }
 
@@ -281,6 +287,10 @@ impl RustWalletViewModel {
     pub fn delete_unsigned_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
         let db = Database::global();
         db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
+
+        self.reconciler
+            .send(WalletViewModelReconcileMessage::UnsignedTransactionsChanged)
+            .expect("failed to send update");
 
         Ok(())
     }
