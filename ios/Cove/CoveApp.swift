@@ -387,7 +387,6 @@ struct CoveApp: App {
         handleScannedCode(StringOrData(scannedMessage))
     }
 
-
     func onChangeNfcData(_: Data?, _ scannedMessage: Data?) {
         guard let scannedMessage else { return }
         if scannedMessage.isEmpty { return }

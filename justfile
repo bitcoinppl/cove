@@ -49,6 +49,7 @@ ci:
     just test
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
+    swiftformat --lint . --swiftversion 6
 
 xcode-reset:
     killAll Xcode || true

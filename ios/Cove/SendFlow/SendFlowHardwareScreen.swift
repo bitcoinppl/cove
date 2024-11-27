@@ -26,46 +26,46 @@ private enum AlertState: Equatable {
 
 struct SendFlowHardwareScreen: View {
     @Environment(MainViewModel.self) private var app
-    
+
     let id: WalletId
     @State var model: WalletViewModel
     let details: ConfirmDetails
     let prices: PriceResponse? = nil
-    
+
     // private nfc
     let nfcWriter = NFCWriter()
     @State private var nfcReader = NFCReader()
-    
+
     // sheets, alerts, confirmations
     @State private var alertState: TaggedItem<AlertState>? = .none
     @State private var sheetState: TaggedItem<SheetState>? = .none
     @State private var confirmationState: TaggedItem<ConfirmationState>? = .none
-    
+
     // file import
     @State private var isPresentingFilePicker = false
-    
+
     var metadata: WalletMetadata {
         model.walletMetadata
     }
-    
+
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
             app.dispatch(action: .updateFiatPrices)
             return "---"
         }
-        
+
         let amount = details.sendingAmount().asBtc() * Double(prices.usd)
         return model.fiatAmountToString(amount)
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
-            
+
             SendFlowHeaderView(model: model, amount: model.balance.confirmed)
-            
+
             // MARK: CONTENT
-            
+
             ScrollView {
                 VStack(spacing: 24) {
                     // amount
@@ -74,11 +74,11 @@ struct SendFlowHardwareScreen: View {
                             Text("You're sending")
                                 .font(.headline)
                                 .fontWeight(.bold)
-                            
+
                             Spacer()
                         }
                         .padding(.top, 6)
-                        
+
                         HStack {
                             Text("The amount they will receive")
                                 .font(.footnote)
@@ -88,7 +88,7 @@ struct SendFlowHardwareScreen: View {
                         }
                     }
                     .padding(.top)
-                    
+
                     // Balance Section
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
@@ -96,7 +96,7 @@ struct SendFlowHardwareScreen: View {
                                 .font(.system(size: 48, weight: .bold))
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
-                            
+
                             Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                                 .padding(.vertical, 10)
                                 .padding(.horizontal, 16)
@@ -111,7 +111,7 @@ struct SendFlowHardwareScreen: View {
                                     } label: {
                                         Text("sats")
                                     }
-                                    
+
                                     Button {
                                         model.dispatch(
                                             action: .updateUnit(.btc))
@@ -130,31 +130,31 @@ struct SendFlowHardwareScreen: View {
                                 .offset(x: -16)
                         }
                         .offset(x: 32)
-                        
+
                         Text(fiatAmount)
                             .font(.title3)
                             .foregroundColor(.secondary)
                     }
                     .padding(.top, 8)
-                    
+
                     AccountSection.padding(.vertical)
-                    
+
                     Divider()
-                    
+
                     // MARK: To Address Section
-                    
+
                     HStack {
                         Text("Address")
                             .font(.footnote)
                             .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                             .foregroundColor(.primary)
-                        
+
                         Spacer()
                         Spacer()
                         Spacer()
                         Spacer()
-                        
+
                         Text(
                             details.sendingTo().spacedOut()
                         )
@@ -164,14 +164,14 @@ struct SendFlowHardwareScreen: View {
                         .padding(.leading, 60)
                     }
                     .padding(.vertical, 8)
-                    
+
                     Divider()
-                    
+
                     // sign Transaction Section
                     SignTransactionSection
-                    
+
                     Spacer()
-                    
+
                     // more details button
                     Button(action: { sheetState = .init(.details) }) {
                         Text("More details")
@@ -208,59 +208,59 @@ struct SendFlowHardwareScreen: View {
             )
         }
     }
-    
+
     func handleFileImport(result: Result<URL, Error>) {
         do {
             let file = try result.get()
             let fileContents = try FileReader(for: file).read()
-            
+
             let txnRecord = try getTxnRecordFromHex(fileContents)
             let route = RouteFactory()
                 .sendConfirm(id: txnRecord.walletId(), details: txnRecord.confirmDetails())
-            
+
             app.pushRoute(route)
         } catch {
             alertState = .init(.fileError(error.localizedDescription))
         }
     }
-    
+
     func handleScannedData(_ txn: Data?) {
         guard let txn else {
             alertState = .init(.nfcError("No transaction found"))
             return
         }
-        
+
         if txn.isEmpty {
             alertState = .init(.nfcError("No transaction found, empty string"))
             return
         }
-        
+
         do {
             let bitcoinTransaction = try BitcoinTransaction.tryFromData(data: txn)
             let db = Database().unsignedTransactions()
             let txnRecord = try db.getTxThrow(txId: bitcoinTransaction.txId())
-            
+
             let route = RouteFactory()
                 .sendConfirm(id: txnRecord.walletId(), details: txnRecord.confirmDetails())
-            
+
             app.pushRoute(route)
         } catch {
             alertState = .init(.nfcError(error.localizedDescription))
         }
     }
-    
+
     func getTxnRecordFromHex(_ hex: String) throws -> UnsignedTransactionRecord {
         let bitcoinTransaction = try BitcoinTransaction(txHex: hex)
         let db = Database().unsignedTransactions()
         return try db.getTxThrow(txId: bitcoinTransaction.txId())
     }
-    
+
     @ViewBuilder
     var AccountSection: some View {
         VStack {
             HStack {
                 BitcoinShieldIcon(width: 24, color: .orange)
-                
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text(
                         metadata.masterFingerprint?.asUppercase()
@@ -269,18 +269,18 @@ struct SendFlowHardwareScreen: View {
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.secondary)
-                    
+
                     Text(metadata.name)
                         .font(.footnote)
                         .fontWeight(.semibold)
                 }
                 .padding(.leading, 8)
-                
+
                 Spacer()
             }
         }
     }
-    
+
     @ViewBuilder
     var SignTransactionSection: some View {
         VStack(spacing: 17) {
@@ -289,10 +289,10 @@ struct SendFlowHardwareScreen: View {
                     .font(.footnote)
                     .fontWeight(.medium)
                     .foregroundColor(.secondary)
-                
+
                 Spacer()
             }
-            
+
             HStack {
                 Button(action: {
                     confirmationState = .init(.exportTxn)
@@ -306,9 +306,9 @@ struct SendFlowHardwareScreen: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
-                
+
                 Spacer()
-                
+
                 Button(action: {
                     confirmationState = .init(.importSignature)
                 }) {
@@ -324,9 +324,9 @@ struct SendFlowHardwareScreen: View {
             }
         }
     }
-    
+
     // MARK: Confirmation Dialog
-    
+
     var confirmationDialogIsPresented: Binding<Bool> {
         Binding(
             get: { confirmationState != .none },
@@ -335,7 +335,7 @@ struct SendFlowHardwareScreen: View {
             }
         )
     }
-    
+
     var confirmationDialogTitle: Text {
         switch confirmationState?.item {
         case .exportTxn: Text("Export Transaction")
@@ -343,7 +343,7 @@ struct SendFlowHardwareScreen: View {
         case .none: Text("")
         }
     }
-    
+
     @ViewBuilder
     func ConfirmationDialogView() -> some View {
         switch confirmationState?.item {
@@ -352,7 +352,7 @@ struct SendFlowHardwareScreen: View {
         case .none: EmptyView()
         }
     }
-    
+
     @ViewBuilder
     var ExportTransactionDialog: some View {
         Button("QR Code") {
@@ -364,11 +364,11 @@ struct SendFlowHardwareScreen: View {
                 alertState = .init(.bbqrError(error.localizedDescription))
             }
         }
-        
+
         Button("NFC") {
             nfcWriter.writeToTag(data: details.psbtBytes())
         }
-        
+
         ShareLink(
             item: PSBTFile(data: details.psbtBytes(), filename: "transaction.psbt"),
             preview: SharePreview(
@@ -379,24 +379,24 @@ struct SendFlowHardwareScreen: View {
             Text("More...")
         }
     }
-    
+
     @ViewBuilder
     var ImportTransactionDialog: some View {
         Button("QR") {
             app.sheetState = .init(.qr)
         }
-        
+
         Button("File") {
             isPresentingFilePicker = true
         }
-        
+
         Button("NFC") {
             nfcReader.scan()
         }
     }
-    
+
     // MARK: Sheet
-    
+
     @ViewBuilder
     private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
@@ -411,28 +411,28 @@ struct SendFlowHardwareScreen: View {
                 .padding(.top, 10)
         }
     }
-    
+
     // MARK: Alerts
-    
+
     var showingAlert: Binding<Bool> {
         Binding(
             get: { alertState != nil },
             set: { if !$0 { alertState = .none } }
         )
     }
-    
+
     private var alertTitle: String {
         guard let alertState else { return "Error" }
         return MyAlert(alertState).title
     }
-    
+
     private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
         let singleOkCancel = {
             Button("Ok", role: .cancel) {
                 alertState = .none
             }
         }
-        
+
         switch alert.item {
         case let .bbqrError(message):
             return AlertBuilder(
