@@ -32,25 +32,34 @@ struct WalletBalanceHeaderView: View {
         }
     }
 
-    private var balanceString: String {
+    private var primaryBalanceString: String {
         if !metadata.sensitiveVisible {
             return "************"
         }
 
         // fiat
         if metadata.fiatOrBtc == .fiat {
-            if let fiatAmount {
-                return model.rust.displayFiatAmount(amount: fiatAmount)
-            } else {
-                return ""
-            }
+            guard let fiatAmount else { return "" }
+            return model.rust.displayFiatAmount(amount: fiatAmount)
         }
 
         // btc or sats
-        return switch metadata.selectedUnit {
-        case .btc: balance.btcStringWithUnit()
-        case .sat: balance.satsStringWithUnit()
+        return model.amountFmtUnit(balance)
+    }
+
+    private var secondaryBalanceString: String {
+        if !metadata.sensitiveVisible {
+            return "************"
         }
+
+        // fiat
+        if metadata.fiatOrBtc == .btc {
+            guard let fiatAmount else { return "" }
+            return model.rust.displayFiatAmount(amount: fiatAmount)
+        }
+
+        // btc or sats
+        return model.amountFmtUnit(balance)
     }
 
     var eyeIcon: String {
@@ -74,43 +83,31 @@ struct WalletBalanceHeaderView: View {
     }
 
     var body: some View {
-        VStack {
-            HStack {
-                Picker(
-                    "Currency",
-                    selection: Binding(
-                        get: { metadata.selectedUnit },
-                        set: { updater(.updateUnit($0)) }
-                    )
-                ) {
-                    Text(String(Unit.btc)).tag(Unit.btc)
-                    Text(String(Unit.sat)).tag(Unit.sat)
+        VStack(spacing: 48) {
+            VStack(spacing: 6){
+                HStack {
+                    Text("Your Balance")
+                        .foregroundColor(.gray)
+                        .font(.subheadline)
+                        .padding(.leading, 2)
+                    
+                    Spacer()
                 }
-                .pickerStyle(SegmentedPickerStyle())
-                .frame(width: 120)
-
-                Spacer()
-
-                Image(systemName: eyeIcon)
-                    .foregroundColor(.gray)
-                    .onTapGesture {
-                        updater(.toggleSensitiveVisibility)
-                    }
+                
+                HStack {
+                    Text(primaryBalanceString)
+                        .foregroundStyle(.white)
+                        .font(.system(size: fontSize, weight: .bold))
+                    
+                    Spacer()
+                    
+                    Image(systemName: eyeIcon)
+                        .foregroundColor(.gray)
+                        .onTapGesture {
+                            updater(.toggleSensitiveVisibility)
+                        }
+                }
             }
-
-            HStack {
-                Text("Your Balance")
-                    .foregroundColor(.gray)
-                    .font(.subheadline)
-                    .padding(.leading, 2)
-
-                Spacer()
-            }
-
-            Text(balanceString)
-                .font(.system(size: fontSize, weight: .bold))
-                .padding(.top, 16)
-                .padding(.bottom, 32)
 
             HStack(spacing: 16) {
                 Button(action: showReceiveSheet) {
@@ -118,10 +115,11 @@ struct WalletBalanceHeaderView: View {
                         Image(systemName: "arrow.down.left")
                         Text("Receive")
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(accentColor)
+                    .padding(.vertical, 4)
+                    .background(Color.buttonPrimary)
                     .cornerRadius(8)
                 }
 
@@ -135,23 +133,29 @@ struct WalletBalanceHeaderView: View {
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.up.right")
-
                         Text("Send")
                     }
-                    .foregroundColor(accentColor)
+                    .foregroundColor(.primary)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.white)
+                    .padding(.vertical, 4)
+                    .background(Color.buttonPrimary)
                     .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(accentColor, lineWidth: 1)
-                    )
                 }
             }
+
         }
         .padding()
-        .background(Color(UIColor.systemGray6))
+        .padding(.vertical, 10)
+        .padding(.top, 70)
+        .background(
+            Image(.headerPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: 300, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+        )
+        .background(Color.midnightBlue)
         .onTapGesture {
             model.dispatch(action: .toggleFiatOrBtc)
         }
@@ -173,7 +177,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -192,7 +196,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -206,12 +210,12 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance:
-                Amount.fromSat(sats: 1_000_738),
+                    Amount.fromSat(sats: 1_000_738),
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -225,12 +229,12 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance:
-                Amount.fromSat(sats: 10_000_000_738),
+                    Amount.fromSat(sats: 10_000_000_738),
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -245,12 +249,12 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance:
-                Amount.fromSat(sats: 10_000_000_738),
+                    Amount.fromSat(sats: 10_000_000_738),
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }

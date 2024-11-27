@@ -173,10 +173,6 @@ struct SelectedWalletScreenInner: View {
 
     var body: some View {
         VStack {
-            VerifyReminder(
-                walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
-            )
-
             ScrollView {
                 VStack {
                     WalletBalanceHeaderView(
@@ -185,8 +181,13 @@ struct SelectedWalletScreenInner: View {
                         updater: updater,
                         showReceiveSheet: showReceiveSheet
                     )
-                    .cornerRadius(16)
-                    .padding()
+                    .clipped()
+                    .ignoresSafeArea(.all)
+                    
+                    
+                    VerifyReminder(
+                        walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
+                    )
 
                     Transactions
                         .environment(model)
@@ -222,10 +223,8 @@ struct SelectedWalletScreenInner: View {
                         }
                     }
                 }
-                .navigationTitle(model.walletMetadata.name)
                 .toolbarColorScheme(.dark, for: .navigationBar)
-                .toolbarBackground(model.walletMetadata.color.toColor(), for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbarBackground(.hidden, for: .navigationBar)
                 .sheet(item: $sheetState, content: SheetContent)
             }
             .refreshable {
@@ -233,7 +232,9 @@ struct SelectedWalletScreenInner: View {
                 let _ = try? await model.rust.forceUpdateHeight()
             }
         }
-        .onChange(of: model.walletMetadata.discoveryState) { _, newValue in setSheetState(newValue)
+        .ignoresSafeArea(edges: .top)
+        .onChange(of: model.walletMetadata.discoveryState) { _,
+            newValue in setSheetState(newValue)
         }
         .onAppear { setSheetState(model.walletMetadata.discoveryState) }
         .alert(
@@ -273,7 +274,9 @@ struct VerifyReminder: View {
 
 #Preview("Loaded Wallet") {
     AsyncPreview {
-        SelectedWalletScreenInner(model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        NavigationStack{
+            SelectedWalletScreenInner(model: WalletViewModel(preview: "preview_only"))
+                .environment(MainViewModel())
+        }
     }
 }

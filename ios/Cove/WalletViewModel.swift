@@ -67,10 +67,8 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
 
     func amountFmtUnit(_ amount: Amount) -> String {
         switch walletMetadata.selectedUnit {
-        case .btc:
-            amount.btcStringWithUnit()
-        case .sat:
-            amount.satsStringWithUnit()
+        case .btc: amount.btcStringWithUnit()
+        case .sat: amount.satsStringWithUnit()
         }
     }
 
