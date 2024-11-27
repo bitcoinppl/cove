@@ -59,7 +59,7 @@ struct SendFlowBbqrExport: View {
             QrCodeView(text: "world"),
             QrCodeView(text: "signal"),
             QrCodeView(text: "baby"),
-            QrCodeView(text: "speaker")
+            QrCodeView(text: "speaker"),
         ])
         .padding()
     }

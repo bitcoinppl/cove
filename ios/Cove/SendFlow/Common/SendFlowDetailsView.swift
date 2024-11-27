@@ -10,11 +10,11 @@ import SwiftUI
 struct SendFlowDetailsView: View {
     let model: WalletViewModel
     let details: ConfirmDetails
-    
+
     var metadata: WalletMetadata {
         model.walletMetadata
     }
-    
+
     var body: some View {
         VStack(spacing: 12) {
             // To Address Section
@@ -24,12 +24,12 @@ struct SendFlowDetailsView: View {
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
                     .foregroundColor(.primary)
-                
+
                 Spacer()
                 Spacer()
                 Spacer()
                 Spacer()
-                
+
                 Text(
                     details
                         .sendingTo()
@@ -41,16 +41,16 @@ struct SendFlowDetailsView: View {
                 .lineLimit(3)
             }
             .padding(.top, 6)
-            
+
             // Network Fee Section
             HStack {
                 Text("Network Fee")
                     .font(.footnote)
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
-                
+
                 Spacer()
-                
+
                 HStack {
                     Text(model.amountFmt(details.feeTotal()))
                     Text(metadata.selectedUnit == .sat ? "sats" : "btc")
@@ -60,7 +60,7 @@ struct SendFlowDetailsView: View {
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 10)
             }
-            
+
             // Total Amount Section
             HStack {
                 Text("You'll pay")
@@ -72,7 +72,7 @@ struct SendFlowDetailsView: View {
             }
             .font(.footnote)
             .fontWeight(.semibold)
-                
+
             // They receive section
             HStack {
                 Text("They'll receive")

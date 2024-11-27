@@ -111,7 +111,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 self.retries = 0
 
                 // is resumable set the currentBlock to how much data we already have
-                let data = data.flatMap { $0 }
+                let data = data.flatMap(\.self)
                 if (try? self.reader.isResumeable(data: Data(data))) != nil {
                     Log.info("Resuming from block: \(self.currentBlock)")
                 } else {
@@ -151,7 +151,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     self.readingMessage = self.readingMessage.appending(".")
                     session.alertMessage = self.readingMessage
 
-                    let dataChunk = data.flatMap { $0 }
+                    let dataChunk = data.flatMap(\.self)
                     self.currentBlock = self.currentBlock + self.blocksToRead
 
                     self.retries = 0
