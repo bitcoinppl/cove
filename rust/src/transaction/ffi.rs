@@ -36,6 +36,27 @@ pub enum BitcoinTransactionError {
     ParseTransactionError(String),
 }
 
+impl BitcoinTransaction {
+    pub fn try_from_data(data: &[u8]) -> Result<Self> {
+        // try dropping the first 64 bytes and try again, coldcard nfc transaction
+        // 32 bytes for the txid
+        // 32 bytes for the sha256 hash
+        let tx_bytes = &data[64..];
+        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(tx_bytes)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()));
+
+        if let Ok(transaction) = transaction {
+            return Ok(transaction.into());
+        }
+
+        // try again with the full data
+        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(data)
+            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+
+        Ok(transaction.into())
+    }
+}
+
 #[uniffi::export]
 impl BitcoinTransaction {
     #[uniffi::constructor(name = "new")]
@@ -51,24 +72,9 @@ impl BitcoinTransaction {
         Ok(transaction.into())
     }
 
-    #[uniffi::constructor]
-    pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
-        // try dropping the first 64 bytes and try again, coldcard nfc transaction
-        // 32 bytes for the txid
-        // 32 bytes for the sha256 hash
-        let tx_bytes = &data[64..];
-        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(tx_bytes)
-            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()));
-
-        if let Ok(transaction) = transaction {
-            return Ok(transaction.into());
-        }
-
-        // try again with the full data
-        let transaction = bitcoin::consensus::deserialize::<bitcoin::Transaction>(&data)
-            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
-
-        Ok(transaction.into())
+    #[uniffi::constructor(name = "tryFromData")]
+    pub fn _try_from_data(data: Vec<u8>) -> Result<Self> {
+        Self::try_from_data(&data)
     }
 
     #[uniffi::method]

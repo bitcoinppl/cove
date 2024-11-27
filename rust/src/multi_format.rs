@@ -37,9 +37,18 @@ type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
 
 impl MultiFormat {
     pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
-        let seed_qr = crate::seed_qr::SeedQr::try_from_data(data)?;
-        let mnemonic = seed_qr.into_mnemonic();
-        Ok(Self::Mnemonic(Arc::new(mnemonic.into())))
+        // try parsing a signed transaction
+        if let Ok(txn) = BitcoinTransaction::try_from_data(&data) {
+            return Ok(Self::Transaction(Arc::new(txn)));
+        }
+
+        // try parsing a seed qr
+        if let Ok(seed_qr) = crate::seed_qr::SeedQr::try_from_data(data) {
+            let mnemonic = seed_qr.into_mnemonic();
+            return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
+        }
+
+        Err(MultiFormatError::UnrecognizedFormat)
     }
 
     pub fn try_from_string(string: String) -> Result<Self> {

@@ -387,6 +387,13 @@ struct CoveApp: App {
         handleScannedCode(StringOrData(scannedMessage))
     }
 
+
+    func onChangeNfcData(_: Data?, _ scannedMessage: Data?) {
+        guard let scannedMessage else { return }
+        if scannedMessage.isEmpty { return }
+        handleScannedCode(StringOrData(scannedMessage))
+    }
+
     var body: some Scene {
         WindowGroup {
             BodyView
@@ -403,6 +410,7 @@ struct CoveApp: App {
                 .onChange(of: scannedCode, onChangeQr)
                 // NFC scanning
                 .onChange(of: model.nfcReader.scannedMessage, onChangeNfc)
+                .onChange(of: model.nfcReader.scannedData, onChangeNfcData)
                 .alert(
                     model.alertState?.item.title() ?? "Alert",
                     isPresented: showingAlert,
