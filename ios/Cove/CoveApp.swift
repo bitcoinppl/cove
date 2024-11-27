@@ -409,7 +409,7 @@ struct CoveApp: App {
                 .onChange(of: scannedCode, onChangeQr)
                 // NFC scanning
                 .onChange(of: model.nfcReader.scannedMessage, onChangeNfc)
-                .onChange(of: model.nfcReader.scannedData, onChangeNfcData)
+                .onChange(of: model.nfcReader.scannedMessageData, onChangeNfcData)
                 .alert(
                     model.alertState?.item.title() ?? "Alert",
                     isPresented: showingAlert,
