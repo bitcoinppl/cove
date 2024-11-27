@@ -1929,7 +1929,7 @@ open class BitcoinTransaction:
 
     public static func tryFromData(data: Data) throws -> BitcoinTransaction {
         try FfiConverterTypeBitcoinTransaction.lift(rustCallWithError(FfiConverterTypeBitcoinTransactionError.lift) {
-            uniffi_cove_fn_constructor_bitcointransaction_try_from_data(
+            uniffi_cove_fn_constructor_bitcointransaction_tryfromdata(
                 FfiConverterData.lower(data), $0
             )
         })
@@ -5285,6 +5285,129 @@ public func FfiConverterTypeMultiQr_lift(_ pointer: UnsafeMutableRawPointer) thr
 #endif
 public func FfiConverterTypeMultiQr_lower(_ value: MultiQr) -> UnsafeMutableRawPointer {
     FfiConverterTypeMultiQr.lower(value)
+}
+
+public protocol NdefRecordReaderProtocol: AnyObject {
+    func id() -> String?
+
+    func type() -> String?
+}
+
+open class NdefRecordReader:
+    NdefRecordReaderProtocol
+{
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
+        pointer = nil
+    }
+
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        try! rustCall { uniffi_cove_fn_clone_ndefrecordreader(self.pointer, $0) }
+    }
+
+    public convenience init(record: NdefRecord) {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_fn_constructor_ndefrecordreader_new(
+                    FfiConverterTypeNdefRecord.lower(record), $0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
+
+    deinit {
+        guard let pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_ndefrecordreader(pointer, $0) }
+    }
+
+    open func id() -> String? {
+        try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_fn_method_ndefrecordreader_id(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func type() -> String? {
+        try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_fn_method_ndefrecordreader_type_(self.uniffiClonePointer(), $0)
+        })
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNdefRecordReader: FfiConverter {
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = NdefRecordReader
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NdefRecordReader {
+        NdefRecordReader(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: NdefRecordReader) -> UnsafeMutableRawPointer {
+        value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecordReader {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if ptr == nil {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: NdefRecordReader, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefRecordReader_lift(_ pointer: UnsafeMutableRawPointer) throws -> NdefRecordReader {
+    try FfiConverterTypeNdefRecordReader.lift(pointer)
+}
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) -> UnsafeMutableRawPointer {
+    FfiConverterTypeNdefRecordReader.lower(value)
 }
 
 public protocol NfcConstProtocol: AnyObject {
@@ -18506,6 +18629,12 @@ private let initializationResult: InitializationResult = {
     if uniffi_cove_checksum_method_multiqr_total_parts() != 51119 {
         return InitializationResult.apiChecksumMismatch
     }
+    if uniffi_cove_checksum_method_ndefrecordreader_id() != 37849 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_method_ndefrecordreader_type_() != 27060 {
+        return InitializationResult.apiChecksumMismatch
+    }
     if uniffi_cove_checksum_method_nfcconst_bytes_per_block() != 35854 {
         return InitializationResult.apiChecksumMismatch
     }
@@ -18905,7 +19034,7 @@ private let initializationResult: InitializationResult = {
     if uniffi_cove_checksum_constructor_bitcointransaction_new() != 54397 {
         return InitializationResult.apiChecksumMismatch
     }
-    if uniffi_cove_checksum_constructor_bitcointransaction_try_from_data() != 37337 {
+    if uniffi_cove_checksum_constructor_bitcointransaction_tryfromdata() != 16116 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_boxedroute_new() != 62486 {
@@ -18960,6 +19089,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_multiqr_try_new_from_data() != 36957 {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if uniffi_cove_checksum_constructor_ndefrecordreader_new() != 36791 {
         return InitializationResult.apiChecksumMismatch
     }
     if uniffi_cove_checksum_constructor_nfcconst_new() != 22455 {
