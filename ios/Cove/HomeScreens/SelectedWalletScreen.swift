@@ -80,6 +80,7 @@ private enum SheetState: Equatable {
 }
 
 struct SelectedWalletScreenInner: View {
+    @Environment(\.safeAreaInsets) private var safeAreaInsets
     @Environment(\.colorScheme) private var colorScheme
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
@@ -92,6 +93,7 @@ struct SelectedWalletScreenInner: View {
     // private
     @State private var sheetState: TaggedItem<SheetState>? = nil
     @State private var showingCopiedPopup = true
+    @State private var shouldShowNavBar = false
 
     var metadata: WalletMetadata {
         model.walletMetadata
@@ -235,14 +237,21 @@ struct SelectedWalletScreenInner: View {
                     }
                 }
                 .toolbarColorScheme(.dark, for: .navigationBar)
-                .toolbarBackground(.hidden, for: .navigationBar)
+                .toolbarBackground(Color.midnightBlue.opacity(0.9), for: .navigationBar)
+                .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
                 .sheet(item: $sheetState, content: SheetContent)
             }
             .refreshable {
                 try? await model.rust.forceWalletScan()
                 let _ = try? await model.rust.forceUpdateHeight()
             }
-            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            }
+            .scrollIndicators(.hidden)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
+            } action: { _, pastTop in
+                shouldShowNavBar = pastTop
+            }
         }
         .ignoresSafeArea(edges: .top)
         .onChange(of: model.walletMetadata.discoveryState) { _,
@@ -253,7 +262,6 @@ struct SelectedWalletScreenInner: View {
             item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
             content: DisplayErrorAlert
         )
-        .scrollIndicators(.hidden)
         .environment(model)
     }
 }
