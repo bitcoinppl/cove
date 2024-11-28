@@ -17,10 +17,12 @@ struct RouteView: View {
                     .id(model.routeId)
             } else {
                 VStack {
-                    ActivityIndicatorView(isVisible: Binding.constant(true), type: .growingArc(.orange, lineWidth: 4))
-                        .frame(width: 75, height: 75)
-                        .padding(.bottom, 100)
-                        .foregroundColor(.orange)
+                    ActivityIndicatorView(
+                        isVisible: Binding.constant(true), type: .growingArc(.orange, lineWidth: 4)
+                    )
+                    .frame(width: 75, height: 75)
+                    .padding(.bottom, 100)
+                    .foregroundColor(.orange)
                 }
             }
         }
@@ -44,7 +46,7 @@ func routeToView(model: MainViewModel, route: Route) -> some View {
     case let .newWallet(route: route):
         NewWalletContainer(route: route)
     case let .selectedWallet(walletId):
-        SelectedWalletScreen(id: walletId)
+        SelectedWalletContainer(id: walletId)
     case let .secretWords(id: walletId):
         SecretWordsScreen(id: walletId)
     case let .transactionDetails(id: id, details: details):

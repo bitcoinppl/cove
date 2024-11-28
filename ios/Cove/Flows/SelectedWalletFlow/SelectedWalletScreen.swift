@@ -2,76 +2,11 @@
 //  SelectedWalletScreen.swift
 //  Cove
 //
-//  Created by Praveen Perera on 7/1/24.
+//  Created by Praveen Perera on 11/28/24.
 //
 
 import ActivityIndicatorView
 import SwiftUI
-
-struct SelectedWalletScreen: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(MainViewModel.self) private var app
-    @Environment(\.navigate) private var navigate
-
-    let id: WalletId
-    @State private var model: WalletViewModel? = nil
-
-    func loadModel() {
-        if model != nil { return }
-
-        do {
-            Log.debug("Getting wallet \(id)")
-            model = try app.getWalletViewModel(id: id)
-        } catch {
-            Log.error("Something went very wrong: \(error)")
-            navigate(Route.listWallets)
-        }
-    }
-
-    var body: some View {
-        Group {
-            if let model {
-                SelectedWalletScreenInner(model: model)
-                    .background(
-                        model.loadState == .loading ?
-                            LinearGradient(colors: [
-                                .black.opacity(colorScheme == .dark ? 0.9 : 0),
-                                .black.opacity(colorScheme == .dark ? 0.9 : 0),
-                            ], startPoint: .top, endPoint: .bottom) :
-                            LinearGradient(stops: [
-                                .init(color: .midnightBlue, location: 0.45),
-                                .init(color: colorScheme == .dark ? .black.opacity(0.9) : .clear, location: 0.55),
-                            ], startPoint: .top, endPoint: .bottom)
-                    )
-                    .background(Color.white)
-
-            } else {
-                Text("Loading...")
-            }
-        }
-        .onAppear {
-            loadModel()
-        }
-        .task {
-            // small delay and then start scanning wallet
-            if let model {
-                do {
-                    try? await Task.sleep(for: .milliseconds(400))
-                    try await model.rust.startWalletScan()
-                } catch {
-                    Log.error("Wallet Scan Failed \(error.localizedDescription)")
-                }
-            }
-        }
-        .onChange(of: model?.loadState) { _, loadState in
-            if case .loaded = loadState {
-                if let model {
-                    app.updateWalletVm(model)
-                }
-            }
-        }
-    }
-}
 
 private enum SheetState: Equatable {
     case receive
@@ -79,7 +14,7 @@ private enum SheetState: Equatable {
     case chooseAddressType([FoundAddress])
 }
 
-struct SelectedWalletScreenInner: View {
+struct SelectedWalletScreen: View {
     @Environment(\.safeAreaInsets) private var safeAreaInsets
     @Environment(\.colorScheme) private var colorScheme
     @Environment(MainViewModel.self) private var app
@@ -192,54 +127,65 @@ struct SelectedWalletScreenInner: View {
         sheetState = TaggedItem(.receive)
     }
 
+    @ViewBuilder
+    var MainContent: some View {
+        VStack(spacing: 0) {
+            WalletBalanceHeaderView(
+                balance: model.balance.confirmed,
+                metadata: model.walletMetadata,
+                updater: updater,
+                showReceiveSheet: showReceiveSheet
+            )
+            .clipped()
+            .ignoresSafeArea(.all)
+
+            VerifyReminder(
+                walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
+            )
+
+            Transactions
+                .environment(model)
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 10) {
+                    if metadata.walletType == .cold {
+                        BitcoinShieldIcon(width: 13, color: .white)
+                    }
+
+                    Text(metadata.name)
+                        .foregroundStyle(.white)
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                }
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 8).inset(by: -8))
+                .contextMenu {
+                    Button("Settings") {
+                        sheetState = .init(.settings)
+                    }
+                }
+            }
+
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button(action: {
+                    app.sheetState = .init(.qr)
+                }) {
+                    Image(systemName: "qrcode")
+                        .foregroundStyle(.white)
+                        .font(.callout)
+                }
+            }
+        }
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(Color.midnightBlue.opacity(0.9), for: .navigationBar)
+        .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
+        .sheet(item: $sheetState, content: SheetContent)
+    }
+
     var body: some View {
         VStack {
             ScrollView {
-                VStack(spacing: 0) {
-                    WalletBalanceHeaderView(
-                        balance: model.balance.confirmed,
-                        metadata: model.walletMetadata,
-                        updater: updater,
-                        showReceiveSheet: showReceiveSheet
-                    )
-                    .clipped()
-                    .ignoresSafeArea(.all)
-
-                    VerifyReminder(
-                        walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
-                    )
-
-                    Transactions
-                        .environment(model)
-                }
-                .toolbar {
-                    ToolbarItem(placement: .principal) {
-                        HStack(spacing: 10) {
-                            if metadata.walletType == .cold {
-                                BitcoinShieldIcon(width: 13, color: .white)
-                            }
-
-                            Text(metadata.name)
-                                .foregroundStyle(.white)
-                                .font(.callout)
-                                .fontWeight(.semibold)
-                        }
-                    }
-
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: {
-                            sheetState = TaggedItem(.settings)
-                        }) {
-                            Image(systemName: "gear")
-                                .foregroundStyle(.white)
-                                .font(.callout)
-                        }
-                    }
-                }
-                .toolbarColorScheme(.dark, for: .navigationBar)
-                .toolbarBackground(Color.midnightBlue.opacity(0.9), for: .navigationBar)
-                .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
-                .sheet(item: $sheetState, content: SheetContent)
+                MainContent
             }
             .refreshable {
                 try? await model.rust.forceWalletScan()
@@ -290,15 +236,10 @@ struct VerifyReminder: View {
     }
 }
 
-#Preview("Loading") {
-    SelectedWalletScreen(id: WalletId())
-        .environment(MainViewModel())
-}
-
-#Preview("Loaded Wallet") {
+#Preview {
     AsyncPreview {
         NavigationStack {
-            SelectedWalletScreenInner(model: WalletViewModel(preview: "preview_only"))
+            SelectedWalletScreen(model: WalletViewModel(preview: "preview_only"))
                 .environment(MainViewModel())
         }
     }
