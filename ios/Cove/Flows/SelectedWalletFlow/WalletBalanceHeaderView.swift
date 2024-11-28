@@ -40,7 +40,7 @@ struct WalletBalanceHeaderView: View {
 
         // fiat
         if metadata.fiatOrBtc == .fiat {
-            guard let fiatAmount else { return "" }
+            guard let fiatAmount else { return "$XX.XX" }
             return model.rust.displayFiatAmount(amount: fiatAmount)
         }
 
@@ -55,7 +55,7 @@ struct WalletBalanceHeaderView: View {
 
         // fiat
         if metadata.fiatOrBtc == .btc {
-            guard let fiatAmount else { return "" }
+            guard let fiatAmount else { return "$XX.XX" }
             return model.rust.displayFiatAmount(amount: fiatAmount)
         }
 
