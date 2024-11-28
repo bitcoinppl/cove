@@ -116,10 +116,12 @@ struct WalletBalanceHeaderView: View {
             .contextMenu {
                 Button("BTC") {
                     model.dispatch(action: .updateUnit(.btc))
+                    model.dispatch(action: .updateFiatOrBtc(.btc))
                 }
 
                 Button("SATS") {
                     model.dispatch(action: .updateUnit(.sat))
+                    model.dispatch(action: .updateFiatOrBtc(.btc))
                 }
             }
 
