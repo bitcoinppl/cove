@@ -142,7 +142,7 @@ struct WalletBalanceHeaderView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
-                    .background(Color.buttonPrimary)
+                    .background(Color.btnPrimary)
                     .cornerRadius(8)
                 }
 
@@ -155,7 +155,7 @@ struct WalletBalanceHeaderView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
-                    .background(Color.buttonPrimary)
+                    .background(Color.btnPrimary)
                     .cornerRadius(8)
                 }
             }
