@@ -245,6 +245,8 @@ struct SelectedWalletScreenInner: View {
                 try? await model.rust.forceWalletScan()
                 let _ = try? await model.rust.forceUpdateHeight()
             }
+            .onAppear {
+                UIRefreshControl.appearance().tintColor = UIColor.white
             }
             .scrollIndicators(.hidden)
             .onScrollGeometryChange(for: Bool.self) { geometry in
