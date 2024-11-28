@@ -84,7 +84,7 @@ struct WalletBalanceHeaderView: View {
     }
 
     var body: some View {
-        VStack(spacing: 26) {
+        VStack(spacing: 28) {
             VStack(spacing: 6) {
                 HStack {
                     Text(secondaryBalanceString)
@@ -161,8 +161,8 @@ struct WalletBalanceHeaderView: View {
             }
         }
         .padding()
-        .padding(.vertical, 26)
-        .padding(.top, safeAreaInsets.top + 25)
+        .padding(.vertical, 22)
+        .padding(.top, safeAreaInsets.top + 35)
         .background(
             Image(.headerPattern)
                 .resizable()
