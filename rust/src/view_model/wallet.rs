@@ -64,9 +64,11 @@ pub enum WalletViewModelAction {
     UpdateColor(WalletColor),
     UpdateUnit(Unit),
     UpdateFiatCurrency(FiatCurrency),
+    UpdateFiatOrBtc(FiatOrBtc),
     ToggleSensitiveVisibility,
     ToggleDetailsExpanded,
     ToggleFiatOrBtc,
+    ToggleFiatBtcPrimarySecondary,
     SelectCurrentWalletAddressType,
     SelectDifferentWalletAddressType(WalletAddressType),
 }
@@ -840,6 +842,36 @@ impl RustWalletViewModel {
                     FiatOrBtc::Btc => FiatOrBtc::Fiat,
                     FiatOrBtc::Fiat => FiatOrBtc::Btc,
                 };
+            }
+
+            WalletViewModelAction::UpdateFiatOrBtc(fiat_or_btc) => {
+                let mut metadata = self.metadata.write();
+                metadata.fiat_or_btc = fiat_or_btc;
+            }
+
+            WalletViewModelAction::ToggleFiatBtcPrimarySecondary => {
+                let order = vec![
+                    (FiatOrBtc::Btc, Unit::Btc),
+                    (FiatOrBtc::Fiat, Unit::Btc),
+                    (FiatOrBtc::Btc, Unit::Sat),
+                    (FiatOrBtc::Fiat, Unit::Sat),
+                ];
+
+                let current = (
+                    self.metadata.read().fiat_or_btc,
+                    self.metadata.read().selected_unit,
+                );
+
+                let current_index = order
+                    .iter()
+                    .position(|option| option == &current)
+                    .expect("all options covered");
+
+                let next_index = (current_index + 1) % order.len();
+                let (fiat_or_btc, unit) = order[next_index];
+
+                self.dispatch(WalletViewModelAction::UpdateFiatOrBtc(fiat_or_btc));
+                self.dispatch(WalletViewModelAction::UpdateUnit(unit));
             }
 
             WalletViewModelAction::ToggleDetailsExpanded => {

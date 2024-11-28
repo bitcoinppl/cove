@@ -158,7 +158,7 @@ struct WalletBalanceHeaderView: View {
         )
         .background(Color.midnightBlue.opacity(0.98))
         .onTapGesture {
-            model.dispatch(action: .toggleFiatOrBtc)
+            model.dispatch(action: .toggleFiatBtcPrimarySecondary)
         }
         .task {
             await getFiatBalance()
