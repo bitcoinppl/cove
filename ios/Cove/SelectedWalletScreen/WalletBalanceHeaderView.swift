@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct WalletBalanceHeaderView: View {
+    @Environment(\.safeAreaInsets) private var safeAreaInsets
     @Environment(MainViewModel.self) var app
     @Environment(WalletViewModel.self) var model
 
@@ -83,24 +84,24 @@ struct WalletBalanceHeaderView: View {
     }
 
     var body: some View {
-        VStack(spacing: 48) {
-            VStack(spacing: 6){
+        VStack(spacing: 30) {
+            VStack(spacing: 6) {
                 HStack {
-                    Text("Your Balance")
-                        .foregroundColor(.gray)
-                        .font(.subheadline)
+                    Text(secondaryBalanceString)
+                        .foregroundColor(.white.opacity(0.75))
+                        .font(.footnote)
                         .padding(.leading, 2)
-                    
+
                     Spacer()
                 }
-                
+
                 HStack {
                     Text(primaryBalanceString)
                         .foregroundStyle(.white)
                         .font(.system(size: fontSize, weight: .bold))
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: eyeIcon)
                         .foregroundColor(.gray)
                         .onTapGesture {
@@ -110,19 +111,6 @@ struct WalletBalanceHeaderView: View {
             }
 
             HStack(spacing: 16) {
-                Button(action: showReceiveSheet) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.down.left")
-                        Text("Receive")
-                    }
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .padding(.vertical, 4)
-                    .background(Color.buttonPrimary)
-                    .cornerRadius(8)
-                }
-
                 Button(action: {
                     if balance.asSats() == 0 {
                         model.errorAlert = .noBalance
@@ -135,7 +123,20 @@ struct WalletBalanceHeaderView: View {
                         Image(systemName: "arrow.up.right")
                         Text("Send")
                     }
-                    .foregroundColor(.primary)
+                    .foregroundColor(Color.midnightBlue)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .padding(.vertical, 4)
+                    .background(Color.buttonPrimary)
+                    .cornerRadius(8)
+                }
+
+                Button(action: showReceiveSheet) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.down.left")
+                        Text("Receive")
+                    }
+                    .foregroundColor(Color.midnightBlue)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
@@ -143,19 +144,19 @@ struct WalletBalanceHeaderView: View {
                     .cornerRadius(8)
                 }
             }
-
         }
         .padding()
-        .padding(.vertical, 10)
-        .padding(.top, 70)
+        .padding(.vertical, 30)
+        .padding(.top, safeAreaInsets.top + 25)
         .background(
             Image(.headerPattern)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(height: 300, alignment: .topTrailing)
                 .frame(maxWidth: .infinity)
+                .brightness(0.1)
         )
-        .background(Color.midnightBlue)
+        .background(Color.midnightBlue.opacity(0.98))
         .onTapGesture {
             model.dispatch(action: .toggleFiatOrBtc)
         }
@@ -210,7 +211,7 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance:
-                    Amount.fromSat(sats: 1_000_738),
+                Amount.fromSat(sats: 1_000_738),
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
@@ -229,7 +230,7 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance:
-                    Amount.fromSat(sats: 10_000_000_738),
+                Amount.fromSat(sats: 10_000_000_738),
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
@@ -249,7 +250,7 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance:
-                    Amount.fromSat(sats: 10_000_000_738),
+                Amount.fromSat(sats: 10_000_000_738),
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}

@@ -9,6 +9,7 @@ import ActivityIndicatorView
 import SwiftUI
 
 struct SelectedWalletScreen: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
@@ -31,6 +32,19 @@ struct SelectedWalletScreen: View {
         Group {
             if let model {
                 SelectedWalletScreenInner(model: model)
+                    .background(
+                        model.loadState == .loading ?
+                            LinearGradient(colors: [
+                                .black.opacity(colorScheme == .dark ? 0.9 : 0),
+                                .black.opacity(colorScheme == .dark ? 0.9 : 0)
+                            ], startPoint: .top, endPoint: .bottom) :
+                            LinearGradient(stops: [
+                                .init(color: .midnightBlue, location: 0.45),
+                                .init(color: colorScheme == .dark ? .black.opacity(0.9) : .clear, location: 0.55)
+                            ], startPoint: .top, endPoint: .bottom)
+                    )
+                    .background(Color.white)
+
             } else {
                 Text("Loading...")
             }
@@ -66,6 +80,7 @@ private enum SheetState: Equatable {
 }
 
 struct SelectedWalletScreenInner: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
@@ -77,6 +92,10 @@ struct SelectedWalletScreenInner: View {
     // private
     @State private var sheetState: TaggedItem<SheetState>? = nil
     @State private var showingCopiedPopup = true
+
+    var metadata: WalletMetadata {
+        model.walletMetadata
+    }
 
     func updater(_ action: WalletViewModelAction) {
         model.dispatch(action: action)
@@ -90,9 +109,9 @@ struct SelectedWalletScreenInner: View {
             scanComplete: scanComplete,
             metadata: model.walletMetadata
         )
-        .background(.thickMaterial)
+        .background(colorScheme == .dark ? .black.opacity(0.9) : .clear)
+        .background(Color.white)
         .ignoresSafeArea()
-        .padding(.top, 10)
     }
 
     @ViewBuilder
@@ -174,7 +193,7 @@ struct SelectedWalletScreenInner: View {
     var body: some View {
         VStack {
             ScrollView {
-                VStack {
+                VStack(spacing: 0) {
                     WalletBalanceHeaderView(
                         balance: model.balance.confirmed,
                         metadata: model.walletMetadata,
@@ -183,8 +202,7 @@ struct SelectedWalletScreenInner: View {
                     )
                     .clipped()
                     .ignoresSafeArea(.all)
-                    
-                    
+
                     VerifyReminder(
                         walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
                     )
@@ -193,24 +211,16 @@ struct SelectedWalletScreenInner: View {
                         .environment(model)
                 }
                 .toolbar {
-                    ToolbarItemGroup {
-                        Button(action: {
-                            app.nfcReader.scan()
-                        }) {
-                            HStack {
-                                Image(systemName: "wave.3.right")
-                                    .foregroundColor(.primary.opacity(0.8))
-                                    .font(.system(size: 14.5))
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 10) {
+                            if metadata.walletType == .cold {
+                                BitcoinShieldIcon(width: 13, color: .white)
                             }
-                        }
 
-                        Button(action: {
-                            app.sheetState = TaggedItem(.qr)
-                        }) {
-                            HStack {
-                                Image(systemName: "qrcode")
-                                    .foregroundColor(.primary.opacity(0.8))
-                            }
+                            Text(metadata.name)
+                                .foregroundStyle(.white)
+                                .font(.callout)
+                                .fontWeight(.semibold)
                         }
                     }
 
@@ -219,7 +229,8 @@ struct SelectedWalletScreenInner: View {
                             sheetState = TaggedItem(.settings)
                         }) {
                             Image(systemName: "gear")
-                                .foregroundColor(.primary.opacity(0.8))
+                                .foregroundStyle(.white)
+                                .font(.callout)
                         }
                     }
                 }
@@ -231,6 +242,7 @@ struct SelectedWalletScreenInner: View {
                 try? await model.rust.forceWalletScan()
                 let _ = try? await model.rust.forceUpdateHeight()
             }
+            .progressViewStyle(CircularProgressViewStyle(tint: .white))
         }
         .ignoresSafeArea(edges: .top)
         .onChange(of: model.walletMetadata.discoveryState) { _,
@@ -241,6 +253,7 @@ struct SelectedWalletScreenInner: View {
             item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
             content: DisplayErrorAlert
         )
+        .scrollIndicators(.hidden)
         .environment(model)
     }
 }
@@ -274,7 +287,7 @@ struct VerifyReminder: View {
 
 #Preview("Loaded Wallet") {
     AsyncPreview {
-        NavigationStack{
+        NavigationStack {
             SelectedWalletScreenInner(model: WalletViewModel(preview: "preview_only"))
                 .environment(MainViewModel())
         }
