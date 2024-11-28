@@ -10,6 +10,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
     var balance: Balance = .init()
+    var fiatBalance: Double?
     var errorAlert: WalletErrorAlert? = nil
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
@@ -24,6 +25,9 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
+        Task {
+            await getFiatBalance()
+        }
     }
 
     public init(xpub: String) throws {
@@ -74,6 +78,16 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
 
     func fiatAmountToString(_ amount: some Numeric & LosslessStringConvertible) -> String {
         "≈ \(FiatFormatter(amount).fmt()) USD"
+    }
+
+    func getFiatBalance() async {
+        do {
+            let fiatBalance = try await rust.balanceInFiat()
+            await MainActor.run { self.fiatBalance = fiatBalance }
+        } catch {
+            Log.error("error getting fiat balance: \(error)")
+            fiatBalance = 0.00
+        }
     }
 
     func reconcile(message: WalletViewModelReconcileMessage) {

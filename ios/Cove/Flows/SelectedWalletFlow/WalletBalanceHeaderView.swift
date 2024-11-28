@@ -12,25 +12,16 @@ struct WalletBalanceHeaderView: View {
     @Environment(MainViewModel.self) var app
     @Environment(WalletViewModel.self) var model
 
+    // args
     // confirmed balance
     let balance: Amount
+    @State var fiatBalance: Double? = nil
     let metadata: WalletMetadata
     let updater: (WalletViewModelAction) -> Void
     let showReceiveSheet: () -> Void
 
-    // private
-    @State var fiatAmount: Float64? = nil
-
     private var accentColor: Color {
         metadata.swiftColor
-    }
-
-    private func getFiatBalance() async {
-        do {
-            fiatAmount = try await model.rust.balanceInFiat()
-        } catch {
-            Log.error("error getting fiat balance: \(error)")
-        }
     }
 
     private var primaryBalanceString: String {
@@ -40,8 +31,8 @@ struct WalletBalanceHeaderView: View {
 
         // fiat
         if metadata.fiatOrBtc == .fiat {
-            guard let fiatAmount else { return "$XX.XX" }
-            return model.rust.displayFiatAmount(amount: fiatAmount)
+            guard let fiatBalance else { return "$XX.XX USD" }
+            return model.rust.displayFiatAmount(amount: fiatBalance)
         }
 
         // btc or sats
@@ -55,8 +46,8 @@ struct WalletBalanceHeaderView: View {
 
         // fiat
         if metadata.fiatOrBtc == .btc {
-            guard let fiatAmount else { return "$XX.XX" }
-            return model.rust.displayFiatAmount(amount: fiatAmount)
+            guard let fiatBalance else { return "$XX.XX USD" }
+            return model.rust.displayFiatAmount(amount: fiatBalance)
         }
 
         // btc or sats
@@ -175,8 +166,21 @@ struct WalletBalanceHeaderView: View {
         .onTapGesture {
             model.dispatch(action: .toggleFiatBtcPrimarySecondary)
         }
+        .onChange(of: model.fiatBalance, initial: true) {
+            // if fiatBalance was pased in explicitly, don't update it, only for previews
+            if fiatBalance ?? 0.0 > 0.0, model.fiatBalance ?? 0.0 == 0.0 {
+                return
+            }
+
+            fiatBalance = model.fiatBalance
+        }
         .task {
-            await getFiatBalance()
+            if balance.asSats() != 0, fiatBalance == 0.00 || fiatBalance == nil {
+                Task {
+                    await model.getFiatBalance()
+                    await MainActor.run { fiatBalance = model.fiatBalance }
+                }
+            }
         }
     }
 }
@@ -189,6 +193,7 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 1_000_738),
+                fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
@@ -208,6 +213,7 @@ struct WalletBalanceHeaderView: View {
         AsyncPreview {
             WalletBalanceHeaderView(
                 balance: Amount.fromSat(sats: 1_000_738),
+                fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
@@ -225,8 +231,8 @@ struct WalletBalanceHeaderView: View {
     return
         AsyncPreview {
             WalletBalanceHeaderView(
-                balance:
-                Amount.fromSat(sats: 1_000_738),
+                balance: Amount.fromSat(sats: 1_000_738),
+                fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
@@ -244,8 +250,8 @@ struct WalletBalanceHeaderView: View {
     return
         AsyncPreview {
             WalletBalanceHeaderView(
-                balance:
-                Amount.fromSat(sats: 10_000_000_738),
+                balance: Amount.fromSat(sats: 10_000_000_738),
+                fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
@@ -264,8 +270,8 @@ struct WalletBalanceHeaderView: View {
     return
         AsyncPreview {
             WalletBalanceHeaderView(
-                balance:
-                Amount.fromSat(sats: 10_000_000_738),
+                balance: Amount.fromSat(sats: 10_000_000_738),
+                fiatBalance: 1835.00,
                 metadata: metadata,
                 updater: { _ in () },
                 showReceiveSheet: {}
