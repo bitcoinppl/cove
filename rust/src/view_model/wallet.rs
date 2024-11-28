@@ -850,7 +850,7 @@ impl RustWalletViewModel {
             }
 
             WalletViewModelAction::ToggleFiatBtcPrimarySecondary => {
-                let order = vec![
+                let order = [
                     (FiatOrBtc::Btc, Unit::Btc),
                     (FiatOrBtc::Fiat, Unit::Btc),
                     (FiatOrBtc::Btc, Unit::Sat),

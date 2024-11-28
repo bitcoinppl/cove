@@ -36,11 +36,11 @@ struct SelectedWalletScreen: View {
                         model.loadState == .loading ?
                             LinearGradient(colors: [
                                 .black.opacity(colorScheme == .dark ? 0.9 : 0),
-                                .black.opacity(colorScheme == .dark ? 0.9 : 0)
+                                .black.opacity(colorScheme == .dark ? 0.9 : 0),
                             ], startPoint: .top, endPoint: .bottom) :
                             LinearGradient(stops: [
                                 .init(color: .midnightBlue, location: 0.45),
-                                .init(color: colorScheme == .dark ? .black.opacity(0.9) : .clear, location: 0.55)
+                                .init(color: colorScheme == .dark ? .black.opacity(0.9) : .clear, location: 0.55),
                             ], startPoint: .top, endPoint: .bottom)
                     )
                     .background(Color.white)
