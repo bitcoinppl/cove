@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct WalletBalanceHeaderView: View {
+    @Environment(\.safeAreaInsets) private var safeAreaInsets
     @Environment(MainViewModel.self) var app
     @Environment(WalletViewModel.self) var model
 
@@ -32,25 +33,34 @@ struct WalletBalanceHeaderView: View {
         }
     }
 
-    private var balanceString: String {
+    private var primaryBalanceString: String {
         if !metadata.sensitiveVisible {
             return "************"
         }
 
         // fiat
         if metadata.fiatOrBtc == .fiat {
-            if let fiatAmount {
-                return model.rust.displayFiatAmount(amount: fiatAmount)
-            } else {
-                return ""
-            }
+            guard let fiatAmount else { return "" }
+            return model.rust.displayFiatAmount(amount: fiatAmount)
         }
 
         // btc or sats
-        return switch metadata.selectedUnit {
-        case .btc: balance.btcStringWithUnit()
-        case .sat: balance.satsStringWithUnit()
+        return model.amountFmtUnit(balance)
+    }
+
+    private var secondaryBalanceString: String {
+        if !metadata.sensitiveVisible {
+            return "************"
         }
+
+        // fiat
+        if metadata.fiatOrBtc == .btc {
+            guard let fiatAmount else { return "" }
+            return model.rust.displayFiatAmount(amount: fiatAmount)
+        }
+
+        // btc or sats
+        return model.amountFmtUnit(balance)
     }
 
     var eyeIcon: String {
@@ -74,57 +84,48 @@ struct WalletBalanceHeaderView: View {
     }
 
     var body: some View {
-        VStack {
-            HStack {
-                Picker(
-                    "Currency",
-                    selection: Binding(
-                        get: { metadata.selectedUnit },
-                        set: { updater(.updateUnit($0)) }
-                    )
-                ) {
-                    Text(String(Unit.btc)).tag(Unit.btc)
-                    Text(String(Unit.sat)).tag(Unit.sat)
+        VStack(spacing: 30) {
+            VStack(spacing: 6) {
+                HStack {
+                    Text(secondaryBalanceString)
+                        .foregroundColor(.white.opacity(0.75))
+                        .font(.footnote)
+                        .padding(.leading, 2)
+
+                    Spacer()
                 }
-                .pickerStyle(SegmentedPickerStyle())
-                .frame(width: 120)
 
-                Spacer()
+                HStack {
+                    Text(primaryBalanceString)
+                        .foregroundStyle(.white)
+                        .font(.system(size: fontSize, weight: .bold))
 
-                Image(systemName: eyeIcon)
-                    .foregroundColor(.gray)
-                    .onTapGesture {
-                        updater(.toggleSensitiveVisibility)
-                    }
+                    Spacer()
+
+                    Image(systemName: eyeIcon)
+                        .foregroundColor(.gray)
+                        .onTapGesture {
+                            updater(.toggleSensitiveVisibility)
+                        }
+                }
             }
+            .contentShape(
+                .contextMenuPreview,
+                RoundedRectangle(cornerRadius: 8).inset(by: -8)
+            )
+            .contextMenu {
+                Button("BTC") {
+                    model.dispatch(action: .updateUnit(.btc))
+                    model.dispatch(action: .updateFiatOrBtc(.btc))
+                }
 
-            HStack {
-                Text("Your Balance")
-                    .foregroundColor(.gray)
-                    .font(.subheadline)
-                    .padding(.leading, 2)
-
-                Spacer()
+                Button("SATS") {
+                    model.dispatch(action: .updateUnit(.sat))
+                    model.dispatch(action: .updateFiatOrBtc(.btc))
+                }
             }
-
-            Text(balanceString)
-                .font(.system(size: fontSize, weight: .bold))
-                .padding(.top, 16)
-                .padding(.bottom, 32)
 
             HStack(spacing: 16) {
-                Button(action: showReceiveSheet) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.down.left")
-                        Text("Receive")
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(accentColor)
-                    .cornerRadius(8)
-                }
-
                 Button(action: {
                     if balance.asSats() == 0 {
                         model.errorAlert = .noBalance
@@ -135,25 +136,44 @@ struct WalletBalanceHeaderView: View {
                 }) {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.up.right")
-
                         Text("Send")
                     }
-                    .foregroundColor(accentColor)
+                    .foregroundColor(Color.midnightBlue)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.white)
+                    .padding(.vertical, 4)
+                    .background(Color.buttonPrimary)
                     .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(accentColor, lineWidth: 1)
-                    )
+                }
+
+                Button(action: showReceiveSheet) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.down.left")
+                        Text("Receive")
+                    }
+                    .foregroundColor(Color.midnightBlue)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .padding(.vertical, 4)
+                    .background(Color.buttonPrimary)
+                    .cornerRadius(8)
                 }
             }
         }
         .padding()
-        .background(Color(UIColor.systemGray6))
+        .padding(.vertical, 30)
+        .padding(.top, safeAreaInsets.top + 25)
+        .background(
+            Image(.headerPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: 300, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .brightness(0.1)
+        )
+        .background(Color.midnightBlue.opacity(0.98))
         .onTapGesture {
-            model.dispatch(action: .toggleFiatOrBtc)
+            model.dispatch(action: .toggleFiatBtcPrimarySecondary)
         }
         .task {
             await getFiatBalance()
@@ -173,7 +193,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -192,7 +212,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -211,7 +231,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -230,7 +250,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }
@@ -250,7 +270,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .padding()
+            .environment(MainViewModel())
             .environment(WalletViewModel(preview: "preview_only"))
         }
 }

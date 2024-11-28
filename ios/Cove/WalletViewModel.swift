@@ -12,13 +12,16 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     var balance: Balance = .init()
     var errorAlert: WalletErrorAlert? = nil
     var foundAddresses: [FoundAddress] = []
+    var unsignedTransactions: [UnsignedTransaction] = []
 
     public init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletViewModel(id: id)
 
         self.rust = rust
+
         walletMetadata = rust.walletMetadata()
+        unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -64,10 +67,8 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
 
     func amountFmtUnit(_ amount: Amount) -> String {
         switch walletMetadata.selectedUnit {
-        case .btc:
-            amount.btcStringWithUnit()
-        case .sat:
-            amount.satsStringWithUnit()
+        case .btc: amount.btcStringWithUnit()
+        case .sat: amount.satsStringWithUnit()
         }
     }
 
@@ -105,6 +106,9 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
                             self.balance = balance
                         }
                     }
+
+                case .unsignedTransactionsChanged:
+                    self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
                 case let .walletMetadataChanged(metadata):
                     withAnimation {

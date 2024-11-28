@@ -37,7 +37,7 @@ struct SendFlowHeaderView: View {
             Image(.headerPattern)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(height: 300, alignment: .topTrailing)
+                .frame(height: 225, alignment: .topTrailing)
                 .frame(maxWidth: .infinity)
                 .ignoresSafeArea(edges: .top)
 

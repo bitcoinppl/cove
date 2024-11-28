@@ -15980,9 +15980,12 @@ public enum WalletViewModelAction {
     )
     case updateFiatCurrency(FiatCurrency
     )
+    case updateFiatOrBtc(FiatOrBtc
+    )
     case toggleSensitiveVisibility
     case toggleDetailsExpanded
     case toggleFiatOrBtc
+    case toggleFiatBtcPrimarySecondary
     case selectCurrentWalletAddressType
     case selectDifferentWalletAddressType(WalletAddressType
     )
@@ -16009,15 +16012,20 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
         case 4: return try .updateFiatCurrency(FfiConverterTypeFiatCurrency.read(from: &buf)
             )
 
-        case 5: return .toggleSensitiveVisibility
+        case 5: return try .updateFiatOrBtc(FfiConverterTypeFiatOrBtc.read(from: &buf)
+            )
 
-        case 6: return .toggleDetailsExpanded
+        case 6: return .toggleSensitiveVisibility
 
-        case 7: return .toggleFiatOrBtc
+        case 7: return .toggleDetailsExpanded
 
-        case 8: return .selectCurrentWalletAddressType
+        case 8: return .toggleFiatOrBtc
 
-        case 9: return try .selectDifferentWalletAddressType(FfiConverterTypeWalletAddressType.read(from: &buf)
+        case 9: return .toggleFiatBtcPrimarySecondary
+
+        case 10: return .selectCurrentWalletAddressType
+
+        case 11: return try .selectDifferentWalletAddressType(FfiConverterTypeWalletAddressType.read(from: &buf)
             )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -16042,20 +16050,27 @@ public struct FfiConverterTypeWalletViewModelAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
 
-        case .toggleSensitiveVisibility:
+        case let .updateFiatOrBtc(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterTypeFiatOrBtc.write(v1, into: &buf)
 
-        case .toggleDetailsExpanded:
+        case .toggleSensitiveVisibility:
             writeInt(&buf, Int32(6))
 
-        case .toggleFiatOrBtc:
+        case .toggleDetailsExpanded:
             writeInt(&buf, Int32(7))
 
-        case .selectCurrentWalletAddressType:
+        case .toggleFiatOrBtc:
             writeInt(&buf, Int32(8))
 
-        case let .selectDifferentWalletAddressType(v1):
+        case .toggleFiatBtcPrimarySecondary:
             writeInt(&buf, Int32(9))
+
+        case .selectCurrentWalletAddressType:
+            writeInt(&buf, Int32(10))
+
+        case let .selectDifferentWalletAddressType(v1):
+            writeInt(&buf, Int32(11))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
         }
     }
@@ -16287,6 +16302,7 @@ public enum WalletViewModelReconcileMessage {
     )
     case walletScannerResponse(ScannerResponse
     )
+    case unsignedTransactionsChanged
 }
 
 #if swift(>=5.8)
@@ -16323,6 +16339,8 @@ public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustB
 
         case 9: return try .walletScannerResponse(FfiConverterTypeScannerResponse.read(from: &buf)
             )
+
+        case 10: return .unsignedTransactionsChanged
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16364,6 +16382,9 @@ public struct FfiConverterTypeWalletViewModelReconcileMessage: FfiConverterRustB
         case let .walletScannerResponse(v1):
             writeInt(&buf, Int32(9))
             FfiConverterTypeScannerResponse.write(v1, into: &buf)
+
+        case .unsignedTransactionsChanged:
+            writeInt(&buf, Int32(10))
         }
     }
 }

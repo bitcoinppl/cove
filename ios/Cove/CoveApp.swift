@@ -19,6 +19,26 @@ extension EnvironmentValues {
     }
 }
 
+struct SafeAreaInsetsKey: EnvironmentKey {
+    static var defaultValue: EdgeInsets {
+        #if os(iOS) || os(tvOS)
+            let window = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.keyWindow
+            guard let insets = window?.safeAreaInsets else {
+                return EdgeInsets()
+            }
+            return EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
+        #else
+            return EdgeInsets()
+        #endif
+    }
+}
+
+public extension EnvironmentValues {
+    var safeAreaInsets: EdgeInsets {
+        self[SafeAreaInsetsKey.self]
+    }
+}
+
 @main
 struct CoveApp: App {
     @Environment(\.colorScheme) var colorScheme

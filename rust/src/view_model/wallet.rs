@@ -54,6 +54,36 @@ pub enum WalletViewModelReconcileMessage {
     UnknownError(String),
 
     WalletScannerResponse(ScannerResponse),
+
+    UnsignedTransactionsChanged,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletViewModelAction {
+    UpdateName(String),
+    UpdateColor(WalletColor),
+    UpdateUnit(Unit),
+    UpdateFiatCurrency(FiatCurrency),
+    UpdateFiatOrBtc(FiatOrBtc),
+    ToggleSensitiveVisibility,
+    ToggleDetailsExpanded,
+    ToggleFiatOrBtc,
+    ToggleFiatBtcPrimarySecondary,
+    SelectCurrentWalletAddressType,
+    SelectDifferentWalletAddressType(WalletAddressType),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletLoadState {
+    Loading,
+    Scanning(Vec<Transaction>),
+    Loaded(Vec<Transaction>),
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletErrorAlert {
+    NodeConnectionFailed(String),
+    NoBalance,
 }
 
 #[uniffi::export(callback_interface)]
@@ -75,32 +105,6 @@ pub struct RustWalletViewModel {
     pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
     #[allow(dead_code)]
     pub scanner: Option<Addr<WalletScanner>>,
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelAction {
-    UpdateName(String),
-    UpdateColor(WalletColor),
-    UpdateUnit(Unit),
-    UpdateFiatCurrency(FiatCurrency),
-    ToggleSensitiveVisibility,
-    ToggleDetailsExpanded,
-    ToggleFiatOrBtc,
-    SelectCurrentWalletAddressType,
-    SelectDifferentWalletAddressType(WalletAddressType),
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletLoadState {
-    Loading,
-    Scanning(Vec<Transaction>),
-    Loaded(Vec<Transaction>),
-}
-
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletErrorAlert {
-    NodeConnectionFailed(String),
-    NoBalance,
 }
 
 pub type Error = WalletViewModelError;
@@ -259,6 +263,10 @@ impl RustWalletViewModel {
             .into(),
         )?;
 
+        self.reconciler
+            .send(WalletViewModelReconcileMessage::UnsignedTransactionsChanged)
+            .expect("failed to send update");
+
         Ok(())
     }
 
@@ -281,6 +289,10 @@ impl RustWalletViewModel {
     pub fn delete_unsigned_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
         let db = Database::global();
         db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
+
+        self.reconciler
+            .send(WalletViewModelReconcileMessage::UnsignedTransactionsChanged)
+            .expect("failed to send update");
 
         Ok(())
     }
@@ -830,6 +842,36 @@ impl RustWalletViewModel {
                     FiatOrBtc::Btc => FiatOrBtc::Fiat,
                     FiatOrBtc::Fiat => FiatOrBtc::Btc,
                 };
+            }
+
+            WalletViewModelAction::UpdateFiatOrBtc(fiat_or_btc) => {
+                let mut metadata = self.metadata.write();
+                metadata.fiat_or_btc = fiat_or_btc;
+            }
+
+            WalletViewModelAction::ToggleFiatBtcPrimarySecondary => {
+                let order = [
+                    (FiatOrBtc::Btc, Unit::Btc),
+                    (FiatOrBtc::Fiat, Unit::Btc),
+                    (FiatOrBtc::Btc, Unit::Sat),
+                    (FiatOrBtc::Fiat, Unit::Sat),
+                ];
+
+                let current = (
+                    self.metadata.read().fiat_or_btc,
+                    self.metadata.read().selected_unit,
+                );
+
+                let current_index = order
+                    .iter()
+                    .position(|option| option == &current)
+                    .expect("all options covered");
+
+                let next_index = (current_index + 1) % order.len();
+                let (fiat_or_btc, unit) = order[next_index];
+
+                self.dispatch(WalletViewModelAction::UpdateFiatOrBtc(fiat_or_btc));
+                self.dispatch(WalletViewModelAction::UpdateUnit(unit));
             }
 
             WalletViewModelAction::ToggleDetailsExpanded => {
