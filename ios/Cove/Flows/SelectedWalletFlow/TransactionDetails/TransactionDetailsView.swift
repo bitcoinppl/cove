@@ -104,7 +104,8 @@ struct TransactionDetailsView: View {
         if metadata.detailsExpanded {
             ReceivedDetailsExpandedView(
                 model: model, transactionDetails: transactionDetails,
-                numberOfConfirmations: numberOfConfirmations)
+                numberOfConfirmations: numberOfConfirmations
+            )
         }
     }
 

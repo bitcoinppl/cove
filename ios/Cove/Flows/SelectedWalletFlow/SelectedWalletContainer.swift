@@ -1,5 +1,5 @@
 //
-//  SelectedWalletScreen.swift
+//  SelectedWalletContainer.swift
 //  Cove
 //
 //  Created by Praveen Perera on 7/1/24.
