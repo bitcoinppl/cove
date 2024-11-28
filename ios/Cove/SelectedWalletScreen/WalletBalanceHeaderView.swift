@@ -109,6 +109,19 @@ struct WalletBalanceHeaderView: View {
                         }
                 }
             }
+            .contentShape(
+                .contextMenuPreview,
+                RoundedRectangle(cornerRadius: 8).inset(by: -8)
+            )
+            .contextMenu {
+                Button("BTC") {
+                    model.dispatch(action: .updateUnit(.btc))
+                }
+
+                Button("SATS") {
+                    model.dispatch(action: .updateUnit(.sat))
+                }
+            }
 
             HStack(spacing: 16) {
                 Button(action: {
