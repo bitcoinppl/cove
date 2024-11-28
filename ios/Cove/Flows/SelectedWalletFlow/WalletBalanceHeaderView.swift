@@ -138,7 +138,7 @@ struct WalletBalanceHeaderView: View {
                         Image(systemName: "arrow.up.right")
                         Text("Send")
                     }
-                    .foregroundColor(Color.midnightBlue)
+                    .foregroundColor(Color.midnightBtn)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
@@ -151,7 +151,7 @@ struct WalletBalanceHeaderView: View {
                         Image(systemName: "arrow.down.left")
                         Text("Receive")
                     }
-                    .foregroundColor(Color.midnightBlue)
+                    .foregroundColor(Color.midnightBtn)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)

@@ -102,7 +102,9 @@ struct TransactionDetailsView: View {
         // MARK: Received Details Expanded
 
         if metadata.detailsExpanded {
-            ReceivedDetailsExpandedView(model: model, transactionDetails: transactionDetails, numberOfConfirmations: numberOfConfirmations)
+            ReceivedDetailsExpandedView(
+                model: model, transactionDetails: transactionDetails,
+                numberOfConfirmations: numberOfConfirmations)
         }
     }
 
@@ -223,7 +225,7 @@ struct TransactionDetailsView: View {
                     Text("View in Explorer")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color.midnightBtn)
                         .foregroundColor(.white)
                         .cornerRadius(8)
                         .padding(.horizontal, detailsExpandedPadding)
@@ -252,7 +254,8 @@ struct TransactionDetailsView: View {
         .task {
             do {
                 if let blockNumber = transactionDetails.blockNumber() {
-                    let numberOfConfirmations = try? await model.rust.numberOfConfirmations(blockHeight: blockNumber)
+                    let numberOfConfirmations = try? await model.rust.numberOfConfirmations(
+                        blockHeight: blockNumber)
                     guard numberOfConfirmations != nil else { return }
                     self.numberOfConfirmations = Int(numberOfConfirmations!)
                 }
@@ -263,36 +266,44 @@ struct TransactionDetailsView: View {
 
 #Preview("confirmed received") {
     AsyncPreview {
-        TransactionDetailsView(id: WalletId(),
-                               transactionDetails: TransactionDetails.previewConfirmedReceived(),
-                               model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        TransactionDetailsView(
+            id: WalletId(),
+            transactionDetails: TransactionDetails.previewConfirmedReceived(),
+            model: WalletViewModel(preview: "preview_only")
+        )
+        .environment(MainViewModel())
     }
 }
 
 #Preview("confirmed sent") {
     AsyncPreview {
-        TransactionDetailsView(id: WalletId(),
-                               transactionDetails: TransactionDetails.previewConfirmedSent(),
-                               model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        TransactionDetailsView(
+            id: WalletId(),
+            transactionDetails: TransactionDetails.previewConfirmedSent(),
+            model: WalletViewModel(preview: "preview_only")
+        )
+        .environment(MainViewModel())
     }
 }
 
 #Preview("pending received") {
     AsyncPreview {
-        TransactionDetailsView(id: WalletId(),
-                               transactionDetails: TransactionDetails.previewPendingReceived(),
-                               model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        TransactionDetailsView(
+            id: WalletId(),
+            transactionDetails: TransactionDetails.previewPendingReceived(),
+            model: WalletViewModel(preview: "preview_only")
+        )
+        .environment(MainViewModel())
     }
 }
 
 #Preview("pending sent") {
     AsyncPreview {
-        TransactionDetailsView(id: WalletId(),
-                               transactionDetails: TransactionDetails.previewPendingSent(),
-                               model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        TransactionDetailsView(
+            id: WalletId(),
+            transactionDetails: TransactionDetails.previewPendingSent(),
+            model: WalletViewModel(preview: "preview_only")
+        )
+        .environment(MainViewModel())
     }
 }

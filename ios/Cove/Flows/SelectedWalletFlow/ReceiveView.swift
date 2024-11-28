@@ -21,10 +21,6 @@ struct ReceiveView: View {
         addressInfo != nil
     }
 
-    var accentColor: Color {
-        model.accentColor
-    }
-
     func copyText() {
         dismiss()
 
@@ -72,7 +68,7 @@ struct ReceiveView: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(accentColor)
+                    .background(.midnightBtn)
                     .cornerRadius(8)
                 }
 
@@ -85,14 +81,14 @@ struct ReceiveView: View {
                         Image(systemName: "arrow.triangle.2.circlepath")
                         Text("New Address")
                     }
-                    .foregroundColor(accentColor)
+                    .foregroundColor(.midnightBtn)
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.white)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(accentColor, lineWidth: 1)
+                            .stroke(.midnightBtn, lineWidth: 1)
                     )
                 }
             }

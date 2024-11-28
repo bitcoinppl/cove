@@ -34,7 +34,7 @@ struct SendFlowDetailsSheetView: View {
                     .frame(maxWidth: .infinity)
             }
             .font(.caption)
-            .background(.midnightBlue)
+            .background(.midnightBtn)
             .foregroundStyle(.white)
             .cornerRadius(8)
         }

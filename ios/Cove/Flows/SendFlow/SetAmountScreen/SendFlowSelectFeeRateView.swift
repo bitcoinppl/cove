@@ -61,7 +61,7 @@ private struct FeeOptionView: View {
     }
 
     var strokeColor: Color {
-        if isSelected { Color.midnightBlue } else { Color.secondary }
+        if isSelected { Color.midnightBtn } else { Color.secondary }
     }
 
     var totalFee: String {
@@ -117,7 +117,7 @@ private struct FeeOptionView: View {
         .padding()
         .background(
             isSelected
-                ? Color.midnightBlue.opacity(0.8) : Color(UIColor.systemGray6)
+                ? Color.midnightBtn.opacity(0.8) : Color(UIColor.systemGray6)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)

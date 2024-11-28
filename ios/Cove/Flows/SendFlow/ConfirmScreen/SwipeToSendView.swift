@@ -43,7 +43,7 @@ struct SwipeToSendView: View {
             // Blue fill that follows the drag
             GeometryReader { geometry in
                 Capsule()
-                    .fill(Color.midnightBlue)
+                    .fill(Color.midnightBtn)
                     .frame(width: offset + circleSize)
                     .frame(maxWidth: geometry.size.width, alignment: .leading)
             }
@@ -62,7 +62,7 @@ struct SwipeToSendView: View {
 
             // Draggable button
             Circle()
-                .fill(Color.midnightBlue)
+                .fill(Color.midnightBtn)
                 .frame(width: circleSize, height: circleSize)
                 .overlay(
                     Image(systemName: "arrow.right")
