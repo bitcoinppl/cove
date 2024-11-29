@@ -138,7 +138,7 @@ impl WalletMetadata {
         Self {
             id: WalletId::new(),
             name: name.into(),
-            color: WalletColor::Blue,
+            color: WalletColor::random(),
             master_fingerprint: Some(fingerprint.into()),
             verified: false,
             network,
@@ -195,7 +195,7 @@ impl WalletMetadata {
             id: WalletId::preview_new(),
             name: "Test Wallet".to_string(),
             master_fingerprint: Some(Arc::new(Fingerprint::default())),
-            color: WalletColor::Blue,
+            color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,
             performed_full_scan: false,

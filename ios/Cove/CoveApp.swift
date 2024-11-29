@@ -26,7 +26,9 @@ struct SafeAreaInsetsKey: EnvironmentKey {
             guard let insets = window?.safeAreaInsets else {
                 return EdgeInsets()
             }
-            return EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
+            return EdgeInsets(
+                top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right
+            )
         #else
             return EdgeInsets()
         #endif
@@ -344,7 +346,7 @@ struct CoveApp: App {
 
     @ViewBuilder
     var BodyView: some View {
-        ZStack {
+        SidebarContainer {
             NavigationStack(path: $model.router.routes) {
                 RouteView(model: model)
                     .navigationDestination(
@@ -369,9 +371,8 @@ struct CoveApp: App {
                     }
             }
             .tint(routeToTint)
-
-            SidebarView(isShowing: $model.isSidebarVisible, currentRoute: model.currentRoute)
         }
+        .environment(model)
     }
 
     var routeToTint: Color {
