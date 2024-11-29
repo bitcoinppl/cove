@@ -19,7 +19,7 @@ struct SidebarContainer<Content: View>: View {
     @GestureState private var gestureOffset: CGFloat = 0
 
     private func onDragEnded(value: DragGesture.Value) {
-        let threshhold = 0.5
+        let threshold = sideBarWidth * 0.5
         let translation = value.translation.width
 
         if translation < 0, !app.isSidebarVisible { return }
@@ -34,7 +34,7 @@ struct SidebarContainer<Content: View>: View {
         }
 
         withAnimation {
-            if translation > sideBarWidth * threshhold {
+            if (translation > threshold) || (value.predictedEndTranslation.width > threshold) {
                 offset = sideBarWidth
                 app.isSidebarVisible = true
             } else {
