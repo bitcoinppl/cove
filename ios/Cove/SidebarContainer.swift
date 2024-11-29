@@ -44,17 +44,38 @@ struct SidebarContainer<Content: View>: View {
         }
     }
 
+    var openPercentage: Double {
+        (offset + gestureOffset) / sideBarWidth
+    }
+
+    var totalOffset: CGFloat {
+        min(max(offset + gestureOffset, 0), sideBarWidth)
+    }
+
     var body: some View {
         ZStack(alignment: .leading) {
-            content
-                .ignoresSafeArea(.all)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .offset(x: offset + gestureOffset)
+            ZStack {
+                content
+                    .ignoresSafeArea(.all)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if app.isSidebarVisible || gestureOffset > 0 || offset > 0 {
+                    Rectangle()
+                        .fill(Color.black)
+                        .background(.black)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .opacity(openPercentage * 0.45)
+                        .onTapGesture {
+                            app.isSidebarVisible = false
+                        }
+                }
+            }
+            .offset(x: totalOffset)
 
             SidebarView(currentRoute: app.currentRoute)
                 .frame(width: sideBarWidth)
                 .offset(x: -sideBarWidth)
-                .offset(x: offset + gestureOffset)
+                .offset(x: totalOffset)
         }
         .gesture(
             DragGesture()
