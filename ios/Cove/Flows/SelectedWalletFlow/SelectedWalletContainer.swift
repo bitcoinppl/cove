@@ -37,16 +37,20 @@ struct SelectedWalletContainer: View {
                                 colors: [
                                     .black.opacity(colorScheme == .dark ? 0.9 : 0),
                                     .black.opacity(colorScheme == .dark ? 0.9 : 0),
-                                ], startPoint: .top, endPoint: .bottom)
+                                ], startPoint: .top, endPoint: .bottom
+                            )
                             : LinearGradient(
                                 stops: [
                                     .init(
                                         color: .midnightBlue,
-                                        location: 0.20),
+                                        location: 0.20
+                                    ),
                                     .init(
                                         color: colorScheme == .dark ? .black.opacity(0.9) : .white,
-                                        location: 0.20),
-                                ], startPoint: .top, endPoint: .bottom)
+                                        location: 0.20
+                                    ),
+                                ], startPoint: .top, endPoint: .bottom
+                            )
                     )
                     .background(Color.white)
 

@@ -56,6 +56,10 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         walletMetadata.swiftColor
     }
 
+    func validateMetadata() {
+        rust.validateMetadata()
+    }
+
     func firstAddress() async throws -> AddressInfo {
         try await rust.addressAt(index: 0)
     }

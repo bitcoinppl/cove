@@ -29,15 +29,21 @@ struct WalletSettingsSheet: View {
                 }
 
                 Section(header: Text("Basic Settings")) {
-                    TextField("Wallet Name", text: Binding(
-                        get: { model.walletMetadata.name },
-                        set: { model.dispatch(action: .updateName($0)) }
-                    ))
+                    TextField(
+                        "Wallet Name",
+                        text: Binding(
+                            get: { model.walletMetadata.name },
+                            set: { model.dispatch(action: .updateName($0)) }
+                        )
+                    )
 
-                    Picker("Wallet Color", selection: Binding(
-                        get: { model.walletMetadata.color },
-                        set: { model.dispatch(action: .updateColor($0)) }
-                    )) {
+                    Picker(
+                        "Wallet Color",
+                        selection: Binding(
+                            get: { model.walletMetadata.color },
+                            set: { model.dispatch(action: .updateColor($0)) }
+                        )
+                    ) {
                         ForEach(colors, id: \.self) { color in
                             Text(color.toColor().description)
                                 .tag(color)
@@ -89,18 +95,22 @@ struct WalletSettingsSheet: View {
             }
             .listStyle(InsetGroupedListStyle())
             .navigationTitle("Wallet Settings")
-            .navigationBarItems(leading:
+            .navigationBarItems(
+                leading:
                 Button {
                     dismiss()
+                    model.validateMetadata()
                     navigate(Route.settings)
                 } label: {
                     Label("App Settings", systemImage: "gear")
                         .foregroundColor(.blue)
                 }
             )
-            .navigationBarItems(trailing: Button("Done") {
-                dismiss()
-            })
+            .navigationBarItems(
+                trailing: Button("Done") {
+                    dismiss()
+                }
+            )
             .foregroundColor(.primary)
             .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
@@ -122,7 +132,9 @@ struct WalletSettingsSheet: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone.")
+                Text(
+                    "Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone."
+                )
             }
         }
     }

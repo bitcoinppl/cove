@@ -11,7 +11,7 @@ pub trait StreamExt {
     fn to_vec(self) -> Vec<u8>;
 }
 
-impl<'a> StreamExt for Stream<'a> {
+impl StreamExt for Stream<'_> {
     fn len(&self) -> usize {
         self.as_ref().len()
     }
