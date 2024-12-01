@@ -207,6 +207,7 @@ struct SelectedWalletScreen: View {
                 newValue in setSheetState(newValue)
         }
         .onAppear { setSheetState(model.walletMetadata.discoveryState) }
+        .onAppear(perform: model.validateMetadata)
         .alert(
             item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
             content: DisplayErrorAlert

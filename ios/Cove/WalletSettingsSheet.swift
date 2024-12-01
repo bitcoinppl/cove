@@ -99,7 +99,6 @@ struct WalletSettingsSheet: View {
                 leading:
                 Button {
                     dismiss()
-                    model.validateMetadata()
                     navigate(Route.settings)
                 } label: {
                     Label("App Settings", systemImage: "gear")
@@ -109,6 +108,7 @@ struct WalletSettingsSheet: View {
             .navigationBarItems(
                 trailing: Button("Done") {
                     dismiss()
+                    model.validateMetadata()
                 }
             )
             .foregroundColor(.primary)
@@ -136,6 +136,9 @@ struct WalletSettingsSheet: View {
                     "Whoever has access to your secret words, has access to your bitcoin. Please keep these safe, don't show them to anyone."
                 )
             }
+        }
+        .onDisappear {
+            model.validateMetadata()
         }
     }
 }
