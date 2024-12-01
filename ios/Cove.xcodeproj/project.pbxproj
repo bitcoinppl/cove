@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AC00F3B52CFD1647006EE6B9 /* Device.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC00F3B42CFD1647006EE6B9 /* Device.swift */; };
 		AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */ = {isa = PBXBuildFile; productRef = AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */; };
 		AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
@@ -28,6 +29,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AC00F3B42CFD1647006EE6B9 /* Device.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Device.swift; sourceTree = "<group>"; };
 		AC9AB5782C34956C00BAE3BE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Cove.xcframework; path = ../rust/ios/Cove.xcframework; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -66,6 +68,7 @@
 		D0245F432C0F7B4E0042B447 = {
 			isa = PBXGroup;
 			children = (
+				AC00F3B42CFD1647006EE6B9 /* Device.swift */,
 				AC9AB5782C34956C00BAE3BE /* Logger.swift */,
 				D000B2EF2C0F7BAA00E32143 /* Cove.xcframework */,
 				AC8CF66C2CF8C86600F02F5C /* CodeScanner */,
@@ -165,6 +168,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AC00F3B52CFD1647006EE6B9 /* Device.swift in Sources */,
 				AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

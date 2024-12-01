@@ -151,8 +151,9 @@ struct CoveApp: App {
     }
 
     public init() {
-        // initialize keychain
+        // initialize keychain and device
         _ = Keychain(keychain: KeychainAccessor())
+        _ = Device(device: DeviceAccesor())
 
         let model = MainViewModel()
         self.model = model

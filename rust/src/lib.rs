@@ -10,6 +10,7 @@ pub(crate) mod color;
 pub(crate) mod color_scheme;
 pub(crate) mod consts;
 pub(crate) mod cove_nfc;
+pub(crate) mod device;
 pub(crate) mod encryption;
 pub(crate) mod fiat;
 pub(crate) mod file_handler;

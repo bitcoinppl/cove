@@ -99,7 +99,7 @@ tap = "1.0.1"
 itertools = "0.13"
 
 # time 
-jiff = { version = "0.1", features = ["tz-system"] }
+jiff = { version = "0.1", features = [] }
 
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }

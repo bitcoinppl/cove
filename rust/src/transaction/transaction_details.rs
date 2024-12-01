@@ -3,8 +3,20 @@ use std::sync::Arc;
 use bdk_chain::{tx_graph::CanonicalTx, ChainPosition as BdkChainPosition, ConfirmationBlockTime};
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bdk_wallet::Wallet as BdkWallet;
+use jiff::Timestamp;
+use numfmt::{Formatter, Precision};
 
-use crate::wallet::{address, Address};
+use crate::{
+    fiat::client::FIAT_CLIENT,
+    format::NumberFormatter as _,
+    task,
+    transaction::{TransactionDirection, Unit},
+};
+
+use crate::{
+    device::Device,
+    wallet::{address, Address},
+};
 
 use super::{Amount, FeeRate, SentAndReceived, TxId};
 
@@ -113,16 +125,6 @@ impl PendingOrConfirmed {
     }
 }
 
-use jiff::{tz::TimeZone, Timestamp, Zoned};
-use numfmt::{Formatter, Precision};
-
-use crate::{
-    fiat::client::FIAT_CLIENT,
-    format::NumberFormatter as _,
-    task,
-    transaction::{TransactionDirection, Unit},
-};
-
 #[uniffi::export]
 impl TransactionDetails {
     #[uniffi::method]
@@ -228,11 +230,21 @@ impl TransactionDetails {
             PendingOrConfirmed::Confirmed(confirmed) => Some(confirmed.confirmation_time),
         }? as i64;
 
+        // get timezone
+        let timezone_string = Device::global().timezone();
+        // let timezone = Tz::from_str(&timezone_string).ok()?;
+
         // Create a Timestamp from Unix seconds
         let ts = Timestamp::from_second(confirm_time).ok()?;
 
         // Convert to local time zone
-        let local = Zoned::new(ts, TimeZone::system());
+        let local = match ts.intz(&timezone_string) {
+            Ok(local) => local,
+            Err(error) => {
+                tracing::warn!("unable to convert timestamp: {error}");
+                ts.intz("UTC").ok()?
+            }
+        };
 
         // Format the timestamp
         jiff::fmt::strtime::format("%B %e, %Y at %-I:%M %p", &local).ok()

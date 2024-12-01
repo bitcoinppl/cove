@@ -2959,6 +2959,125 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRa
 
 
 
+public protocol DeviceProtocol : AnyObject {
+    
+}
+
+open class Device:
+    DeviceProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_device(self.pointer, $0) }
+    }
+public convenience init(device: DeviceAccess) {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_device_new(
+        FfiConverterCallbackInterfaceDeviceAccess.lower(device),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_device(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDevice: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Device
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Device {
+        return Device(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Device) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Device {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Device, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDevice_lift(_ pointer: UnsafeMutableRawPointer) throws -> Device {
+    return try FfiConverterTypeDevice.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDevice_lower(_ value: Device) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDevice.lower(value)
+}
+
+
+
+
 public protocol FeeRateProtocol : AnyObject {
     
     func satPerVb()  -> Double
@@ -18955,6 +19074,106 @@ extension XpubError: Foundation.LocalizedError {
 
 
 
+public protocol DeviceAccess : AnyObject {
+    
+    func timezone()  -> String
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceDeviceAccess {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceDeviceAccess] = [UniffiVTableCallbackInterfaceDeviceAccess(
+        timezone: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceDeviceAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.timezone(
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterCallbackInterfaceDeviceAccess.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface DeviceAccess: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitDeviceAccess() {
+    uniffi_cove_fn_init_callback_vtable_deviceaccess(UniffiCallbackInterfaceDeviceAccess.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceDeviceAccess {
+    fileprivate static let handleMap = UniffiHandleMap<DeviceAccess>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceDeviceAccess : FfiConverter {
+    typealias SwiftType = DeviceAccess
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+
+
 public protocol FfiReconcile : AnyObject {
     
     /**
@@ -21572,6 +21791,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_database_new() != 41458) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_device_new() != 52650) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_feerate_from_sat_per_vb() != 58499) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21680,6 +21902,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_wallet_previewnewwallet() != 56877) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_deviceaccess_timezone() != 16696) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffireconcile_reconcile() != 54238) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21703,6 +21928,7 @@ private let initializationResult: InitializationResult = {
     }
 
     uniffiCallbackInitAutoComplete()
+    uniffiCallbackInitDeviceAccess()
     uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitImportWalletViewModelReconciler()
     uniffiCallbackInitKeychainAccess()
