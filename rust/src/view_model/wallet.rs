@@ -514,6 +514,21 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub fn validate_metadata(&self) {
+        if self.metadata.read().name.trim().is_empty() {
+            let name = self
+                .metadata
+                .read()
+                .master_fingerprint
+                .as_ref()
+                .map(|f| f.as_uppercase())
+                .unwrap_or_else(|| "Unnamed Wallet".to_string());
+
+            self.dispatch(WalletViewModelAction::UpdateName(name));
+        }
+    }
+
+    #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
         debug!("start_wallet_scan: {}", self.id);
 
@@ -811,7 +826,6 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
         match action {
-            WalletViewModelAction::UpdateName(name) if name.is_empty() => {}
             WalletViewModelAction::UpdateName(name) => {
                 let mut metadata = self.metadata.write();
                 metadata.name = name;
