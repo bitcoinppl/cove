@@ -69,7 +69,7 @@ struct SidebarView: View {
                 }
 
                 Divider()
-                    .overlay(Color(.systemGray5))
+                    .overlay(Color(.white))
                     .opacity(0.50)
                     .padding(.vertical, 22)
 
@@ -105,7 +105,7 @@ struct SidebarView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color(.systemGray5).opacity(0.06))
+                            .background(Color.lightGray.opacity(0.06))
                             .cornerRadius(10)
                         }
                     }
@@ -115,7 +115,7 @@ struct SidebarView: View {
 
                 VStack(spacing: 32) {
                     Divider()
-                        .overlay(Color(.systemGray5))
+                        .overlay(.lightGray)
                         .opacity(0.50)
 
                     HStack {
@@ -146,7 +146,7 @@ struct SidebarView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .background(.midnightBtn)
+        .background(.midnightBlue)
     }
 
     func goTo(_ route: Route) {
@@ -164,20 +164,22 @@ struct SidebarView: View {
     }
 }
 
-#Preview {
-    HStack {
-        SidebarView(
-            currentRoute: Route.listWallets,
-            wallets: [
-                WalletMetadata("Test Wallet", preview: true),
-                WalletMetadata("Second Wallet", preview: true),
-                WalletMetadata("Coldcard Q1", preview: true),
-            ]
-        )
-        .environment(MainViewModel())
-        .background(Color.white)
-        .frame(width: 280)
+#if DEBUG
+    #Preview {
+        HStack {
+            SidebarView(
+                currentRoute: Route.listWallets,
+                wallets: [
+                    WalletMetadata("Test Wallet", preview: true),
+                    WalletMetadata("Second Wallet", preview: true),
+                    WalletMetadata("Coldcard Q1", preview: true),
+                ]
+            )
+            .environment(MainViewModel())
+            .background(Color.white)
+            .frame(width: 280)
 
-        Spacer()
+            Spacer()
+        }
     }
-}
+#endif
