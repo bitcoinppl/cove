@@ -11,13 +11,24 @@ struct SidebarView: View {
     @Environment(MainViewModel.self) private var app
     @Environment(\.navigate) private var navigate
 
-    @Binding var isShowing: Bool
-
     let currentRoute: Route
+    let wallets: [WalletMetadata]
 
-    @GestureState private var dragState = CGSize.zero
-    @State private var sidebarOffset = -1 * UIScreen.main.bounds.width
-    private let screenWidth = UIScreen.main.bounds.width
+    init(currentRoute: Route, wallets: [WalletMetadata]? = nil) {
+        self.currentRoute = currentRoute
+        if let wallets {
+            self.wallets = wallets
+            return
+        }
+
+        do {
+            self.wallets = try Database().wallets().all()
+            Log.debug("wallets: \(self.wallets)")
+        } catch {
+            Log.error("Failed to get wallets \(error)")
+            self.wallets = []
+        }
+    }
 
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
@@ -41,122 +52,132 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        ZStack {
-            if sidebarOffset == 0 {
-                Rectangle()
-                    .ignoresSafeArea()
-                    .foregroundColor(.black)
-                    .opacity(0.95)
-                    .onTapGesture {
-                        withAnimation {
-                            isShowing = false
-                        }
-                    }
-            }
-
-            HStack(alignment: .top) {
-                VStack(spacing: 40) {
-                    Spacer()
-
-                    Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
-                        Label("Add Wallet", systemImage: "wallet.pass.fill")
-                            .foregroundStyle(.white)
-                            .font(.headline)
-                            .frame(minWidth: screenWidth * 0.55, minHeight: 45)
-                            .background(Color.blue)
-                            .cornerRadius(10)
-                    }
-
-                    if app.numberOfWallets > 1 {
-                        Button(action: { goTo(Route.listWallets) }) {
-                            Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
-                                .foregroundStyle(.white)
-                                .font(.headline)
-                                .frame(minWidth: screenWidth * 0.55, minHeight: 45)
-                                .background(Color.blue)
-                                .cornerRadius(10)
-                        }
-                    }
+        HStack(alignment: .top) {
+            VStack {
+                HStack(alignment: .top) {
+                    Image(.icon)
+                        .resizable()
+                        .frame(width: 65, height: 65)
+                        .clipShape(Circle())
 
                     Spacer()
-                    HStack(alignment: .center) {
-                        Button(
-                            action: { goTo(.settings) },
-                            label: {
-                                HStack {
-                                    Image(systemName: "gear")
-                                        .foregroundStyle(Color.white.gradient.opacity(0.5))
 
-                                    Text("Settings")
-                                        .foregroundStyle(Color.white.gradient)
+                    Button(action: app.nfcReader.scan) {
+                        Image(systemName: "wave.3.right")
+                    }
+                    .foregroundStyle(.white)
+                }
+
+                Divider()
+                    .overlay(Color(.systemGray5))
+                    .opacity(0.50)
+                    .padding(.vertical, 22)
+
+                HStack {
+                    Text("My Wallets")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
+
+                    Spacer()
+                }
+                .padding(.bottom, 16)
+
+                GeometryReader { proxy in
+                    VStack(spacing: 12) {
+                        ForEach(wallets, id: \.id) { wallet in
+                            Button(action: {
+                                goTo(Route.selectedWallet(wallet.id))
+                            }) {
+                                HStack(spacing: 20) {
+                                    Circle()
+                                        .fill(Color(wallet.color))
+                                        .frame(width: 6, height: 6)
+
+                                    Text(wallet.name)
+                                        .font(.footnote)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(.white)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.80)
                                 }
+                                .frame(width: proxy.size.width / 2, alignment: .leading)
                             }
-                        )
-                        .frame(maxWidth: screenWidth * 0.75)
-                    }
-                }
-                .frame(maxWidth: screenWidth * 0.75, maxHeight: .infinity, alignment: .leading)
-                .background(
-                    LinearGradient(
-                        gradient:
-                        Gradient(colors: [Color.blue.opacity(1), Color.blue.opacity(0.75)]),
-                        startPoint: .bottomTrailing, endPoint: .topLeading
-                    )
-                )
-                Spacer()
-            }
-            .transition(.move(edge: .leading))
-        }
-        .gesture(
-            DragGesture()
-                .updating($dragState) { value, state, _ in
-                    state = CGSize(width: value.translation.width, height: 0)
-                }
-                .onEnded { gesture in
-                    let dragThreshold: CGFloat = 100
-                    let draggedRatio = -gesture.translation.width / screenWidth
-
-                    withAnimation(.spring()) {
-                        if draggedRatio > 0.5
-                            || gesture.predictedEndTranslation.width < -dragThreshold
-                        {
-                            sidebarOffset = -screenWidth
-                            isShowing = false
-                        } else {
-                            sidebarOffset = 0
-                            isShowing = true
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(.systemGray5).opacity(0.06))
+                            .cornerRadius(10)
                         }
                     }
                 }
-        )
-        .onChange(of: isShowing) { _, newValue in
-            withAnimation {
-                sidebarOffset = newValue ? 0 : -1 * screenWidth
+
+                Spacer()
+
+                VStack(spacing: 32) {
+                    Divider()
+                        .overlay(Color(.systemGray5))
+                        .opacity(0.50)
+
+                    HStack {
+                        Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
+                            HStack(spacing: 20) {
+                                Image(systemName: "wallet.bifold")
+                                Text("Add Wallet")
+                            }
+                            .foregroundColor(.white)
+                        }
+
+                        Spacer()
+                    }
+
+                    HStack {
+                        Button(action: { goTo(Route.settings) }) {
+                            HStack(spacing: 22) {
+                                Image(systemName: "gear")
+                                Text("Settings")
+                            }
+                            .foregroundColor(.white)
+                        }
+
+                        Spacer()
+                    }
+                }
             }
         }
-        .onAppear {
-            if isShowing {
-                sidebarOffset = 0
-            }
-        }
-        .offset(x: sidebarOffset)
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(.midnightBtn)
     }
 
     func goTo(_ route: Route) {
-        isShowing = false
+        app.isSidebarVisible = false
+
+        if case Route.selectedWallet = route {
+            return app.loadAndReset(to: route)
+        }
 
         if !app.hasWallets, route == Route.newWallet(.select) {
             return app.resetRoute(to: RouteFactory().newWalletSelect())
-        } else {
-            navigate(route)
         }
+
+        navigate(route)
     }
 }
 
 #Preview {
-    ZStack {
-        SidebarView(isShowing: Binding.constant(true), currentRoute: Route.listWallets)
+    HStack {
+        SidebarView(
+            currentRoute: Route.listWallets,
+            wallets: [
+                WalletMetadata("Test Wallet", preview: true),
+                WalletMetadata("Second Wallet", preview: true),
+                WalletMetadata("Coldcard Q1", preview: true),
+            ]
+        )
+        .environment(MainViewModel())
+        .background(Color.white)
+        .frame(width: 280)
+
+        Spacer()
     }
-    .environment(MainViewModel())
-    .background(Color.white)
 }

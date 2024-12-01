@@ -514,6 +514,21 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
+    pub fn validate_metadata(&self) {
+        if self.metadata.read().name.trim().is_empty() {
+            let name = self
+                .metadata
+                .read()
+                .master_fingerprint
+                .as_deref()
+                .map(Fingerprint::as_uppercase)
+                .unwrap_or_else(|| "Unnamed Wallet".to_string());
+
+            self.dispatch(WalletViewModelAction::UpdateName(name));
+        }
+    }
+
+    #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
         debug!("start_wallet_scan: {}", self.id);
 

@@ -162,7 +162,7 @@ struct WalletBalanceHeaderView: View {
                 .frame(maxWidth: .infinity)
                 .brightness(0.1)
         )
-        .background(Color.midnightBlue.opacity(0.98))
+        .background(Color.midnightBlue)
         .onTapGesture {
             model.dispatch(action: .toggleFiatBtcPrimarySecondary)
         }

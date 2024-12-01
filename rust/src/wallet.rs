@@ -270,8 +270,8 @@ impl Wallet {
             .map_err(WalletError::ParseXpubError)?;
 
         metadata.name = match fingerprint {
-            Some(fingerprint) => format!("HWW Import ({})", fingerprint.to_ascii_uppercase()),
-            None => "HWW Import".to_string(),
+            Some(fingerprint) => format!("Imported {}", fingerprint.to_ascii_uppercase()),
+            None => "Imported".to_string(),
         };
 
         let descriptors: Descriptors = descriptors.into();

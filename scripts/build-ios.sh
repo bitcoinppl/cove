@@ -70,7 +70,6 @@ xcodebuild -create-xcframework \
 # Cleanup
 rm -rf bindings
 
-
 # if [ ! -z $SIGN ] && [ ! -z $SIGNING_IDENTITY ] || [ $SIGN == "--sign" ]; then
 #     echo "Signing for distribution: identity: $SIGNING_IDENTITY"
 #     codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"

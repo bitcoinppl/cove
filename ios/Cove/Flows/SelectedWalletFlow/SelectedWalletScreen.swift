@@ -158,7 +158,13 @@ struct SelectedWalletScreen: View {
                         .font(.callout)
                         .fontWeight(.semibold)
                 }
-                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 8).inset(by: -8))
+                .padding(.vertical, 20)
+                .padding(.horizontal, 28)
+                .contentShape(Rectangle())
+                .contentShape(
+                    .contextMenuPreview,
+                    RoundedRectangle(cornerRadius: 8)
+                )
                 .contextMenu {
                     Button("Settings") {
                         sheetState = .init(.settings)
@@ -202,10 +208,12 @@ struct SelectedWalletScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        .onChange(of: model.walletMetadata.discoveryState) { _,
-            newValue in setSheetState(newValue)
+        .onChange(of: model.walletMetadata.discoveryState) {
+            _,
+                newValue in setSheetState(newValue)
         }
         .onAppear { setSheetState(model.walletMetadata.discoveryState) }
+        .onAppear(perform: model.validateMetadata)
         .alert(
             item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
             content: DisplayErrorAlert
@@ -222,15 +230,34 @@ struct VerifyReminder: View {
     var body: some View {
         Group {
             if !isVerified {
-                Text("verify wallet")
-                    .font(.caption)
-                    .foregroundColor(.primary.opacity(0.6))
+                Button(action: {
+                    navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
+                }
+                ) {
+                    HStack(spacing: 20) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.red.opacity(0.85))
+                            .fontWeight(.semibold)
+
+                        Text("backup wallet")
+                            .fontWeight(.semibold)
+                            .font(.caption)
+
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.red.opacity(0.85))
+                            .fontWeight(.semibold)
+                    }
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity)
-                    .background(Color.yellow.gradient.opacity(0.75))
-                    .onTapGesture {
-                        navigate(Route.newWallet(.hotWallet(.verifyWords(walletId))))
-                    }
+                    .background(
+                        LinearGradient(
+                            colors: [.orange.opacity(0.67), .yellow.opacity(0.96)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .foregroundStyle(.black.opacity(0.66))
+                }
             }
         }
     }

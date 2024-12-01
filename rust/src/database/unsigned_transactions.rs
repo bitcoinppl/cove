@@ -279,11 +279,15 @@ impl redb::Key for TxId {
 }
 
 impl redb::Value for TxId {
-    type SelfType<'a> = TxId
-           where Self: 'a;
+    type SelfType<'a>
+        = TxId
+    where
+        Self: 'a;
 
-    type AsBytes<'a> = Vec<u8>
-        where Self: 'a;
+    type AsBytes<'a>
+        = Vec<u8>
+    where
+        Self: 'a;
 
     fn fixed_width() -> Option<usize> {
         None
