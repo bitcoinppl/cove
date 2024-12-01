@@ -158,7 +158,13 @@ struct SelectedWalletScreen: View {
                         .font(.callout)
                         .fontWeight(.semibold)
                 }
-                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 8).inset(by: -8))
+                .padding(.vertical, 20)
+                .padding(.horizontal, 28)
+                .contentShape(Rectangle())
+                .contentShape(
+                    .contextMenuPreview,
+                    RoundedRectangle(cornerRadius: 8)
+                )
                 .contextMenu {
                     Button("Settings") {
                         sheetState = .init(.settings)
