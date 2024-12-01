@@ -12,6 +12,23 @@ struct SidebarView: View {
     @Environment(\.navigate) private var navigate
 
     let currentRoute: Route
+    let wallets: [WalletMetadata]
+
+    init(currentRoute: Route, wallets: [WalletMetadata]? = nil) {
+        self.currentRoute = currentRoute
+        if let wallets {
+            self.wallets = wallets
+            return
+        }
+
+        do {
+            self.wallets = try Database().wallets().all()
+            Log.debug("wallets: \(self.wallets)")
+        } catch {
+            Log.error("Failed to get wallets \(error)")
+            self.wallets = []
+        }
+    }
 
     func setForeground(_ route: Route) -> LinearGradient {
         if RouteFactory().isSameParentRoute(route: route, routeToCheck: currentRoute) {
@@ -37,52 +54,102 @@ struct SidebarView: View {
     var body: some View {
         HStack(alignment: .top) {
             VStack(spacing: 40) {
-                Spacer()
+                HStack(alignment: .top) {
+                    Image(.icon)
+                        .resizable()
+                        .frame(width: 65, height: 65)
+                        .clipShape(Circle())
 
-                Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
-                    Label("Add Wallet", systemImage: "wallet.pass.fill")
-                        .foregroundStyle(.white)
-                        .font(.headline)
-                        .background(Color.blue)
-                        .cornerRadius(10)
+                    Spacer()
+
+                    Button(action: app.nfcReader.scan) {
+                        Image(systemName: "wave.3.right")
+                    }
+                    .foregroundStyle(.white)
                 }
 
-                if app.numberOfWallets > 1 {
-                    Button(action: { goTo(Route.listWallets) }) {
-                        Label("Change Wallet", systemImage: "arrow.uturn.right.square.fill")
-                            .foregroundStyle(.white)
-                            .font(.headline)
-                            .background(Color.blue)
+                Divider()
+                    .overlay(Color(.systemGray5))
+                    .opacity(0.50)
+
+                HStack {
+                    Text("My Wallets")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.white)
+
+                    Spacer()
+                }
+
+                GeometryReader { proxy in
+                    VStack(spacing: 12) {
+                        ForEach(wallets, id: \.id) { wallet in
+                            Button(action: {
+                                goTo(Route.selectedWallet(wallet.id))
+                            }) {
+                                HStack(spacing: 20) {
+                                    Circle()
+                                        .fill(Color(wallet.color))
+                                        .frame(width: 6, height: 6)
+
+                                    Text(wallet.name)
+                                        .font(.footnote)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(.white)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.80)
+                                }
+                                .frame(width: proxy.size.width / 2, alignment: .leading)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(.systemGray5).opacity(0.06))
                             .cornerRadius(10)
+                        }
                     }
                 }
 
                 Spacer()
-                HStack(alignment: .center) {
-                    Button(
-                        action: { goTo(.settings) },
-                        label: {
-                            HStack {
-                                Image(systemName: "gear")
-                                    .foregroundStyle(Color.white.gradient.opacity(0.5))
 
-                                Text("Settings")
-                                    .foregroundStyle(Color.white.gradient)
-                            }
+                Divider()
+                    .overlay(Color(.systemGray5))
+                    .opacity(0.50)
+
+                HStack {
+                    Button(action: { goTo(RouteFactory().newWalletSelect()) }) {
+                        HStack(spacing: 20) {
+                            Image(systemName: "wallet.bifold")
+                            Text("Add Wallet")
                         }
-                    )
+                        .foregroundColor(.white)
+                    }
+
+                    Spacer()
+                }
+
+                HStack {
+                    Button(action: { goTo(Route.settings) }) {
+                        HStack(spacing: 22) {
+                            Image(systemName: "gear")
+                            Text("Settings")
+                        }
+                        .foregroundColor(.white)
+                    }
+
+                    Spacer()
                 }
             }
         }
+        .padding(20)
         .frame(maxWidth: .infinity)
-        .background(.blue)
+        .background(.midnightBtn)
     }
 
     func goTo(_ route: Route) {
         app.isSidebarVisible = false
 
         if !app.hasWallets, route == Route.newWallet(.select) {
-            return app.resetRoute(to: RouteFactory().newWalletSelect())
+            app.resetRoute(to: RouteFactory().newWalletSelect())
         } else {
             navigate(route)
         }
@@ -90,7 +157,22 @@ struct SidebarView: View {
 }
 
 #Preview {
-    SidebarView(currentRoute: Route.listWallets)
+    HStack {
+        SidebarView(
+            currentRoute: Route.listWallets,
+            wallets: [
+                WalletMetadata("Test Wallet", preview: true),
+                WalletMetadata("Second Wallet", preview: true),
+                WalletMetadata("Coldcard Q1", preview: true),
+//                WalletMetadata("Daily Spending", preview: true),
+//                WalletMetadata("Coldcard Q1", preview: true),
+//                WalletMetadata("This is a really long wallet name", preview: true),
+            ]
+        )
         .environment(MainViewModel())
         .background(Color.white)
+        .frame(width: 280)
+
+        Spacer()
+    }
 }

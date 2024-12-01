@@ -56,7 +56,6 @@ struct SidebarContainer<Content: View>: View {
         ZStack(alignment: .leading) {
             ZStack {
                 content
-                    .ignoresSafeArea(.all)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if app.isSidebarVisible || gestureOffset > 0 || offset > 0 {
@@ -68,6 +67,7 @@ struct SidebarContainer<Content: View>: View {
                         .onTapGesture {
                             app.isSidebarVisible = false
                         }
+                        .ignoresSafeArea(.all)
                 }
             }
             .offset(x: totalOffset)
@@ -78,7 +78,8 @@ struct SidebarContainer<Content: View>: View {
                 .offset(x: totalOffset)
         }
         .gesture(
-            DragGesture()
+            !app.router.routes.isEmpty ? nil :
+                DragGesture()
                 .updating($gestureOffset) { value, state, _ in
                     // closed
                     if !app.isSidebarVisible,
@@ -103,7 +104,6 @@ struct SidebarContainer<Content: View>: View {
                 offset = isVisible ? sideBarWidth : 0
             }
         }
-        .ignoresSafeArea(.all)
     }
 }
 
@@ -111,7 +111,13 @@ struct SidebarContainer<Content: View>: View {
     SidebarContainer {
         VStack {}
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(LinearGradient(colors: [Color.red, Color.green], startPoint: .leading, endPoint: .trailing))
+            .background(
+                LinearGradient(
+                    colors: [Color.red, Color.yellow],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
     }
     .environment(MainViewModel())
 }

@@ -21,6 +21,18 @@ impl WalletId {
     pub fn preview_new() -> Self {
         Self("testtesttest".to_string())
     }
+
+    pub fn preview_new_random() -> Self {
+        // random string id
+        let rng = rand::thread_rng();
+        let random_string: String = rng
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(8)
+            .map(char::from)
+            .collect();
+
+        Self(random_string)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
@@ -192,7 +204,7 @@ impl WalletMetadata {
 
     pub fn preview_new() -> Self {
         Self {
-            id: WalletId::preview_new(),
+            id: WalletId::preview_new_random(),
             name: "Test Wallet".to_string(),
             master_fingerprint: Some(Arc::new(Fingerprint::default())),
             color: WalletColor::random(),
