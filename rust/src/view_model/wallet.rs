@@ -811,6 +811,7 @@ impl RustWalletViewModel {
     #[uniffi::method]
     pub fn dispatch(&self, action: WalletViewModelAction) {
         match action {
+            WalletViewModelAction::UpdateName(name) if name.is_empty() => {}
             WalletViewModelAction::UpdateName(name) => {
                 let mut metadata = self.metadata.write();
                 metadata.name = name;

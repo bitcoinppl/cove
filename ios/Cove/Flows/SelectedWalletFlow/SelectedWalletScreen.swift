@@ -192,6 +192,10 @@ struct SelectedWalletScreen: View {
                 let _ = try? await model.rust.forceUpdateHeight()
             }
             .onAppear {
+                if metadata.name.isEmpty {
+                    model.dispatch(action: .updateName(metadata.masterFingerprint?.asUppercase() ?? "Unnamed Wallet"))
+                }
+
                 UIRefreshControl.appearance().tintColor = UIColor.white
             }
             .scrollIndicators(.hidden)
