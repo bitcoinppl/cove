@@ -17,6 +17,7 @@ struct LoadAndResetView: View {
                 try? await Task.sleep(for: .milliseconds(loadingTimeMs))
                 app.resetRoute(to: nextRoute)
             }
+            .tint(.primary)
     }
 }
 

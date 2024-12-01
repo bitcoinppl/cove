@@ -110,6 +110,11 @@ import SwiftUI
         rust.resetDefaultRouteTo(route: route)
     }
 
+    @MainActor
+    func loadAndReset(to route: Route) {
+        rust.loadAndResetDefaultRoute(route: route)
+    }
+
     func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {

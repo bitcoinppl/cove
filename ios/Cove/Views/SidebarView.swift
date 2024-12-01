@@ -53,7 +53,7 @@ struct SidebarView: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            VStack(spacing: 40) {
+            VStack {
                 HStack(alignment: .top) {
                     Image(.icon)
                         .resizable()
@@ -71,6 +71,7 @@ struct SidebarView: View {
                 Divider()
                     .overlay(Color(.systemGray5))
                     .opacity(0.50)
+                    .padding(.vertical, 22)
 
                 HStack {
                     Text("My Wallets")
@@ -80,6 +81,7 @@ struct SidebarView: View {
 
                     Spacer()
                 }
+                .padding(.bottom, 16)
 
                 GeometryReader { proxy in
                     VStack(spacing: 12) {
@@ -148,11 +150,15 @@ struct SidebarView: View {
     func goTo(_ route: Route) {
         app.isSidebarVisible = false
 
-        if !app.hasWallets, route == Route.newWallet(.select) {
-            app.resetRoute(to: RouteFactory().newWalletSelect())
-        } else {
-            navigate(route)
+        if case Route.selectedWallet = route {
+            return app.loadAndReset(to: route)
         }
+
+        if !app.hasWallets, route == Route.newWallet(.select) {
+            return app.resetRoute(to: RouteFactory().newWalletSelect())
+        }
+
+        navigate(route)
     }
 }
 
@@ -164,9 +170,6 @@ struct SidebarView: View {
                 WalletMetadata("Test Wallet", preview: true),
                 WalletMetadata("Second Wallet", preview: true),
                 WalletMetadata("Coldcard Q1", preview: true),
-//                WalletMetadata("Daily Spending", preview: true),
-//                WalletMetadata("Coldcard Q1", preview: true),
-//                WalletMetadata("This is a really long wallet name", preview: true),
             ]
         )
         .environment(MainViewModel())
