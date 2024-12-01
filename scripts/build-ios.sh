@@ -60,6 +60,7 @@ mv ./bindings/coveFFI.modulemap ./bindings/module.modulemap
 # Move the Swift file to the project
 rm ../ios/Cove/Cove.swift || true
 mv ./bindings/cove.swift ../ios/Cove/Cove.swift
+swiftformat ../ios/Cove/Cove.swift --swiftversion 6 &
  
 # Recreate XCFramework
 rm -rf "ios/Cove.xcframework" || true

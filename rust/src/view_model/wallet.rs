@@ -520,8 +520,8 @@ impl RustWalletViewModel {
                 .metadata
                 .read()
                 .master_fingerprint
-                .as_ref()
-                .map(|f| f.as_uppercase())
+                .as_deref()
+                .map(Fingerprint::as_uppercase)
                 .unwrap_or_else(|| "Unnamed Wallet".to_string());
 
             self.dispatch(WalletViewModelAction::UpdateName(name));
