@@ -106,6 +106,7 @@ struct NewWalletSelectScreen: View {
                     HStack {
                         Image(systemName: "wave.3.right")
                         Text("NFC Help")
+                            .font(.subheadline)
                     }
                 }
                 .foregroundColor(.white)

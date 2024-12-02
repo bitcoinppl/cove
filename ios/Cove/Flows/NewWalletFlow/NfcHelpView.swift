@@ -46,6 +46,7 @@ struct NfcHelpView: View {
                 }
             }
         }
+        .scrollIndicators(.hidden)
         .padding(22)
     }
 }

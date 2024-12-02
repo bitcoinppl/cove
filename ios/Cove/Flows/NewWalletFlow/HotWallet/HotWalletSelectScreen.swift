@@ -26,39 +26,69 @@ struct HotWalletSelectScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Select Wallet Option")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top)
-
+        VStack(spacing: 28) {
             Spacer()
 
-            Button(action: { isSheetShown = true; nextScreen = .create }) {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Create Wallet")
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 25)
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-            }
-            Button(action: { isSheetShown = true; nextScreen = .import_ }) {
-                HStack {
-                    Image(systemName: "arrow.down.circle.fill")
-                    Text("Import Wallet")
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 25)
-                .background(Color.secondary.opacity(0.1))
-                .foregroundColor(.primary)
-                .cornerRadius(10)
+            HStack {
+                DotMenuView(selected: 1, size: 5)
+                Spacer()
             }
 
-            Spacer()
-            Spacer()
+            HStack {
+                Text("Do you already have a wallet?")
+                    .font(.system(size: 38, weight: .semibold))
+                    .lineSpacing(1.2)
+                    .foregroundColor(.white)
+
+                Spacer()
+            }
+
+            Divider()
+                .overlay(.lightGray.opacity(0.50))
+
+            VStack(spacing: 14) {
+                Button(action: { isSheetShown = true; nextScreen = .create }) {
+                    Text("Create new wallet")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .padding(.horizontal, 10)
+                        .background(Color.btnPrimary)
+                        .foregroundColor(.midnightBlue)
+                        .cornerRadius(10)
+                }
+
+                Button(action: { isSheetShown = true; nextScreen = .import_ }) {
+                    Text("Import existing wallet")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .padding(.horizontal, 10)
+                        .foregroundColor(.white)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding()
+        .navigationBarTitleDisplayMode(.inline)
+        .frame(maxHeight: .infinity)
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .brightness(0.05)
+        )
+        .background(Color.midnightBlue)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Add New Wallet")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+            }
         }
         .confirmationDialog("Select Number of Words", isPresented: $isSheetShown) {
             if nextScreen == .import_ {
@@ -77,8 +107,6 @@ struct HotWalletSelectScreen: View {
                 Text("24 Words")
             }
         }
-        .padding()
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
