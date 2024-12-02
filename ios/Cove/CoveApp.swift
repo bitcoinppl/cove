@@ -382,6 +382,8 @@ struct CoveApp: App {
             .white
         case .selectedWallet:
             .white
+        case .newWallet:
+            .white
         default:
             .blue
         }

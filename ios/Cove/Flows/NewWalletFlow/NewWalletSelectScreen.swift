@@ -35,117 +35,69 @@ struct NewWalletSelectScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 30) {
-            Text("How do you want to secure your Bitcoin?")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .padding(.top)
-
+        VStack(spacing: 28) {
             Spacer()
 
-            VStack(spacing: 30) {
+            HStack {
+                DotMenuView(selected: 0, size: 5)
+                Spacer()
+            }
+
+            HStack {
+                Text("How do you want to secure your Bitcoin?")
+                    .font(.system(size: 38, weight: .semibold))
+                    .lineSpacing(1.2)
+                    .foregroundColor(.white)
+
+                Spacer()
+            }
+
+            Divider()
+                .overlay(.lightGray.opacity(0.50))
+
+            HStack(spacing: 14) {
+                Button(action: { showSelectDialog = true }) {
+                    HStack {
+                        BitcoinShieldIcon(width: 15, color: .midnightBlue)
+
+                        Text("Hardware Wallet")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+                    .padding(.horizontal, 10)
+                    .background(Color.btnPrimary)
+                    .foregroundColor(.midnightBlue)
+                    .cornerRadius(10)
+                }
+
                 NavigationLink(value: RouteFactory().newHotWallet()) {
                     HStack {
                         Image(systemName: "iphone")
-                            .font(.title2)
+                            .font(.subheadline)
+                            .symbolRenderingMode(.monochrome)
+
                         Text("On This Device")
-                            .font(.headline)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 22)
-                    .background(
-                        .blue.opacity(colorScheme == .dark ? 0.85 : 1)
-                    )
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
+                    .padding(.vertical, 20)
+                    .padding(.horizontal, 10)
+                    .background(Color.btnPrimary)
+                    .foregroundColor(.midnightBlue)
+                    .cornerRadius(10)
                 }
                 .buttonStyle(PlainButtonStyle())
-
-                Button(action: { showSelectDialog = true }) {
-                    HStack {
-                        Image(systemName: "externaldrive")
-                            .font(.title2)
-                        Text("On a Hardware Wallet")
-                            .font(.headline)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 22)
-                    .background(
-                        .green.opacity(colorScheme == .dark ? 0.85 : 1)
-                    )
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Divider()
-
-                HStack {
-                    Button(action: app.nfcReader.scan) {
-                        HStack(spacing: 16) {
-                            Image(systemName: "wave.3.right")
-                                .font(.system(size: 16))
-                            Text("NFC")
-                                .font(.headline)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(.black.gradient)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-
-                    Button(action: app.scanQr) {
-                        HStack(spacing: 16) {
-                            Image(systemName: "qrcode")
-                                .font(.title2)
-                            Text("QR")
-                                .font(.headline)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(.black.gradient)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
             }
-            .padding(.horizontal)
             .confirmationDialog(
                 "Import hardware wallet using",
                 isPresented: $showSelectDialog,
                 titleVisibility: .visible
             ) {
-                NavigationLink(value: routeFactory.qrImport()) {
-                    Text("QR Code")
-                }
-                Button("File") {
-                    isImporting = true
-                }
-                Button("NFC") {
-                    nfcReader.scan()
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        withAnimation {
-                            nfcCalled = true
-                        }
-                    }
-                }
-                Button("Paste") {
-                    let text = UIPasteboard.general.string ?? ""
-                    if text.isEmpty {
-                        alert = AlertItem(
-                            type: .error("No text found on the clipboard."))
-                        return
-                    }
-
-                    newWalletFromXpub(text)
-                }
+                ConfirmationDialogContent
             }
-
-            Spacer()
 
             if nfcCalled {
                 Button(action: {
@@ -154,12 +106,13 @@ struct NewWalletSelectScreen: View {
                     HStack {
                         Image(systemName: "wave.3.right")
                         Text("NFC Help")
+                            .font(.subheadline)
                     }
                 }
+                .foregroundColor(.white)
             }
-
-            Spacer()
         }
+        .padding()
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(
             isPresented: $isImporting,
@@ -183,10 +136,44 @@ struct NewWalletSelectScreen: View {
                 }
             )
         }
-        .onChange(of: nfcReader.scannedMessage) { _, message in
-            if let message { newWalletFromXpub(message) }
-        }
+        .onChange(of: nfcReader.scannedMessage, initial: false, onChangeScannedMessage)
         .sheet(item: $sheetState, content: SheetContent)
+        .frame(maxHeight: .infinity)
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .brightness(0.05)
+        )
+        .background(Color.midnightBlue)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Add New Wallet")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+            }
+
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                HStack(spacing: 6) {
+                    Button(action: app.scanQr) {
+                        Image(systemName: "qrcode")
+                            .foregroundColor(.white)
+                    }
+
+                    Button(action: app.nfcReader.scan) {
+                        Image(systemName: "wave.3.right")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+        }
+    }
+
+    private func onChangeScannedMessage(_: String?, _ message: String?) {
+        guard let xpub = message else { return }
+        newWalletFromXpub(xpub)
     }
 
     private func newWalletFromXpub(_ xpub: String) {
@@ -199,6 +186,38 @@ struct NewWalletSelectScreen: View {
             try app.rust.selectWallet(id: id)
         } catch {
             alert = AlertItem(type: .error(error.localizedDescription))
+        }
+    }
+
+    @ViewBuilder
+    var ConfirmationDialogContent: some View {
+        NavigationLink(value: routeFactory.qrImport()) {
+            Text("QR Code")
+        }
+
+        Button("File") {
+            isImporting = true
+        }
+
+        Button("NFC") {
+            nfcReader.scan()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                withAnimation {
+                    nfcCalled = true
+                }
+            }
+        }
+
+        Button("Paste") {
+            let text = UIPasteboard.general.string ?? ""
+            if text.isEmpty {
+                alert = AlertItem(
+                    type: .error("No text found on the clipboard."))
+                return
+            }
+
+            newWalletFromXpub(text)
         }
     }
 }
@@ -232,6 +251,8 @@ private enum SheetState {
 }
 
 #Preview {
-    NewWalletSelectScreen()
-        .environment(MainViewModel())
+    NavigationStack {
+        NewWalletSelectScreen()
+            .environment(MainViewModel())
+    }
 }
