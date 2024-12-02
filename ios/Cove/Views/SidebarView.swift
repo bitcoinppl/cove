@@ -83,16 +83,16 @@ struct SidebarView: View {
                 }
                 .padding(.bottom, 16)
 
-                GeometryReader { proxy in
+                GeometryReader { geo in
                     VStack(spacing: 12) {
                         ForEach(wallets, id: \.id) { wallet in
                             Button(action: {
                                 goTo(Route.selectedWallet(wallet.id))
                             }) {
-                                HStack(spacing: 20) {
+                                HStack(spacing: 10) {
                                     Circle()
                                         .fill(Color(wallet.color))
-                                        .frame(width: 6, height: 6)
+                                        .frame(width: 8, height: 8, alignment: .leading)
 
                                     Text(wallet.name)
                                         .font(.footnote)
@@ -100,10 +100,11 @@ struct SidebarView: View {
                                         .foregroundStyle(.white)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.80)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .frame(width: proxy.size.width / 2, alignment: .leading)
+                                .frame(maxWidth: .infinity)
+                                .padding(.leading, geo.size.width / 4)
                             }
-                            .frame(maxWidth: .infinity)
                             .padding()
                             .background(Color.lightGray.opacity(0.06))
                             .cornerRadius(10)
