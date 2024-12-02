@@ -150,15 +150,19 @@ struct SidebarView: View {
     func goTo(_ route: Route) {
         app.isSidebarVisible = false
 
-        if case Route.selectedWallet = route {
-            return app.loadAndReset(to: route)
-        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
 
-        if !app.hasWallets, route == Route.newWallet(.select) {
-            return app.resetRoute(to: RouteFactory().newWalletSelect())
-        }
+            if case Route.selectedWallet = route {
+                return app.loadAndReset(to: route)
+            }
 
-        navigate(route)
+            if !app.hasWallets, route == Route.newWallet(.select) {
+                return app.resetRoute(to: RouteFactory().newWalletSelect())
+            }
+
+            navigate(route)
+        }
     }
 }
 
