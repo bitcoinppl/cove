@@ -137,7 +137,7 @@ impl RustPendingWalletViewModel {
 
     #[uniffi::method]
     pub fn bip_39_words_grouped(&self) -> Vec<Vec<GroupedWord>> {
-        self.state.read().wallet.mnemonic.grouped_words_of(6)
+        self.state.read().wallet.mnemonic.grouped_words_of(12)
     }
 
     // boilerplate methods

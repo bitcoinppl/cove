@@ -19,6 +19,12 @@ struct HotWalletCreateScreen: View {
     }
 }
 
+let columns = [
+    GridItem(.flexible()),
+    GridItem(.flexible()),
+    GridItem(.flexible()),
+]
+
 struct WordsView: View {
     var model: PendingWalletViewModel
     var groupedWords: [[GroupedWord]]
@@ -32,57 +38,92 @@ struct WordsView: View {
     }
 
     var body: some View {
-        SunsetWave {
-            VStack {
-                Spacer()
-
-                Text("Please write these words down")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white.opacity(0.75))
-                    .padding(.top, 50)
-
-                StyledWordCard(tabIndex: $tabIndex) {
-                    ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
-                        WordCardView(words: wordGroup).tag(index)
-                    }
+        VStack(spacing: 24) {
+            StyledWordCard(tabIndex: $tabIndex) {
+                ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
+                    WordCardView(words: wordGroup).tag(index)
                 }
-                .frame(height: 400)
-                .padding()
+            }
+            .frame(height: screenHeight * 0.50)
 
+            Spacer()
+
+            HStack {
+                DotMenuView(selected: 2, size: 5)
                 Spacer()
+            }
 
-                if tabIndex == lastIndex {
-                    Button("Save Wallet") {
-                        do {
-                            // save the wallet
-                            let walletId = try model.rust.saveWallet().id
-
-                            navigate(
-                                HotWalletRoute.verifyWords(walletId).intoRoute()
-                            )
-                        } catch {
-                            // TODO: handle, maybe show an alert?
-                            Log.error("Error \(error)")
-                        }
-                    }
-                    .buttonStyle(GradientButtonStyle())
-                    .padding(.top, 50)
-
-                } else {
-                    Button("Next") {
-                        withAnimation {
-                            tabIndex += 1
-                        }
-                    }
-                    .buttonStyle(GlassyButtonStyle())
-                    .padding(.top, 50)
-                }
+            HStack {
+                Text("Recovery Words")
+                    .font(.system(size: 38, weight: .semibold))
+                    .lineSpacing(1.2)
+                    .foregroundColor(.white)
 
                 Spacer()
             }
+
+            Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Once you leave this screen, you won’t be able to view them again.")
+                .font(.subheadline)
+                .foregroundStyle(.lightGray)
+                .opacity(0.70)
+
+            HStack {
+                Text("Please save these words in a secure location.")
+                    .font(.subheadline)
+                    .multilineTextAlignment(.leading)
+                    .fontWeight(.bold)
+                Spacer()
+            }
+
+            Divider()
+                .overlay(.lightGray.opacity(0.50))
+
+            VStack(spacing: 14) {
+                Group {
+                    if tabIndex == lastIndex {
+                        Button("Save Wallet") {
+                            do {
+                                // save the wallet
+                                let walletId = try model.rust.saveWallet().id
+
+                                navigate(
+                                    HotWalletRoute.verifyWords(walletId).intoRoute()
+                                )
+                            } catch {
+                                // TODO: handle, maybe show an alert?
+                                Log.error("Error \(error)")
+                            }
+                        }
+                    } else {
+                        Button("Next") {
+                            withAnimation {
+                                tabIndex += 1
+                            }
+                        }
+                    }
+                }
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .padding(.horizontal, 10)
+                .background(Color.btnPrimary)
+                .foregroundColor(.midnightBlue)
+                .cornerRadius(10)
+            }
         }
-        .navigationBarBackButtonHidden(true)
+        .padding()
+        .navigationBarTitleDisplayMode(.inline)
+        .frame(maxHeight: .infinity)
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .opacity(0.5)
+        )
+        .background(Color.midnightBlue)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button(action: {
@@ -92,7 +133,14 @@ struct WordsView: View {
                         Image(systemName: "chevron.left")
                         Text("Back")
                     }
+                    .foregroundStyle(.white)
                 }
+            }
+
+            ToolbarItem(placement: .principal) {
+                Text("Backup your wallet")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
             }
         }
         .alert(isPresented: $showConfirmationAlert) {
@@ -112,22 +160,35 @@ struct WordCardView: View {
     let words: [GroupedWord]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        LazyVGrid(columns: columns, spacing: 20) {
             ForEach(words, id: \.self) { group in
-                HStack {
-                    Text("\(String(format: "%02d", group.number)). ")
-                        .foregroundColor(.secondary)
-                        .frame(width: 30, alignment: .trailing)
-                        .padding(.trailing, 8)
-                        .multilineTextAlignment(.center)
+                HStack(spacing: 0) {
+                    Text("\(String(format: "%d", group.number)). ")
+                        .foregroundColor(.black.opacity(0.5))
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(1)
+                        .frame(alignment: .leading)
+                        .minimumScaleFactor(0.10)
+
+                    Spacer()
 
                     Text(group.word)
-                        .font(.headline)
+                        .foregroundStyle(.midnightBlue)
+                        .multilineTextAlignment(.center)
+                        .frame(alignment: .leading)
+                        .minimumScaleFactor(0.50)
+                        .lineLimit(1)
+
+                    Spacer()
                 }
+                .padding(.horizontal)
+                .padding(.vertical, 12)
+                .frame(width: (screenWidth * 0.33) - 20)
+                .background(Color.btnPrimary)
+                .cornerRadius(10)
             }
+            .font(.caption)
         }
-        .padding()
-        .foregroundColor(.white)
     }
 }
 
@@ -136,20 +197,21 @@ struct StyledWordCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        FixedGlassCard {
-            TabView(selection: $tabIndex) {
-                content
-            }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+        TabView(selection: $tabIndex) {
+            content
         }
-        .padding()
+        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
     }
 }
 
 #Preview("12 Words") {
-    HotWalletCreateScreen(numberOfWords: .twelve)
+    NavigationStack {
+        HotWalletCreateScreen(numberOfWords: .twelve)
+    }
 }
 
 #Preview("24 Words") {
-    HotWalletCreateScreen(numberOfWords: .twentyFour)
+    NavigationStack {
+        HotWalletCreateScreen(numberOfWords: .twentyFour)
+    }
 }
