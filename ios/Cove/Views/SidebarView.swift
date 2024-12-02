@@ -83,32 +83,29 @@ struct SidebarView: View {
                 }
                 .padding(.bottom, 16)
 
-                GeometryReader { geo in
-                    VStack(spacing: 12) {
-                        ForEach(wallets, id: \.id) { wallet in
-                            Button(action: {
-                                goTo(Route.selectedWallet(wallet.id))
-                            }) {
-                                HStack(spacing: 10) {
-                                    Circle()
-                                        .fill(Color(wallet.color))
-                                        .frame(width: 8, height: 8, alignment: .leading)
+                VStack(spacing: 12) {
+                    ForEach(wallets, id: \.id) { wallet in
+                        Button(action: {
+                            goTo(Route.selectedWallet(wallet.id))
+                        }) {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(Color(wallet.color))
+                                    .frame(width: 8, height: 8, alignment: .leading)
 
-                                    Text(wallet.name)
-                                        .font(.footnote)
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(.white)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.80)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.leading, geo.size.width / 4)
+                                Text(wallet.name)
+                                    .font(.footnote)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.80)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .padding()
-                            .background(Color.lightGray.opacity(0.06))
-                            .cornerRadius(10)
+                            .frame(maxWidth: .infinity)
                         }
+                        .padding()
+                        .background(Color.lightGray.opacity(0.06))
+                        .cornerRadius(10)
                     }
                 }
 
