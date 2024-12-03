@@ -10230,7 +10230,7 @@ public func FfiConverterTypeWalletsTable_lower(_ value: WalletsTable) -> UnsafeM
 
 public protocol WordValidatorProtocol : AnyObject {
     
-    func groupedWords()  -> [[GroupedWord]]
+    func groupedWords(groupsOf: UInt8)  -> [[GroupedWord]]
     
     func invalidWordsString(enteredWords: [[String]])  -> String
     
@@ -10288,11 +10288,21 @@ open class WordValidator:
     }
 
     
+public static func preview(preview: Bool, numberOfWords: NumberOfBip39Words? = nil) -> WordValidator  {
+    return try!  FfiConverterTypeWordValidator.lift(try! rustCall() {
+    uniffi_cove_fn_constructor_wordvalidator_preview(
+        FfiConverterBool.lower(preview),
+        FfiConverterOptionTypeNumberOfBip39Words.lower(numberOfWords),$0
+    )
+})
+}
+    
 
     
-open func groupedWords() -> [[GroupedWord]]  {
+open func groupedWords(groupsOf: UInt8 = UInt8(12)) -> [[GroupedWord]]  {
     return try!  FfiConverterSequenceSequenceTypeGroupedWord.lift(try! rustCall() {
-    uniffi_cove_fn_method_wordvalidator_grouped_words(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_wordvalidator_grouped_words(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(groupsOf),$0
     )
 })
 }
@@ -20111,6 +20121,30 @@ fileprivate struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeNumberOfBip39Words: FfiConverterRustBuffer {
+    typealias SwiftType = NumberOfBip39Words?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNumberOfBip39Words.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNumberOfBip39Words.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionSequenceSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [[String]]?
 
@@ -21740,7 +21774,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_walletstable_len() != 35149) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_wordvalidator_grouped_words() != 32035) {
+    if (uniffi_cove_checksum_method_wordvalidator_grouped_words() != 49274) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordvalidator_invalid_words_string() != 7159) {
@@ -21900,6 +21934,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_wallet_previewnewwallet() != 56877) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_wordvalidator_preview() != 53831) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_deviceaccess_timezone() != 16696) {

@@ -1,6 +1,6 @@
 use bip39::Mnemonic;
 
-use crate::{mnemonic::GroupedWord, mnemonic::WordAccess as _};
+use crate::mnemonic::{GroupedWord, NumberOfBip39Words, WordAccess as _};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct WordValidator {
@@ -16,9 +16,9 @@ impl WordValidator {
 #[uniffi::export]
 impl WordValidator {
     // get the grouped words
-    #[uniffi::method]
-    pub fn grouped_words(&self) -> Vec<Vec<GroupedWord>> {
-        self.mnemonic.grouped_words_of(6)
+    #[uniffi::method(default(groups_of = 12))]
+    pub fn grouped_words(&self, groups_of: u8) -> Vec<Vec<GroupedWord>> {
+        self.mnemonic.grouped_words_of(groups_of as usize)
     }
 
     // check if the word group passed in is valid
@@ -64,5 +64,16 @@ impl WordValidator {
         }
 
         invalid_words.join(", ")
+    }
+
+    // preview only
+    #[uniffi::constructor(name = "preview", default(number_of_words = None))]
+    pub fn preview(preview: bool, number_of_words: Option<NumberOfBip39Words>) -> Self {
+        assert!(preview);
+
+        let number_of_words = number_of_words.unwrap_or(NumberOfBip39Words::Twelve);
+        let mnemonic = number_of_words.to_mnemonic().clone();
+
+        Self { mnemonic }
     }
 }

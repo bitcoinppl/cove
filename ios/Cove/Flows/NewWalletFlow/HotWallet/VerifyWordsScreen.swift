@@ -7,12 +7,46 @@
 
 import SwiftUI
 
-struct VerifyWordsScreen: View {
+// MARK: CONTAINER
+
+struct VerifyWordsContainer: View {
+    @Environment(MainViewModel.self) private var app
     let id: WalletId
 
+    @State private var model: WalletViewModel? = nil
+    @State private var validator: WordValidator? = nil
+
+    func initOnAppear() {
+        do {
+            let model = try app.getWalletViewModel(id: id)
+            let validator = try model.rust.wordValidator()
+
+            self.model = model
+            self.validator = validator
+        } catch {
+            Log.error("VerifyWords failed to initialize: \(error)")
+        }
+    }
+
+    var body: some View {
+        if let model, let validator {
+            VerifyWordsScreen(model: model, validator: validator)
+        } else {
+            Text("Loading....")
+                .onAppear(perform: initOnAppear)
+        }
+    }
+}
+
+// MARK: Screen
+
+struct VerifyWordsScreen: View {
     @Environment(\.navigate) private var navigate
-    @Environment(MainViewModel.self) private var appModel
-    @State var model: WalletViewModel? = nil
+    @Environment(MainViewModel.self) private var app
+
+    // args
+    let model: WalletViewModel
+    let validator: WordValidator
 
     // private
     @State private var tabIndex: Int = 0
@@ -20,11 +54,10 @@ struct VerifyWordsScreen: View {
     @State private var invalidWords: String = ""
     @State private var focusField: Int?
 
-    @State private var validator: WordValidator? = nil
-    @State private var groupedWords: [[GroupedWord]] = [[]]
-    @State private var enteredWords: [[String]] = [[]]
-    @State private var textFields: [String] = []
-    @State private var filteredSuggestions: [String] = []
+    @State private var groupedWords: [[GroupedWord]]
+    @State private var enteredWords: [[String]]
+    @State private var textFields: [String]
+    @State private var filteredSuggestions: [String]
 
     @StateObject private var keyboardObserver = KeyboardObserver()
 
@@ -36,19 +69,20 @@ struct VerifyWordsScreen: View {
 
     @State private var activeAlert: AlertType?
 
-    func initOnAppear() {
-        do {
-            let model = try WalletViewModel(id: id)
-            let validator = try model.rust.wordValidator()
-            let groupedWords = validator.groupedWords()
+    var id: WalletId {
+        model.walletMetadata.id
+    }
 
-            self.model = model
-            self.validator = validator
-            self.groupedWords = groupedWords
-            enteredWords = groupedWords.map { $0.map { _ in "" }}
-        } catch {
-            Log.error("VerifyWords failed to initialize: \(error)")
-        }
+    init(model: WalletViewModel, validator: WordValidator) {
+        self.model = model
+        self.validator = validator
+
+        let groupedWords = validator.groupedWords()
+
+        self.groupedWords = groupedWords
+        self.enteredWords = groupedWords.map { $0.map { _ in "" } }
+        self.textFields = []
+        self.filteredSuggestions = []
     }
 
     var keyboardIsShowing: Bool {
@@ -60,11 +94,13 @@ struct VerifyWordsScreen: View {
     }
 
     var buttonIsDisabled: Bool {
-        !validator!.isValidWordGroup(groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex])
+        !validator.isValidWordGroup(
+            groupNumber: UInt8(tabIndex), enteredWords: enteredWords[tabIndex]
+        )
     }
 
     var isAllWordsValid: Bool {
-        validator!.isAllWordsValid(enteredWords: enteredWords)
+        validator.isAllWordsValid(enteredWords: enteredWords)
     }
 
     var lastIndex: Int {
@@ -82,19 +118,23 @@ struct VerifyWordsScreen: View {
         case .words:
             Alert(
                 title: Text("See Secret Words?"),
-                message: Text("Whoever has your secret words has access to your bitcoin. Please keep these safe and don't show them to anyone else."),
+                message: Text(
+                    "Whoever has your secret words has access to your bitcoin. Please keep these safe and don't show them to anyone else."
+                ),
                 primaryButton: .destructive(Text("Yes, Show Me")) {
-                    appModel.pushRoute(Route.secretWords(id))
+                    app.pushRoute(Route.secretWords(id))
                 },
                 secondaryButton: .cancel(Text("Cancel"))
             )
         case .skip:
             Alert(
                 title: Text("Skip verifying words?"),
-                message: Text("Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"),
+                message: Text(
+                    "Are you sure you want to skip verifying words? Without having a back of these words, you could lose your bitcoin"
+                ),
                 primaryButton: .destructive(Text("Yes, Verify Later")) {
                     Log.debug("Skipping verification, going to wallet id: \(id)")
-                    appModel.resetRoute(to: Route.selectedWallet(id))
+                    app.resetRoute(to: Route.selectedWallet(id))
                 },
                 secondaryButton: .cancel(Text("Cancel"))
             )
@@ -110,121 +150,122 @@ struct VerifyWordsScreen: View {
 
         do {
             try model.rust.markWalletAsVerified()
-            appModel.resetRoute(to: Route.selectedWallet(id))
+            app.resetRoute(to: Route.selectedWallet(id))
         } catch {
             Log.error("Error marking wallet as verified: \(error)")
         }
     }
 
     var body: some View {
-        if let model, let validator {
-            SunsetWave {
-                VStack {
-                    Spacer()
+        SunsetWave {
+            VStack {
+                Spacer()
 
-                    if !keyboardIsShowing {
-                        Text("Please verify your words")
-                            .font(.title2)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white.opacity(0.85))
-                            .padding(.top, 60)
-                            .padding(.bottom, 30)
-                    }
-
-                    FixedGlassCard {
-                        VStack {
-                            TabView(selection: $tabIndex) {
-                                ForEach(Array(validator.groupedWords().enumerated()), id: \.offset) { index, wordGroup in
-                                    VStack {
-                                        CardTab(wordGroup: wordGroup, fields: $enteredWords[index], filteredSuggestions: $filteredSuggestions, focusField: $focusField)
-                                            .tag(index)
-                                            .padding(.bottom, keyboardIsShowing ? 60 : 20)
-                                    }
-                                }
-                                .padding(.horizontal, 30)
-                            }
-                        }
-                    }
-                    .frame(height: cardHeight)
-                    .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            HStack {
-                                ForEach(filteredSuggestions, id: \.self) { word in
-                                    Spacer()
-                                    Button(word) {
-                                        guard let focusField else { return }
-                                        let (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
-                                        let innerIndex = remainder - 1
-                                        enteredWords[outerIndex][innerIndex] = word
-                                        self.focusField = focusField + 1
-                                    }
-                                    .foregroundColor(.secondary)
-                                    Spacer()
-
-                                    // only show divider in the middle
-                                    if filteredSuggestions.count > 1, filteredSuggestions.last != word {
-                                        Divider()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 30)
-
-                    Spacer()
-
-                    if tabIndex == lastIndex {
-                        Button("Confirm") {
-                            confirm(model, validator)
-                        }
-                        .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
-                        .padding(.top, 20)
-
-                    } else {
-                        Button("Next") {
-                            withAnimation {
-                                tabIndex += 1
-                            }
-                        }
-                        .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
-                        .disabled(buttonIsDisabled)
-                        .foregroundStyle(Color.red)
-                        .padding(.top, 20)
-                    }
-
-                    Button(action: {
-                        activeAlert = .words
-                    }) {
-                        Text("View Words")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.opacity(0.8))
-                    }
-                    .padding(.top, 10)
-
-                    Button(action: {
-                        activeAlert = .skip
-                    }) {
-                        Text("SKIP")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.opacity(0.6))
-                    }
-                    .padding(.top, 10)
-
-                    Spacer()
+                if !keyboardIsShowing {
+                    Text("Please verify your words")
+                        .font(.title2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white.opacity(0.85))
+                        .padding(.top, 60)
+                        .padding(.bottom, 30)
                 }
+
+                FixedGlassCard {
+                    VStack {
+                        TabView(selection: $tabIndex) {
+                            ForEach(Array(groupedWords.enumerated()), id: \.offset) {
+                                index, wordGroup in
+                                VStack {
+                                    CardTab(
+                                        wordGroup: wordGroup, fields: $enteredWords[index],
+                                        filteredSuggestions: $filteredSuggestions,
+                                        focusField: $focusField
+                                    )
+                                    .tag(index)
+                                    .padding(.bottom, keyboardIsShowing ? 60 : 20)
+                                }
+                            }
+                            .padding(.horizontal, 30)
+                        }
+                    }
+                }
+                .frame(height: cardHeight)
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        HStack {
+                            ForEach(filteredSuggestions, id: \.self) { word in
+                                Spacer()
+                                Button(word) {
+                                    guard let focusField else { return }
+                                    let (outerIndex, remainder) = focusField.quotientAndRemainder(
+                                        dividingBy: 6)
+                                    let innerIndex = remainder - 1
+                                    enteredWords[outerIndex][innerIndex] = word
+                                    self.focusField = focusField + 1
+                                }
+                                .foregroundColor(.secondary)
+                                Spacer()
+
+                                // only show divider in the middle
+                                if filteredSuggestions.count > 1, filteredSuggestions.last != word {
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 30)
+
+                Spacer()
+
+                if tabIndex == lastIndex {
+                    Button("Confirm") {
+                        confirm(model, validator)
+                    }
+                    .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
+                    .padding(.top, 20)
+
+                } else {
+                    Button("Next") {
+                        withAnimation {
+                            tabIndex += 1
+                        }
+                    }
+                    .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
+                    .disabled(buttonIsDisabled)
+                    .foregroundStyle(Color.red)
+                    .padding(.top, 20)
+                }
+
+                Button(action: {
+                    activeAlert = .words
+                }) {
+                    Text("View Words")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.opacity(0.8))
+                }
+                .padding(.top, 10)
+
+                Button(action: {
+                    activeAlert = .skip
+                }) {
+                    Text("SKIP")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.opacity(0.6))
+                }
+                .padding(.top, 10)
+
+                Spacer()
             }
-            .alert(item: $activeAlert) { alertType in
-                DisplayAlert(for: alertType)
-            }
-            .onChange(of: focusField) { _, _ in
-                filteredSuggestions = []
-            }
-        } else {
-            Text("Loading....")
-                .onAppear(perform: initOnAppear)
+        }
+        .alert(item: $activeAlert) { alertType in
+            DisplayAlert(for: alertType)
+        }
+        .onChange(of: focusField) { _, _ in
+            filteredSuggestions = []
         }
     }
 }
@@ -248,11 +289,13 @@ private struct CardTab: View {
     var body: some View {
         VStack(spacing: cardSpacing) {
             ForEach(Array(wordGroup.enumerated()), id: \.offset) { index, word in
-                AutocompleteField(autocomplete: Bip39AutoComplete(),
-                                  word: word,
-                                  text: $fields[index],
-                                  filteredSuggestions: $filteredSuggestions,
-                                  focusField: $focusField)
+                AutocompleteField(
+                    autocomplete: Bip39AutoComplete(),
+                    word: word,
+                    text: $fields[index],
+                    filteredSuggestions: $filteredSuggestions,
+                    focusField: $focusField
+                )
             }
         }
     }
@@ -327,46 +370,63 @@ private struct AutocompleteField: View {
     }
 
     var textField: some View {
-        TextField("", text: $text,
-                  prompt: Text("enter secret word...")
-                      .foregroundColor(.white.opacity(0.65)))
-            .foregroundColor(borderColor ?? .white)
-            .frame(alignment: .trailing)
-            .padding(.trailing, 8)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .keyboardType(.asciiCapable)
-            .focused($isFocused)
-            .onChange(of: isFocused) {
-                if !isFocused { return showSuggestions = false }
-
-                if isFocused {
-                    focusField = Int(word.number)
-                }
+        TextField(
+            "", text: $text,
+            prompt: Text("enter secret word...")
+                .foregroundColor(.white.opacity(0.65))
+        )
+        .foregroundColor(borderColor ?? .white)
+        .frame(alignment: .trailing)
+        .padding(.trailing, 8)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled(true)
+        .keyboardType(.asciiCapable)
+        .focused($isFocused)
+        .onChange(of: isFocused) {
+            if !isFocused {
+                showSuggestions = false
+                return
             }
-            .onSubmit {
+
+            if isFocused {
+                focusField = Int(word.number)
+            }
+        }
+        .onSubmit {
+            submitFocusField()
+        }
+        .onChange(of: focusField) { _, fieldNumber in
+            guard let fieldNumber else { return }
+            if word.number == fieldNumber {
+                isFocused = true
+            }
+        }
+        .onChange(of: text) {
+            filteredSuggestions = autocomplete.autocomplete(word: text)
+
+            if filteredSuggestions.count == 1, filteredSuggestions.first == word.word {
+                text = filteredSuggestions.first!
+
                 submitFocusField()
+                return
             }
-            .onChange(of: focusField) { _, fieldNumber in
-                guard let fieldNumber else { return }
-                if word.number == fieldNumber {
-                    isFocused = true
-                }
-            }
-            .onChange(of: text) {
-                filteredSuggestions = autocomplete.autocomplete(word: text)
-
-                if filteredSuggestions.count == 1, filteredSuggestions.first == word.word {
-                    text = filteredSuggestions.first!
-
-                    submitFocusField()
-                    return
-                }
-            }
+        }
     }
 }
 
 #Preview {
-    VerifyWordsScreen(id: WalletId())
-        .environment(MainViewModel())
+    struct Container: View {
+        @State var model = WalletViewModel(preview: "preview_only")
+        @State var validator = WordValidator.preview(preview: true)
+
+        var body: some View {
+            VerifyWordsScreen(model: model, validator: validator)
+                .environment(MainViewModel())
+        }
+    }
+
+    return
+        AsyncPreview {
+            Container()
+        }
 }
