@@ -10238,6 +10238,10 @@ public protocol WordValidatorProtocol : AnyObject {
     
     func isValidWordGroup(groupNumber: UInt8, enteredWords: [String])  -> Bool
     
+    func isWordCorrect(word: String, `for`: UInt8)  -> Bool
+    
+    func possibleWords(`for`: UInt8)  -> [String]
+    
 }
 
 open class WordValidator:
@@ -10328,6 +10332,23 @@ open func isValidWordGroup(groupNumber: UInt8, enteredWords: [String]) -> Bool  
     uniffi_cove_fn_method_wordvalidator_is_valid_word_group(self.uniffiClonePointer(),
         FfiConverterUInt8.lower(groupNumber),
         FfiConverterSequenceString.lower(enteredWords),$0
+    )
+})
+}
+    
+open func isWordCorrect(word: String, `for`: UInt8) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_wordvalidator_is_word_correct(self.uniffiClonePointer(),
+        FfiConverterString.lower(word),
+        FfiConverterUInt8.lower(`for`),$0
+    )
+})
+}
+    
+open func possibleWords(`for`: UInt8) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_cove_fn_method_wordvalidator_possible_words(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(`for`),$0
     )
 })
 }
@@ -21784,6 +21805,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordvalidator_is_valid_word_group() != 6393) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordvalidator_is_word_correct() != 39689) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_wordvalidator_possible_words() != 25098) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_address_from_string() != 47046) {

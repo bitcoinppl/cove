@@ -1,20 +1,72 @@
 use bip39::Mnemonic;
+use rand::seq::SliceRandom;
 
 use crate::mnemonic::{GroupedWord, NumberOfBip39Words, WordAccess as _};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct WordValidator {
     mnemonic: Mnemonic,
+    words: Vec<&'static str>,
 }
 
 impl WordValidator {
     pub fn new(mnemonic: Mnemonic) -> Self {
-        Self { mnemonic }
+        let words = mnemonic.words().collect();
+        Self { mnemonic, words }
     }
 }
 
 #[uniffi::export]
 impl WordValidator {
+    // get a word list of possible words for the word number
+    #[uniffi::method]
+    pub fn possible_words(&self, for_: u8) -> Vec<String> {
+        let Some(word_index) = for_.checked_sub(1) else { return vec![] };
+        let word_index = word_index as usize;
+        if word_index > self.words.len() {
+            return vec![];
+        }
+
+        let mut rng = rand::thread_rng();
+        let correct_word = self.words[word_index as usize];
+
+        let mut words_clone = self.words.clone();
+        words_clone.shuffle(&mut rng);
+
+        let new_words = NumberOfBip39Words::Twelve.to_mnemonic();
+
+        let five_existing_words = words_clone.iter().take(5).cloned();
+
+        let six_new_words = new_words.words().take(6);
+        let correct = std::iter::once(correct_word);
+
+        let mut combined: Vec<String> = five_existing_words
+            .chain(six_new_words)
+            .chain(correct)
+            .map(|word| word.to_string())
+            .collect();
+
+        combined.shuffle(&mut rng);
+
+        combined
+    }
+
+    // check if the selected word is correct
+    #[uniffi::method]
+    pub fn is_word_correct(&self, word: String, for_: u8) -> bool {
+        let Some(word_index) = for_.checked_sub(1) else { return false };
+        let word_index = word_index as usize;
+        if word_index > self.words.len() {
+            return false;
+        }
+
+        let correct_word = self.words[word_index];
+        correct_word == word
+    }
+
+    // OLD API
+    // TODO: remove this if no longer used
+
     // get the grouped words
     #[uniffi::method(default(groups_of = 12))]
     pub fn grouped_words(&self, groups_of: u8) -> Vec<Vec<GroupedWord>> {
@@ -74,6 +126,6 @@ impl WordValidator {
         let number_of_words = number_of_words.unwrap_or(NumberOfBip39Words::Twelve);
         let mnemonic = number_of_words.to_mnemonic().clone();
 
-        Self { mnemonic }
+        Self::new(mnemonic)
     }
 }

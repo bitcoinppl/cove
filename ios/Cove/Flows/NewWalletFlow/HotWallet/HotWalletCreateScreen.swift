@@ -72,6 +72,9 @@ struct WordsView: View {
                     .font(.subheadline)
                     .multilineTextAlignment(.leading)
                     .fontWeight(.bold)
+                    .foregroundStyle(.white)
+                    .opacity(0.9)
+
                 Spacer()
             }
 
