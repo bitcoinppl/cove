@@ -13,6 +13,10 @@ extension Color {
         Color(hue: 0.61, saturation: 0.04, brightness: 0.83, opacity: 1.00)
     }
 
+    static var lightGreen: Color {
+        Color(red: 0.463, green: 0.898, blue: 0.584) // #76e595
+    }
+
     init(_ color: WalletColor) {
         self = color.toColor()
     }

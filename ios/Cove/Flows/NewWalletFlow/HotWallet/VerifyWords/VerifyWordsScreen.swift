@@ -327,8 +327,7 @@ struct VerifyWordsScreen: View {
                 HStack {
                     Text("To confirm that you've securely saved your recovery phrase, please drag and drop the word into their correct positions.")
                         .font(.footnote)
-                        .foregroundStyle(.lightGray)
-                        .opacity(0.75)
+                        .foregroundStyle(.lightGray.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
@@ -343,15 +342,8 @@ struct VerifyWordsScreen: View {
             VStack(spacing: 16) {
                 Button(action: { activeAlert = .words }) {
                     Text("Show Words")
-                        .font(.footnote)
-                        .fontWeight(.medium)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .padding(.horizontal, 10)
-                        .background(Color.btnPrimary)
-                        .foregroundColor(.midnightBlue)
-                        .cornerRadius(10)
                 }
+                .buttonStyle(PrimaryButtonStyle())
 
                 Button(action: { activeAlert = .skip }) {
                     Text("Skip Verification")
