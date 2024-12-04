@@ -24,7 +24,7 @@ impl WordValidator {
     pub fn possible_words(&self, for_: u8) -> Vec<String> {
         let Some(word_index) = for_.checked_sub(1) else { return vec![] };
         let word_index = word_index as usize;
-        if word_index > self.words.len() {
+        if word_index >= self.words.len() {
             return vec![];
         }
 

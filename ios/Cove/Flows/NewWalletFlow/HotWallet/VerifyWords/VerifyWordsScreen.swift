@@ -13,7 +13,7 @@ struct VerifyWordsContainer: View {
     @Environment(MainViewModel.self) private var app
     let id: WalletId
 
-    @State private var verificationComplete = false
+    @State var verificationComplete = false
     @State private var model: WalletViewModel? = nil
     @State private var validator: WordValidator? = nil
 
@@ -29,14 +29,31 @@ struct VerifyWordsContainer: View {
         }
     }
 
+    @ViewBuilder
+    func LoadedScreen(model: WalletViewModel, validator: WordValidator) -> some View {
+        if verificationComplete {
+            VerificationCompleteScreen(model: model)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing),
+                    removal: .move(edge: .leading)
+                ))
+        } else {
+            VerifyWordsScreen(
+                model: model,
+                validator: validator,
+                verificationComplete: $verificationComplete
+            )
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing),
+                removal: .move(edge: .leading)
+            ))
+        }
+    }
+
     var body: some View {
         Group {
             if let model, let validator {
-                if verificationComplete {
-                    VerificationCompleteScreen(model: model)
-                } else {
-                    VerifyWordsScreen(model: model, validator: validator)
-                }
+                LoadedScreen(model: model, validator: validator)
             } else {
                 Text("Loading....")
                     .onAppear(perform: initOnAppear)
@@ -62,14 +79,13 @@ struct VerifyWordsScreen: View {
     // args
     let model: WalletViewModel
     let validator: WordValidator
+    @Binding var verificationComplete: Bool
 
     // private
     @State private var wordNumber: Int
     @State private var possibleWords: [String]
     @State private var checkState: CheckState = .none
-
-    @State private var clicks = 0
-    @State private var inSelectionProgress = false
+    @State private var incorrectGuesses = 0
 
     @Namespace private var namespace
 
@@ -85,16 +101,14 @@ struct VerifyWordsScreen: View {
         model.walletMetadata.id
     }
 
-    init(model: WalletViewModel, validator: WordValidator) {
+    init(model: WalletViewModel, validator: WordValidator, verificationComplete: Binding<Bool>) {
         self.model = model
         self.validator = validator
+        _verificationComplete = verificationComplete
+
         wordNumber = 1
 
         possibleWords = validator.possibleWords(for: 1)
-    }
-
-    var buttonIsDisabled: Bool {
-        true
     }
 
     private func DisplayAlert(for alertType: AlertType) -> Alert {
@@ -125,44 +139,24 @@ struct VerifyWordsScreen: View {
         }
     }
 
-    func confirm(_ model: WalletViewModel, _: WordValidator) {
-        do {
-            try model.rust.markWalletAsVerified()
-            app.resetRoute(to: Route.selectedWallet(id))
-        } catch {
-            Log.error("Error marking wallet as verified: \(error)")
-        }
-    }
-
     @MainActor
     func selectWord(_ word: String) {
-        // if in the middle of a correct check, ignore
-        if case .correct = checkState { return }
-        if case .checking = checkState { return }
-
-        if checkState == .none {
-            let animation = if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
-                Animation.spring().speed(2.5)
-            } else {
-                Animation.spring().speed(1.5)
-            }
-
-            withAnimation(animation) {
-                checkState = .checking(word)
-            } completion: {
-                checkWord(word)
-            }
+        // if already checking, skip
+        if checkState != .none {
+            withAnimation(.spring().speed(6)) { checkState = .none }
             return
         }
 
-        // if already in the middle of another selection ignore
-        if inSelectionProgress { return }
+        let animation = if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
+            Animation.spring().speed(2.25)
+        } else {
+            Animation.spring().speed(1.75)
+        }
 
-        inSelectionProgress = true
-        withAnimation(.spring().speed(5), completionCriteria: .removed) {
-            checkState = .none
+        withAnimation(animation) {
+            checkState = .checking(word)
         } completion: {
-            selectWord(word)
+            checkWord(word)
         }
     }
 
@@ -171,8 +165,6 @@ struct VerifyWordsScreen: View {
         withAnimation(animation) {
             checkState = .none
         } completion: {
-            inSelectionProgress = false
-            clicks += 1
             completion()
         }
     }
@@ -180,23 +172,27 @@ struct VerifyWordsScreen: View {
     @MainActor
     func checkWord(_ word: String) {
         if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
-            withAnimation(Animation.spring().speed(2))
+            withAnimation(Animation.spring().speed(3), completionCriteria: .removed)
                 { checkState = .correct(word) }
                 completion: { nextWord() }
         } else {
-            withAnimation(Animation.spring().speed(1.25))
+            withAnimation(Animation.spring().speed(2))
                 { checkState = .incorrect(word) }
-                completion: { deselectWord(.spring().speed(2)) }
+                completion: {
+                    deselectWord(.spring().speed(3), completion: {
+                        incorrectGuesses += 1
+                    })
+                }
         }
     }
 
     @MainActor
     func nextWord() {
-        inSelectionProgress = false
-        clicks += 1
-
         if validator.isComplete(wordNumber: UInt8(wordNumber)) {
-            return confirm(model, validator)
+            withAnimation(.easeInOut(duration: 0.3)) {
+                verificationComplete = true
+            }
+            return
         }
 
         withAnimation(.spring().speed(3)) {
@@ -208,7 +204,7 @@ struct VerifyWordsScreen: View {
     }
 
     func matchedGeoId(for word: String) -> String {
-        "\(wordNumber)-\(word)-\(clicks)"
+        "\(wordNumber)-\(word)-\(incorrectGuesses)"
     }
 
     var checkingWordBg: Color {
@@ -232,11 +228,7 @@ struct VerifyWordsScreen: View {
     }
 
     var isDisabled: Bool {
-        if inSelectionProgress, checkState != .none {
-            return true
-        }
-
-        return false
+        checkState != .none
     }
 
     var columns: [GridItem] {
@@ -267,7 +259,11 @@ struct VerifyWordsScreen: View {
                             .background(checkingWordBg)
                             .cornerRadius(10)
                     }
-                    .matchedGeometryEffect(id: matchedGeoId(for: checkingWord), in: namespace)
+                    .matchedGeometryEffect(
+                        id: matchedGeoId(for: checkingWord),
+                        in: namespace,
+                        isSource: checkState != .none
+                    )
                 } else {
                     // take up the same space
                     Text("")
@@ -298,7 +294,11 @@ struct VerifyWordsScreen: View {
                             .padding(.vertical, 12)
                             .background(Color.btnPrimary)
                             .cornerRadius(10)
-                            .matchedGeometryEffect(id: matchedGeoId(for: word), in: namespace)
+                            .matchedGeometryEffect(
+                                id: matchedGeoId(for: word),
+                                in: namespace,
+                                isSource: checkState == .none
+                            )
                         } else {
                             Text(word).opacity(0)
                         }
@@ -394,8 +394,12 @@ enum CheckState: Equatable {
         @State var validator = WordValidator.preview(preview: true)
 
         var body: some View {
-            VerifyWordsScreen(model: model, validator: validator)
-                .environment(MainViewModel())
+            VerifyWordsScreen(
+                model: model,
+                validator: validator,
+                verificationComplete: Binding.constant(false)
+            )
+            .environment(MainViewModel())
         }
     }
 
