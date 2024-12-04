@@ -4,7 +4,7 @@ use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 use tracing::debug;
 
 use crate::{
-    app::reconcile::{AppStateReconcileMessage, Updater},
+    app::reconcile::{AppStateReconcileMessage, Update, Updater},
     network::Network,
     redb::Json,
     wallet::metadata::{WalletId, WalletMetadata},
@@ -100,6 +100,7 @@ impl WalletsTable {
         });
 
         self.save_all_wallets(network, wallets)?;
+        Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }

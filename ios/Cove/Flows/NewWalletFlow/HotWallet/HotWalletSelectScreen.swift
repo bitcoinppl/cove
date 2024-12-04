@@ -46,7 +46,7 @@ struct HotWalletSelectScreen: View {
             Divider()
                 .overlay(.lightGray.opacity(0.50))
 
-            VStack(spacing: 14) {
+            VStack(spacing: 24) {
                 Button(action: { isSheetShown = true; nextScreen = .create }) {
                     Text("Create new wallet")
                         .font(.subheadline)
@@ -64,11 +64,8 @@ struct HotWalletSelectScreen: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .padding(.horizontal, 10)
                         .foregroundColor(.white)
                 }
-                .buttonStyle(PlainButtonStyle())
             }
         }
         .padding()

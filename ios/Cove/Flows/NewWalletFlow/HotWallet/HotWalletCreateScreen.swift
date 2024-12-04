@@ -44,7 +44,6 @@ struct WordsView: View {
                     WordCardView(words: wordGroup).tag(index)
                 }
             }
-            .frame(height: screenHeight * 0.50)
 
             Spacer()
 
@@ -62,10 +61,16 @@ struct WordsView: View {
                 Spacer()
             }
 
-            Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Once you leave this screen, you won’t be able to view them again.")
-                .font(.subheadline)
-                .foregroundStyle(.lightGray)
-                .opacity(0.70)
+            HStack {
+                Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Once you leave this screen, you won’t be able to view them again.")
+                    .font(.subheadline)
+                    .foregroundStyle(.lightGray)
+                    .multilineTextAlignment(.leading)
+                    .opacity(0.70)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer()
+            }
 
             HStack {
                 Text("Please save these words in a secure location.")
@@ -81,10 +86,10 @@ struct WordsView: View {
             Divider()
                 .overlay(.lightGray.opacity(0.50))
 
-            VStack(spacing: 14) {
+            VStack(spacing: 24) {
                 Group {
                     if tabIndex == lastIndex {
-                        Button("Save Wallet") {
+                        Button(action: {
                             do {
                                 // save the wallet
                                 let walletId = try model.rust.saveWallet().id
@@ -96,23 +101,35 @@ struct WordsView: View {
                                 // TODO: handle, maybe show an alert?
                                 Log.error("Error \(error)")
                             }
+                        }) {
+                            Text("Save Wallet")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 20)
+                                .padding(.horizontal, 10)
+                                .background(Color.btnPrimary)
+                                .foregroundColor(.midnightBlue)
+                                .cornerRadius(10)
                         }
                     } else {
-                        Button("Next") {
-                            withAnimation {
-                                tabIndex += 1
-                            }
+                        Button(action: {
+                            withAnimation { tabIndex += 1 }
+                        }) {
+                            Text("Next")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 20)
+                                .padding(.horizontal, 10)
+                                .background(Color.btnPrimary)
+                                .foregroundColor(.midnightBlue)
+                                .cornerRadius(10)
                         }
                     }
                 }
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .padding(.horizontal, 10)
-                .background(Color.btnPrimary)
-                .foregroundColor(.midnightBlue)
-                .cornerRadius(10)
             }
         }
         .padding()
@@ -134,7 +151,6 @@ struct WordsView: View {
                 }) {
                     HStack {
                         Image(systemName: "chevron.left")
-                        Text("Back")
                     }
                     .foregroundStyle(.white)
                 }
@@ -156,6 +172,7 @@ struct WordsView: View {
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
+        .navigationBarBackButtonHidden(true)
     }
 }
 
@@ -167,6 +184,7 @@ struct WordCardView: View {
             ForEach(words, id: \.self) { group in
                 HStack(spacing: 0) {
                     Text("\(String(format: "%d", group.number)). ")
+                        .fontWeight(.medium)
                         .foregroundColor(.black.opacity(0.5))
                         .multilineTextAlignment(.leading)
                         .lineLimit(1)
@@ -176,6 +194,7 @@ struct WordCardView: View {
                     Spacer()
 
                     Text(group.word)
+                        .fontWeight(.medium)
                         .foregroundStyle(.midnightBlue)
                         .multilineTextAlignment(.center)
                         .frame(alignment: .leading)
@@ -201,7 +220,7 @@ struct StyledWordCard<Content: View>: View {
 
     var body: some View {
         TabView(selection: $tabIndex) {
-            content
+            content.padding(.bottom, 20)
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
     }

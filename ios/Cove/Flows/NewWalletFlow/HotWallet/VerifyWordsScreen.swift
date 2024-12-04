@@ -181,8 +181,7 @@ struct VerifyWordsScreen: View {
         clicks += 1
 
         if validator.isComplete(wordNumber: UInt8(wordNumber)) {
-            // TODO: complete validation
-            return
+            return confirm(model, validator)
         }
 
         withAnimation(.spring().speed(3)) {
@@ -243,6 +242,7 @@ struct VerifyWordsScreen: View {
                     Button(action: { deselectWord() }) {
                         Text(checkingWord)
                             .font(.caption)
+                            .fontWeight(.medium)
                             .foregroundStyle(checkingWordColor)
                             .multilineTextAlignment(.center)
                             .frame(alignment: .leading)
@@ -291,6 +291,7 @@ struct VerifyWordsScreen: View {
                     }
                 }
             }
+            .padding(.vertical)
 
             Spacer()
 
@@ -310,14 +311,40 @@ struct VerifyWordsScreen: View {
                 }
 
                 HStack {
-                    Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Once you leave this screen, you won’t be able to view them again.")
+                    Text("To confirm that you've securely saved your recovery phrase, please drag and drop the word into their correct positions.")
                         .font(.subheadline)
                         .foregroundStyle(.lightGray)
                         .opacity(0.75)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
                 }
             }
+
+            Divider()
+                .overlay(.lightGray.opacity(0.50))
+
+            VStack(spacing: 16) {
+                Button(action: { activeAlert = .words }) {
+                    Text("Show Words")
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .padding(.horizontal, 10)
+                        .background(Color.btnPrimary)
+                        .foregroundColor(.midnightBlue)
+                        .cornerRadius(10)
+                }
+
+                Button(action: { activeAlert = .skip }) {
+                    Text("Skip Verification")
+                        .foregroundStyle(.white)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+            }
+            .padding(.bottom, 32)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
