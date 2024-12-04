@@ -51,6 +51,12 @@ struct VerifyWordsScreen: View {
     // private
     @State private var wordNumber: Int
     @State private var possibleWords: [String]
+    @State private var checkState: CheckState = .none
+
+    @State private var clicks = 0
+    @State private var inSelectionProgress = false
+
+    @Namespace private var namespace
 
     // alerts
     private enum AlertType: Identifiable {
@@ -113,37 +119,176 @@ struct VerifyWordsScreen: View {
         }
     }
 
+    @MainActor
+    func selectWord(_ word: String) {
+        // if in the middle of a correct check, ignore
+        if case .correct = checkState { return }
+        if case .checking = checkState { return }
+
+        if checkState == .none {
+            let animation = if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
+                Animation.spring().speed(2.5)
+            } else {
+                Animation.spring().speed(1.5)
+            }
+
+            withAnimation(animation) {
+                checkState = .checking(word)
+            } completion: {
+                checkWord(word)
+            }
+            return
+        }
+
+        // if already in the middle of another selection ignore
+        if inSelectionProgress { return }
+
+        inSelectionProgress = true
+        withAnimation(.spring().speed(5), completionCriteria: .removed) {
+            checkState = .none
+        } completion: {
+            selectWord(word)
+        }
+    }
+
+    @MainActor
+    func deselectWord(_ animation: Animation = .spring(), completion: @escaping () -> Void = {}) {
+        withAnimation(animation) {
+            checkState = .none
+        } completion: {
+            inSelectionProgress = false
+            clicks += 1
+            completion()
+        }
+    }
+
+    @MainActor
+    func checkWord(_ word: String) {
+        if validator.isWordCorrect(word: word, for: UInt8(wordNumber)) {
+            withAnimation(Animation.spring().speed(2))
+                { checkState = .correct(word) }
+                completion: { nextWord() }
+        } else {
+            withAnimation(Animation.spring().speed(1.25))
+                { checkState = .incorrect(word) }
+                completion: { deselectWord(.spring().speed(2)) }
+        }
+    }
+
+    @MainActor
+    func nextWord() {
+        inSelectionProgress = false
+        clicks += 1
+
+        if validator.isComplete(wordNumber: UInt8(wordNumber)) {
+            // TODO: complete validation
+            return
+        }
+
+        withAnimation(.spring().speed(3)) {
+            wordNumber += 1
+            possibleWords = validator.possibleWords(for: UInt8(wordNumber))
+        } completion: {
+            deselectWord(.spring().speed(2.5))
+        }
+    }
+
+    func matchedGeoId(for word: String) -> String {
+        "\(wordNumber)-\(word)-\(clicks)"
+    }
+
+    var checkingWordBg: Color {
+        switch checkState {
+        case .correct:
+            .green
+        case .incorrect:
+            .red
+        default:
+            .btnPrimary
+        }
+    }
+
+    var checkingWordColor: Color {
+        switch checkState {
+        case .correct, .incorrect:
+            Color.white
+        default:
+            Color.midnightBlue.opacity(0.90)
+        }
+    }
+
+    var isDisabled: Bool {
+        if inSelectionProgress, checkState != .none {
+            return true
+        }
+
+        return false
+    }
+
     var columns: [GridItem] {
         let item = GridItem(.adaptive(minimum: screenWidth * 0.25 - 20))
         return [item, item, item, item]
     }
 
     var body: some View {
-        VStack(spacing: 48) {
+        VStack(spacing: 24) {
             Spacer()
             Text("What is word #\(wordNumber)?")
                 .foregroundStyle(.white)
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Rectangle().frame(width: 200, height: 1)
-                .foregroundColor(.white)
-
-            LazyVGrid(columns: columns, spacing: 20) {
-                ForEach(Array(possibleWords.enumerated()), id: \.offset) { _, word in
-                    Button(action: {}) {
-                        Text(word)
+            VStack(spacing: 10) {
+                if let checkingWord = checkState.word {
+                    Button(action: { deselectWord() }) {
+                        Text(checkingWord)
                             .font(.caption)
-                            .foregroundStyle(.midnightBlue.opacity(0.90))
+                            .foregroundStyle(checkingWordColor)
                             .multilineTextAlignment(.center)
                             .frame(alignment: .leading)
                             .minimumScaleFactor(0.90)
                             .lineLimit(1)
+                            .padding(.horizontal)
+                            .padding(.vertical, 12)
+                            .background(checkingWordBg)
+                            .cornerRadius(10)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(Color.btnPrimary)
-                    .cornerRadius(10)
+                    .matchedGeometryEffect(id: matchedGeoId(for: checkingWord), in: namespace)
+                } else {
+                    // take up the same space
+                    Text("")
+                        .padding(.vertical, 12)
+                }
+
+                Rectangle().frame(width: 200, height: 1)
+                    .foregroundColor(.white)
+            }
+
+            LazyVGrid(columns: columns, spacing: 20) {
+                ForEach(Array(possibleWords.enumerated()), id: \.offset) { _, word in
+                    Group {
+                        if checkState.word ?? "" != word {
+                            Button(action: { selectWord(word) }) {
+                                Text(word)
+                                    .font(.caption)
+                                    .foregroundStyle(.midnightBlue.opacity(0.90))
+                                    .multilineTextAlignment(.center)
+                                    .frame(alignment: .leading)
+                                    .minimumScaleFactor(0.50)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .disabled(isDisabled)
+                            .contentShape(Rectangle())
+                            .padding(.horizontal)
+                            .padding(.vertical, 12)
+                            .background(Color.btnPrimary)
+                            .cornerRadius(10)
+                            .matchedGeometryEffect(id: matchedGeoId(for: word), in: namespace)
+                        } else {
+                            Text(word).opacity(0)
+                        }
+                    }
                 }
             }
 
@@ -159,14 +304,19 @@ struct VerifyWordsScreen: View {
                     Text("Verify your recovery words")
                         .font(.system(size: 38, weight: .semibold))
                         .foregroundColor(.white)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
                 }
 
-                Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Once you leave this screen, you won’t be able to view them again.")
-                    .font(.subheadline)
-                    .foregroundStyle(.lightGray)
-                    .opacity(0.75)
+                HStack {
+                    Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Once you leave this screen, you won’t be able to view them again.")
+                        .font(.subheadline)
+                        .foregroundStyle(.lightGray)
+                        .opacity(0.75)
+
+                    Spacer()
+                }
             }
         }
         .padding()
@@ -183,6 +333,23 @@ struct VerifyWordsScreen: View {
                 .opacity(0.5)
         )
         .background(Color.midnightBlue)
+    }
+}
+
+enum CheckState: Equatable {
+    case none, checking(String), correct(String), incorrect(String)
+
+    var word: String? {
+        switch self {
+        case .checking(let word):
+            word
+        case .correct(let word):
+            word
+        case .incorrect(let word):
+            word
+        case .none:
+            nil
+        }
     }
 }
 

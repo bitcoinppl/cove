@@ -153,8 +153,10 @@ struct SidebarView: View {
         Task {
             try? await Task.sleep(for: .milliseconds(300))
 
-            if case Route.selectedWallet = route {
-                return app.loadAndReset(to: route)
+            if case let Route.selectedWallet(id: id) = route {
+                let selected: ()? = try? app.rust.selectWallet(id: id)
+                if selected == nil { app.loadAndReset(to: route) }
+                return
             }
 
             if !app.hasWallets, route == Route.newWallet(.select) {

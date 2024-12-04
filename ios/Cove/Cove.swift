@@ -10230,13 +10230,7 @@ public func FfiConverterTypeWalletsTable_lower(_ value: WalletsTable) -> UnsafeM
 
 public protocol WordValidatorProtocol : AnyObject {
     
-    func groupedWords(groupsOf: UInt8)  -> [[GroupedWord]]
-    
-    func invalidWordsString(enteredWords: [[String]])  -> String
-    
-    func isAllWordsValid(enteredWords: [[String]])  -> Bool
-    
-    func isValidWordGroup(groupNumber: UInt8, enteredWords: [String])  -> Bool
+    func isComplete(wordNumber: UInt8)  -> Bool
     
     func isWordCorrect(word: String, `for`: UInt8)  -> Bool
     
@@ -10303,35 +10297,10 @@ public static func preview(preview: Bool, numberOfWords: NumberOfBip39Words? = n
     
 
     
-open func groupedWords(groupsOf: UInt8 = UInt8(12)) -> [[GroupedWord]]  {
-    return try!  FfiConverterSequenceSequenceTypeGroupedWord.lift(try! rustCall() {
-    uniffi_cove_fn_method_wordvalidator_grouped_words(self.uniffiClonePointer(),
-        FfiConverterUInt8.lower(groupsOf),$0
-    )
-})
-}
-    
-open func invalidWordsString(enteredWords: [[String]]) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_wordvalidator_invalid_words_string(self.uniffiClonePointer(),
-        FfiConverterSequenceSequenceString.lower(enteredWords),$0
-    )
-})
-}
-    
-open func isAllWordsValid(enteredWords: [[String]]) -> Bool  {
+open func isComplete(wordNumber: UInt8) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_wordvalidator_is_all_words_valid(self.uniffiClonePointer(),
-        FfiConverterSequenceSequenceString.lower(enteredWords),$0
-    )
-})
-}
-    
-open func isValidWordGroup(groupNumber: UInt8, enteredWords: [String]) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_wordvalidator_is_valid_word_group(self.uniffiClonePointer(),
-        FfiConverterUInt8.lower(groupNumber),
-        FfiConverterSequenceString.lower(enteredWords),$0
+    uniffi_cove_fn_method_wordvalidator_is_complete(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(wordNumber),$0
     )
 })
 }
@@ -21795,16 +21764,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_walletstable_len() != 35149) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_wordvalidator_grouped_words() != 49274) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_wordvalidator_invalid_words_string() != 7159) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_wordvalidator_is_all_words_valid() != 17704) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_wordvalidator_is_valid_word_group() != 6393) {
+    if (uniffi_cove_checksum_method_wordvalidator_is_complete() != 18257) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordvalidator_is_word_correct() != 39689) {
