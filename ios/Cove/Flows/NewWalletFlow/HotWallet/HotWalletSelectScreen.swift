@@ -47,7 +47,10 @@ struct HotWalletSelectScreen: View {
                 .overlay(.lightGray.opacity(0.50))
 
             VStack(spacing: 24) {
-                Button(action: { isSheetShown = true; nextScreen = .create }) {
+                Button(action: {
+                    isSheetShown = true
+                    nextScreen = .create
+                }) {
                     Text("Create new wallet")
                         .font(.subheadline)
                         .fontWeight(.medium)
@@ -59,7 +62,10 @@ struct HotWalletSelectScreen: View {
                         .cornerRadius(10)
                 }
 
-                Button(action: { isSheetShown = true; nextScreen = .import_ }) {
+                Button(action: {
+                    isSheetShown = true
+                    nextScreen = .import_
+                }) {
                     Text("Import existing wallet")
                         .font(.subheadline)
                         .fontWeight(.medium)
@@ -83,6 +89,7 @@ struct HotWalletSelectScreen: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text("Add New Wallet")
+                    .font(.callout)
                     .fontWeight(.semibold)
                     .foregroundStyle(.white)
             }

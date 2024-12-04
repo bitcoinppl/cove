@@ -13,6 +13,7 @@ struct VerifyWordsContainer: View {
     @Environment(MainViewModel.self) private var app
     let id: WalletId
 
+    @State private var verificationComplete = false
     @State private var model: WalletViewModel? = nil
     @State private var validator: WordValidator? = nil
 
@@ -29,11 +30,25 @@ struct VerifyWordsContainer: View {
     }
 
     var body: some View {
-        if let model, let validator {
-            VerifyWordsScreen(model: model, validator: validator)
-        } else {
-            Text("Loading....")
-                .onAppear(perform: initOnAppear)
+        Group {
+            if let model, let validator {
+                if verificationComplete {
+                    VerificationCompleteScreen(model: model)
+                } else {
+                    VerifyWordsScreen(model: model, validator: validator)
+                }
+            } else {
+                Text("Loading....")
+                    .onAppear(perform: initOnAppear)
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Verify Recovery Words")
+                    .foregroundStyle(.white)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+            }
         }
     }
 }
@@ -231,7 +246,6 @@ struct VerifyWordsScreen: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Spacer()
             Text("What is word #\(wordNumber)?")
                 .foregroundStyle(.white)
                 .font(.title2)
@@ -293,7 +307,7 @@ struct VerifyWordsScreen: View {
             }
             .padding(.vertical)
 
-            Spacer()
+            if !isMiniDevice { Spacer() }
 
             HStack {
                 DotMenuView(selected: 3, size: 5)
@@ -312,7 +326,7 @@ struct VerifyWordsScreen: View {
 
                 HStack {
                     Text("To confirm that you've securely saved your recovery phrase, please drag and drop the word into their correct positions.")
-                        .font(.subheadline)
+                        .font(.footnote)
                         .foregroundStyle(.lightGray)
                         .opacity(0.75)
                         .fixedSize(horizontal: false, vertical: true)
@@ -320,6 +334,8 @@ struct VerifyWordsScreen: View {
                     Spacer()
                 }
             }
+
+            if !isMiniDevice { Spacer() }
 
             Divider()
                 .overlay(.lightGray.opacity(0.50))
@@ -344,10 +360,10 @@ struct VerifyWordsScreen: View {
                         .fontWeight(.medium)
                 }
             }
-            .padding(.bottom, 32)
+            // mini and se only
+            .safeAreaPadding(.bottom, isMiniDevice ? 20 : 0)
         }
         .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .alert(item: $activeAlert) { alertType in
             DisplayAlert(for: alertType)
         }
@@ -392,7 +408,9 @@ enum CheckState: Equatable {
     }
 
     return
-        AsyncPreview {
-            Container()
+        NavigationStack {
+            AsyncPreview {
+                Container()
+            }
         }
 }

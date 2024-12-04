@@ -22,8 +22,6 @@ struct QrCodeScanView: View {
     @State private var totalParts: Int? = nil
     @State private var partsLeft: Int? = nil
 
-    private let screenHeight = UIScreen.main.bounds.height
-
     var alertState: Binding<TaggedItem<AppAlertState>?> {
         $app.alertState
     }
@@ -98,12 +96,12 @@ struct QrCodeScanView: View {
         do {
             let multiQr: MultiQr =
                 try multiQr
-                    ?? {
-                        let newMultiQr = try MultiQr.tryNew(qr: qr)
-                        self.multiQr = newMultiQr
-                        totalParts = Int(newMultiQr.totalParts())
-                        return newMultiQr
-                    }()
+                ?? {
+                    let newMultiQr = try MultiQr.tryNew(qr: qr)
+                    self.multiQr = newMultiQr
+                    totalParts = Int(newMultiQr.totalParts())
+                    return newMultiQr
+                }()
 
             // single QR
             if !multiQr.isBbqr() {
