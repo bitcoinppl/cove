@@ -376,11 +376,11 @@ enum CheckState: Equatable {
 
     var word: String? {
         switch self {
-        case .checking(let word):
+        case let .checking(word):
             word
-        case .correct(let word):
+        case let .correct(word):
             word
-        case .incorrect(let word):
+        case let .incorrect(word):
             word
         case .none:
             nil

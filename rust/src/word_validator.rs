@@ -29,7 +29,7 @@ impl WordValidator {
         }
 
         let mut rng = rand::thread_rng();
-        let correct_word = self.words[word_index as usize];
+        let correct_word = self.words[word_index];
 
         let mut words_clone = self.words.clone();
         words_clone.shuffle(&mut rng);
