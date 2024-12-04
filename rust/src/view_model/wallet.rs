@@ -557,10 +557,17 @@ impl RustWalletViewModel {
         {
             let mut wallet_metadata = self.metadata.write();
             wallet_metadata.verified = true;
+
+            self.reconciler
+                .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                    wallet_metadata.clone(),
+                ))
+                .expect("failed to send update");
         }
 
         let id = self.metadata.read().id.clone();
         let database = Database::global();
+
         database
             .wallets
             .mark_wallet_as_verified(id)
