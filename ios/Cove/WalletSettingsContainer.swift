@@ -20,7 +20,7 @@ struct WalletSettingsContainer: View {
 
     func initOnAppear() {
         do {
-            let model = try app.getWalletViewModel(id: self.id)
+            let model = try app.getWalletViewModel(id: id)
             self.model = model
         } catch {
             self.error = "Failed to get wallet \(error.localizedDescription)"
@@ -32,14 +32,14 @@ struct WalletSettingsContainer: View {
         if let model {
             WalletSettingsSheet(model: model, isSheet: false)
         } else {
-            Text(self.error ?? "Loading...")
+            Text(error ?? "Loading...")
                 .task {
-                    guard let error = self.error else { return }
+                    guard let error else { return }
                     Log.error(error)
                     try? await Task.sleep(for: .seconds(5))
-                    self.app.resetRoute(to: .listWallets)
+                    app.resetRoute(to: .listWallets)
                 }
-                .onAppear(perform: self.initOnAppear)
+                .onAppear(perform: initOnAppear)
         }
     }
 }
