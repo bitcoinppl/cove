@@ -106,6 +106,11 @@ import SwiftUI
     }
 
     @MainActor
+    func resetRoute(to routes: [Route]) {
+        guard routes.count > 1 else { return resetRoute(to: routes[0]) }
+        rust.resetNestedRoutesTo(defaultRoute: routes[0], nestedRoutes: Array(routes[1...]))
+    }
+
     func resetRoute(to route: Route) {
         rust.resetDefaultRouteTo(route: route)
     }
@@ -133,9 +138,8 @@ import SwiftUI
                 case let .selectedNodeChanged(node):
                     self.selectedNode = node
 
-                case let .defaultRouteChanged(route):
-                    // default changes, means root changes, set routes to []
-                    self.router.routes = []
+                case let .defaultRouteChanged(route, nestedRoutes):
+                    self.router.routes = nestedRoutes
                     self.router.default = route
                     self.routeId = UUID()
 

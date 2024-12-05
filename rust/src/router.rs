@@ -14,11 +14,12 @@ use macros::impl_default_for;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
     LoadAndReset {
-        reset_to: Arc<BoxedRoute>,
+        reset_to: Vec<Arc<BoxedRoute>>,
         after_millis: u32,
     },
     ListWallets,
     SelectedWallet(WalletId),
+    WalletSettings(WalletId),
     NewWallet(NewWalletRoute),
     Settings,
     SecretWords(WalletId),
@@ -111,6 +112,13 @@ impl Router {
         self.default = route;
         self.routes.clear();
     }
+
+    pub fn reset_nested_routes_to(&mut self, default: Route, nested_routes: Vec<Route>) {
+        self.default = default;
+
+        self.routes.clear();
+        self.routes = nested_routes;
+    }
 }
 
 #[derive(
@@ -154,7 +162,7 @@ impl Route {
 
     pub fn load_and_reset_after(self, time: u32) -> Self {
         Self::LoadAndReset {
-            reset_to: BoxedRoute::new(self).into(),
+            reset_to: vec![BoxedRoute::new(self).into()],
             after_millis: time,
         }
     }
@@ -214,6 +222,23 @@ impl RouteFactory {
 
     pub fn qr_import(&self) -> Route {
         ColdWalletRoute::QrCode.into()
+    }
+
+    pub fn load_and_reset_nested_to(
+        &self,
+        default_route: Route,
+        nested_routes: Vec<Route>,
+    ) -> Route {
+        let boxed_nested_routes = nested_routes.into_iter().map(BoxedRoute::new).map(Arc::new);
+
+        let mut routes = Vec::with_capacity(boxed_nested_routes.len() + 1);
+        routes.push(BoxedRoute::new(default_route).into());
+        routes.extend(boxed_nested_routes);
+
+        Route::LoadAndReset {
+            reset_to: routes,
+            after_millis: 500,
+        }
     }
 
     pub fn load_and_reset_to(&self, reset_to: Route) -> Route {

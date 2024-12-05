@@ -10,7 +10,7 @@ use crate::{
     fiat::client::{PriceResponse, FIAT_CLIENT},
     network::Network,
     node::Node,
-    router::{Route, Router},
+    router::{Route, RouteFactory, Router},
     transaction::fees::client::{FeeResponse, FEE_CLIENT},
     wallet::metadata::WalletId,
 };
@@ -260,6 +260,21 @@ impl FfiApp {
         self.reset_default_route_to(loading_route);
     }
 
+    // MARK: Routes
+    /// Reset the default route, with a nested route
+    pub fn reset_nested_routes_to(&self, default_route: Route, nested_routes: Vec<Route>) {
+        self.inner()
+            .state
+            .write()
+            .router
+            .reset_nested_routes_to(default_route.clone(), nested_routes.clone());
+
+        Updater::send_update(AppStateReconcileMessage::DefaultRouteChanged(
+            default_route,
+            nested_routes,
+        ));
+    }
+
     /// Change the default route, and reset the routes
     pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);
@@ -281,7 +296,7 @@ impl FfiApp {
             .router
             .reset_routes_to(route.clone());
 
-        Updater::send_update(AppStateReconcileMessage::DefaultRouteChanged(route));
+        Updater::send_update(AppStateReconcileMessage::DefaultRouteChanged(route, vec![]));
     }
 
     pub fn state(&self) -> AppState {
