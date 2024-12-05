@@ -554,12 +554,23 @@ impl RustWalletViewModel {
 
     #[uniffi::method]
     pub fn mark_wallet_as_verified(&self) -> Result<(), Error> {
-        let wallet_metadata = &self.metadata.read();
+        {
+            let mut wallet_metadata = self.metadata.write();
+            wallet_metadata.verified = true;
 
+            self.reconciler
+                .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                    wallet_metadata.clone(),
+                ))
+                .expect("failed to send update");
+        }
+
+        let id = self.metadata.read().id.clone();
         let database = Database::global();
+
         database
             .wallets
-            .mark_wallet_as_verified(wallet_metadata.id.clone())
+            .mark_wallet_as_verified(id)
             .map_err(Error::MarkWalletAsVerifiedError)?;
 
         Ok(())

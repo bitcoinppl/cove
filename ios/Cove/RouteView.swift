@@ -37,8 +37,11 @@ struct RouteView: View {
 @MainActor @ViewBuilder
 func routeToView(model: MainViewModel, route: Route) -> some View {
     switch route {
-    case let .loadAndReset(resetTo: route, afterMillis: time):
-        LoadAndResetView(nextRoute: route.route(), loadingTimeMs: Int(time))
+    case let .loadAndReset(resetTo: routes, afterMillis: time):
+        LoadAndResetView(nextRoute: routes.routes, loadingTimeMs: Int(time))
+    case let .walletSettings(id):
+        WalletSettingsContainer(id: id)
+            .environment(model)
     case .settings:
         SettingsScreen()
     case .listWallets:

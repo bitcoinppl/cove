@@ -239,7 +239,7 @@ struct VerifyReminder: View {
                             .foregroundStyle(.red.opacity(0.85))
                             .fontWeight(.semibold)
 
-                        Text("backup wallet")
+                        Text("backup your wallet")
                             .fontWeight(.semibold)
                             .font(.caption)
 

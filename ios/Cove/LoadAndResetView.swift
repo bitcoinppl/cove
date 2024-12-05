@@ -8,7 +8,7 @@ import SwiftUI
 
 struct LoadAndResetView: View {
     @Environment(MainViewModel.self) var app
-    let nextRoute: Route
+    let nextRoute: [Route]
     let loadingTimeMs: Int
 
     var body: some View {
@@ -22,5 +22,5 @@ struct LoadAndResetView: View {
 }
 
 #Preview {
-    LoadAndResetView(nextRoute: .listWallets, loadingTimeMs: 100).environment(MainViewModel())
+    LoadAndResetView(nextRoute: [.listWallets], loadingTimeMs: 100).environment(MainViewModel())
 }

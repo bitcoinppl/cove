@@ -19,7 +19,7 @@ struct NewHotWalletContainer: View {
         case let .import(numberOfWords, importType):
             HotWalletImportScreen(numberOfWords: numberOfWords, importType: importType)
         case let .verifyWords(walletId):
-            VerifyWordsScreen(id: walletId)
+            VerifyWordsContainer(id: walletId)
         }
     }
 }

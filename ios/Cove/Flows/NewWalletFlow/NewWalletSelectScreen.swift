@@ -151,6 +151,7 @@ struct NewWalletSelectScreen: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text("Add New Wallet")
+                    .font(.callout)
                     .fontWeight(.semibold)
                     .foregroundStyle(.white)
             }

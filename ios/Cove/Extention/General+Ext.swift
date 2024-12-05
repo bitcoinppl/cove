@@ -96,6 +96,12 @@ extension UnsignedTransaction: Identifiable {
     }
 }
 
+extension [BoxedRoute] {
+    var routes: [Route] {
+        self.map { $0.route() }
+    }
+}
+
 #if canImport(UIKit)
     extension View {
         func hideKeyboard() {

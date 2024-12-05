@@ -22,8 +22,6 @@ struct QrCodeScanView: View {
     @State private var totalParts: Int? = nil
     @State private var partsLeft: Int? = nil
 
-    private let screenHeight = UIScreen.main.bounds.height
-
     var alertState: Binding<TaggedItem<AppAlertState>?> {
         $app.alertState
     }

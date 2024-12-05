@@ -14,61 +14,118 @@ struct SecretWordsScreen: View {
     @State var words: Mnemonic?
     @State var errorMessage: String?
 
-    var cardPadding: CGFloat {
-        if let words, words.allWords().count > 12 {
-            8
-        } else {
-            50
-        }
-    }
-
     var verticalSpacing: CGFloat {
         15
     }
 
+    let rowHeight = 30.0
+    var numberOfRows: Int {
+        (words?.words().count ?? 24) / 3
+    }
+
+    var rows: [GridItem] {
+        Array(repeating: .init(.fixed(rowHeight)), count: numberOfRows)
+    }
+
     var body: some View {
-        Group {
-            if let words {
-                VStack {
+        VStack {
+            Spacer()
+
+            Group {
+                if let words {
                     GroupBox {
-                        HStack(alignment: .top, spacing: 20) {
-                            VStack(alignment: .leading, spacing: verticalSpacing) {
-                                ForEach(words.allWords().prefix(12), id: \.number) { word in
-                                    Text("\(String(format: "%02d", word.number)). \(word.word)")
+                        LazyHGrid(rows: rows, spacing: 12) {
+                            ForEach(words.allWords(), id: \.number) { word in
+                                HStack {
+                                    Text("\(word.number).")
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(.secondary)
                                         .fontDesign(.monospaced)
                                         .multilineTextAlignment(.leading)
-                                }
-                            }
+                                        .minimumScaleFactor(0.5)
 
-                            if words.allWords().count > 12 {
-                                VStack(alignment: .leading, spacing: verticalSpacing) {
-                                    ForEach(words.allWords().dropFirst(12), id: \.number) { word in
-                                        Text("\(String(format: "%02d", word.number)). \(word.word)")
-                                            .fontDesign(.monospaced)
-                                            .multilineTextAlignment(.leading)
-                                    }
+                                    Text(word.word)
+                                        .fontWeight(.bold)
+                                        .fontDesign(.monospaced)
+                                        .multilineTextAlignment(.leading)
+                                        .minimumScaleFactor(0.75)
+                                        .lineLimit(1)
+                                        .fixedSize()
+
+                                    Spacer()
                                 }
                             }
                         }
-                        .padding(.horizontal, cardPadding)
                     }
-                    .padding(.horizontal, 10)
+                    .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 32)
+                    .frame(width: screenWidth * 0.9)
+                    .font(.caption)
+                } else {
+                    Text(errorMessage ?? "Loading...")
                 }
-            } else {
-                Text(errorMessage ?? "Loading...")
+
+                Spacer()
+                Spacer()
+                Spacer()
+
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Recovery Words")
+                            .font(.system(size: 36, weight: .semibold))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.leading)
+
+                        Spacer()
+                    }
+
+                    HStack {
+                        Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has you recovery words, controls your Bitcoin.")
+                            .multilineTextAlignment(.leading)
+                            .font(.footnote)
+                            .foregroundStyle(.lightGray.opacity(0.75))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer()
+                    }
+
+                    HStack {
+                        Text("Please save these words in a secure location.")
+                            .font(.subheadline)
+                            .multilineTextAlignment(.leading)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.white)
+                            .opacity(0.9)
+
+                        Spacer()
+                    }
+                }
             }
         }
+        .padding()
         .onAppear {
-            if words == nil {
-                do {
-                    words = try Mnemonic(id: id)
-                } catch {
-                    errorMessage = error.localizedDescription
-                }
+            guard words == nil else { return }
+            do { words = try Mnemonic(id: id) }
+            catch { errorMessage = error.localizedDescription }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Recovery Words")
+                    .foregroundStyle(.white)
+                    .font(.callout)
+                    .fontWeight(.semibold)
             }
         }
-        .navigationTitle("Secret Words")
-        .navigationBarTitleDisplayMode(.inline)
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .opacity(0.5)
+        )
+        .background(Color.midnightBlue)
+        .tint(.white)
     }
 }
 
