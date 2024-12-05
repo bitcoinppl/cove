@@ -210,7 +210,7 @@ struct SelectedWalletScreen: View {
         .ignoresSafeArea(edges: .top)
         .onChange(of: model.walletMetadata.discoveryState) {
             _,
-            newValue in setSheetState(newValue)
+                newValue in setSheetState(newValue)
         }
         .onAppear { setSheetState(model.walletMetadata.discoveryState) }
         .onAppear(perform: model.validateMetadata)

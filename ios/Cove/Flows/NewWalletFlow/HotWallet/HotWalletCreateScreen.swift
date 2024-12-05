@@ -62,12 +62,14 @@ struct WordsView: View {
             }
 
             HStack {
-                Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet.")
-                    .font(.subheadline)
-                    .foregroundStyle(.lightGray)
-                    .multilineTextAlignment(.leading)
-                    .opacity(0.70)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever, has you recovery words, controls your Bitcoin."
+                )
+                .font(.subheadline)
+                .foregroundStyle(.lightGray)
+                .multilineTextAlignment(.leading)
+                .opacity(0.70)
+                .fixedSize(horizontal: false, vertical: true)
 
                 Spacer()
             }

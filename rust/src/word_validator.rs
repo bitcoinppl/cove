@@ -39,13 +39,14 @@ impl WordValidator {
         let five_existing_words = words_clone.iter().take(5).cloned();
 
         let six_new_words = new_words.words().take(6);
-        let correct = std::iter::once(correct_word);
 
-        let mut combined: Vec<String> = five_existing_words
-            .chain(six_new_words)
-            .chain(correct)
-            .map(|word| word.to_string())
-            .collect();
+        let mut combined: Vec<String> = Vec::with_capacity(12);
+        combined.push(correct_word.to_string());
+        combined.extend(
+            five_existing_words
+                .chain(six_new_words)
+                .map(ToString::to_string),
+        );
 
         // remove last word from the list
         if word_index > 0 {

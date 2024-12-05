@@ -106,6 +106,25 @@ struct SidebarView: View {
                         .padding()
                         .background(Color.lightGray.opacity(0.06))
                         .cornerRadius(10)
+                        .contentShape(
+                            .contextMenuPreview,
+                            RoundedRectangle(cornerRadius: 10)
+                        )
+                        .contextMenu {
+                            Button("Settings") {
+                                app.isSidebarVisible = false
+
+                                do {
+                                    try app.rust.selectWallet(
+                                        id: wallet.id,
+                                        nextRoute: Route.walletSettings(wallet.id)
+                                    )
+                                } catch {
+                                    Log.error("Failed to select wallet \(error)")
+                                    goTo(Route.selectedWallet(wallet.id))
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -160,7 +179,7 @@ struct SidebarView: View {
             }
 
             if !app.hasWallets, route == Route.newWallet(.select) {
-                return app.resetRoute(to: RouteFactory().newWalletSelect())
+                return app.resetRoute(to: [RouteFactory().newWalletSelect()])
             }
 
             navigate(route)

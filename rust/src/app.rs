@@ -217,12 +217,24 @@ impl FfiApp {
     }
 
     /// Select a wallet
-    pub fn select_wallet(&self, id: WalletId) -> Result<(), DatabaseError> {
+    #[uniffi::method(default(next_route = None))]
+    pub fn select_wallet(
+        &self,
+        id: WalletId,
+        next_route: Option<Route>,
+    ) -> Result<(), DatabaseError> {
         // set the selected wallet
         Database::global().global_config.select_wallet(id.clone())?;
 
         // update the router
-        self.go_to_selected_wallet();
+        if let Some(next_route) = next_route {
+            let wallet_route = Route::SelectedWallet(id.clone());
+            let loading_route =
+                RouteFactory.load_and_reset_nested_to(wallet_route, vec![next_route]);
+            self.load_and_reset_default_route(loading_route);
+        } else {
+            self.go_to_selected_wallet();
+        }
 
         Ok(())
     }
