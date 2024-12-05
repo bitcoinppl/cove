@@ -162,9 +162,10 @@ struct VerifyWordsScreen: View {
 
     @MainActor
     func deselectWord(_ animation: Animation = .spring(), completion: @escaping () -> Void = {}) {
-        withAnimation(animation) {
-            checkState = .none
+        withAnimation(animation, completionCriteria: .logicallyComplete) {
+            checkState = .returning
         } completion: {
+            checkState = .none
             completion()
         }
     }
@@ -191,6 +192,8 @@ struct VerifyWordsScreen: View {
         if validator.isComplete(wordNumber: UInt8(wordNumber)) {
             withAnimation(.easeInOut(duration: 0.3)) {
                 verificationComplete = true
+            } completion: {
+                checkState = .none
             }
             return
         }
@@ -199,7 +202,7 @@ struct VerifyWordsScreen: View {
             wordNumber += 1
             possibleWords = validator.possibleWords(for: UInt8(wordNumber))
         } completion: {
-            deselectWord(.spring().speed(2.5))
+            checkState = .none
         }
     }
 
@@ -245,7 +248,10 @@ struct VerifyWordsScreen: View {
 
             VStack(spacing: 10) {
                 if let checkingWord = checkState.word {
-                    Button(action: { deselectWord() }) {
+                    Button(action: {
+                        guard case .checking = checkState else { return }
+                        deselectWord()
+                    }) {
                         Text(checkingWord)
                             .font(.caption)
                             .fontWeight(.medium)
@@ -372,7 +378,7 @@ struct VerifyWordsScreen: View {
 }
 
 enum CheckState: Equatable {
-    case none, checking(String), correct(String), incorrect(String)
+    case none, checking(String), correct(String), incorrect(String), returning
 
     var word: String? {
         switch self {
@@ -382,7 +388,7 @@ enum CheckState: Equatable {
             word
         case let .incorrect(word):
             word
-        case .none:
+        case .none, .returning:
             nil
         }
     }
