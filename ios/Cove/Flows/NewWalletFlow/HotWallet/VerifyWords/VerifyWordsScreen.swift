@@ -325,7 +325,7 @@ struct VerifyWordsScreen: View {
                 }
 
                 HStack {
-                    Text("To confirm that you've securely saved your recovery phrase, please drag and drop the word into their correct positions.")
+                    Text("To confirm that you've securely saved your recovery phrase, please select the correct word")
                         .font(.footnote)
                         .foregroundStyle(.lightGray.opacity(0.75))
                         .fixedSize(horizontal: false, vertical: true)

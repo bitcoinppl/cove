@@ -210,7 +210,7 @@ struct SelectedWalletScreen: View {
         .ignoresSafeArea(edges: .top)
         .onChange(of: model.walletMetadata.discoveryState) {
             _,
-                newValue in setSheetState(newValue)
+            newValue in setSheetState(newValue)
         }
         .onAppear { setSheetState(model.walletMetadata.discoveryState) }
         .onAppear(perform: model.validateMetadata)
@@ -239,7 +239,7 @@ struct VerifyReminder: View {
                             .foregroundStyle(.red.opacity(0.85))
                             .fontWeight(.semibold)
 
-                        Text("backup wallet")
+                        Text("backup your wallet")
                             .fontWeight(.semibold)
                             .font(.caption)
 
