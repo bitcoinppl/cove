@@ -5,6 +5,9 @@ struct WalletSettingsSheet: View {
     @Environment(\.navigate) private var navigate
     @Environment(\.dismiss) private var dismiss
 
+    // args
+    @State var isSheet = true
+
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
 
@@ -95,22 +98,26 @@ struct WalletSettingsSheet: View {
             }
             .listStyle(InsetGroupedListStyle())
             .navigationTitle("Wallet Settings")
-            .navigationBarItems(
-                leading:
-                Button {
-                    dismiss()
-                    navigate(Route.settings)
-                } label: {
-                    Label("App Settings", systemImage: "gear")
-                        .foregroundColor(.blue)
+            .toolbar {
+                if isSheet {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            dismiss()
+                            navigate(Route.settings)
+                        } label: {
+                            Label("App Settings", systemImage: "gear")
+                                .foregroundColor(.blue)
+                        }
+                    }
+
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            dismiss()
+                            model.validateMetadata()
+                        }
+                    }
                 }
-            )
-            .navigationBarItems(
-                trailing: Button("Done") {
-                    dismiss()
-                    model.validateMetadata()
-                }
-            )
+            }
             .foregroundColor(.primary)
             .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
                 Button("Delete", role: .destructive) {

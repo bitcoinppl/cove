@@ -30,7 +30,7 @@ struct WalletSettingsContainer: View {
 
     var body: some View {
         if let model {
-            WalletSettingsSheet(model: model)
+            WalletSettingsSheet(model: model, isSheet: false)
         } else {
             Text(self.error ?? "Loading...")
                 .task {
