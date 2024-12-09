@@ -35,8 +35,8 @@ struct SafeAreaInsetsKey: EnvironmentKey {
     }
 }
 
-extension EnvironmentValues {
-    public var safeAreaInsets: EdgeInsets {
+public extension EnvironmentValues {
+    var safeAreaInsets: EdgeInsets {
         self[SafeAreaInsetsKey.self]
     }
 }
@@ -73,7 +73,7 @@ struct CoveApp: App {
             ):
                 "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
-                let .foundAddress(address, _):
+                 let .foundAddress(address, _):
                 String(address)
             case .noCameraPermission:
                 "Please allow camera access in Settings to use this feature."
@@ -95,11 +95,11 @@ struct CoveApp: App {
                 try? manager.rust.selectWallet(id: walletId)
             }
         case .invalidWordGroup,
-            .errorImportingHotWallet,
-            .importedSuccessfully,
-            .unableToSelectWallet,
-            .errorImportingHardwareWallet,
-            .invalidFileFormat:
+             .errorImportingHotWallet,
+             .importedSuccessfully,
+             .unableToSelectWallet,
+             .errorImportingHardwareWallet,
+             .invalidFileFormat:
             Button("OK") {
                 manager.alertState = .none
             }
@@ -442,20 +442,20 @@ struct CoveApp: App {
                 .gesture(
                     manager.router.routes.isEmpty
                         ? DragGesture()
-                            .onChanged { gesture in
-                                if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                    withAnimation(.spring()) {
-                                        manager.isSidebarVisible = true
-                                    }
+                        .onChanged { gesture in
+                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                withAnimation(.spring()) {
+                                    manager.isSidebarVisible = true
                                 }
                             }
-                            .onEnded { gesture in
-                                if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                    withAnimation(.spring()) {
-                                        manager.isSidebarVisible = true
-                                    }
+                        }
+                        .onEnded { gesture in
+                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                withAnimation(.spring()) {
+                                    manager.isSidebarVisible = true
                                 }
-                            } : nil
+                            }
+                        } : nil
                 )
                 .task {
                     await manager.rust.initOnStart()

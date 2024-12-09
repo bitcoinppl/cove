@@ -1,5 +1,5 @@
 //
-//  PendingWalletManager.swift
+//  PendingWalletViewModel.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/18/24.

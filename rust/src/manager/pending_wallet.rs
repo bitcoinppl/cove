@@ -78,9 +78,7 @@ impl RustPendingWalletManager {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
-            state: Arc::new(RwLock::new(PendingWalletManagerState::new(
-                number_of_words,
-            ))),
+            state: Arc::new(RwLock::new(PendingWalletManagerState::new(number_of_words))),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }

@@ -40,7 +40,8 @@ public struct SendRouteContainer: View {
                 switch sendRoute {
                 case let .setAmount(id: id, address: address, amount: amount):
                     SendFlowSetAmountScreen(
-                        id: id, manager: manager, address: address?.string() ?? "", amount: amount)
+                        id: id, manager: manager, address: address?.string() ?? "", amount: amount
+                    )
                 case let .confirm(id: id, details: details):
                     SendFlowConfirmScreen(id: id, manager: manager, details: details)
                 case let .hardwareExport(id: id, details: details):

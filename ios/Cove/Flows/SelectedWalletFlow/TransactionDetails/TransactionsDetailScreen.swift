@@ -37,7 +37,8 @@ struct TransactionsDetailScreen: View {
         Group {
             if let manager {
                 TransactionDetailsView(
-                    id: id, transactionDetails: transactionDetails, manager: manager)
+                    id: id, transactionDetails: transactionDetails, manager: manager
+                )
             } else {
                 Text("Loading...")
             }

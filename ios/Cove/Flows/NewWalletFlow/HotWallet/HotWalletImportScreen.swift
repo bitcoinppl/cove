@@ -111,11 +111,11 @@ struct HotWalletImportScreen: View {
         do {
             let multiQr: MultiQr =
                 try multiQr
-                ?? {
-                    let newMultiQr = try MultiQr.tryNew(qr: qr)
-                    self.multiQr = newMultiQr
-                    return newMultiQr
-                }()
+                    ?? {
+                        let newMultiQr = try MultiQr.tryNew(qr: qr)
+                        self.multiQr = newMultiQr
+                        return newMultiQr
+                    }()
 
             // see if its single qr or seed qr
             if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(6)) {
@@ -175,8 +175,7 @@ struct HotWalletImportScreen: View {
                         outerIndex = outerIndex - 1
                     }
 
-                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0
-                    {
+                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
                         Log.error(
                             "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)"
                         )
@@ -367,7 +366,7 @@ struct HotWalletImportScreen: View {
             // if its the last word on the non last card and all words are valid words, then go to next tab
             // focusField will already have changed by now
             if let focusField,
-                !buttonIsDisabled, tabIndex < lastIndex, focusField % 6 == 1
+               !buttonIsDisabled, tabIndex < lastIndex, focusField % 6 == 1
             {
                 withAnimation {
                     tabIndex += 1
@@ -607,7 +606,7 @@ private struct AutocompleteField: View {
             // then auto select the first selection, because we want auto selection
             // but also allow the user to fix a wrong word
             if let word = filteredSuggestions.last,
-                filteredSuggestions.count == 1, oldText.count < newText.count
+               filteredSuggestions.count == 1, oldText.count < newText.count
             {
                 state = .valid
                 filteredSuggestions = []

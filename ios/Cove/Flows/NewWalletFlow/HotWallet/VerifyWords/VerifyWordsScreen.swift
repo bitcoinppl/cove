@@ -189,7 +189,8 @@ struct VerifyWordsScreen: View {
                     .spring().speed(3),
                     completion: {
                         incorrectGuesses += 1
-                    })
+                    }
+                )
             }
         }
     }
