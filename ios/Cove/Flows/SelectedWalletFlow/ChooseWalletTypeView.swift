@@ -10,7 +10,7 @@ import SwiftUI
 
 public struct ChooseWalletTypeView: View {
     @Environment(\.dismiss) private var dismiss
-    @State var model: WalletViewModel
+    @State var manager: WalletManager
     @State var foundAddresses: [FoundAddress]
 
     // private
@@ -26,7 +26,7 @@ public struct ChooseWalletTypeView: View {
             Task {
                 // switch the wallet
                 do {
-                    try await model.rust.switchToDifferentWalletAddressType(
+                    try await manager.rust.switchToDifferentWalletAddressType(
                         walletAddressType: foundAddress.type)
                 } catch {
                     Log.error(error.localizedDescription)
@@ -36,7 +36,7 @@ public struct ChooseWalletTypeView: View {
 
                 // update the metadata
                 await MainActor.run {
-                    model.dispatch(action: .selectDifferentWalletAddressType(foundAddress.type))
+                    manager.dispatch(action: .selectDifferentWalletAddressType(foundAddress.type))
                     dismiss()
                 }
             }
@@ -63,7 +63,7 @@ public struct ChooseWalletTypeView: View {
                 .multilineTextAlignment(.center)
 
             Button(action: {
-                model.dispatch(action: .selectCurrentWalletAddressType)
+                manager.dispatch(action: .selectCurrentWalletAddressType)
                 dismiss()
             }) {
                 VStack {
@@ -81,7 +81,7 @@ public struct ChooseWalletTypeView: View {
             ForEach(foundAddressesSorted, id: \.self, content: TypeButton)
         }
         .task {
-            let address = try? await model.firstAddress()
+            let address = try? await manager.firstAddress()
             if let address {
                 withAnimation {
                     self.address = address
@@ -95,7 +95,7 @@ public struct ChooseWalletTypeView: View {
 #Preview {
     AsyncPreview {
         ChooseWalletTypeView(
-            model: WalletViewModel(preview: "preview_only"),
+            manager: WalletManager(preview: "preview_only"),
             foundAddresses: [
                 previewNewLegacyFoundAddress(),
                 previewNewWrappedFoundAddress(),

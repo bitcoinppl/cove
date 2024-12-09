@@ -12,10 +12,10 @@ use crate::{
     wallet::{fingerprint::Fingerprint, metadata::WalletMetadata, Wallet},
 };
 
-type Error = PendingWalletViewModelError;
+type Error = PendingWalletManagerError;
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
-pub enum PendingWalletViewModelError {
+pub enum PendingWalletManagerError {
     #[error("failed to create wallet: {0}")]
     BdkError(String),
 
@@ -24,32 +24,32 @@ pub enum PendingWalletViewModelError {
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum PendingWalletViewModelReconcileMessage {
+pub enum PendingWalletManagerReconcileMessage {
     Words(NumberOfBip39Words),
 }
 
 #[uniffi::export(callback_interface)]
-pub trait PendingWalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
+pub trait PendingWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the view model changes
-    fn reconcile(&self, message: PendingWalletViewModelReconcileMessage);
+    fn reconcile(&self, message: PendingWalletManagerReconcileMessage);
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
-pub struct RustPendingWalletViewModel {
-    pub state: Arc<RwLock<PendingWalletViewModelState>>,
-    pub reconciler: Sender<PendingWalletViewModelReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<PendingWalletViewModelReconcileMessage>>,
+pub struct RustPendingWalletManager {
+    pub state: Arc<RwLock<PendingWalletManagerState>>,
+    pub reconciler: Sender<PendingWalletManagerReconcileMessage>,
+    pub reconcile_receiver: Arc<Receiver<PendingWalletManagerReconcileMessage>>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
 
-pub struct PendingWalletViewModelState {
+pub struct PendingWalletManagerState {
     pub number_of_words: NumberOfBip39Words,
     pub wallet: Arc<PendingWallet>,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum PendingWalletViewModelAction {
+pub enum PendingWalletManagerAction {
     UpdateWords(NumberOfBip39Words),
 }
 
@@ -72,13 +72,13 @@ pub enum WalletCreationError {
 }
 
 #[uniffi::export]
-impl RustPendingWalletViewModel {
+impl RustPendingWalletManager {
     #[uniffi::constructor]
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
-            state: Arc::new(RwLock::new(PendingWalletViewModelState::new(
+            state: Arc::new(RwLock::new(PendingWalletManagerState::new(
                 number_of_words,
             ))),
             reconciler: sender,
@@ -87,7 +87,7 @@ impl RustPendingWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn get_state(&self) -> PendingWalletViewModelState {
+    pub fn get_state(&self) -> PendingWalletManagerState {
         self.state.read().clone()
     }
 
@@ -142,7 +142,7 @@ impl RustPendingWalletViewModel {
 
     // boilerplate methods
     #[uniffi::method]
-    pub fn listen_for_updates(&self, reconciler: Box<dyn PendingWalletViewModelReconciler>) {
+    pub fn listen_for_updates(&self, reconciler: Box<dyn PendingWalletManagerReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
         std::thread::spawn(move || {
@@ -155,9 +155,9 @@ impl RustPendingWalletViewModel {
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: PendingWalletViewModelAction) {
+    pub fn dispatch(&self, action: PendingWalletManagerAction) {
         match action {
-            PendingWalletViewModelAction::UpdateWords(words) => {
+            PendingWalletManagerAction::UpdateWords(words) => {
                 {
                     let mut state = self.state.write();
                     state.wallet = PendingWallet::new(words, None).into();
@@ -165,14 +165,14 @@ impl RustPendingWalletViewModel {
                 }
 
                 self.reconciler
-                    .send(PendingWalletViewModelReconcileMessage::Words(words))
+                    .send(PendingWalletManagerReconcileMessage::Words(words))
                     .expect("failed to send update");
             }
         }
     }
 }
 
-impl PendingWalletViewModelState {
+impl PendingWalletManagerState {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
         Self {
             number_of_words,
@@ -181,7 +181,7 @@ impl PendingWalletViewModelState {
     }
 }
 
-impl From<crate::wallet::WalletError> for PendingWalletViewModelError {
+impl From<crate::wallet::WalletError> for PendingWalletManagerError {
     fn from(error: crate::wallet::WalletError) -> Self {
         WalletCreationError::from(error).into()
     }

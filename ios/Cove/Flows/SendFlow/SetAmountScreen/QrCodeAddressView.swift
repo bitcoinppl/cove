@@ -9,7 +9,7 @@ import SwiftUI
 
 struct QrCodeAddressView: View {
     @State private var multiQr: MultiQr?
-    @Environment(MainViewModel.self) var app
+    @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
 
     // passed in
@@ -120,5 +120,5 @@ struct QrCodeAddressView: View {
 
 #Preview {
     QrCodeAddressView(scannedCode: Binding.constant(nil))
-        .environment(MainViewModel())
+        .environment(AppManager())
 }

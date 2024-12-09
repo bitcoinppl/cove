@@ -15,7 +15,7 @@ struct AsyncPreview<Content: View>: View {
         self.content = content
     }
 
-    @State private var model = MainViewModel()
+    @State private var manager = AppManager()
 
     var body: some View {
         Group {
@@ -26,7 +26,7 @@ struct AsyncPreview<Content: View>: View {
             }
         }
         .task {
-            await model.rust.initOnStart()
+            await manager.rust.initOnStart()
             contentView = await content()
         }
     }

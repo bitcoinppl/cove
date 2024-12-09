@@ -9,7 +9,6 @@ import SwiftUI
 
 struct NewWalletContainer: View {
     var route: NewWalletRoute
-    @Environment(MainViewModel.self) private var mainViewModel
 
     var body: some View {
         switch route {
@@ -24,5 +23,5 @@ struct NewWalletContainer: View {
 }
 
 #Preview {
-    NewWalletContainer(route: NewWalletRoute.select).environment(MainViewModel())
+    NewWalletContainer(route: NewWalletRoute.select).environment(AppManager())
 }

@@ -8,7 +8,7 @@ import SwiftUI
 
 struct EnterAmountView: View {
     @Environment(SendFlowSetAmountPresenter.self) private var presenter
-    @Environment(WalletViewModel.self) private var model
+    @Environment(WalletManager.self) private var manager
 
     // args
     @Binding var sendAmount: String
@@ -18,7 +18,7 @@ struct EnterAmountView: View {
     @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
     @State private var showingMenu: Bool = false
 
-    var metadata: WalletMetadata { model.walletMetadata }
+    var metadata: WalletMetadata { manager.walletMetadata }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -41,7 +41,7 @@ struct EnterAmountView: View {
 
                 HStack(spacing: 0) {
                     Button(action: { showingMenu.toggle() }) {
-                        Text(model.unit)
+                        Text(manager.unit)
                             .padding(.vertical, 10)
 
                         Image(systemName: "chevron.down")
@@ -57,7 +57,7 @@ struct EnterAmountView: View {
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button("sats") {
-                            model.dispatch(action: .updateUnit(.sat))
+                            manager.dispatch(action: .updateUnit(.sat))
                             showingMenu = false
                         }
                         .padding(12)
@@ -66,7 +66,7 @@ struct EnterAmountView: View {
                         Divider()
 
                         Button("btc") {
-                            model.dispatch(action: .updateUnit(.btc))
+                            manager.dispatch(action: .updateUnit(.btc))
                             showingMenu = false
                         }
                         .padding(12)

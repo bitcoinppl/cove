@@ -1,8 +1,8 @@
 import Observation
 import SwiftUI
 
-@Observable class MainViewModel: FfiReconcile {
-    private let logger = Log(id: "MainViewModel")
+@Observable class AppManager: FfiReconcile {
+    private let logger = Log(id: "AppManager")
 
     var rust: FfiApp
     var router: Router
@@ -25,7 +25,7 @@ import SwiftUI
     var routeId = UUID()
 
     @ObservationIgnored
-    weak var walletViewModel: WalletViewModel?
+    weak var walletManager: WalletManager?
 
     public var selectedNetwork: Network {
         rust.network()
@@ -43,7 +43,7 @@ import SwiftUI
     }
 
     public init() {
-        logger.debug("Initializing MainViewModel")
+        logger.debug("Initializing AppManager")
 
         let rust = FfiApp()
         let state = rust.state()
@@ -55,22 +55,22 @@ import SwiftUI
         self.rust.listenForUpdates(updater: self)
     }
 
-    public func getWalletViewModel(id: WalletId) throws -> WalletViewModel {
-        if let walletvm = walletViewModel, walletvm.id == id {
+    public func getWalletManager(id: WalletId) throws -> WalletManager {
+        if let walletvm = walletManager, walletvm.id == id {
             logger.debug("found and using vm for \(id)")
             return walletvm
         }
 
-        logger.debug("did not find vm for \(id), creating new vm: \(walletViewModel?.id ?? "none")")
+        logger.debug("did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")")
 
-        let walletvm = try WalletViewModel(id: id)
-        walletViewModel = walletvm
+        let walletvm = try WalletManager(id: id)
+        walletManager = walletvm
 
-        return walletViewModel!
+        return walletManager!
     }
 
-    public func updateWalletVm(_ vm: WalletViewModel) {
-        walletViewModel = vm
+    public func updateWalletVm(_ vm: WalletManager) {
+        walletManager = vm
     }
 
     var currentRoute: Route {

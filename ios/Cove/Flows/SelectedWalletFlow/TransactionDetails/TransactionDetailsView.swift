@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct TransactionDetailsView: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.openURL) private var openURL
     private let screenWidth = UIScreen.main.bounds.width
     private let screenHeight = UIScreen.main.bounds.height
@@ -19,7 +19,7 @@ struct TransactionDetailsView: View {
     // public
     let id: WalletId
     let transactionDetails: TransactionDetails
-    var model: WalletViewModel
+    var manager: WalletManager
 
     var headerIcon: HeaderIcon {
         HeaderIcon(
@@ -30,7 +30,7 @@ struct TransactionDetailsView: View {
     }
 
     var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
     var detailsExpanded: Bool {
@@ -69,7 +69,7 @@ struct TransactionDetailsView: View {
             .multilineTextAlignment(.center)
         }
 
-        Text(model.rust.displayAmount(amount: transactionDetails.amount()))
+        Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
             .font(.largeTitle)
             .fontWeight(.bold)
             .padding(.top, 12)
@@ -103,7 +103,7 @@ struct TransactionDetailsView: View {
 
         if metadata.detailsExpanded {
             ReceivedDetailsExpandedView(
-                model: model, transactionDetails: transactionDetails,
+                manager: manager, transactionDetails: transactionDetails,
                 numberOfConfirmations: numberOfConfirmations
             )
         }
@@ -141,7 +141,7 @@ struct TransactionDetailsView: View {
             .multilineTextAlignment(.center)
         }
 
-        Text(model.rust.displayAmount(amount: transactionDetails.amount()))
+        Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
             .font(.largeTitle)
             .fontWeight(.bold)
             .padding(.top, 12)
@@ -174,7 +174,7 @@ struct TransactionDetailsView: View {
         }
 
         if metadata.detailsExpanded {
-            SentDetailsExpandedView(model: model, transactionDetails: transactionDetails)
+            SentDetailsExpandedView(manager: manager, transactionDetails: transactionDetails)
         }
     }
 
@@ -238,10 +238,10 @@ struct TransactionDetailsView: View {
                             scrollPosition.scrollTo(edge: .top)
                         }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            model.dispatch(action: .toggleDetailsExpanded)
+                            manager.dispatch(action: .toggleDetailsExpanded)
                         }
                     } else {
-                        model.dispatch(action: .toggleDetailsExpanded)
+                        manager.dispatch(action: .toggleDetailsExpanded)
                     }
                 }) {
                     Text(detailsExpanded ? "Hide Details" : "Show Details")
@@ -255,7 +255,7 @@ struct TransactionDetailsView: View {
         .task {
             do {
                 if let blockNumber = transactionDetails.blockNumber() {
-                    let numberOfConfirmations = try? await model.rust.numberOfConfirmations(
+                    let numberOfConfirmations = try? await manager.rust.numberOfConfirmations(
                         blockHeight: blockNumber)
                     guard numberOfConfirmations != nil else { return }
                     self.numberOfConfirmations = Int(numberOfConfirmations!)
@@ -270,9 +270,9 @@ struct TransactionDetailsView: View {
         TransactionDetailsView(
             id: WalletId(),
             transactionDetails: TransactionDetails.previewConfirmedReceived(),
-            model: WalletViewModel(preview: "preview_only")
+            manager: WalletManager(preview: "preview_only")
         )
-        .environment(MainViewModel())
+        .environment(AppManager())
     }
 }
 
@@ -281,9 +281,9 @@ struct TransactionDetailsView: View {
         TransactionDetailsView(
             id: WalletId(),
             transactionDetails: TransactionDetails.previewConfirmedSent(),
-            model: WalletViewModel(preview: "preview_only")
+            manager: WalletManager(preview: "preview_only")
         )
-        .environment(MainViewModel())
+        .environment(AppManager())
     }
 }
 
@@ -292,9 +292,9 @@ struct TransactionDetailsView: View {
         TransactionDetailsView(
             id: WalletId(),
             transactionDetails: TransactionDetails.previewPendingReceived(),
-            model: WalletViewModel(preview: "preview_only")
+            manager: WalletManager(preview: "preview_only")
         )
-        .environment(MainViewModel())
+        .environment(AppManager())
     }
 }
 
@@ -303,8 +303,8 @@ struct TransactionDetailsView: View {
         TransactionDetailsView(
             id: WalletId(),
             transactionDetails: TransactionDetails.previewPendingSent(),
-            model: WalletViewModel(preview: "preview_only")
+            manager: WalletManager(preview: "preview_only")
         )
-        .environment(MainViewModel())
+        .environment(AppManager())
     }
 }

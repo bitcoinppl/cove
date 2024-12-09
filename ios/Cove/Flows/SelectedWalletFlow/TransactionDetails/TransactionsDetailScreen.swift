@@ -10,7 +10,7 @@ import SwiftUI
 let detailsExpandedPadding: CGFloat = 28
 
 struct TransactionsDetailScreen: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
     // public
@@ -18,15 +18,15 @@ struct TransactionsDetailScreen: View {
     let transactionDetails: TransactionDetails
 
     // private
-    @State var model: WalletViewModel? = nil
+    @State var manager: WalletManager? = nil
 
-    func loadModel() {
-        if model != nil { return }
-        if model != nil { return }
+    func loadManager() {
+        if manager != nil { return }
+        if manager != nil { return }
 
         do {
-            Log.debug("Getting wallet model for \(id)")
-            model = try app.getWalletViewModel(id: id)
+            Log.debug("Getting wallet manager for \(id)")
+            manager = try app.getWalletManager(id: id)
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -35,14 +35,13 @@ struct TransactionsDetailScreen: View {
 
     var body: some View {
         Group {
-            if let model {
-                TransactionDetailsView(id: id, transactionDetails: transactionDetails, model: model)
+            if let manager {
+                TransactionDetailsView(
+                    id: id, transactionDetails: transactionDetails, manager: manager)
             } else {
                 Text("Loading...")
             }
         }
-        .task {
-            loadModel()
-        }
+        .task { loadManager() }
     }
 }

@@ -1,8 +1,8 @@
 use crate::{
     database::Database,
+    manager::wallet::Error,
     node::client::NodeClient,
     transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
-    view_model::wallet::Error,
     wallet::{
         balance::Balance, confirm::ConfirmDetails, metadata::BlockSizeLast, Address, AddressInfo,
         Wallet, WalletAddressType,
@@ -21,12 +21,12 @@ use eyre::Context as _;
 use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, info};
 
-use super::WalletViewModelReconcileMessage;
+use super::WalletManagerReconcileMessage;
 
 #[derive(Debug)]
 pub struct WalletActor {
     pub addr: WeakAddr<Self>,
-    pub reconciler: Sender<WalletViewModelReconcileMessage>,
+    pub reconciler: Sender<WalletManagerReconcileMessage>,
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
 
@@ -57,19 +57,19 @@ impl Actor for WalletActor {
 
         // an error occurred, that wasn't a wallet error, send unknown error
         let Some(error) = error.downcast::<Error>().ok().map(|e| *e) else {
-            self.send(WalletViewModelReconcileMessage::UnknownError(error_string));
+            self.send(WalletManagerReconcileMessage::UnknownError(error_string));
             return false;
         };
 
         match error {
             Error::NodeConnectionFailed(error_string) => {
-                self.send(WalletViewModelReconcileMessage::NodeConnectionFailed(
+                self.send(WalletManagerReconcileMessage::NodeConnectionFailed(
                     error_string,
                 ));
             }
 
             _ => {
-                self.send(WalletViewModelReconcileMessage::WalletError(error));
+                self.send(WalletManagerReconcileMessage::WalletError(error));
             }
         };
 
@@ -78,7 +78,7 @@ impl Actor for WalletActor {
 }
 
 impl WalletActor {
-    pub fn new(wallet: Wallet, reconciler: Sender<WalletViewModelReconcileMessage>) -> Self {
+    pub fn new(wallet: Wallet, reconciler: Sender<WalletManagerReconcileMessage>) -> Self {
         Self {
             addr: Default::default(),
             reconciler,
@@ -201,7 +201,7 @@ impl WalletActor {
     }
 
     pub async fn wallet_scan_and_notify(&mut self, force_scan: bool) -> ActorResult<()> {
-        use WalletViewModelReconcileMessage as Msg;
+        use WalletManagerReconcileMessage as Msg;
         debug!("wallet_scan_and_notify");
 
         // get the initial balance and transactions
@@ -233,7 +233,7 @@ impl WalletActor {
     }
 
     pub async fn start_wallet_scan_in_task(&mut self, force_scan: bool) -> ActorResult<()> {
-        use WalletViewModelReconcileMessage as Msg;
+        use WalletManagerReconcileMessage as Msg;
         debug!("start_wallet_scan");
 
         if !force_scan {
@@ -452,7 +452,7 @@ impl WalletActor {
     /// Notify the frontend that the wallet scan is complete
     /// Ssend the wallet balance and transactions
     async fn mark_and_notify_scan_complete(&mut self) -> ActorResult<()> {
-        use WalletViewModelReconcileMessage as Msg;
+        use WalletManagerReconcileMessage as Msg;
 
         // set the scan state to complete
         self.state = ActorState::ScanComplete;
@@ -549,7 +549,7 @@ fn elapsed_secs_since(earlier: Duration) -> u64 {
 }
 
 impl WalletActor {
-    fn send(&self, msg: WalletViewModelReconcileMessage) {
+    fn send(&self, msg: WalletManagerReconcileMessage) {
         self.reconciler.send(msg).unwrap();
     }
 }

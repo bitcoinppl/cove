@@ -1,12 +1,12 @@
 import SwiftUI
 
-extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletViewModel {}
+extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletManager {}
 
-@Observable class WalletViewModel: AnyReconciler, WalletViewModelReconciler {
-    private let logger = Log(id: "WalletViewModel")
+@Observable class WalletManager: AnyReconciler, WalletManagerReconciler {
+    private let logger = Log(id: "WalletManager")
 
     let id: WalletId
-    var rust: RustWalletViewModel
+    var rust: RustWalletManager
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
     var balance: Balance = .init()
@@ -17,7 +17,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
 
     public init(id: WalletId) throws {
         self.id = id
-        let rust = try RustWalletViewModel(id: id)
+        let rust = try RustWalletManager(id: id)
 
         self.rust = rust
 
@@ -31,7 +31,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
     }
 
     public init(xpub: String) throws {
-        let rust = try RustWalletViewModel.tryNewFromXpub(xpub: xpub)
+        let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
         let metadata = rust.walletMetadata()
 
         self.rust = rust
@@ -94,15 +94,15 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         }
     }
 
-    func reconcile(message: WalletViewModelReconcileMessage) {
+    func reconcile(message: WalletManagerReconcileMessage) {
         Task { [weak self] in
             guard let self else {
-                Log.error("WalletViewModel no longer available")
+                Log.error("WalletManager no longer available")
                 return
             }
 
             let rust = rust
-            logger.debug("WalletViewModelReconcileMessage: \(message)")
+            logger.debug("WalletManagerReconcileMessage: \(message)")
 
             await MainActor.run {
                 switch message {
@@ -156,7 +156,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         }
     }
 
-    public func dispatch(action: WalletViewModelAction) {
+    public func dispatch(action: WalletManagerAction) {
         rust.dispatch(action: action)
     }
 
@@ -165,7 +165,7 @@ extension WeakReconciler: WalletViewModelReconciler where Reconciler == WalletVi
         assert(preview == "preview_only")
 
         id = WalletId()
-        let rust = RustWalletViewModel.previewNewWallet()
+        let rust = RustWalletManager.previewNewWallet()
 
         self.rust = rust
         walletMetadata = rust.walletMetadata()

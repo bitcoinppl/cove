@@ -8,14 +8,14 @@
 import SwiftUI
 
 struct HotWalletCreateScreen: View {
-    @State private var model: PendingWalletViewModel
+    @State private var manager: PendingWalletManager
 
     init(numberOfWords: NumberOfBip39Words) {
-        model = PendingWalletViewModel(numberOfWords: numberOfWords)
+        manager = PendingWalletManager(numberOfWords: numberOfWords)
     }
 
     var body: some View {
-        WordsView(model: model, groupedWords: model.rust.bip39WordsGrouped())
+        WordsView(manager: manager, groupedWords: manager.rust.bip39WordsGrouped())
     }
 }
 
@@ -26,7 +26,7 @@ let columns = [
 ]
 
 struct WordsView: View {
-    var model: PendingWalletViewModel
+    var manager: PendingWalletManager
     var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
@@ -94,7 +94,7 @@ struct WordsView: View {
                         Button(action: {
                             do {
                                 // save the wallet
-                                let walletId = try model.rust.saveWallet().id
+                                let walletId = try manager.rust.saveWallet().id
 
                                 navigate(
                                     HotWalletRoute.verifyWords(walletId).intoRoute()

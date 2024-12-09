@@ -9,18 +9,18 @@ import SwiftUI
 
 struct SelectedWalletContainer: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
     let id: WalletId
-    @State private var model: WalletViewModel? = nil
+    @State private var manager: WalletManager? = nil
 
-    func loadModel() {
-        if model != nil { return }
+    func loadManager() {
+        if manager != nil { return }
 
         do {
             Log.debug("Getting wallet \(id)")
-            model = try app.getWalletViewModel(id: id)
+            manager = try app.getWalletManager(id: id)
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -29,10 +29,10 @@ struct SelectedWalletContainer: View {
 
     var body: some View {
         Group {
-            if let model {
-                SelectedWalletScreen(model: model)
+            if let manager {
+                SelectedWalletScreen(manager: manager)
                     .background(
-                        model.loadState == .loading
+                        manager.loadState == .loading
                             ? LinearGradient(
                                 colors: [
                                     .black.opacity(colorScheme == .dark ? 0.9 : 0),
@@ -58,24 +58,22 @@ struct SelectedWalletContainer: View {
                 Text("Loading...")
             }
         }
-        .onAppear {
-            loadModel()
-        }
+        .onAppear(perform: loadManager)
         .task {
             // small delay and then start scanning wallet
-            if let model {
+            if let manager {
                 do {
                     try? await Task.sleep(for: .milliseconds(400))
-                    try await model.rust.startWalletScan()
+                    try await manager.rust.startWalletScan()
                 } catch {
                     Log.error("Wallet Scan Failed \(error.localizedDescription)")
                 }
             }
         }
-        .onChange(of: model?.loadState) { _, loadState in
+        .onChange(of: manager?.loadState) { _, loadState in
             if case .loaded = loadState {
-                if let model {
-                    app.updateWalletVm(model)
+                if let manager {
+                    app.updateWalletVm(manager)
                 }
             }
         }
@@ -84,5 +82,5 @@ struct SelectedWalletContainer: View {
 
 #Preview {
     SelectedWalletContainer(id: WalletId())
-        .environment(MainViewModel())
+        .environment(AppManager())
 }

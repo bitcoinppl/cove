@@ -9,10 +9,10 @@ import Foundation
 import SwiftUI
 
 struct SendFlowConfirmScreen: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
 
     let id: WalletId
-    @State var model: WalletViewModel
+    @State var manager: WalletManager
     let details: ConfirmDetails
     let prices: PriceResponse? = nil
 
@@ -24,18 +24,18 @@ struct SendFlowConfirmScreen: View {
 
         let amount = details.sendingAmount().asBtc() * Double(prices.usd)
 
-        return model.fiatAmountToString(amount)
+        return manager.fiatAmountToString(amount)
     }
 
     var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
 
             // MARK: CONTENT
 
@@ -65,7 +65,7 @@ struct SendFlowConfirmScreen: View {
                     // Balance Section
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
-                            Text(model.amountFmt(details.sendingAmount()))
+                            Text(manager.amountFmt(details.sendingAmount()))
                                 .font(.system(size: 48, weight: .bold))
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
@@ -79,14 +79,14 @@ struct SendFlowConfirmScreen: View {
                                 )
                                 .contextMenu {
                                     Button {
-                                        model.dispatch(
+                                        manager.dispatch(
                                             action: .updateUnit(.sat))
                                     } label: {
                                         Text("sats")
                                     }
 
                                     Button {
-                                        model.dispatch(
+                                        manager.dispatch(
                                             action: .updateUnit(.btc))
                                     } label: {
                                         Text("btc")
@@ -110,12 +110,12 @@ struct SendFlowConfirmScreen: View {
                     }
                     .padding(.top, 8)
 
-                    SendFlowAccountSection(model: model)
+                    SendFlowAccountSection(manager: manager)
                         .padding(.top)
 
                     Divider()
 
-                    SendFlowDetailsView(model: model, details: details)
+                    SendFlowDetailsView(manager: manager, details: details)
                 }
             }
             .scrollIndicators(.hidden)
@@ -137,10 +137,10 @@ struct SendFlowConfirmScreen: View {
         AsyncPreview {
             SendFlowConfirmScreen(
                 id: WalletId(),
-                model: WalletViewModel(preview: "preview_only"),
+                manager: WalletManager(preview: "preview_only"),
                 details: ConfirmDetails.previewNew()
             )
-            .environment(MainViewModel())
+            .environment(AppManager())
         }
     }
 }

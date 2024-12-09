@@ -8,26 +8,26 @@ import Foundation
 import SwiftUI
 
 public struct SendRouteContainer: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
     // passed in
     let sendRoute: SendRoute
 
     // private
-    @State private var model: WalletViewModel? = nil
+    @State private var manager: WalletManager? = nil
     @State private var presenter: SendFlowSetAmountPresenter? = nil
 
     func initOnAppear() {
         let id = sendRoute.id()
-        if model != nil { return }
+        if manager != nil { return }
 
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
-            let model = try app.getWalletViewModel(id: id)
+            let manager = try app.getWalletManager(id: id)
 
-            self.model = model
-            presenter = SendFlowSetAmountPresenter(app: app, model: model)
+            self.manager = manager
+            presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -35,24 +35,25 @@ public struct SendRouteContainer: View {
     }
 
     public var body: some View {
-        if let model, let presenter {
+        if let manager, let presenter {
             Group {
                 switch sendRoute {
                 case let .setAmount(id: id, address: address, amount: amount):
-                    SendFlowSetAmountScreen(id: id, model: model, address: address?.string() ?? "", amount: amount)
+                    SendFlowSetAmountScreen(
+                        id: id, manager: manager, address: address?.string() ?? "", amount: amount)
                 case let .confirm(id: id, details: details):
-                    SendFlowConfirmScreen(id: id, model: model, details: details)
+                    SendFlowConfirmScreen(id: id, manager: manager, details: details)
                 case let .hardwareExport(id: id, details: details):
-                    SendFlowHardwareScreen(id: id, model: model, details: details)
+                    SendFlowHardwareScreen(id: id, manager: manager, details: details)
                 }
             }
-            .environment(model)
+            .environment(manager)
             .environment(presenter)
             .onAppear {
                 presenter.disappearing = false
 
                 // if zero balance, show alert and send back
-                if model.balance.confirmed.asSats() == 0 {
+                if manager.balance.confirmed.asSats() == 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         withAnimation(.easeInOut(duration: 0.4)) {
                             presenter.focusField = .none

@@ -8,11 +8,11 @@
 import SwiftUI
 
 struct SentDetailsExpandedView: View {
-    let model: WalletViewModel
+    let manager: WalletManager
     let transactionDetails: TransactionDetails
 
     var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
     var body: some View {
@@ -38,7 +38,7 @@ struct SentDetailsExpandedView: View {
 
                             AsyncView(operation: {
                                 let blockNumber = transactionDetails.blockNumber() ?? 0
-                                return try await model.rust.numberOfConfirmationsFmt(blockHeight: blockNumber)
+                                return try await manager.rust.numberOfConfirmationsFmt(blockHeight: blockNumber)
                             }) { (confirmations: String) in
                                 Group {
                                     Text(confirmations)

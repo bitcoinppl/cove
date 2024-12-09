@@ -8,10 +8,10 @@
 import SwiftUI
 
 struct SendFlowAccountSection: View {
-    let model: WalletViewModel
+    let manager: WalletManager
 
     var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
     var body: some View {
@@ -51,7 +51,7 @@ struct SendFlowAccountSection: View {
 #Preview {
     AsyncPreview {
         SendFlowAccountSection(
-            model: WalletViewModel(preview: "preview_only")
+            manager: WalletManager(preview: "preview_only")
         )
     }
 }

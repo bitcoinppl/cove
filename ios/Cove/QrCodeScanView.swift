@@ -11,7 +11,7 @@ struct QrCodeScanView: View {
     @Environment(\.dismiss) private var dismiss
 
     // public
-    @Bindable var app: MainViewModel
+    @Bindable var app: AppManager
     @Binding var scannedCode: TaggedItem<StringOrData>?
 
     // private
@@ -131,7 +131,7 @@ struct QrCodeScanView: View {
 
 #Preview {
     struct PreviewContainer: View {
-        @State private var app = MainViewModel()
+        @State private var app = AppManager()
         @State private var alert: TaggedItem<AppAlertState>? = nil
         @State private var scannedCode: TaggedItem<StringOrData>? = nil
 

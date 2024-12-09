@@ -9,7 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct NewWalletSelectScreen: View {
-    @Environment(MainViewModel.self) var app
+    @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
 
     @Environment(\.colorScheme) var colorScheme
@@ -254,6 +254,6 @@ private enum SheetState {
 #Preview {
     NavigationStack {
         NewWalletSelectScreen()
-            .environment(MainViewModel())
+            .environment(AppManager())
     }
 }

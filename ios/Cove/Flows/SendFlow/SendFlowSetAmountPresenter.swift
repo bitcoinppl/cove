@@ -9,19 +9,19 @@ import SwiftUI
 
 @Observable class SendFlowSetAmountPresenter {
     @ObservationIgnored
-    let app: MainViewModel
+    let app: AppManager
 
     @ObservationIgnored
-    let model: WalletViewModel
+    let manager: WalletManager
 
     var disappearing: Bool = false
     var focusField: FocusField?
     var sheetState: TaggedItem<SheetState>? = .none
     var alertState: TaggedItem<AlertState>? = .none
 
-    init(app: MainViewModel, model: WalletViewModel) {
+    init(app: AppManager, manager: WalletManager) {
         self.app = app
-        self.model = model
+        self.manager = manager
     }
 
     enum FocusField: Hashable {
@@ -114,7 +114,7 @@ import SwiftUI
             case let .invalidAddress(address):
                 "The address \(address) is invalid"
             case let .wrongNetwork(address):
-                "The address \(address) is on the wrong network. You are on \(model.walletMetadata.network)"
+                "The address \(address) is on the wrong network. You are on \(manager.walletMetadata.network)"
             case .insufficientFunds:
                 "You do not have enough bitcoin in your wallet to cover the amount plus fees"
             case .sendAmountToLow:

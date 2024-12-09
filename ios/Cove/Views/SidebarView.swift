@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SidebarView: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
     let currentRoute: Route
@@ -198,7 +198,7 @@ struct SidebarView: View {
                     WalletMetadata("Coldcard Q1", preview: true),
                 ]
             )
-            .environment(MainViewModel())
+            .environment(AppManager())
             .background(Color.white)
             .frame(width: 280)
 

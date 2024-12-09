@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 struct SendFlowSelectFeeRateView: View {
-    let model: WalletViewModel
+    let manager: WalletManager
     let feeOptions: FeeRateOptionsWithTotalFee
     @Binding var selectedOption: FeeRateOptionWithTotalFee
 
@@ -21,19 +21,19 @@ struct SendFlowSelectFeeRateView: View {
                 .padding(.bottom, 8)
 
             FeeOptionView(
-                model: model,
+                manager: manager,
                 feeOption: feeOptions.fast(),
                 selectedOption: $selectedOption
             )
 
             FeeOptionView(
-                model: model,
+                manager: manager,
                 feeOption: feeOptions.medium(),
                 selectedOption: $selectedOption
             )
 
             FeeOptionView(
-                model: model,
+                manager: manager,
                 feeOption: feeOptions.slow(),
                 selectedOption: $selectedOption
             )
@@ -44,11 +44,11 @@ struct SendFlowSelectFeeRateView: View {
 }
 
 private struct FeeOptionView: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
 
     // passed in args
-    let model: WalletViewModel
+    let manager: WalletManager
     let feeOption: FeeRateOptionWithTotalFee
     @Binding var selectedOption: FeeRateOptionWithTotalFee
 
@@ -79,7 +79,7 @@ private struct FeeOptionView: View {
         }
 
         let amount = feeOption.totalFee().asBtc() * Double(prices.usd)
-        return model.fiatAmountToString(amount)
+        return manager.fiatAmountToString(amount)
     }
 
     var body: some View {
@@ -154,11 +154,11 @@ private struct DurationCapsule: View {
 #Preview {
     AsyncPreview {
         SendFlowSelectFeeRateView(
-            model: WalletViewModel(preview: "preview_only"),
+            manager: WalletManager(preview: "preview_only"),
             feeOptions: FeeRateOptionsWithTotalFee.previewNew(),
             selectedOption: Binding.constant(
                 FeeRateOptionsWithTotalFee.previewNew().medium())
         )
-        .environment(MainViewModel())
+        .environment(AppManager())
     }
 }

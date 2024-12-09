@@ -1,15 +1,15 @@
 import SwiftUI
 
-@Observable class ImportWalletViewModel: ImportWalletViewModelReconciler {
-    private let logger = Log(id: "ImportWalletViewModel")
-    var rust: RustImportWalletViewModel
+@Observable class ImportWalletManager: ImportWalletManagerReconciler {
+    private let logger = Log(id: "ImportWalletManager")
+    var rust: RustImportWalletManager
 
     public init() {
-        rust = RustImportWalletViewModel()
+        rust = RustImportWalletManager()
         rust.listenForUpdates(reconciler: self)
     }
 
-    func reconcile(message: ImportWalletViewModelReconcileMessage) {
+    func reconcile(message: ImportWalletManagerReconcileMessage) {
         Task {
             await MainActor.run {
                 logger.debug("Reconcile: \(message)")
@@ -22,7 +22,7 @@ import SwiftUI
         }
     }
 
-    public func dispatch(action: ImportWalletViewModelAction) {
+    public func dispatch(action: ImportWalletManagerAction) {
         logger.debug("Dispatch: \(action)")
         rust.dispatch(action: action)
     }

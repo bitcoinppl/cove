@@ -1,4 +1,4 @@
-//! MainViewModel
+//! AppManager
 
 pub mod reconcile;
 

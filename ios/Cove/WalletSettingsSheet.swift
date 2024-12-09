@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WalletSettingsSheet: View {
-    let model: WalletViewModel
+    let manager: WalletManager
     @Environment(\.navigate) private var navigate
     @Environment(\.dismiss) private var dismiss
 
@@ -20,13 +20,13 @@ struct WalletSettingsSheet: View {
                     HStack {
                         Text("Network")
                         Spacer()
-                        Text(model.walletMetadata.network.toString())
+                        Text(manager.walletMetadata.network.toString())
                             .foregroundColor(.secondary)
                     }
                     HStack {
                         Text("Fingerprint")
                         Spacer()
-                        Text(model.rust.fingerprint())
+                        Text(manager.rust.fingerprint())
                             .foregroundColor(.secondary)
                     }
                 }
@@ -35,16 +35,16 @@ struct WalletSettingsSheet: View {
                     TextField(
                         "Wallet Name",
                         text: Binding(
-                            get: { model.walletMetadata.name },
-                            set: { model.dispatch(action: .updateName($0)) }
+                            get: { manager.walletMetadata.name },
+                            set: { manager.dispatch(action: .updateName($0)) }
                         )
                     )
 
                     Picker(
                         "Wallet Color",
                         selection: Binding(
-                            get: { model.walletMetadata.color },
-                            set: { model.dispatch(action: .updateColor($0)) }
+                            get: { manager.walletMetadata.color },
+                            set: { manager.dispatch(action: .updateColor($0)) }
                         )
                     ) {
                         ForEach(colors, id: \.self) { color in
@@ -53,7 +53,7 @@ struct WalletSettingsSheet: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .tint(model.walletMetadata.color.toColor())
+                    .tint(manager.walletMetadata.color.toColor())
                 }
 
                 Section(header: Text("App Settings")) {
@@ -74,7 +74,7 @@ struct WalletSettingsSheet: View {
                 }
 
                 Section(header: Text("Danger Zone")) {
-                    if model.walletMetadata.walletType == .hot {
+                    if manager.walletMetadata.walletType == .hot {
                         Button {
                             showingSecretWordsConfirmation = true
                         } label: {
@@ -113,7 +113,7 @@ struct WalletSettingsSheet: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Done") {
                             dismiss()
-                            model.validateMetadata()
+                            manager.validateMetadata()
                         }
                     }
                 }
@@ -122,7 +122,7 @@ struct WalletSettingsSheet: View {
             .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
                     do {
-                        try model.rust.deleteWallet()
+                        try manager.rust.deleteWallet()
                         dismiss()
                     } catch {
                         Log.error("Unable to delete wallet: \(error)")
@@ -135,7 +135,7 @@ struct WalletSettingsSheet: View {
             .confirmationDialog("Are you sure?", isPresented: $showingSecretWordsConfirmation) {
                 Button("Show Me") {
                     dismiss()
-                    navigate(Route.secretWords(model.walletMetadata.id))
+                    navigate(Route.secretWords(manager.walletMetadata.id))
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -145,15 +145,15 @@ struct WalletSettingsSheet: View {
             }
         }
         .onDisappear {
-            model.validateMetadata()
+            manager.validateMetadata()
         }
     }
 }
 
 #Preview {
     AsyncPreview {
-        WalletSettingsSheet(model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        WalletSettingsSheet(manager: WalletManager(preview: "preview_only"))
+            .environment(AppManager())
             .environment(\.navigate) { _ in
                 ()
             }

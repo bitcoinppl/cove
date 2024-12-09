@@ -54,7 +54,7 @@ struct QrCodeImportScreen: View {
     @State private var multiQr: MultiQr?
     @State private var scannedCode: TaggedString?
     @State private var showingHelp = false
-    @Environment(MainViewModel.self) var app
+    @Environment(AppManager.self) var app
     @Environment(\.dismiss) private var dismiss
 
     // private
@@ -276,5 +276,5 @@ struct HelpView: View {
 
 #Preview {
     QrCodeImportScreen()
-        .environment(MainViewModel())
+        .environment(AppManager())
 }

@@ -18,33 +18,33 @@ use crate::{
 use macros::impl_default_for;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum ImportWalletViewModelReconcileMessage {
+pub enum ImportWalletManagerReconcileMessage {
     NoOp,
 }
 
 #[uniffi::export(callback_interface)]
-pub trait ImportWalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
+pub trait ImportWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the view model changes
-    fn reconcile(&self, message: ImportWalletViewModelReconcileMessage);
+    fn reconcile(&self, message: ImportWalletManagerReconcileMessage);
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
 #[allow(dead_code)]
-pub struct RustImportWalletViewModel {
-    pub state: Arc<RwLock<ImportWalletViewModelState>>,
-    pub reconciler: Sender<ImportWalletViewModelReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<ImportWalletViewModelReconcileMessage>>,
+pub struct RustImportWalletManager {
+    pub state: Arc<RwLock<ImportWalletManagerState>>,
+    pub reconciler: Sender<ImportWalletManagerReconcileMessage>,
+    pub reconcile_receiver: Arc<Receiver<ImportWalletManagerReconcileMessage>>,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
-pub struct ImportWalletViewModelState {}
+pub struct ImportWalletManagerState {}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum ImportWalletViewModelAction {
+pub enum ImportWalletManagerAction {
     NoOp,
 }
 
-impl_default_for!(RustImportWalletViewModel);
+impl_default_for!(RustImportWalletManager);
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 pub enum ImportWalletError {
@@ -70,20 +70,20 @@ pub enum ImportWalletError {
 pub type Error = ImportWalletError;
 
 #[uniffi::export]
-impl RustImportWalletViewModel {
+impl RustImportWalletManager {
     #[uniffi::constructor]
     pub fn new() -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
-            state: Arc::new(RwLock::new(ImportWalletViewModelState::new())),
+            state: Arc::new(RwLock::new(ImportWalletManagerState::new())),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
     }
 
     #[uniffi::method]
-    pub fn listen_for_updates(&self, reconciler: Box<dyn ImportWalletViewModelReconciler>) {
+    pub fn listen_for_updates(&self, reconciler: Box<dyn ImportWalletManagerReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
         std::thread::spawn(move || {
@@ -146,15 +146,15 @@ impl RustImportWalletViewModel {
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: ImportWalletViewModelAction) {
+    pub fn dispatch(&self, action: ImportWalletManagerAction) {
         match action {
-            ImportWalletViewModelAction::NoOp => {}
+            ImportWalletManagerAction::NoOp => {}
         }
     }
 }
 
-impl_default_for!(ImportWalletViewModelState);
-impl ImportWalletViewModelState {
+impl_default_for!(ImportWalletManagerState);
+impl ImportWalletManagerState {
     pub fn new() -> Self {
         Self {}
     }

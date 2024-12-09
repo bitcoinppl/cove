@@ -10,7 +10,7 @@ import SwiftUI
 struct SendFlowDetailsSheetView: View {
     @Environment(\.dismiss) private var dismiss
 
-    let model: WalletViewModel
+    let manager: WalletManager
     let details: ConfirmDetails
 
     var body: some View {
@@ -20,11 +20,11 @@ struct SendFlowDetailsSheetView: View {
                 .fontWeight(.semibold)
                 .padding(.top)
 
-            SendFlowAccountSection(model: model)
+            SendFlowAccountSection(manager: manager)
 
             Divider()
 
-            SendFlowDetailsView(model: model, details: details)
+            SendFlowDetailsView(manager: manager, details: details)
 
             Spacer()
 
@@ -44,7 +44,7 @@ struct SendFlowDetailsSheetView: View {
 #Preview {
     AsyncPreview {
         SendFlowDetailsSheetView(
-            model: WalletViewModel(preview: "preview_only"),
+            manager: WalletManager(preview: "preview_only"),
             details: ConfirmDetails.previewNew()
         )
         .padding()

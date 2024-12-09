@@ -747,7 +747,7 @@ internal interface UniffiCallbackInterfaceKeychainMethod0 : com.sun.jna.Callback
     )
 }
 
-internal interface UniffiCallbackInterfaceWalletViewModelReconcilerMethod0 : com.sun.jna.Callback {
+internal interface UniffiCallbackInterfaceWalletManagerReconcilerMethod0 : com.sun.jna.Callback {
     fun callback(
         `uniffiHandle`: Long,
         `message`: RustBuffer.ByValue,
@@ -800,17 +800,17 @@ internal open class UniffiVTableCallbackInterfaceKeychain(
 }
 
 @Structure.FieldOrder("reconcile", "uniffiFree")
-internal open class UniffiVTableCallbackInterfaceWalletViewModelReconciler(
-    @JvmField internal var `reconcile`: UniffiCallbackInterfaceWalletViewModelReconcilerMethod0? = null,
+internal open class UniffiVTableCallbackInterfaceWalletManagerReconciler(
+    @JvmField internal var `reconcile`: UniffiCallbackInterfaceWalletManagerReconcilerMethod0? = null,
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
 ) : Structure() {
     class UniffiByValue(
-        `reconcile`: UniffiCallbackInterfaceWalletViewModelReconcilerMethod0? = null,
+        `reconcile`: UniffiCallbackInterfaceWalletManagerReconcilerMethod0? = null,
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
-    ) : UniffiVTableCallbackInterfaceWalletViewModelReconciler(`reconcile`, `uniffiFree`),
+    ) : UniffiVTableCallbackInterfaceWalletManagerReconciler(`reconcile`, `uniffiFree`),
         Structure.ByValue
 
-    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceWalletViewModelReconciler) {
+    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceWalletManagerReconciler) {
         `reconcile` = other.`reconcile`
         `uniffiFree` = other.`uniffiFree`
     }
@@ -846,7 +846,7 @@ internal interface UniffiLib : Library {
                     uniffiCallbackInterfaceAutoComplete.register(lib)
                     uniffiCallbackInterfaceFfiUpdater.register(lib)
                     uniffiCallbackInterfaceKeychain.register(lib)
-                    uniffiCallbackInterfaceWalletViewModelReconciler.register(lib)
+                    uniffiCallbackInterfaceWalletManagerReconciler.register(lib)
                 }
         }
 
@@ -1015,54 +1015,54 @@ internal interface UniffiLib : Library {
         uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
 
-    fun uniffi_cove_fn_clone_rustwalletviewmodel(
+    fun uniffi_cove_fn_clone_rustwalletManager(
         `ptr`: Pointer,
         uniffi_out_err: UniffiRustCallStatus,
     ): Pointer
 
-    fun uniffi_cove_fn_free_rustwalletviewmodel(
+    fun uniffi_cove_fn_free_rustwalletManager(
         `ptr`: Pointer,
         uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-    fun uniffi_cove_fn_constructor_rustwalletviewmodel_new(
+    fun uniffi_cove_fn_constructor_rustwalletManager_new(
         `numberOfWords`: RustBuffer.ByValue,
         uniffi_out_err: UniffiRustCallStatus,
     ): Pointer
 
-    fun uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words(
+    fun uniffi_cove_fn_method_rustwalletManager_bip_39_words(
         `ptr`: Pointer,
         uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
 
-    fun uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words_grouped(
+    fun uniffi_cove_fn_method_rustwalletManager_bip_39_words_grouped(
         `ptr`: Pointer,
         uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
 
-    fun uniffi_cove_fn_method_rustwalletviewmodel_card_indexes(
+    fun uniffi_cove_fn_method_rustwalletManager_card_indexes(
         `ptr`: Pointer,
         uniffi_out_err: UniffiRustCallStatus,
     ): Byte
 
-    fun uniffi_cove_fn_method_rustwalletviewmodel_dispatch(
+    fun uniffi_cove_fn_method_rustwalletManager_dispatch(
         `ptr`: Pointer,
         `action`: RustBuffer.ByValue,
         uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-    fun uniffi_cove_fn_method_rustwalletviewmodel_get_state(
+    fun uniffi_cove_fn_method_rustwalletManager_get_state(
         `ptr`: Pointer,
         uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
 
-    fun uniffi_cove_fn_method_rustwalletviewmodel_listen_for_updates(
+    fun uniffi_cove_fn_method_rustwalletManager_listen_for_updates(
         `ptr`: Pointer,
         `reconciler`: Long,
         uniffi_out_err: UniffiRustCallStatus,
     ): Unit
 
-    fun uniffi_cove_fn_method_rustwalletviewmodel_number_of_words_count(
+    fun uniffi_cove_fn_method_rustwalletManager_number_of_words_count(
         `ptr`: Pointer,
         uniffi_out_err: UniffiRustCallStatus,
     ): Byte
@@ -1081,8 +1081,8 @@ internal interface UniffiLib : Library {
 
     fun uniffi_cove_fn_init_callback_vtable_keychain(`vtable`: UniffiVTableCallbackInterfaceKeychain): Unit
 
-    fun uniffi_cove_fn_init_callback_vtable_walletviewmodelreconciler(
-        `vtable`: UniffiVTableCallbackInterfaceWalletViewModelReconciler,
+    fun uniffi_cove_fn_init_callback_vtable_walletManagerreconciler(
+        `vtable`: UniffiVTableCallbackInterfaceWalletManagerReconciler,
     ): Unit
 
     fun uniffi_cove_fn_func_global(uniffi_out_err: UniffiRustCallStatus): Unit
@@ -1331,19 +1331,19 @@ internal interface UniffiLib : Library {
 
     fun uniffi_cove_checksum_method_routefactory_new_wallet_select(): Short
 
-    fun uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words(): Short
+    fun uniffi_cove_checksum_method_rustwalletManager_bip_39_words(): Short
 
-    fun uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words_grouped(): Short
+    fun uniffi_cove_checksum_method_rustwalletManager_bip_39_words_grouped(): Short
 
-    fun uniffi_cove_checksum_method_rustwalletviewmodel_card_indexes(): Short
+    fun uniffi_cove_checksum_method_rustwalletManager_card_indexes(): Short
 
-    fun uniffi_cove_checksum_method_rustwalletviewmodel_dispatch(): Short
+    fun uniffi_cove_checksum_method_rustwalletManager_dispatch(): Short
 
-    fun uniffi_cove_checksum_method_rustwalletviewmodel_get_state(): Short
+    fun uniffi_cove_checksum_method_rustwalletManager_get_state(): Short
 
-    fun uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates(): Short
+    fun uniffi_cove_checksum_method_rustwalletManager_listen_for_updates(): Short
 
-    fun uniffi_cove_checksum_method_rustwalletviewmodel_number_of_words_count(): Short
+    fun uniffi_cove_checksum_method_rustwalletManager_number_of_words_count(): Short
 
     fun uniffi_cove_checksum_constructor_authenticator_new(): Short
 
@@ -1355,13 +1355,13 @@ internal interface UniffiLib : Library {
 
     fun uniffi_cove_checksum_constructor_routefactory_new(): Short
 
-    fun uniffi_cove_checksum_constructor_rustwalletviewmodel_new(): Short
+    fun uniffi_cove_checksum_constructor_rustwalletManager_new(): Short
 
     fun uniffi_cove_checksum_method_ffiupdater_update(): Short
 
     fun uniffi_cove_checksum_method_keychain_encrypt(): Short
 
-    fun uniffi_cove_checksum_method_walletviewmodelreconciler_reconcile(): Short
+    fun uniffi_cove_checksum_method_walletManagerreconciler_reconcile(): Short
 
     fun ffi_cove_uniffi_contract_version(): Int
 }
@@ -1420,25 +1420,25 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_new_wallet_select() != 21343.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words() != 30749.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletManager_bip_39_words() != 30749.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletviewmodel_bip_39_words_grouped() != 18300.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletManager_bip_39_words_grouped() != 18300.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletviewmodel_card_indexes() != 50108.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletManager_card_indexes() != 50108.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletviewmodel_dispatch() != 35864.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletManager_dispatch() != 35864.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletviewmodel_get_state() != 55828.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletManager_get_state() != 55828.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletviewmodel_listen_for_updates() != 31064.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletManager_listen_for_updates() != 31064.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletviewmodel_number_of_words_count() != 60024.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletManager_number_of_words_count() != 60024.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_authenticator_new() != 4424.toShort()) {
@@ -1456,7 +1456,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_routefactory_new() != 4959.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_rustwalletviewmodel_new() != 22927.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_rustwalletManager_new() != 22927.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiupdater_update() != 21755.toShort()) {
@@ -1465,7 +1465,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_cove_checksum_method_keychain_encrypt() != 65101.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_walletviewmodelreconciler_reconcile() != 28159.toShort()) {
+    if (lib.uniffi_cove_checksum_method_walletManagerreconciler_reconcile() != 28159.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -3590,7 +3590,7 @@ public object FfiConverterTypeRouteFactory : FfiConverter<RouteFactory, Pointer>
 // [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
 //
 
-public interface RustWalletViewModelInterface {
+public interface RustWalletManagerInterface {
     fun `bip39Words`(): List<kotlin.String>
 
     fun `bip39WordsGrouped`(): List<List<GroupedWord>>
@@ -3600,21 +3600,21 @@ public interface RustWalletViewModelInterface {
     /**
      * Action from the frontend to change the state of the view model
      */
-    fun `dispatch`(`action`: WalletViewModelAction)
+    fun `dispatch`(`action`: WalletManagerAction)
 
-    fun `getState`(): WalletViewModelState
+    fun `getState`(): WalletManagerState
 
-    fun `listenForUpdates`(`reconciler`: WalletViewModelReconciler)
+    fun `listenForUpdates`(`reconciler`: WalletManagerReconciler)
 
     fun `numberOfWordsCount`(): kotlin.UByte
 
     companion object
 }
 
-open class RustWalletViewModel :
+open class RustWalletManager :
     Disposable,
     AutoCloseable,
-    RustWalletViewModelInterface {
+    RustWalletManagerInterface {
     constructor(pointer: Pointer) {
         this.pointer = pointer
         this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
@@ -3633,7 +3633,7 @@ open class RustWalletViewModel :
     constructor(`numberOfWords`: NumberOfBip39Words) :
         this(
             uniffiRustCall { _status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustwalletviewmodel_new(
+                UniffiLib.INSTANCE.uniffi_cove_fn_constructor_rustwalletManager_new(
                     FfiConverterTypeNumberOfBip39Words.lower(`numberOfWords`),
                     _status,
                 )
@@ -3693,7 +3693,7 @@ open class RustWalletViewModel :
         override fun run() {
             pointer?.let { ptr ->
                 uniffiRustCall { status ->
-                    UniffiLib.INSTANCE.uniffi_cove_fn_free_rustwalletviewmodel(ptr, status)
+                    UniffiLib.INSTANCE.uniffi_cove_fn_free_rustwalletManager(ptr, status)
                 }
             }
         }
@@ -3701,14 +3701,14 @@ open class RustWalletViewModel :
 
     fun uniffiClonePointer(): Pointer =
         uniffiRustCall { status ->
-            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustwalletviewmodel(pointer!!, status)
+            UniffiLib.INSTANCE.uniffi_cove_fn_clone_rustwalletManager(pointer!!, status)
         }
 
     override fun `bip39Words`(): List<kotlin.String> =
         FfiConverterSequenceString.lift(
             callWithPointer {
                 uniffiRustCall { _status ->
-                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words(
+                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletManager_bip_39_words(
                         it,
                         _status,
                     )
@@ -3720,7 +3720,7 @@ open class RustWalletViewModel :
         FfiConverterSequenceSequenceTypeGroupedWord.lift(
             callWithPointer {
                 uniffiRustCall { _status ->
-                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletviewmodel_bip_39_words_grouped(
+                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletManager_bip_39_words_grouped(
                         it,
                         _status,
                     )
@@ -3732,7 +3732,7 @@ open class RustWalletViewModel :
         FfiConverterUByte.lift(
             callWithPointer {
                 uniffiRustCall { _status ->
-                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletviewmodel_card_indexes(
+                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletManager_card_indexes(
                         it,
                         _status,
                     )
@@ -3743,22 +3743,22 @@ open class RustWalletViewModel :
     /**
      * Action from the frontend to change the state of the view model
      */
-    override fun `dispatch`(`action`: WalletViewModelAction) =
+    override fun `dispatch`(`action`: WalletManagerAction) =
         callWithPointer {
             uniffiRustCall { _status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletviewmodel_dispatch(
+                UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletManager_dispatch(
                     it,
-                    FfiConverterTypeWalletViewModelAction.lower(`action`),
+                    FfiConverterTypeWalletManagerAction.lower(`action`),
                     _status,
                 )
             }
         }
 
-    override fun `getState`(): WalletViewModelState =
-        FfiConverterTypeWalletViewModelState.lift(
+    override fun `getState`(): WalletManagerState =
+        FfiConverterTypeWalletManagerState.lift(
             callWithPointer {
                 uniffiRustCall { _status ->
-                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletviewmodel_get_state(
+                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletManager_get_state(
                         it,
                         _status,
                     )
@@ -3766,12 +3766,12 @@ open class RustWalletViewModel :
             },
         )
 
-    override fun `listenForUpdates`(`reconciler`: WalletViewModelReconciler) =
+    override fun `listenForUpdates`(`reconciler`: WalletManagerReconciler) =
         callWithPointer {
             uniffiRustCall { _status ->
-                UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletviewmodel_listen_for_updates(
+                UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletManager_listen_for_updates(
                     it,
-                    FfiConverterTypeWalletViewModelReconciler.lower(`reconciler`),
+                    FfiConverterTypeWalletManagerReconciler.lower(`reconciler`),
                     _status,
                 )
             }
@@ -3781,7 +3781,7 @@ open class RustWalletViewModel :
         FfiConverterUByte.lift(
             callWithPointer {
                 uniffiRustCall { _status ->
-                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletviewmodel_number_of_words_count(
+                    UniffiLib.INSTANCE.uniffi_cove_fn_method_rustwalletManager_number_of_words_count(
                         it,
                         _status,
                     )
@@ -3792,21 +3792,21 @@ open class RustWalletViewModel :
     companion object
 }
 
-public object FfiConverterTypeRustWalletViewModel : FfiConverter<RustWalletViewModel, Pointer> {
-    override fun lower(value: RustWalletViewModel): Pointer = value.uniffiClonePointer()
+public object FfiConverterTypeRustWalletManager : FfiConverter<RustWalletManager, Pointer> {
+    override fun lower(value: RustWalletManager): Pointer = value.uniffiClonePointer()
 
-    override fun lift(value: Pointer): RustWalletViewModel = RustWalletViewModel(value)
+    override fun lift(value: Pointer): RustWalletManager = RustWalletManager(value)
 
-    override fun read(buf: ByteBuffer): RustWalletViewModel {
+    override fun read(buf: ByteBuffer): RustWalletManager {
         // The Rust code always writes pointers as 8 bytes, and will
         // fail to compile if they don't fit.
         return lift(Pointer(buf.getLong()))
     }
 
-    override fun allocationSize(value: RustWalletViewModel) = 8UL
+    override fun allocationSize(value: RustWalletManager) = 8UL
 
     override fun write(
-        value: RustWalletViewModel,
+        value: RustWalletManager,
         buf: ByteBuffer,
     ) {
         // The Rust code always expects pointers written as 8 bytes,
@@ -4121,7 +4121,7 @@ public object FfiConverterTypeRouter : FfiConverterRustBuffer<Router> {
     }
 }
 
-data class WalletViewModelState(
+data class WalletManagerState(
     var `numberOfWords`: NumberOfBip39Words,
     var `wallet`: Wallet,
 ) : Disposable {
@@ -4135,21 +4135,21 @@ data class WalletViewModelState(
     companion object
 }
 
-public object FfiConverterTypeWalletViewModelState : FfiConverterRustBuffer<WalletViewModelState> {
-    override fun read(buf: ByteBuffer): WalletViewModelState =
-        WalletViewModelState(
+public object FfiConverterTypeWalletManagerState : FfiConverterRustBuffer<WalletManagerState> {
+    override fun read(buf: ByteBuffer): WalletManagerState =
+        WalletManagerState(
             FfiConverterTypeNumberOfBip39Words.read(buf),
             FfiConverterTypeWallet.read(buf),
         )
 
-    override fun allocationSize(value: WalletViewModelState) =
+    override fun allocationSize(value: WalletManagerState) =
         (
             FfiConverterTypeNumberOfBip39Words.allocationSize(value.`numberOfWords`) +
                 FfiConverterTypeWallet.allocationSize(value.`wallet`)
         )
 
     override fun write(
-        value: WalletViewModelState,
+        value: WalletManagerState,
         buf: ByteBuffer,
     ) {
         FfiConverterTypeNumberOfBip39Words.write(value.`numberOfWords`, buf)
@@ -4794,29 +4794,29 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
     }
 }
 
-sealed class WalletViewModelAction {
+sealed class WalletManagerAction {
     data class UpdateWords(
         val v1: NumberOfBip39Words,
-    ) : WalletViewModelAction() {
+    ) : WalletManagerAction() {
         companion object
     }
 
     companion object
 }
 
-public object FfiConverterTypeWalletViewModelAction : FfiConverterRustBuffer<WalletViewModelAction> {
-    override fun read(buf: ByteBuffer): WalletViewModelAction =
+public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<WalletManagerAction> {
+    override fun read(buf: ByteBuffer): WalletManagerAction =
         when (buf.getInt()) {
             1 ->
-                WalletViewModelAction.UpdateWords(
+                WalletManagerAction.UpdateWords(
                     FfiConverterTypeNumberOfBip39Words.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
 
-    override fun allocationSize(value: WalletViewModelAction) =
+    override fun allocationSize(value: WalletManagerAction) =
         when (value) {
-            is WalletViewModelAction.UpdateWords -> {
+            is WalletManagerAction.UpdateWords -> {
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 (
                     4UL +
@@ -4826,11 +4826,11 @@ public object FfiConverterTypeWalletViewModelAction : FfiConverterRustBuffer<Wal
         }
 
     override fun write(
-        value: WalletViewModelAction,
+        value: WalletManagerAction,
         buf: ByteBuffer,
     ) {
         when (value) {
-            is WalletViewModelAction.UpdateWords -> {
+            is WalletManagerAction.UpdateWords -> {
                 buf.putInt(1)
                 FfiConverterTypeNumberOfBip39Words.write(value.v1, buf)
                 Unit
@@ -4839,29 +4839,29 @@ public object FfiConverterTypeWalletViewModelAction : FfiConverterRustBuffer<Wal
     }
 }
 
-sealed class WalletViewModelReconcileMessage {
+sealed class WalletManagerReconcileMessage {
     data class Words(
         val v1: NumberOfBip39Words,
-    ) : WalletViewModelReconcileMessage() {
+    ) : WalletManagerReconcileMessage() {
         companion object
     }
 
     companion object
 }
 
-public object FfiConverterTypeWalletViewModelReconcileMessage : FfiConverterRustBuffer<WalletViewModelReconcileMessage> {
-    override fun read(buf: ByteBuffer): WalletViewModelReconcileMessage =
+public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBuffer<WalletManagerReconcileMessage> {
+    override fun read(buf: ByteBuffer): WalletManagerReconcileMessage =
         when (buf.getInt()) {
             1 ->
-                WalletViewModelReconcileMessage.Words(
+                WalletManagerReconcileMessage.Words(
                     FfiConverterTypeNumberOfBip39Words.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
 
-    override fun allocationSize(value: WalletViewModelReconcileMessage) =
+    override fun allocationSize(value: WalletManagerReconcileMessage) =
         when (value) {
-            is WalletViewModelReconcileMessage.Words -> {
+            is WalletManagerReconcileMessage.Words -> {
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 (
                     4UL +
@@ -4871,11 +4871,11 @@ public object FfiConverterTypeWalletViewModelReconcileMessage : FfiConverterRust
         }
 
     override fun write(
-        value: WalletViewModelReconcileMessage,
+        value: WalletManagerReconcileMessage,
         buf: ByteBuffer,
     ) {
         when (value) {
-            is WalletViewModelReconcileMessage.Words -> {
+            is WalletManagerReconcileMessage.Words -> {
                 buf.putInt(1)
                 FfiConverterTypeNumberOfBip39Words.write(value.v1, buf)
                 Unit
@@ -4986,27 +4986,27 @@ internal object uniffiCallbackInterfaceKeychain {
 // The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
 public object FfiConverterTypeKeychain : FfiConverterCallbackInterface<Keychain>()
 
-public interface WalletViewModelReconciler {
+public interface WalletManagerReconciler {
     /**
      * Tells the frontend to reconcile the view model changes
      */
-    fun `reconcile`(`message`: WalletViewModelReconcileMessage)
+    fun `reconcile`(`message`: WalletManagerReconcileMessage)
 
     companion object
 }
 
 // Put the implementation in an object so we don't pollute the top-level namespace
-internal object uniffiCallbackInterfaceWalletViewModelReconciler {
-    internal object `reconcile` : UniffiCallbackInterfaceWalletViewModelReconcilerMethod0 {
+internal object uniffiCallbackInterfaceWalletManagerReconciler {
+    internal object `reconcile` : UniffiCallbackInterfaceWalletManagerReconcilerMethod0 {
         override fun callback(
             `uniffiHandle`: Long,
             `message`: RustBuffer.ByValue,
             `uniffiOutReturn`: Pointer,
             uniffiCallStatus: UniffiRustCallStatus,
         ) {
-            val uniffiObj = FfiConverterTypeWalletViewModelReconciler.handleMap.get(uniffiHandle)
+            val uniffiObj = FfiConverterTypeWalletManagerReconciler.handleMap.get(uniffiHandle)
             val makeCall = {  uniffiObj.`reconcile`(
-                FfiConverterTypeWalletViewModelReconcileMessage.lift(`message`),
+                FfiConverterTypeWalletManagerReconcileMessage.lift(`message`),
             )
             }
             val writeReturn = { _: Unit -> Unit }
@@ -5016,12 +5016,12 @@ internal object uniffiCallbackInterfaceWalletViewModelReconciler {
 
     internal object uniffiFree : UniffiCallbackInterfaceFree {
         override fun callback(handle: Long) {
-            FfiConverterTypeWalletViewModelReconciler.handleMap.remove(handle)
+            FfiConverterTypeWalletManagerReconciler.handleMap.remove(handle)
         }
     }
 
     internal var vtable =
-        UniffiVTableCallbackInterfaceWalletViewModelReconciler.UniffiByValue(
+        UniffiVTableCallbackInterfaceWalletManagerReconciler.UniffiByValue(
             `reconcile`,
             uniffiFree,
         )
@@ -5029,12 +5029,12 @@ internal object uniffiCallbackInterfaceWalletViewModelReconciler {
     // Registers the foreign callback with the Rust side.
     // This method is generated for each callback interface.
     internal fun register(lib: UniffiLib) {
-        lib.uniffi_cove_fn_init_callback_vtable_walletviewmodelreconciler(vtable)
+        lib.uniffi_cove_fn_init_callback_vtable_walletManagerreconciler(vtable)
     }
 }
 
 // The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
-public object FfiConverterTypeWalletViewModelReconciler : FfiConverterCallbackInterface<WalletViewModelReconciler>()
+public object FfiConverterTypeWalletManagerReconciler : FfiConverterCallbackInterface<WalletManagerReconciler>()
 
 public object FfiConverterSequenceString : FfiConverterRustBuffer<List<kotlin.String>> {
     override fun read(buf: ByteBuffer): List<kotlin.String> {

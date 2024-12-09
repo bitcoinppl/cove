@@ -11,14 +11,14 @@ import SwiftUI
 struct SendFlowHeaderView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @Bindable var model: WalletViewModel
+    @Bindable var manager: WalletManager
     let amount: Amount
 
     @State var height: CGFloat = screenHeight * 0.145
 
     // private
     @State var showingMenu: Bool = false
-    private var metadata: WalletMetadata { model.walletMetadata }
+    private var metadata: WalletMetadata { manager.walletMetadata }
     private var balanceString: String {
         if !metadata.sensitiveVisible {
             return "************"
@@ -59,7 +59,7 @@ struct SendFlowHeaderView: View {
                         .foregroundStyle(.white)
 
                     HStack(spacing: 0) {
-                        Text(model.unit)
+                        Text(manager.unit)
                             .font(.subheadline)
                             .padding(.trailing, 0)
                     }
@@ -70,7 +70,7 @@ struct SendFlowHeaderView: View {
                     .popover(isPresented: $showingMenu) {
                         VStack(alignment: .center, spacing: 0) {
                             Button("sats") {
-                                model.dispatch(action: .updateUnit(.sat))
+                                manager.dispatch(action: .updateUnit(.sat))
                                 showingMenu = false
                             }
                             .padding(8)
@@ -79,7 +79,7 @@ struct SendFlowHeaderView: View {
                             Divider()
 
                             Button("btc") {
-                                model.dispatch(action: .updateUnit(.btc))
+                                manager.dispatch(action: .updateUnit(.btc))
                                 showingMenu = false
                             }
                             .padding(8)
@@ -95,7 +95,7 @@ struct SendFlowHeaderView: View {
                     Spacer()
 
                     Button(action: {
-                        model.dispatch(action: .toggleSensitiveVisibility)
+                        manager.dispatch(action: .toggleSensitiveVisibility)
                     }) {
                         switch metadata.sensitiveVisible {
                         case true: Image(systemName: "eye.slash")
@@ -115,11 +115,11 @@ struct SendFlowHeaderView: View {
 
 #Preview {
     struct Container: View {
-        @State var model: WalletViewModel = .init(preview: "preview_only")
+        @State var manager: WalletManager = .init(preview: "preview_only")
 
         var body: some View {
             SendFlowHeaderView(
-                model: model, amount: Amount.fromSat(sats: 1_385_433)
+                manager: manager, amount: Amount.fromSat(sats: 1_385_433)
             )
         }
     }
@@ -129,11 +129,11 @@ struct SendFlowHeaderView: View {
 
 #Preview("small") {
     struct Container: View {
-        @State var model: WalletViewModel = .init(preview: "preview_only")
+        @State var manager: WalletManager = .init(preview: "preview_only")
 
         var body: some View {
             SendFlowHeaderView(
-                model: model, amount: Amount.fromSat(sats: 1_385_433),
+                manager: manager, amount: Amount.fromSat(sats: 1_385_433),
                 height: 55
             )
         }

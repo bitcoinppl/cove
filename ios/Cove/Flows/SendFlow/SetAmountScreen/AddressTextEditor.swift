@@ -63,9 +63,9 @@ struct AddressTextEditor: View {
 
 #Preview("focused") {
     AsyncPreview {
-        let app = MainViewModel()
-        let model = WalletViewModel(preview: "preview_only")
-        let presenter = SendFlowSetAmountPresenter(app: app, model: model)
+        let app = AppManager()
+        let manager = WalletManager(preview: "preview_only")
+        let presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
 
         AddressTextEditor(
             text: .constant("bc1qw8wrek2m7nlqldll66ajnwr9mh64syvkt67zlu")
@@ -79,9 +79,9 @@ struct AddressTextEditor: View {
 
 #Preview("not focused") {
     AsyncPreview {
-        let app = MainViewModel()
-        let model = WalletViewModel(preview: "preview_only")
-        let presenter = SendFlowSetAmountPresenter(app: app, model: model)
+        let app = AppManager()
+        let manager = WalletManager(preview: "preview_only")
+        let presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
 
         AddressTextEditor(
             text: .constant("bc1qwzrryqr3ja8w7hnja2spmkgfdcgvqwp5swz4af4ngsjecfz0w0pqud7k38")

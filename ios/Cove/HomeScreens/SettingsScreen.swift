@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsScreen: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
 
     @State private var notificationFrequency = 1
@@ -116,5 +116,5 @@ struct SettingsScreen: View {
 
 #Preview {
     SettingsScreen()
-        .environment(MainViewModel())
+        .environment(AppManager())
 }

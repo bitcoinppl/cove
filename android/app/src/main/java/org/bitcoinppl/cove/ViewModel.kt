@@ -1,5 +1,5 @@
 package com.example.cove
 
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.Manager
 
-class ViewModel : ViewModel()
+class Manager : Manager()

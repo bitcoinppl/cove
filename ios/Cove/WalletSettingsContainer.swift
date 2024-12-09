@@ -9,19 +9,19 @@ import Foundation
 import SwiftUI
 
 struct WalletSettingsContainer: View {
-    @Environment(MainViewModel.self) var app
+    @Environment(AppManager.self) var app
 
     // args
     let id: WalletId
 
     // private
-    @State private var model: WalletViewModel? = nil
+    @State private var manager: WalletManager? = nil
     @State private var error: String? = nil
 
     func initOnAppear() {
         do {
-            let model = try app.getWalletViewModel(id: id)
-            self.model = model
+            let manager = try app.getWalletManager(id: id)
+            self.manager = manager
         } catch {
             self.error = "Failed to get wallet \(error.localizedDescription)"
             Log.error(self.error!)
@@ -29,8 +29,8 @@ struct WalletSettingsContainer: View {
     }
 
     var body: some View {
-        if let model {
-            WalletSettingsSheet(model: model, isSheet: false)
+        if let manager {
+            WalletSettingsSheet(manager: manager, isSheet: false)
         } else {
             Text(error ?? "Loading...")
                 .task {

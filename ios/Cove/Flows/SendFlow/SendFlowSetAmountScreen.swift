@@ -16,11 +16,11 @@ private typealias AlertState = SendFlowSetAmountPresenter.AlertState
 
 struct SendFlowSetAmountScreen: View {
     @Environment(SendFlowSetAmountPresenter.self) private var presenter
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.colorScheme) private var colorScheme
 
     let id: WalletId
-    @State var model: WalletViewModel
+    @State var manager: WalletManager
     @State var address: String = ""
     @State var amount: Amount? = nil
 
@@ -47,7 +47,7 @@ struct SendFlowSetAmountScreen: View {
     @State private var maxSelected: Amount? = nil
 
     private var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
     private var sendAmountSats: Int? {
@@ -105,7 +105,7 @@ struct SendFlowSetAmountScreen: View {
         guard let usd = app.prices?.usd else { return "---" }
 
         let fiat = totalSpentInBtc * Double(usd)
-        return model.fiatAmountToString(fiat)
+        return manager.fiatAmountToString(fiat)
     }
 
     private var totalSending: String {
@@ -135,7 +135,7 @@ struct SendFlowSetAmountScreen: View {
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
         Task {
             guard
-                let max = try? await model.rust.getMaxSendAmount(
+                let max = try? await manager.rust.getMaxSendAmount(
                     fee: selectedFeeRate)
             else {
                 return Log.error("unable to get max send amount")
@@ -167,14 +167,14 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             do {
-                let confirmDetails = try await model.rust.getConfirmDetails(
+                let confirmDetails = try await manager.rust.getConfirmDetails(
                     amount: amount,
                     address: address,
                     feeRate: feeRate.feeRate()
                 )
 
                 if case .cold = metadata.walletType {
-                    try? model.rust.saveUnsignedTransaction(details: confirmDetails)
+                    try? manager.rust.saveUnsignedTransaction(details: confirmDetails)
                 }
 
                 let route =
@@ -206,7 +206,7 @@ struct SendFlowSetAmountScreen: View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
 
             // MARK: CONTENT
 
@@ -277,7 +277,7 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: address, initial: true, addressChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .task {
-            guard let feeRateOptions = try? await model.rust.getFeeOptions()
+            guard let feeRateOptions = try? await manager.rust.getFeeOptions()
             else { return }
             await MainActor.run {
                 feeRateOptionsBase = feeRateOptions
@@ -390,7 +390,7 @@ struct SendFlowSetAmountScreen: View {
             return false
         }
 
-        let balance = Double(model.balance.confirmed.asSats())
+        let balance = Double(manager.balance.confirmed.asSats())
         let amountSats = amountSats(amount)
 
         if amountSats < 10000 {
@@ -491,7 +491,7 @@ struct SendFlowSetAmountScreen: View {
             Task { await getFeeRateOptions() }
         }
 
-        sendAmountFiat = model.fiatAmountToString(fiatAmount)
+        sendAmountFiat = manager.fiatAmountToString(fiatAmount)
 
         if oldValue.contains(","), metadata.selectedUnit == .sat {
             print("old value: \(oldValue) CONTIANS ,")
@@ -639,7 +639,7 @@ struct SendFlowSetAmountScreen: View {
             amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
 
         guard
-            let feeRateOptions = try? await model.rust
+            let feeRateOptions = try? await manager.rust
             .feeRateOptionsWithTotalFee(
                 feeRateOptions: feeRateOptionsBase, amount: amount,
                 address: address
@@ -909,7 +909,7 @@ struct SendFlowSetAmountScreen: View {
                 .presentationDetents([.large])
         case .fee:
             SendFlowSelectFeeRateView(
-                model: model,
+                manager: manager,
                 feeOptions: feeRateOptions!,
                 selectedOption: Binding(
                     get: { selectedFeeRate! },
@@ -931,16 +931,16 @@ struct SendFlowSetAmountScreen: View {
 #Preview("with address") {
     AsyncPreview {
         NavigationStack {
-            let model = WalletViewModel(preview: "preview_only")
+            let manager = WalletManager(preview: "preview_only")
 
             SendFlowSetAmountScreen(
                 id: WalletId(),
-                model: model,
+                manager: manager,
                 address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
             )
-            .environment(model)
-            .environment(MainViewModel())
-            .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
+            .environment(manager)
+            .environment(AppManager())
+            .environment(SendFlowSetAmountPresenter(app: AppManager(), manager: manager))
         }
     }
 }
@@ -948,16 +948,16 @@ struct SendFlowSetAmountScreen: View {
 #Preview("no address") {
     AsyncPreview {
         NavigationStack {
-            let model = WalletViewModel(preview: "preview_only")
+            let manager = WalletManager(preview: "preview_only")
 
             SendFlowSetAmountScreen(
                 id: WalletId(),
-                model: model,
+                manager: manager,
                 address: ""
             )
-            .environment(model)
-            .environment(MainViewModel())
-            .environment(SendFlowSetAmountPresenter(app: MainViewModel(), model: model))
+            .environment(manager)
+            .environment(AppManager())
+            .environment(SendFlowSetAmountPresenter(app: AppManager(), manager: manager))
         }
     }
 }

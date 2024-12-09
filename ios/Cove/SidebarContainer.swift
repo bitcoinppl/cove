@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SidebarContainer<Content: View>: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
 
     @ViewBuilder
     let content: Content
@@ -119,5 +119,5 @@ struct SidebarContainer<Content: View>: View {
                 )
             )
     }
-    .environment(MainViewModel())
+    .environment(AppManager())
 }

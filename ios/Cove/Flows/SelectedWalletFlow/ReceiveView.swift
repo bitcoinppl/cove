@@ -11,7 +11,7 @@ import SwiftUI
 struct ReceiveView: View {
     @Environment(\.dismiss) private var dismiss
 
-    let model: WalletViewModel
+    let manager: WalletManager
 
     private let pasteboard = UIPasteboard.general
 
@@ -34,7 +34,7 @@ struct ReceiveView: View {
 
     func nextAddress() async {
         do {
-            let addressInfo = try await model.rust.nextAddress()
+            let addressInfo = try await manager.rust.nextAddress()
             await MainActor.run {
                 self.addressInfo = addressInfo
             }
@@ -156,7 +156,7 @@ private struct AddressView: View {
 
 #Preview {
     AsyncPreview {
-        ReceiveView(model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        ReceiveView(manager: WalletManager(preview: "preview_only"))
+            .environment(AppManager())
     }
 }

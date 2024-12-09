@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ReceivedDetailsExpandedView: View {
-    let model: WalletViewModel
+    let manager: WalletManager
     let transactionDetails: TransactionDetails
     let numberOfConfirmations: Int?
 

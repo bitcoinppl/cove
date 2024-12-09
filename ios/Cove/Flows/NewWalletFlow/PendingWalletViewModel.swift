@@ -1,5 +1,5 @@
 //
-//  PendingWalletViewModel.swift
+//  PendingWalletManager.swift
 //  Cove
 //
 //  Created by Praveen Perera on 6/18/24.
@@ -7,14 +7,14 @@
 
 import SwiftUI
 
-@Observable class PendingWalletViewModel: PendingWalletViewModelReconciler {
-    private let logger = Log(id: "PendingWalletViewModel")
-    var rust: RustPendingWalletViewModel
+@Observable class PendingWalletManager: PendingWalletManagerReconciler {
+    private let logger = Log(id: "PendingWalletManager")
+    var rust: RustPendingWalletManager
     var numberOfWords: NumberOfBip39Words
     var bip39Words: [String]
 
     public init(numberOfWords: NumberOfBip39Words) {
-        let rust = RustPendingWalletViewModel(numberOfWords: numberOfWords)
+        let rust = RustPendingWalletManager(numberOfWords: numberOfWords)
         self.rust = rust
 
         self.numberOfWords = numberOfWords
@@ -22,7 +22,7 @@ import SwiftUI
         self.rust.listenForUpdates(reconciler: self)
     }
 
-    func reconcile(message: PendingWalletViewModelReconcileMessage) {
+    func reconcile(message: PendingWalletManagerReconcileMessage) {
         Task {
             await MainActor.run {
                 logger.debug("Reconcile: \(message)")
@@ -36,7 +36,7 @@ import SwiftUI
         }
     }
 
-    public func dispatch(action: PendingWalletViewModelAction) {
+    public func dispatch(action: PendingWalletManagerAction) {
         rust.dispatch(action: action)
     }
 }

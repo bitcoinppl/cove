@@ -58,13 +58,13 @@ struct EnterAddressView: View {
 
 #Preview {
     AsyncPreview {
-        let app = MainViewModel()
-        let model = WalletViewModel(preview: "preview_only")
-        let presenter = SendFlowSetAmountPresenter(app: app, model: model)
+        let app = AppManager()
+        let manager = WalletManager(preview: "preview_only")
+        let presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
 
         EnterAddressView(address: Binding.constant("bc1qdgxdn046v8tvxtx2k6ml7q7mcanj6dy63atva9"))
             .environment(app)
-            .environment(model)
+            .environment(manager)
             .environment(presenter)
             .padding()
     }

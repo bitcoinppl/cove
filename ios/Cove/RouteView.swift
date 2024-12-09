@@ -2,19 +2,19 @@ import ActivityIndicatorView
 import SwiftUI
 
 struct RouteView: View {
-    @Bindable var model: MainViewModel
+    @Bindable var manager: AppManager
     @State var route: Route
 
-    init(model: MainViewModel, route: Route? = nil) {
-        self.model = model
-        self.route = route ?? model.router.default
+    init(manager: AppManager, route: Route? = nil) {
+        self.manager = manager
+        self.route = route ?? manager.router.default
     }
 
     var body: some View {
         ZStack {
-            if model.asyncRuntimeReady {
-                routeToView(model: model, route: route)
-                    .id(model.routeId)
+            if manager.asyncRuntimeReady {
+                routeToView(manager: manager, route: route)
+                    .id(manager.routeId)
             } else {
                 VStack {
                     ActivityIndicatorView(
@@ -26,7 +26,7 @@ struct RouteView: View {
                 }
             }
         }
-        .onChange(of: model.router.default) { _, newRoute in
+        .onChange(of: manager.router.default) { _, newRoute in
             route = newRoute
         }
         .tint(.blue)
@@ -35,17 +35,17 @@ struct RouteView: View {
 }
 
 @MainActor @ViewBuilder
-func routeToView(model: MainViewModel, route: Route) -> some View {
+func routeToView(manager: AppManager, route: Route) -> some View {
     switch route {
     case let .loadAndReset(resetTo: routes, afterMillis: time):
         LoadAndResetView(nextRoute: routes.routes, loadingTimeMs: Int(time))
     case let .walletSettings(id):
         WalletSettingsContainer(id: id)
-            .environment(model)
+            .environment(manager)
     case .settings:
         SettingsScreen()
     case .listWallets:
-        ListWalletsScreen(model: model)
+        ListWalletsScreen(manager: manager)
     case let .newWallet(route: route):
         NewWalletContainer(route: route)
     case let .selectedWallet(walletId):

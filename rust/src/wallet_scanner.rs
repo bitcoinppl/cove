@@ -18,13 +18,13 @@ use crate::{
         Database,
     },
     keychain::Keychain,
+    manager::wallet::WalletManagerReconcileMessage,
     mnemonic::MnemonicExt,
     node::{
         client::{NodeClient, NodeClientOptions},
         Node,
     },
     task::spawn_actor,
-    view_model::wallet::WalletViewModelReconcileMessage,
     wallet::{
         metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
         WalletAddressType, WalletError,
@@ -98,7 +98,7 @@ pub struct WalletScanner {
     pub started_at: Instant,
     pub node_client_builder: NodeClientBuilder,
     pub scan_source: ScanSource,
-    pub responder: Sender<WalletViewModelReconcileMessage>,
+    pub responder: Sender<WalletManagerReconcileMessage>,
 }
 
 #[derive(Debug, Clone)]
@@ -131,7 +131,7 @@ impl WalletScanner {
     /// have the required information to start a scan.
     pub fn try_new(
         metadata: WalletMetadata,
-        reconciler: Sender<WalletViewModelReconcileMessage>,
+        reconciler: Sender<WalletManagerReconcileMessage>,
     ) -> Result<Self, WalletScannerError> {
         debug!(
             "starting wallet scanner for {}, metadata: {metadata:?}",
@@ -193,7 +193,7 @@ impl WalletScanner {
         node_client_builder: NodeClientBuilder,
         wallets: Wallets,
         scan_source: ScanSource,
-        reconciler: Sender<WalletViewModelReconcileMessage>,
+        reconciler: Sender<WalletManagerReconcileMessage>,
     ) -> Self {
         let mut started_workers = 0;
         let mut workers = Workers::default();
@@ -364,7 +364,7 @@ impl WalletScanner {
         db.update_wallet_metadata(metadata.clone())?;
 
         self.responder
-            .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+            .send(WalletManagerReconcileMessage::WalletMetadataChanged(
                 metadata,
             ))?;
 
@@ -592,8 +592,8 @@ impl NodeClientBuilder {
     }
 }
 
-impl From<ScannerResponse> for WalletViewModelReconcileMessage {
+impl From<ScannerResponse> for WalletManagerReconcileMessage {
     fn from(response: ScannerResponse) -> Self {
-        WalletViewModelReconcileMessage::WalletScannerResponse(response)
+        WalletManagerReconcileMessage::WalletScannerResponse(response)
     }
 }

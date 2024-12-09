@@ -9,10 +9,10 @@ import Foundation
 import SwiftUI
 
 struct VerificationCompleteScreen: View {
-    @Environment(MainViewModel.self) var app
+    @Environment(AppManager.self) var app
 
     // args
-    let model: WalletViewModel
+    let manager: WalletManager
 
     var body: some View {
         VStack(spacing: 24) {
@@ -44,10 +44,12 @@ struct VerificationCompleteScreen: View {
                 }
 
                 HStack {
-                    Text("All set! You’ve successfully verified your recovery words and can now access your wallet.")
-                        .font(.footnote)
-                        .foregroundStyle(.lightGray.opacity(0.75))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "All set! You’ve successfully verified your recovery words and can now access your wallet."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.lightGray.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
                 }
@@ -57,8 +59,8 @@ struct VerificationCompleteScreen: View {
 
             Button("Go To Wallet") {
                 do {
-                    try model.rust.markWalletAsVerified()
-                    app.resetRoute(to: Route.selectedWallet(model.id))
+                    try manager.rust.markWalletAsVerified()
+                    app.resetRoute(to: Route.selectedWallet(manager.id))
                 } catch {
                     Log.error("Error marking wallet as verified: \(error)")
                 }
@@ -81,7 +83,7 @@ struct VerificationCompleteScreen: View {
 
 #Preview {
     AsyncPreview {
-        VerificationCompleteScreen(model: WalletViewModel(preview: "preview_only"))
-            .environment(MainViewModel())
+        VerificationCompleteScreen(manager: WalletManager(preview: "preview_only"))
+            .environment(AppManager())
     }
 }

@@ -26,10 +26,10 @@ private enum AlertState: Equatable {
 }
 
 struct SendFlowHardwareScreen: View {
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
 
     let id: WalletId
-    @State var model: WalletViewModel
+    @State var manager: WalletManager
     let details: ConfirmDetails
     let prices: PriceResponse? = nil
 
@@ -46,7 +46,7 @@ struct SendFlowHardwareScreen: View {
     @State private var isPresentingFilePicker = false
 
     var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
     var fiatAmount: String {
@@ -56,14 +56,14 @@ struct SendFlowHardwareScreen: View {
         }
 
         let amount = details.sendingAmount().asBtc() * Double(prices.usd)
-        return model.fiatAmountToString(amount)
+        return manager.fiatAmountToString(amount)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(model: model, amount: model.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
 
             // MARK: CONTENT
 
@@ -93,7 +93,7 @@ struct SendFlowHardwareScreen: View {
                     // Balance Section
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
-                            Text(model.amountFmt(details.sendingAmount()))
+                            Text(manager.amountFmt(details.sendingAmount()))
                                 .font(.system(size: 48, weight: .bold))
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
@@ -107,14 +107,14 @@ struct SendFlowHardwareScreen: View {
                                 )
                                 .contextMenu {
                                     Button {
-                                        model.dispatch(
+                                        manager.dispatch(
                                             action: .updateUnit(.sat))
                                     } label: {
                                         Text("sats")
                                     }
 
                                     Button {
-                                        model.dispatch(
+                                        manager.dispatch(
                                             action: .updateUnit(.btc))
                                     } label: {
                                         Text("btc")
@@ -419,7 +419,7 @@ struct SendFlowHardwareScreen: View {
     private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
         case .details:
-            SendFlowDetailsSheetView(model: model, details: details)
+            SendFlowDetailsSheetView(manager: manager, details: details)
                 .presentationDetents([.height(425), .height(600), .large])
                 .padding()
         case let .exportQr(qrs):
@@ -485,10 +485,10 @@ struct SendFlowHardwareScreen: View {
         AsyncPreview {
             SendFlowHardwareScreen(
                 id: WalletId(),
-                model: WalletViewModel(preview: "preview_only"),
+                manager: WalletManager(preview: "preview_only"),
                 details: ConfirmDetails.previewNew()
             )
-            .environment(MainViewModel())
+            .environment(AppManager())
         }
     }
 }

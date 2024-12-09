@@ -8,11 +8,11 @@
 import SwiftUI
 
 struct SendFlowDetailsView: View {
-    let model: WalletViewModel
+    let manager: WalletManager
     let details: ConfirmDetails
 
     var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
     var body: some View {
@@ -52,7 +52,7 @@ struct SendFlowDetailsView: View {
                 Spacer()
 
                 HStack {
-                    Text(model.amountFmt(details.feeTotal()))
+                    Text(manager.amountFmt(details.feeTotal()))
                     Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                 }
                 .font(.footnote)
@@ -66,7 +66,7 @@ struct SendFlowDetailsView: View {
                 Text("You'll pay")
                 Spacer()
                 HStack {
-                    Text(model.amountFmt(details.spendingAmount()))
+                    Text(manager.amountFmt(details.spendingAmount()))
                     Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                 }
             }
@@ -78,7 +78,7 @@ struct SendFlowDetailsView: View {
                 Text("They'll receive")
                 Spacer()
                 HStack {
-                    Text(model.amountFmt(details.sendingAmount()))
+                    Text(manager.amountFmt(details.sendingAmount()))
                     Text(metadata.selectedUnit == .sat ? "sats" : "btc")
                 }
             }
@@ -91,7 +91,7 @@ struct SendFlowDetailsView: View {
 #Preview {
     AsyncPreview {
         SendFlowDetailsView(
-            model: WalletViewModel(preview: "preview_only"),
+            manager: WalletManager(preview: "preview_only"),
             details: ConfirmDetails.previewNew()
         )
         .padding()

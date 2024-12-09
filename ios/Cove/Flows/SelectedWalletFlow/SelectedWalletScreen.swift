@@ -17,13 +17,13 @@ private enum SheetState: Equatable {
 struct SelectedWalletScreen: View {
     @Environment(\.safeAreaInsets) private var safeAreaInsets
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(MainViewModel.self) private var app
+    @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
     private let screenHeight = UIScreen.main.bounds.height
 
     // public
-    var model: WalletViewModel
+    var manager: WalletManager
 
     // private
     @State private var sheetState: TaggedItem<SheetState>? = nil
@@ -31,20 +31,20 @@ struct SelectedWalletScreen: View {
     @State private var shouldShowNavBar = false
 
     var metadata: WalletMetadata {
-        model.walletMetadata
+        manager.walletMetadata
     }
 
-    func updater(_ action: WalletViewModelAction) {
-        model.dispatch(action: action)
+    func updater(_ action: WalletManagerAction) {
+        manager.dispatch(action: action)
     }
 
     @ViewBuilder
     func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
         TransactionsCardView(
             transactions: transactions,
-            unsignedTransactions: model.unsignedTransactions,
+            unsignedTransactions: manager.unsignedTransactions,
             scanComplete: scanComplete,
-            metadata: model.walletMetadata
+            metadata: manager.walletMetadata
         )
         .background(colorScheme == .dark ? .black.opacity(0.9) : .clear)
         .background(Color.white)
@@ -85,11 +85,11 @@ struct SelectedWalletScreen: View {
 
     @ViewBuilder
     var Transactions: some View {
-        switch model.loadState {
+        switch manager.loadState {
         case .loading:
             Loading
         case let .scanning(txns):
-            if !model.walletMetadata.performedFullScan, txns.isEmpty {
+            if !manager.walletMetadata.performedFullScan, txns.isEmpty {
                 Loading
             } else {
                 transactionsCard(transactions: txns, scanComplete: false)
@@ -103,11 +103,11 @@ struct SelectedWalletScreen: View {
     private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
         case .receive:
-            ReceiveView(model: model)
+            ReceiveView(manager: manager)
         case .settings:
-            WalletSettingsSheet(model: model)
+            WalletSettingsSheet(manager: manager)
         case let .chooseAddressType(foundAddresses):
-            ChooseWalletTypeView(model: model, foundAddresses: foundAddresses)
+            ChooseWalletTypeView(manager: manager, foundAddresses: foundAddresses)
         }
     }
 
@@ -131,8 +131,8 @@ struct SelectedWalletScreen: View {
     var MainContent: some View {
         VStack(spacing: 0) {
             WalletBalanceHeaderView(
-                balance: model.balance.confirmed,
-                metadata: model.walletMetadata,
+                balance: manager.balance.confirmed,
+                metadata: manager.walletMetadata,
                 updater: updater,
                 showReceiveSheet: showReceiveSheet
             )
@@ -140,11 +140,11 @@ struct SelectedWalletScreen: View {
             .ignoresSafeArea(.all)
 
             VerifyReminder(
-                walletId: model.walletMetadata.id, isVerified: model.walletMetadata.verified
+                walletId: manager.walletMetadata.id, isVerified: manager.walletMetadata.verified
             )
 
             Transactions
-                .environment(model)
+                .environment(manager)
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -194,8 +194,8 @@ struct SelectedWalletScreen: View {
                 MainContent
             }
             .refreshable {
-                try? await model.rust.forceWalletScan()
-                let _ = try? await model.rust.forceUpdateHeight()
+                try? await manager.rust.forceWalletScan()
+                let _ = try? await manager.rust.forceUpdateHeight()
             }
             .onAppear {
                 UIRefreshControl.appearance().tintColor = UIColor.white
@@ -208,17 +208,17 @@ struct SelectedWalletScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        .onChange(of: model.walletMetadata.discoveryState) {
+        .onChange(of: manager.walletMetadata.discoveryState) {
             _,
-                newValue in setSheetState(newValue)
+            newValue in setSheetState(newValue)
         }
-        .onAppear { setSheetState(model.walletMetadata.discoveryState) }
-        .onAppear(perform: model.validateMetadata)
+        .onAppear { setSheetState(manager.walletMetadata.discoveryState) }
+        .onAppear(perform: manager.validateMetadata)
         .alert(
-            item: Binding(get: { model.errorAlert }, set: { model.errorAlert = $0 }),
+            item: Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
             content: DisplayErrorAlert
         )
-        .environment(model)
+        .environment(manager)
     }
 }
 
@@ -266,8 +266,8 @@ struct VerifyReminder: View {
 #Preview {
     AsyncPreview {
         NavigationStack {
-            SelectedWalletScreen(model: WalletViewModel(preview: "preview_only"))
-                .environment(MainViewModel())
+            SelectedWalletScreen(manager: WalletManager(preview: "preview_only"))
+                .environment(AppManager())
         }
     }
 }

@@ -41,7 +41,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelReconcileMessage {
+pub enum WalletManagerReconcileMessage {
     StartedWalletScan,
     AvailableTransactions(Vec<Transaction>),
     ScanComplete(Vec<Transaction>),
@@ -50,7 +50,7 @@ pub enum WalletViewModelReconcileMessage {
     WalletMetadataChanged(WalletMetadata),
     WalletBalanceChanged(Balance),
 
-    WalletError(WalletViewModelError),
+    WalletError(WalletManagerError),
     UnknownError(String),
 
     WalletScannerResponse(ScannerResponse),
@@ -59,7 +59,7 @@ pub enum WalletViewModelReconcileMessage {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum WalletViewModelAction {
+pub enum WalletManagerAction {
     UpdateName(String),
     UpdateColor(WalletColor),
     UpdateUnit(Unit),
@@ -87,13 +87,13 @@ pub enum WalletErrorAlert {
 }
 
 #[uniffi::export(callback_interface)]
-pub trait WalletViewModelReconciler: Send + Sync + std::fmt::Debug + 'static {
+pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the view model changes
-    fn reconcile(&self, message: WalletViewModelReconcileMessage);
+    fn reconcile(&self, message: WalletManagerReconcileMessage);
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
-pub struct RustWalletViewModel {
+pub struct RustWalletManager {
     pub id: WalletId,
     pub actor: Addr<WalletActor>,
 
@@ -101,15 +101,15 @@ pub struct RustWalletViewModel {
     // faster to access, but adds complexity to the code because we have to make sure its updated
     // in all the places
     pub metadata: Arc<RwLock<WalletMetadata>>,
-    pub reconciler: Sender<WalletViewModelReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<WalletViewModelReconcileMessage>>,
+    pub reconciler: Sender<WalletManagerReconcileMessage>,
+    pub reconcile_receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
     #[allow(dead_code)]
     pub scanner: Option<Addr<WalletScanner>>,
 }
 
-pub type Error = WalletViewModelError;
+pub type Error = WalletManagerError;
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum WalletViewModelError {
+pub enum WalletManagerError {
     #[error("failed to get selected wallet: {0}")]
     GetSelectedWalletError(String),
 
@@ -169,7 +169,7 @@ pub enum WalletViewModelError {
 }
 
 #[uniffi::export(async_runtime = "tokio")]
-impl RustWalletViewModel {
+impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
@@ -264,7 +264,7 @@ impl RustWalletViewModel {
         )?;
 
         self.reconciler
-            .send(WalletViewModelReconcileMessage::UnsignedTransactionsChanged)
+            .send(WalletManagerReconcileMessage::UnsignedTransactionsChanged)
             .expect("failed to send update");
 
         Ok(())
@@ -291,7 +291,7 @@ impl RustWalletViewModel {
         db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
 
         self.reconciler
-            .send(WalletViewModelReconcileMessage::UnsignedTransactionsChanged)
+            .send(WalletManagerReconcileMessage::UnsignedTransactionsChanged)
             .expect("failed to send update");
 
         Ok(())
@@ -524,7 +524,7 @@ impl RustWalletViewModel {
                 .map(Fingerprint::as_uppercase)
                 .unwrap_or_else(|| "Unnamed Wallet".to_string());
 
-            self.dispatch(WalletViewModelAction::UpdateName(name));
+            self.dispatch(WalletManagerAction::UpdateName(name));
         }
     }
 
@@ -559,7 +559,7 @@ impl RustWalletViewModel {
             wallet_metadata.verified = true;
 
             self.reconciler
-                .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                .send(WalletManagerReconcileMessage::WalletMetadataChanged(
                     wallet_metadata.clone(),
                 ))
                 .expect("failed to send update");
@@ -759,7 +759,7 @@ impl RustWalletViewModel {
     }
 
     #[uniffi::method]
-    pub fn listen_for_updates(&self, reconciler: Box<dyn WalletViewModelReconciler>) {
+    pub fn listen_for_updates(&self, reconciler: Box<dyn WalletManagerReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
         std::thread::spawn(move || {
@@ -835,34 +835,34 @@ impl RustWalletViewModel {
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: WalletViewModelAction) {
+    pub fn dispatch(&self, action: WalletManagerAction) {
         match action {
-            WalletViewModelAction::UpdateName(name) => {
+            WalletManagerAction::UpdateName(name) => {
                 let mut metadata = self.metadata.write();
                 metadata.name = name;
             }
 
-            WalletViewModelAction::UpdateColor(color) => {
+            WalletManagerAction::UpdateColor(color) => {
                 let mut metadata = self.metadata.write();
                 metadata.color = color;
             }
 
-            WalletViewModelAction::UpdateUnit(unit) => {
+            WalletManagerAction::UpdateUnit(unit) => {
                 let mut metadata = self.metadata.write();
                 metadata.selected_unit = unit;
             }
 
-            WalletViewModelAction::UpdateFiatCurrency(fiat_currency) => {
+            WalletManagerAction::UpdateFiatCurrency(fiat_currency) => {
                 let mut metadata = self.metadata.write();
                 metadata.selected_fiat_currency = fiat_currency;
             }
 
-            WalletViewModelAction::ToggleSensitiveVisibility => {
+            WalletManagerAction::ToggleSensitiveVisibility => {
                 let mut metadata = self.metadata.write();
                 metadata.sensitive_visible = !metadata.sensitive_visible;
             }
 
-            WalletViewModelAction::ToggleFiatOrBtc => {
+            WalletManagerAction::ToggleFiatOrBtc => {
                 let mut metadata = self.metadata.write();
                 metadata.fiat_or_btc = match metadata.fiat_or_btc {
                     FiatOrBtc::Btc => FiatOrBtc::Fiat,
@@ -870,12 +870,12 @@ impl RustWalletViewModel {
                 };
             }
 
-            WalletViewModelAction::UpdateFiatOrBtc(fiat_or_btc) => {
+            WalletManagerAction::UpdateFiatOrBtc(fiat_or_btc) => {
                 let mut metadata = self.metadata.write();
                 metadata.fiat_or_btc = fiat_or_btc;
             }
 
-            WalletViewModelAction::ToggleFiatBtcPrimarySecondary => {
+            WalletManagerAction::ToggleFiatBtcPrimarySecondary => {
                 let order = [
                     (FiatOrBtc::Btc, Unit::Btc),
                     (FiatOrBtc::Fiat, Unit::Btc),
@@ -896,28 +896,28 @@ impl RustWalletViewModel {
                 let next_index = (current_index + 1) % order.len();
                 let (fiat_or_btc, unit) = order[next_index];
 
-                self.dispatch(WalletViewModelAction::UpdateFiatOrBtc(fiat_or_btc));
-                self.dispatch(WalletViewModelAction::UpdateUnit(unit));
+                self.dispatch(WalletManagerAction::UpdateFiatOrBtc(fiat_or_btc));
+                self.dispatch(WalletManagerAction::UpdateUnit(unit));
             }
 
-            WalletViewModelAction::ToggleDetailsExpanded => {
+            WalletManagerAction::ToggleDetailsExpanded => {
                 let mut metadata = self.metadata.write();
                 metadata.details_expanded = !metadata.details_expanded;
             }
 
-            WalletViewModelAction::SelectCurrentWalletAddressType => {
+            WalletManagerAction::SelectCurrentWalletAddressType => {
                 let mut metadata = self.metadata.write();
                 metadata.discovery_state = DiscoveryState::ChoseAdressType;
             }
 
-            WalletViewModelAction::SelectDifferentWalletAddressType(wallet_address_type) => {
+            WalletManagerAction::SelectDifferentWalletAddressType(wallet_address_type) => {
                 {
                     let mut metadata = self.metadata.write();
                     metadata.address_type = wallet_address_type;
                     metadata.discovery_state = DiscoveryState::ChoseAdressType;
 
                     self.reconciler
-                        .send(WalletViewModelReconcileMessage::WalletMetadataChanged(
+                        .send(WalletManagerReconcileMessage::WalletMetadataChanged(
                             metadata.clone(),
                         ))
                         .unwrap();
@@ -932,7 +932,7 @@ impl RustWalletViewModel {
 
         let metadata = self.metadata.read();
         let metdata_changed_msg =
-            WalletViewModelReconcileMessage::WalletMetadataChanged(metadata.clone());
+            WalletManagerReconcileMessage::WalletMetadataChanged(metadata.clone());
 
         self.reconciler.send(metdata_changed_msg).unwrap();
 
@@ -947,7 +947,7 @@ impl RustWalletViewModel {
 }
 
 #[uniffi::export]
-impl RustWalletViewModel {
+impl RustWalletManager {
     #[uniffi::constructor]
     pub fn preview_new_wallet() -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
@@ -967,9 +967,9 @@ impl RustWalletViewModel {
     }
 }
 
-impl Drop for RustWalletViewModel {
+impl Drop for RustWalletManager {
     fn drop(&mut self) {
-        debug!("[DROP] Wallet View Model: {}", self.id);
+        debug!("[DROP] Wallet View manager: {}", self.id);
     }
 }
 

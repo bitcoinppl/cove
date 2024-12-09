@@ -9,7 +9,7 @@ import MijickPopupView
 import SwiftUI
 
 struct TransactionsCardView: View {
-    @Environment(WalletViewModel.self) var model
+    @Environment(WalletManager.self) var manager
 
     let transactions: [Transaction]
     let unsignedTransactions: [UnsignedTransaction]
@@ -47,7 +47,7 @@ struct TransactionsCardView: View {
                                 )
                                 .contextMenu {
                                     Button(role: .destructive) {
-                                        try? model.rust.deleteUnsignedTransaction(txId: txn.id())
+                                        try? manager.rust.deleteUnsignedTransaction(txId: txn.id())
                                     } label: {
                                         Label("Delete", systemImage: "trash")
                                     }
@@ -96,7 +96,7 @@ private func amountColor(_ direction: TransactionDirection) -> Color {
 }
 
 struct TransactionRow: View {
-    @Environment(WalletViewModel.self) var model
+    @Environment(WalletManager.self) var manager
     var txn: Transaction
     var metadata: WalletMetadata
 
@@ -119,7 +119,7 @@ struct TransactionRow: View {
 
 struct ConfirmedTransactionView: View {
     @Environment(\.navigate) private var navigate
-    @Environment(WalletViewModel.self) var model
+    @Environment(WalletManager.self) var manager
 
     let txn: ConfirmedTransaction
     let metadata: WalletMetadata
@@ -131,13 +131,13 @@ struct ConfirmedTransactionView: View {
     private var amount: String {
         if case .btc = metadata.fiatOrBtc {
             return privateShow(
-                model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+                manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
             )
         }
 
         // fiat
         guard let fiatAmount = txn.fiatAmount() else { return privateShow("---") }
-        return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
+        return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
     }
 
     private func privateShow(_ text: String, placeholder: String = "*******") -> String {
@@ -175,7 +175,7 @@ struct ConfirmedTransactionView: View {
             MiddlePopup(state: .loading).showAndStack()
             Task {
                 do {
-                    let details = try await model.rust.transactionDetails(txId: txn.id())
+                    let details = try await manager.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
                         PopupManager.dismiss()
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
@@ -192,7 +192,7 @@ struct ConfirmedTransactionView: View {
 
 struct UnconfirmedTransactionView: View {
     @Environment(\.navigate) private var navigate
-    @Environment(WalletViewModel.self) var model
+    @Environment(WalletManager.self) var manager
 
     let txn: UnconfirmedTransaction
     let metadata: WalletMetadata
@@ -208,13 +208,13 @@ struct UnconfirmedTransactionView: View {
     private var amount: String {
         if case .btc = metadata.fiatOrBtc {
             return privateShow(
-                model.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
+                manager.rust.displaySentAndReceivedAmount(sentAndReceived: txn.sentAndReceived())
             )
         }
 
         // fiat
         if let fiatAmount = txn.fiatAmount() {
-            return privateShow(model.rust.displayFiatAmount(amount: fiatAmount.amount))
+            return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount.amount))
         } else {
             return privateShow("---")
         }
@@ -240,7 +240,7 @@ struct UnconfirmedTransactionView: View {
             MiddlePopup(state: .loading).showAndStack()
             Task {
                 do {
-                    let details = try await model.rust.transactionDetails(txId: txn.id())
+                    let details = try await manager.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
                         PopupManager.dismiss()
                         navigate(Route.transactionDetails(id: metadata.id, details: details))
@@ -257,7 +257,7 @@ struct UnconfirmedTransactionView: View {
 
 struct UnsignedTransactionView: View {
     @Environment(\.navigate) private var navigate
-    @Environment(WalletViewModel.self) var model
+    @Environment(WalletManager.self) var manager
     @Environment(\.colorScheme) var colorScheme
 
     // args
@@ -278,12 +278,12 @@ struct UnsignedTransactionView: View {
     private var amount: String {
         // btc or sats
         if case .btc = metadata.fiatOrBtc {
-            return privateShow(model.amountFmtUnit(txn.spendingAmount()))
+            return privateShow(manager.amountFmtUnit(txn.spendingAmount()))
         }
 
         // fiat
         guard let fiatAmount else { return privateShow("$XX.XX USD") }
-        return privateShow(model.rust.displayFiatAmount(amount: fiatAmount))
+        return privateShow(manager.rust.displayFiatAmount(amount: fiatAmount))
     }
 
     var body: some View {
@@ -319,7 +319,7 @@ struct UnsignedTransactionView: View {
         }
         .task {
             fiatAmount =
-                try? await model.rust.amountInFiat(
+                try? await manager.rust.amountInFiat(
                     amount: txn.spendingAmount(),
                     currency: .usd
                 )
@@ -378,7 +378,7 @@ private struct TxnIcon: View {
             scanComplete: true,
             metadata: walletMetadataPreview()
         )
-        .environment(WalletViewModel(preview: "preview_only"))
+        .environment(WalletManager(preview: "preview_only"))
     }
 }
 
@@ -392,7 +392,7 @@ private struct TxnIcon: View {
                 metadata: walletMetadataPreview()
             )
             .background(.thickMaterial)
-            .environment(WalletViewModel(preview: "preview_only"))
+            .environment(WalletManager(preview: "preview_only"))
         }
     }
 }
@@ -405,7 +405,7 @@ private struct TxnIcon: View {
             scanComplete: false,
             metadata: walletMetadataPreview()
         )
-        .environment(WalletViewModel(preview: "preview_only"))
+        .environment(WalletManager(preview: "preview_only"))
     }
 }
 
@@ -417,7 +417,7 @@ private struct TxnIcon: View {
             scanComplete: true,
             metadata: walletMetadataPreview()
         )
-        .environment(WalletViewModel(preview: "preview_only"))
+        .environment(WalletManager(preview: "preview_only"))
     }
 }
 
@@ -425,11 +425,13 @@ private struct TxnIcon: View {
     AsyncPreview {
         TransactionsCardView(
             transactions: transactionsPreviewNew(confirmed: UInt8(3), unconfirmed: UInt8(1)),
-            unsignedTransactions: [UnsignedTransaction.previewNew(), UnsignedTransaction.previewNew()],
+            unsignedTransactions: [
+                UnsignedTransaction.previewNew(), UnsignedTransaction.previewNew(),
+            ],
             scanComplete: true,
             metadata: walletMetadataPreview()
         )
-        .environment(WalletViewModel(preview: "preview_only"))
+        .environment(WalletManager(preview: "preview_only"))
     }
 }
 
@@ -444,7 +446,7 @@ private struct TxnIcon: View {
             scanComplete: true,
             metadata: metadata
         )
-        .environment(WalletViewModel(preview: "preview_only"))
+        .environment(WalletManager(preview: "preview_only"))
     }
 }
 
@@ -460,7 +462,7 @@ private struct TxnIcon: View {
                 scanComplete: true,
                 metadata: metadata
             )
-            .environment(WalletViewModel(preview: "preview_only"))
+            .environment(WalletManager(preview: "preview_only"))
         }
 }
 
@@ -492,6 +494,6 @@ private struct TxnIcon: View {
             }
             .ignoresSafeArea()
         }
-        .environment(WalletViewModel(preview: "preview_only"))
+        .environment(WalletManager(preview: "preview_only"))
     }
 }

@@ -9,15 +9,15 @@ import SwiftUI
 
 struct WalletBalanceHeaderView: View {
     @Environment(\.safeAreaInsets) private var safeAreaInsets
-    @Environment(MainViewModel.self) var app
-    @Environment(WalletViewModel.self) var model
+    @Environment(AppManager.self) var app
+    @Environment(WalletManager.self) var manager
 
     // args
     // confirmed balance
     let balance: Amount
     @State var fiatBalance: Double? = nil
     let metadata: WalletMetadata
-    let updater: (WalletViewModelAction) -> Void
+    let updater: (WalletManagerAction) -> Void
     let showReceiveSheet: () -> Void
 
     private var accentColor: Color {
@@ -32,11 +32,11 @@ struct WalletBalanceHeaderView: View {
         // fiat
         if metadata.fiatOrBtc == .fiat {
             guard let fiatBalance else { return "$XX.XX USD" }
-            return model.rust.displayFiatAmount(amount: fiatBalance)
+            return manager.rust.displayFiatAmount(amount: fiatBalance)
         }
 
         // btc or sats
-        return model.amountFmtUnit(balance)
+        return manager.amountFmtUnit(balance)
     }
 
     private var secondaryBalanceString: String {
@@ -47,11 +47,11 @@ struct WalletBalanceHeaderView: View {
         // fiat
         if metadata.fiatOrBtc == .btc {
             guard let fiatBalance else { return "$XX.XX USD" }
-            return model.rust.displayFiatAmount(amount: fiatBalance)
+            return manager.rust.displayFiatAmount(amount: fiatBalance)
         }
 
         // btc or sats
-        return model.amountFmtUnit(balance)
+        return manager.amountFmtUnit(balance)
     }
 
     var eyeIcon: String {
@@ -106,20 +106,20 @@ struct WalletBalanceHeaderView: View {
             )
             .contextMenu {
                 Button("BTC") {
-                    model.dispatch(action: .updateUnit(.btc))
-                    model.dispatch(action: .updateFiatOrBtc(.btc))
+                    manager.dispatch(action: .updateUnit(.btc))
+                    manager.dispatch(action: .updateFiatOrBtc(.btc))
                 }
 
                 Button("SATS") {
-                    model.dispatch(action: .updateUnit(.sat))
-                    model.dispatch(action: .updateFiatOrBtc(.btc))
+                    manager.dispatch(action: .updateUnit(.sat))
+                    manager.dispatch(action: .updateFiatOrBtc(.btc))
                 }
             }
 
             HStack(spacing: 16) {
                 Button(action: {
                     if balance.asSats() == 0 {
-                        model.errorAlert = .noBalance
+                        manager.errorAlert = .noBalance
                         return
                     }
 
@@ -164,21 +164,21 @@ struct WalletBalanceHeaderView: View {
         )
         .background(Color.midnightBlue)
         .onTapGesture {
-            model.dispatch(action: .toggleFiatBtcPrimarySecondary)
+            manager.dispatch(action: .toggleFiatBtcPrimarySecondary)
         }
-        .onChange(of: model.fiatBalance, initial: true) {
+        .onChange(of: manager.fiatBalance, initial: true) {
             // if fiatBalance was pased in explicitly, don't update it, only for previews
-            if fiatBalance ?? 0.0 > 0.0, model.fiatBalance ?? 0.0 == 0.0 {
+            if fiatBalance ?? 0.0 > 0.0, manager.fiatBalance ?? 0.0 == 0.0 {
                 return
             }
 
-            fiatBalance = model.fiatBalance
+            fiatBalance = manager.fiatBalance
         }
         .task {
             if balance.asSats() != 0, fiatBalance == 0.00 || fiatBalance == nil {
                 Task {
-                    await model.getFiatBalance()
-                    await MainActor.run { fiatBalance = model.fiatBalance }
+                    await manager.getFiatBalance()
+                    await MainActor.run { fiatBalance = manager.fiatBalance }
                 }
             }
         }
@@ -198,8 +198,8 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(MainViewModel())
-            .environment(WalletViewModel(preview: "preview_only"))
+            .environment(AppManager())
+            .environment(WalletManager(preview: "preview_only"))
         }
 }
 
@@ -218,8 +218,8 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(MainViewModel())
-            .environment(WalletViewModel(preview: "preview_only"))
+            .environment(AppManager())
+            .environment(WalletManager(preview: "preview_only"))
         }
 }
 
@@ -237,8 +237,8 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(MainViewModel())
-            .environment(WalletViewModel(preview: "preview_only"))
+            .environment(AppManager())
+            .environment(WalletManager(preview: "preview_only"))
         }
 }
 
@@ -256,8 +256,8 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(MainViewModel())
-            .environment(WalletViewModel(preview: "preview_only"))
+            .environment(AppManager())
+            .environment(WalletManager(preview: "preview_only"))
         }
 }
 
@@ -276,7 +276,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(MainViewModel())
-            .environment(WalletViewModel(preview: "preview_only"))
+            .environment(AppManager())
+            .environment(WalletManager(preview: "preview_only"))
         }
 }

@@ -9,13 +9,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cove.ViewModel
+import com.example.cove.Manager
 import com.example.cove.ui.theme.CoveTheme
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Manager.compose.Manager
 import org.bitcoinppl.cove.AutoComplete
 
 @Composable
-fun CoveApp(viewModel: ViewModel = viewModel()) {
+fun CoveApp(Manager: Manager = Manager()) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
