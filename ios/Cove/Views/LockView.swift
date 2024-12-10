@@ -115,7 +115,7 @@ struct LockView<Content: View>: View {
     private func unlockView() {
         /// Checking and Unlocking View
         Task {
-            guard isBiometricAvailable, lockType != .number else {
+            guard isBiometricAvailable, lockType != .pin else {
                 /// No Bio Metric Permission || Lock Type Must be Set as Keypad
                 /// Updating Biometric Status
                 await MainActor.run { noBiometricAccess = !isBiometricAvailable }
@@ -267,24 +267,6 @@ struct LockView<Content: View>: View {
         }
         .padding()
         .environment(\.colorScheme, .dark)
-    }
-}
-
-/// Lock Type
-enum LockType {
-    case biometric
-    case number
-    case both
-    
-    var description: String {
-        switch self {
-        case .biometric:
-            "Bio Metric Auth"
-        case .number:
-            "Custom Number Lock"
-        case .both:
-            "First preference will be biometric, and if it's not available, it will go for number lock."
-        }
     }
 }
 

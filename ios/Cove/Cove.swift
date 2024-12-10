@@ -4876,6 +4876,8 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     
     func get(key: GlobalConfigKey) throws  -> String?
     
+    func getLockType() throws  -> LockType
+    
     func selectWallet(id: WalletId) throws 
     
     func selectedNetwork()  -> Network
@@ -4887,6 +4889,8 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     func set(key: GlobalConfigKey, value: String) throws 
     
     func setColorScheme(colorScheme: ColorSchemeSelection) throws 
+    
+    func setLockType(lockType: LockType) throws 
     
     func setSelectedNetwork(network: Network) throws 
     
@@ -4972,6 +4976,13 @@ open func get(key: GlobalConfigKey)throws  -> String?  {
 })
 }
     
+open func getLockType()throws  -> LockType  {
+    return try  FfiConverterTypeLockType.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    uniffi_cove_fn_method_globalconfigtable_get_lock_type(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func selectWallet(id: WalletId)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
     uniffi_cove_fn_method_globalconfigtable_select_wallet(self.uniffiClonePointer(),
         FfiConverterTypeWalletId.lower(id),$0
@@ -5011,6 +5022,13 @@ open func set(key: GlobalConfigKey, value: String)throws   {try rustCallWithErro
 open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
     uniffi_cove_fn_method_globalconfigtable_set_color_scheme(self.uniffiClonePointer(),
         FfiConverterTypeColorSchemeSelection.lower(colorScheme),$0
+    )
+}
+}
+    
+open func setLockType(lockType: LockType)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_lock_type(self.uniffiClonePointer(),
+        FfiConverterTypeLockType.lower(lockType),$0
     )
 }
 }
@@ -14122,6 +14140,7 @@ public enum GlobalConfigKey {
     case selectedNode(Network
     )
     case colorScheme
+    case lockType
 }
 
 
@@ -14143,6 +14162,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         )
         
         case 4: return .colorScheme
+        
+        case 5: return .lockType
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14167,6 +14188,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .colorScheme:
             writeInt(&buf, Int32(4))
+        
+        
+        case .lockType:
+            writeInt(&buf, Int32(5))
         
         }
     }
@@ -14844,6 +14869,84 @@ extension KeychainError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum LockType {
+    
+    case pin
+    case biometric
+    case both
+    case none
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLockType: FfiConverterRustBuffer {
+    typealias SwiftType = LockType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LockType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .pin
+        
+        case 2: return .biometric
+        
+        case 3: return .both
+        
+        case 4: return .none
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LockType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .pin:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .biometric:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .both:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .none:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLockType_lift(_ buf: RustBuffer) throws -> LockType {
+    return try FfiConverterTypeLockType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLockType_lower(_ value: LockType) -> RustBuffer {
+    return FfiConverterTypeLockType.lower(value)
+}
+
+
+
+extension LockType: Equatable, Hashable {}
+
+
 
 
 public enum MnemonicError {
@@ -21420,6 +21523,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_get() != 52128) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_get_lock_type() != 16233) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 52001) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21436,6 +21542,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_color_scheme() != 24086) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_lock_type() != 26312) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 34312) {

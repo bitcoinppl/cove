@@ -19,6 +19,7 @@ pub(crate) mod hardware_export;
 pub(crate) mod header_icon_presenter;
 pub(crate) mod keychain;
 pub(crate) mod keys;
+pub(crate) mod lock;
 pub(crate) mod manager;
 pub(crate) mod mnemonic;
 pub(crate) mod multi_format;

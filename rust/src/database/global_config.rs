@@ -1,10 +1,11 @@
-use std::sync::Arc;
+use std::{str::FromStr as _, sync::Arc};
 
 use redb::TableDefinition;
 
 use crate::{
     app::reconcile::{Update, Updater},
     color_scheme::ColorSchemeSelection,
+    lock::LockType,
     network::Network,
     node::Node,
     wallet::metadata::WalletId,
@@ -20,6 +21,7 @@ pub enum GlobalConfigKey {
     SelectedNetwork,
     SelectedNode(Network),
     ColorScheme,
+    LockType,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -30,6 +32,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::SelectedNode(Network::Bitcoin) => "selected_node_bitcoin",
             GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
             GlobalConfigKey::ColorScheme => "color_scheme",
+            GlobalConfigKey::LockType => "lock_type",
         }
     }
 }
@@ -144,6 +147,26 @@ impl GlobalConfigTable {
     pub fn set_selected_network(&self, network: Network) -> Result<(), Error> {
         self.set(GlobalConfigKey::SelectedNetwork, network.to_string())?;
 
+        Ok(())
+    }
+
+    pub fn get_lock_type(&self) -> Result<LockType, Error> {
+        let Some(lock_type) = self
+            .get(GlobalConfigKey::LockType)
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?
+        else {
+            return Ok(LockType::None);
+        };
+
+        let lock_type = LockType::from_str(&lock_type)
+            .map_err(|_| GlobalConfigTableError::Read("unable to parse lock type".to_string()))?;
+
+        Ok(lock_type)
+    }
+
+    pub fn set_lock_type(&self, lock_type: LockType) -> Result<(), Error> {
+        let lock_type = lock_type.to_string();
+        self.set(GlobalConfigKey::LockType, lock_type)?;
         Ok(())
     }
 
