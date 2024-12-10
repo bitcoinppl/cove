@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(
     Debug,
+    Copy,
     Clone,
     Hash,
     Eq,
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
     Display,
     FromStr,
 )]
-pub enum LockType {
+pub enum AuthType {
     Pin,
     Biometric,
     Both,

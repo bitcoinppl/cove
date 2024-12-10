@@ -4,8 +4,8 @@ use crossbeam::channel::Sender;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    color_scheme::ColorSchemeSelection, fiat::client::PriceResponse, node::Node, router::Route,
-    transaction::fees::client::FeeResponse,
+    auth::AuthType, color_scheme::ColorSchemeSelection, fiat::client::PriceResponse, node::Node,
+    router::Route, transaction::fees::client::FeeResponse,
 };
 
 #[derive(uniffi::Enum)]
@@ -18,9 +18,10 @@ pub enum AppStateReconcileMessage {
     SelectedNodeChanged(Node),
     FiatPricesChanged(PriceResponse),
     FeesChanged(FeeResponse),
+    AuthTypeChanged(AuthType),
 }
 
-// alais for easier imports on the rust side
+// alias for easier imports on the rust side
 pub type Update = AppStateReconcileMessage;
 
 pub static UPDATER: OnceCell<Updater> = OnceCell::new();

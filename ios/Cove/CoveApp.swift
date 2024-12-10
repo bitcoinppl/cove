@@ -465,8 +465,8 @@ struct CoveApp: App {
                 .onOpenURL(perform: handleFileOpen)
                 .onChange(of: phase) { oldPhase, newPhase in
                     Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase)")
-                    
-                    /// TODO: only do this if PIN and/or Biometric is enabledA
+
+                    // TODO: only do this if PIN and/or Biometric is enabledA
                     if newPhase == .background {
                         UIApplication.shared.connectedScenes
                             .compactMap { $0 as? UIWindowScene }

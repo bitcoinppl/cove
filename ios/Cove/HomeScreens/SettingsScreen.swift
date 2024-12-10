@@ -1,3 +1,4 @@
+import LocalAuthentication
 import SwiftUI
 
 struct SettingsScreen: View {
@@ -9,6 +10,26 @@ struct SettingsScreen: View {
     @State private var showConfirmationAlert = false
 
     let themes = allColorSchemes()
+
+    private func canUseBiometrics() -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+    }
+
+    var useAuth: Binding<Bool> {
+        Binding(
+            get: { app.isAuthEnabled },
+            set: { app.dispatch(action: .toggleAuth) }
+        )
+    }
+
+    var useBiometric: Binding<Bool> {
+        Binding(
+            get: { app.authType == .both || app.authType == .biometric },
+            set: { app.dispatch(action: .toggleBiometric) }
+        )
+    }
 
     var body: some View {
         Form {
@@ -49,6 +70,24 @@ struct SettingsScreen: View {
 
             NodeSelectionView()
 
+            Section("Security") {
+                Toggle(isOn: useAuth) {
+                    Label("Require Authentication", systemImage: "lock.shield")
+                }
+
+                if useAuth {
+                    if canUseBiometrics() {
+                        Toggle(isOn: $useBiometric) {
+                            Label("Enable Face ID", systemImage: "faceid")
+                        }
+                    }
+
+                    Toggle(isOn: $usePIN) {
+                        Label("Enable PIN", systemImage: "key.fill")
+                    }
+                }
+            }
+
             Section(header: Text("About")) {
                 HStack {
                     Text("Version")
@@ -57,8 +96,8 @@ struct SettingsScreen: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle("Settings")
         }
+        .navigationTitle("Settings")
         .navigationBarBackButtonHidden(networkChanged)
         .toolbar {
             networkChanged

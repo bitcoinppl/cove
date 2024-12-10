@@ -4,8 +4,8 @@ use redb::TableDefinition;
 
 use crate::{
     app::reconcile::{Update, Updater},
+    auth::AuthType,
     color_scheme::ColorSchemeSelection,
-    lock::LockType,
     network::Network,
     node::Node,
     wallet::metadata::WalletId,
@@ -21,7 +21,7 @@ pub enum GlobalConfigKey {
     SelectedNetwork,
     SelectedNode(Network),
     ColorScheme,
-    LockType,
+    AuthType,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -32,7 +32,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::SelectedNode(Network::Bitcoin) => "selected_node_bitcoin",
             GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
             GlobalConfigKey::ColorScheme => "color_scheme",
-            GlobalConfigKey::LockType => "lock_type",
+            GlobalConfigKey::AuthType => "auth_type",
         }
     }
 }
@@ -150,23 +150,23 @@ impl GlobalConfigTable {
         Ok(())
     }
 
-    pub fn get_lock_type(&self) -> Result<LockType, Error> {
-        let Some(lock_type) = self
-            .get(GlobalConfigKey::LockType)
+    pub fn auth_type(&self) -> Result<AuthType, Error> {
+        let Some(auth_type) = self
+            .get(GlobalConfigKey::AuthType)
             .map_err(|error| Error::DatabaseAccess(error.to_string()))?
         else {
-            return Ok(LockType::None);
+            return Ok(AuthType::None);
         };
 
-        let lock_type = LockType::from_str(&lock_type)
+        let auth_type = AuthType::from_str(&auth_type)
             .map_err(|_| GlobalConfigTableError::Read("unable to parse lock type".to_string()))?;
 
-        Ok(lock_type)
+        Ok(auth_type)
     }
 
-    pub fn set_lock_type(&self, lock_type: LockType) -> Result<(), Error> {
-        let lock_type = lock_type.to_string();
-        self.set(GlobalConfigKey::LockType, lock_type)?;
+    pub fn set_auth_type(&self, auth_type: AuthType) -> Result<(), Error> {
+        let auth_type = auth_type.to_string();
+        self.set(GlobalConfigKey::AuthType, auth_type)?;
         Ok(())
     }
 

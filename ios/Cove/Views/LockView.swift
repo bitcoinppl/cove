@@ -16,32 +16,32 @@ struct LockView<Content: View>: View {
     var lockWhenBackground: Bool = true
     var bioMetricUnlockMessage: String = "Unlock your wallet"
     @ViewBuilder var content: Content
-    
+
     /// View Properties
     @State private var pin: String = ""
     @State private var animateField: Bool = false
     @State private var isUnlocked: Bool = false
     @State private var noBiometricAccess: Bool = false
-    
+
     /// private consts
     private let pinLength = 6
-    
+
     /// Scene Phase
     @Environment(\.scenePhase) private var phase
-    
+
     var body: some View {
         GeometryReader {
             let size = $0.size
-            
+
             content
                 .frame(width: size.width, height: size.height)
-            
+
             if isEnabled, !isUnlocked {
                 ZStack {
                     Rectangle()
                         .fill(.black)
                         .ignoresSafeArea()
-                    
+
                     if (lockType == .both && !noBiometricAccess) || lockType == .biometric {
                         Group {
                             if noBiometricAccess {
@@ -55,7 +55,7 @@ struct LockView<Content: View>: View {
                                     VStack(spacing: 6) {
                                         Image(systemName: "faceid")
                                             .font(.largeTitle)
-                                        
+
                                         Text("Tap to Unlock")
                                             .font(.caption2)
                                             .foregroundStyle(.gray)
@@ -66,7 +66,7 @@ struct LockView<Content: View>: View {
                                     .onTapGesture {
                                         unlockView()
                                     }
-                                    
+
                                     if lockType == .both {
                                         Text("Enter Pin")
                                             .frame(width: 100, height: 40)
@@ -102,16 +102,17 @@ struct LockView<Content: View>: View {
             }
         }
     }
-    
+
     private func bioMetricUnlock() async throws -> Bool {
         /// Lock Context
         let context = LAContext()
-        
+
         return try await context.evaluatePolicy(
             .deviceOwnerAuthenticationWithBiometrics,
-            localizedReason: bioMetricUnlockMessage)
+            localizedReason: bioMetricUnlockMessage
+        )
     }
-    
+
     private func unlockView() {
         /// Checking and Unlocking View
         Task {
@@ -121,27 +122,27 @@ struct LockView<Content: View>: View {
                 await MainActor.run { noBiometricAccess = !isBiometricAvailable }
                 return
             }
-            
+
             /// Requesting Biometric Unlock
             if await (try? bioMetricUnlock()) ?? false {
                 await MainActor.run {
                     withAnimation(
                         .snappy,
-                        completionCriteria: .logicallyComplete)
-                    {
+                        completionCriteria: .logicallyComplete
+                    ) {
                         isUnlocked = true
                     } completion: { pin = "" }
                 }
             }
         }
     }
-    
+
     private var isBiometricAvailable: Bool {
         /// Lock Context
         let context = LAContext()
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
     }
-    
+
     /// Numberpad Pin View
     @ViewBuilder
     private func NumberPadPinView() -> some View {
@@ -164,7 +165,7 @@ struct LockView<Content: View>: View {
                         .padding(.leading)
                     }
                 }
-            
+
             /// Adding Wiggling Animation for Wrong Password With Keyframe Animator
             HStack(spacing: 10) {
                 ForEach(0 ..< pinLength, id: \.self) { index in
@@ -176,7 +177,7 @@ struct LockView<Content: View>: View {
                             if pin.count > index {
                                 let index = pin.index(pin.startIndex, offsetBy: index)
                                 let string = String(pin[index])
-                                
+
                                 Text(string)
                                     .font(.title.bold())
                                     .foregroundStyle(.black)
@@ -201,10 +202,11 @@ struct LockView<Content: View>: View {
                         CubicKeyframe(-10, duration: 0.07)
                         CubicKeyframe(0, duration: 0.07)
                     }
-                })
+                }
+            )
             .padding(.top, 15)
             .frame(maxHeight: .infinity)
-            
+
             /// Custom Number Pad
             GeometryReader { _ in
                 LazyVGrid(columns: Array(repeating: GridItem(), count: 3), content: {
@@ -221,7 +223,7 @@ struct LockView<Content: View>: View {
                         })
                         .tint(.white)
                     }
-                    
+
                     /// 0 and Back Button
                     Button(action: {
                         if !pin.isEmpty { pin.removeLast() }
@@ -233,7 +235,7 @@ struct LockView<Content: View>: View {
                             .contentShape(.rect)
                     })
                     .tint(.white)
-                    
+
                     Button(action: {
                         guard pin.count < pinLength else { return }
                         pin.append("0")
