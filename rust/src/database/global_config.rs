@@ -82,6 +82,13 @@ impl GlobalConfigTable {
         ColorSchemeSelection,
         Update::ColorSchemeChanged
     );
+
+    string_config_accessor!(
+        hashed_pin_code,
+        GlobalConfigKey::HashedPinCode,
+        String,
+        Update::HashedPinCodeChanged
+    );
 }
 
 #[uniffi::export]

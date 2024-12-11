@@ -20,12 +20,7 @@ macro_rules! string_config_accessor {
 
         paste::paste! {
             pub fn [<set_ $fn_name>](&self, value: $return_type) -> Result<(), Error> {
-                let value_to_send = if std::mem::needs_drop::<$return_type>() {
-                    value.clone()
-                } else {
-                    value
-                };
-
+                let value_to_send = value.clone();
                 let value = value.to_string();
                 self.set($key, value)?;
                 Updater::send_update($update_variant(value_to_send));
