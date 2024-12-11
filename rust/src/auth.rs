@@ -80,7 +80,7 @@ impl AuthPin {
         Database::global()
             .global_config
             .set_hashed_pin_code(hashed)
-            .map_err(|error| AuthError::DatabaseSaveError(error))
+            .map_err(AuthError::DatabaseSaveError)
     }
 
     #[uniffi::method]
@@ -94,6 +94,14 @@ impl AuthPin {
             .to_string();
 
         Ok(pin_hash)
+    }
+
+    #[uniffi::method]
+    pub fn delete(&self) -> Result<()> {
+        Database::global()
+            .global_config
+            .delete_hashed_pin_code()
+            .map_err(AuthError::DatabaseSaveError)
     }
 
     #[uniffi::method]

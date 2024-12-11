@@ -28,5 +28,13 @@ macro_rules! string_config_accessor {
                 Ok(())
             }
         }
+
+        paste::paste! {
+            #[allow(dead_code)]
+            pub fn [<delete_ $fn_name>](&self) -> Result<(), Error> {
+                self.delete($key)?;
+                Ok(())
+            }
+        }
     };
 }
