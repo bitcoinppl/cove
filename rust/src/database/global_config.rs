@@ -70,21 +70,21 @@ pub enum GlobalConfigTableError {
 
 impl GlobalConfigTable {
     string_config_accessor!(
-        auth_type,
+        pub auth_type,
         GlobalConfigKey::AuthType,
         AuthType,
         Update::AuthTypeChanged
     );
 
     string_config_accessor!(
-        color_scheme,
+        pub color_scheme,
         GlobalConfigKey::ColorScheme,
         ColorSchemeSelection,
         Update::ColorSchemeChanged
     );
 
     string_config_accessor!(
-        hashed_pin_code,
+        priv_hashed_pin_code,
         GlobalConfigKey::HashedPinCode,
         String,
         Update::HashedPinCodeChanged
@@ -173,6 +173,26 @@ impl GlobalConfigTable {
     #[uniffi::method(name = "setColorScheme")]
     pub fn _set_color_scheme(&self, color_scheme: ColorSchemeSelection) -> Result<()> {
         self.set_color_scheme(color_scheme)
+    }
+
+    pub fn hashed_pin_code(&self) -> Result<String> {
+        self.priv_hashed_pin_code()
+    }
+
+    pub fn delete_hashed_pin_code(&self) -> Result<()> {
+        self.delete_priv_hashed_pin_code()
+    }
+
+    pub fn set_hashed_pin_code(&self, hashed_pin_code: String) -> Result<()> {
+        if hashed_pin_code.is_empty() {
+            return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
+        }
+
+        if hashed_pin_code.len() <= 6 {
+            return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
+        }
+
+        self.set_priv_hashed_pin_code(hashed_pin_code)
     }
 
     fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {

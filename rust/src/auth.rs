@@ -117,3 +117,23 @@ impl AuthPin {
             .map_err(|error| AuthError::VerificationFailed(format!("{error:?}")))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_pin() {
+        let auth = AuthPin::new();
+        let hashed = auth.hash("123456".to_string()).unwrap();
+        assert!(hashed.starts_with("$argon2id"));
+    }
+
+    #[test]
+    fn test_verify_pin() {
+        let auth = AuthPin::new();
+        let hashed = auth.hash("123456".to_string()).unwrap();
+        let result = auth.verify("123456".to_string(), hashed);
+        assert!(result.is_ok());
+    }
+}

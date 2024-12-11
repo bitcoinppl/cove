@@ -1,7 +1,8 @@
 #[macro_export]
 macro_rules! string_config_accessor {
-    ($fn_name:ident, $key:expr, $return_type:ty, $update_variant:path) => {
-        pub fn $fn_name(&self) -> Result<$return_type, Error> {
+    // Define internal macro for the implementation
+    (@impl $vis:vis, $fn_name:ident, $key:expr, $return_type:ty, $update_variant:path) => {
+        $vis fn $fn_name(&self) -> Result<$return_type, Error> {
             use std::str::FromStr as _;
 
             let Some(value) = self
@@ -19,7 +20,7 @@ macro_rules! string_config_accessor {
         }
 
         paste::paste! {
-            pub fn [<set_ $fn_name>](&self, value: $return_type) -> Result<(), Error> {
+            $vis fn [<set_ $fn_name>](&self, value: $return_type) -> Result<(), Error> {
                 let value_to_send = value.clone();
                 let value = value.to_string();
                 self.set($key, value)?;
@@ -31,10 +32,20 @@ macro_rules! string_config_accessor {
 
         paste::paste! {
             #[allow(dead_code)]
-            pub fn [<delete_ $fn_name>](&self) -> Result<(), Error> {
+            $vis fn [<delete_ $fn_name>](&self) -> Result<(), Error> {
                 self.delete($key)?;
                 Ok(())
             }
         }
+    };
+
+    // Public interface
+    (pub $fn_name:ident, $key:expr, $return_type:ty, $update_variant:path) => {
+        string_config_accessor!(@impl pub, $fn_name, $key, $return_type, $update_variant);
+    };
+
+    // Private interface
+    ($fn_name:ident, $key:expr, $return_type:ty, $update_variant:path) => {
+        string_config_accessor!(@impl , $fn_name, $key, $return_type, $update_variant);
     };
 }
