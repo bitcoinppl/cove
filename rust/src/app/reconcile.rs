@@ -19,6 +19,7 @@ pub enum AppStateReconcileMessage {
     FiatPricesChanged(PriceResponse),
     FeesChanged(FeeResponse),
     AuthTypeChanged(AuthType),
+    PinCodeChanged(String),
 }
 
 // alias for easier imports on the rust side
