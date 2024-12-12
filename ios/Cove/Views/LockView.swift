@@ -13,25 +13,60 @@ struct LockView<Content: View>: View {
     var lockType: AuthType
     var isPinCorrect: (String) -> Bool
     var isEnabled: Bool
-    var lockWhenBackground: Bool = true
-    var bioMetricUnlockMessage: String = "Unlock your wallet"
+    var lockWhenBackground: Bool
+    var bioMetricUnlockMessage: String
 
     /// default calllbacks on success and failure
-    let onUnlock: (String) -> Void = { _ in }
-    let onWrongPin: (String) -> Void = { _ in }
+    var onUnlock: (String) -> Void
+    var onWrongPin: (String) -> Void
 
     @ViewBuilder var content: Content
 
+    /// back button
+    private var backEnabled: Bool
+    var backAction: () -> Void
+
     /// View Properties
-    @State private var animateField: Bool = false
-    @State private var isUnlocked: Bool = false
-    @State private var noBiometricAccess: Bool = false
+    @State private var animateField: Bool
+    @State private var isUnlocked: Bool
+    @State private var noBiometricAccess: Bool
 
     /// private consts
-    private let pinLength = 6
+    private let pinLength: Int
 
     /// Scene Phase
     @Environment(\.scenePhase) private var phase
+
+    init(
+        lockType: AuthType,
+        isPinCorrect: @escaping (String) -> Bool,
+        isEnabled: Bool = true,
+        lockWhenBackground: Bool = true,
+        bioMetricUnlockMessage: String = "Unlock your wallet",
+        onUnlock: @escaping (String) -> Void = { _ in },
+        onWrongPin: @escaping (String) -> Void = { _ in },
+        backAction: (() -> Void)? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.lockType = lockType
+        self.isPinCorrect = isPinCorrect
+        self.isEnabled = isEnabled
+        self.lockWhenBackground = lockWhenBackground
+        self.bioMetricUnlockMessage = bioMetricUnlockMessage
+        self.onUnlock = onUnlock
+        self.onWrongPin = onWrongPin
+        self.content = content()
+
+        // back
+        self.backEnabled = backAction != nil
+        self.backAction = backAction ?? {}
+
+        // private
+        self.animateField = false
+        self.isUnlocked = false
+        self.noBiometricAccess = false
+        self.pinLength = 6
+    }
 
     var body: some View {
         GeometryReader {
@@ -72,6 +107,7 @@ struct LockView<Content: View>: View {
             isUnlocked: $isUnlocked,
             isPinCorrect: isPinCorrect,
             pinLength: pinLength,
+            backAction: backEnabled ? backAction : nil,
             onUnlock: onUnlock,
             onWrongPin: onWrongPin
         )
@@ -139,8 +175,10 @@ struct LockView<Content: View>: View {
             /// Requesting Biometric Unlock
             if await (try? bioMetricUnlock()) ?? false {
                 await MainActor.run {
-                    withAnimation(.snappy) {
+                    withAnimation(.snappy, completionCriteria: .logicallyComplete) {
                         isUnlocked = true
+                    } completion: {
+                        onUnlock("")
                     }
                 }
             }

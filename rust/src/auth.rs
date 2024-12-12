@@ -57,6 +57,48 @@ pub enum AuthError {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct AuthPin;
 
+impl AuthPin {
+    pub fn set(&self, pin: String) -> Result<()> {
+        let hashed = self.hash(pin)?;
+
+        Database::global()
+            .global_config
+            .set_hashed_pin_code(hashed)
+            .map_err(AuthError::DatabaseSaveError)
+    }
+
+    pub fn hash(&self, pin: String) -> Result<String> {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+
+        let pin_hash = argon2
+            .hash_password(pin.as_bytes(), &salt)
+            .map_err(|error| AuthError::HashError(format!("unable to hash pin: {error}")))?
+            .to_string();
+
+        Ok(pin_hash)
+    }
+
+    pub fn delete(&self) -> Result<()> {
+        Database::global()
+            .global_config
+            .delete_hashed_pin_code()
+            .map_err(AuthError::DatabaseSaveError)
+    }
+
+    pub fn verify(&self, pin: String, hashed_pin: String) -> Result<()> {
+        let argon2 = Argon2::default();
+
+        let parsed_hash = PasswordHash::new(&hashed_pin).map_err(|error| {
+            AuthError::ParseHashedPinError(format!("unable to parse hashed pin: {error}"))
+        })?;
+
+        argon2
+            .verify_password(pin.as_bytes(), &parsed_hash)
+            .map_err(|error| AuthError::VerificationFailed(format!("{error:?}")))
+    }
+}
+
 #[uniffi::export]
 impl AuthPin {
     #[uniffi::constructor]
@@ -72,49 +114,6 @@ impl AuthPin {
             .unwrap_or_default();
 
         self.verify(pin, hashed_pin).is_ok()
-    }
-
-    #[uniffi::method]
-    pub fn set(&self, pin: String) -> Result<()> {
-        let hashed = self.hash(pin)?;
-        Database::global()
-            .global_config
-            .set_hashed_pin_code(hashed)
-            .map_err(AuthError::DatabaseSaveError)
-    }
-
-    #[uniffi::method]
-    pub fn hash(&self, pin: String) -> Result<String> {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-
-        let pin_hash = argon2
-            .hash_password(pin.as_bytes(), &salt)
-            .map_err(|error| AuthError::HashError(format!("unable to hash pin: {error}")))?
-            .to_string();
-
-        Ok(pin_hash)
-    }
-
-    #[uniffi::method]
-    pub fn delete(&self) -> Result<()> {
-        Database::global()
-            .global_config
-            .delete_hashed_pin_code()
-            .map_err(AuthError::DatabaseSaveError)
-    }
-
-    #[uniffi::method]
-    pub fn verify(&self, pin: String, hashed_pin: String) -> Result<()> {
-        let argon2 = Argon2::default();
-
-        let parsed_hash = PasswordHash::new(&hashed_pin).map_err(|error| {
-            AuthError::ParseHashedPinError(format!("unable to parse hashed pin: {error}"))
-        })?;
-
-        argon2
-            .verify_password(pin.as_bytes(), &parsed_hash)
-            .map_err(|error| AuthError::VerificationFailed(format!("{error:?}")))
     }
 }
 

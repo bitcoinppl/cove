@@ -1236,14 +1236,6 @@ public protocol AuthPinProtocol : AnyObject {
     
     func check(pin: String)  -> Bool
     
-    func delete() throws 
-    
-    func hash(pin: String) throws  -> String
-    
-    func set(pin: String) throws 
-    
-    func verify(pin: String, hashedPin: String) throws 
-    
 }
 
 open class AuthPin:
@@ -1309,35 +1301,6 @@ open func check(pin: String) -> Bool  {
         FfiConverterString.lower(pin),$0
     )
 })
-}
-    
-open func delete()throws   {try rustCallWithError(FfiConverterTypeAuthError.lift) {
-    uniffi_cove_fn_method_authpin_delete(self.uniffiClonePointer(),$0
-    )
-}
-}
-    
-open func hash(pin: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeAuthError.lift) {
-    uniffi_cove_fn_method_authpin_hash(self.uniffiClonePointer(),
-        FfiConverterString.lower(pin),$0
-    )
-})
-}
-    
-open func set(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthError.lift) {
-    uniffi_cove_fn_method_authpin_set(self.uniffiClonePointer(),
-        FfiConverterString.lower(pin),$0
-    )
-}
-}
-    
-open func verify(pin: String, hashedPin: String)throws   {try rustCallWithError(FfiConverterTypeAuthError.lift) {
-    uniffi_cove_fn_method_authpin_verify(self.uniffiClonePointer(),
-        FfiConverterString.lower(pin),
-        FfiConverterString.lower(hashedPin),$0
-    )
-}
 }
     
 
@@ -12601,8 +12564,10 @@ public enum AppAction {
     case updateFees
     case updateAuthType(AuthType
     )
-    case toggleAuth
-    case toggleBiometric
+    case enableAuth
+    case disableAuth
+    case enableBiometric
+    case disableBiometric
     case setPin(String
     )
     case disablePin
@@ -12638,14 +12603,18 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 7: return .updateAuthType(try FfiConverterTypeAuthType.read(from: &buf)
         )
         
-        case 8: return .toggleAuth
+        case 8: return .enableAuth
         
-        case 9: return .toggleBiometric
+        case 9: return .disableAuth
         
-        case 10: return .setPin(try FfiConverterString.read(from: &buf)
+        case 10: return .enableBiometric
+        
+        case 11: return .disableBiometric
+        
+        case 12: return .setPin(try FfiConverterString.read(from: &buf)
         )
         
-        case 11: return .disablePin
+        case 13: return .disablePin
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -12688,21 +12657,29 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             FfiConverterTypeAuthType.write(v1, into: &buf)
             
         
-        case .toggleAuth:
+        case .enableAuth:
             writeInt(&buf, Int32(8))
         
         
-        case .toggleBiometric:
+        case .disableAuth:
             writeInt(&buf, Int32(9))
         
         
-        case let .setPin(v1):
+        case .enableBiometric:
             writeInt(&buf, Int32(10))
+        
+        
+        case .disableBiometric:
+            writeInt(&buf, Int32(11))
+        
+        
+        case let .setPin(v1):
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .disablePin:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -21641,18 +21618,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_authpin_check() != 17948) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_authpin_delete() != 15788) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_authpin_hash() != 13652) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_authpin_set() != 63469) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_authpin_verify() != 9856) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748) {

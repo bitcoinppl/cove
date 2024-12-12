@@ -9,20 +9,46 @@ import SwiftUI
 
 struct NumberPadPinView: View {
     /// args
-    var title: String = "Enter Pin"
+    var title: String
     @Binding var isUnlocked: Bool
     
     let isPinCorrect: (String) -> Bool
-    var pinLength: Int = 6
+    var pinLength: Int
+    
+    // back button
+    private var backEnabled: Bool
+    var backAction: () -> Void
 
     /// default calllbacks on success and failure
-    var onUnlock: (String) -> Void = { _ in }
-    var onWrongPin: (String) -> Void = { _ in }
+    var onUnlock: (String) -> Void
+    var onWrongPin: (String) -> Void
 
     /// private view properties
-    @State private var pin: String = ""
-    @State private var animateField: Bool = false
+    @State private var pin: String
+    @State private var animateField: Bool
     
+    public init(
+        title: String = "Enter Pin",
+        isUnlocked: Binding<Bool> = .constant(false),
+        isPinCorrect: @escaping (String) -> Bool = { _ in true },
+        pinLength: Int = 6,
+        backAction: (() -> Void)? = nil,
+        onUnlock: @escaping (String) -> Void = { _ in },
+        onWrongPin: @escaping (String) -> Void = { _ in }
+    ) {
+        self.title = title
+        self._isUnlocked = isUnlocked
+        self.isPinCorrect = isPinCorrect
+        self.pinLength = pinLength
+        self.backEnabled = backAction != nil
+        self.backAction = backAction ?? {}
+        self.onUnlock = onUnlock
+        self.onWrongPin = onWrongPin
+        
+        self.pin = ""
+        self.animateField = false
+    }
+        
     private var isBiometricAvailable: Bool {
         /// Lock Context
         let context = LAContext()
@@ -31,6 +57,18 @@ struct NumberPadPinView: View {
 
     var body: some View {
         VStack(spacing: 15) {
+            if backEnabled {
+                HStack {
+                    Spacer()
+                    Button(action: backAction) {
+                        Text("Cancel")
+                    }
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                }
+                .padding(.bottom, 10)
+            }
+
             Text(title)
                 .font(.title.bold())
                 .frame(maxWidth: .infinity)

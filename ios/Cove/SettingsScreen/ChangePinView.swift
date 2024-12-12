@@ -1,5 +1,5 @@
 //
-//  NewPinView.swift
+//  ChangePinView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 12/12/24.
@@ -8,24 +8,35 @@
 import SwiftUI
 
 private enum PinState {
-    case new, confirm(String)
+    case current, new, confirm(String)
 }
 
-struct NewPinView: View {
+struct ChangePinView: View {
     /// args
-    var onComplete: (String) -> Void
+    var isPinCorrect: (String) -> Bool
     var backAction: () -> Void
+    var onComplete: (String) -> Void
 
     /// private
-    @State private var pinState: PinState = .new
+    @State private var pinState: PinState = .current
 
     var body: some View {
         Group {
             switch pinState {
+            case .current:
+                NumberPadPinView(
+                    title: "Enter Current PIN",
+                    backAction: backAction,
+                    onUnlock: { _ in
+                        withAnimation {
+                            pinState = .new
+                        }
+                    }
+                )
+
             case .new:
                 NumberPadPinView(
-                    title: "Enter New PIN",
-                    isPinCorrect: { _ in true },
+                    title: "Enter new PIN",
                     backAction: backAction,
                     onUnlock: { enteredPin in
                         withAnimation {
@@ -33,6 +44,7 @@ struct NewPinView: View {
                         }
                     }
                 )
+
             case .confirm(let pinToConfirm):
                 NumberPadPinView(
                     title: "Confirm New PIN",
@@ -46,5 +58,9 @@ struct NewPinView: View {
 }
 
 #Preview {
-    NewPinView(onComplete: { _ in }, backAction: {})
+    ChangePinView(
+        isPinCorrect: { pin in pin == "111111" },
+        backAction: {},
+        onComplete: { _ in }
+    )
 }

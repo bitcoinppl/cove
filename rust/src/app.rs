@@ -54,8 +54,10 @@ pub enum AppAction {
     UpdateFiatPrices,
     UpdateFees,
     UpdateAuthType(AuthType),
-    ToggleAuth,
-    ToggleBiometric,
+    EnableAuth,
+    DisableAuth,
+    EnableBiometric,
+    DisableBiometric,
     SetPin(String),
     DisablePin,
 }
@@ -195,43 +197,58 @@ impl App {
                 set_auth_type(auth_type);
             }
 
-            AppAction::ToggleAuth => {
+            AppAction::EnableAuth => {
                 let current_auth_type = FfiApp::global().auth_type();
-                let auth_type = if current_auth_type == AuthType::None {
-                    AuthType::Biometric
-                } else {
-                    AuthType::None
-                };
-
-                set_auth_type(auth_type);
+                if current_auth_type == AuthType::None {
+                    set_auth_type(AuthType::Biometric);
+                }
             }
 
-            AppAction::ToggleBiometric => {
-                let current_auth_type = FfiApp::global().auth_type();
-                let auth_type = match current_auth_type {
-                    AuthType::None => AuthType::Biometric,
-                    AuthType::Biometric => AuthType::None,
-                    AuthType::Pin => AuthType::Biometric,
-                    AuthType::Both => AuthType::Pin,
-                };
+            AppAction::DisableAuth => {
+                set_auth_type(AuthType::None);
+            }
 
-                set_auth_type(auth_type);
+            AppAction::EnableBiometric => {
+                let current_auth_type = FfiApp::global().auth_type();
+                match current_auth_type {
+                    AuthType::None => set_auth_type(AuthType::Biometric),
+                    AuthType::Pin => set_auth_type(AuthType::Both),
+                    _ => {}
+                };
+            }
+
+            AppAction::DisableBiometric => {
+                let current_auth_type = FfiApp::global().auth_type();
+                match current_auth_type {
+                    AuthType::Biometric => set_auth_type(AuthType::None),
+                    AuthType::Both => set_auth_type(AuthType::Biometric),
+                    _ => {}
+                };
             }
 
             AppAction::SetPin(pin) => {
                 if let Err(err) = AuthPin::new().set(pin) {
-                    error!("unable to set pin: {err:?}");
+                    return error!("unable to set pin: {err:?}");
+                }
+
+                let current_auth_type = FfiApp::global().auth_type();
+                match current_auth_type {
+                    AuthType::None => set_auth_type(AuthType::Pin),
+                    AuthType::Biometric => set_auth_type(AuthType::Both),
+                    _ => {}
                 }
             }
 
             AppAction::DisablePin => {
+                if let Err(err) = AuthPin::new().delete() {
+                    return error!("unable to delete pin: {err:?}");
+                }
+
                 let current_auth_type = FfiApp::global().auth_type();
                 match current_auth_type {
                     AuthType::Pin => set_auth_type(AuthType::None),
                     AuthType::Both => set_auth_type(AuthType::Biometric),
-                    AuthType::None | AuthType::Biometric => {
-                        AuthPin::new().delete().unwrap_or_default();
-                    }
+                    _ => {}
                 }
             }
         }
