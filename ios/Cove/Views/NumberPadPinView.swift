@@ -9,17 +9,16 @@ import SwiftUI
 
 struct NumberPadPinView: View {
     /// args
+    var title: String = "Enter Pin"
     @Binding var pin: String
     @Binding var isUnlocked: Bool
-    @Binding var noBiometricAccess: Bool
     
     let isPinCorrect: (String) -> Bool
-    let lockType: AuthType
-    let pinLength: Int
+    var pinLength: Int = 6
 
     /// default calllbacks on success and failure
-    var onUnlock: () -> Void = {}
-    var onWrongPin: () -> Void = {}
+    var onUnlock: (String) -> Void = { _ in }
+    var onWrongPin: (String) -> Void = { _ in }
 
     /// private view properties
     @State private var animateField: Bool = false
@@ -32,30 +31,17 @@ struct NumberPadPinView: View {
 
     var body: some View {
         VStack(spacing: 15) {
-            Text("Enter Pin")
+            Text(title)
                 .font(.title.bold())
                 .frame(maxWidth: .infinity)
-                .overlay(alignment: .leading) {
-                    /// Back button only for Both Lock Type
-                    if lockType == .both, isBiometricAvailable {
-                        Button(action: {
-                            pin = ""
-                            noBiometricAccess = false
-                        }, label: {
-                            Image(systemName: "arrow.left")
-                                .font(.title3)
-                                .contentShape(.rect)
-                        })
-                        .tint(.white)
-                        .padding(.leading)
-                    }
-                }
+                .foregroundStyle(.white)
             
             /// Adding Wiggling Animation for Wrong Password With Keyframe Animator
             HStack(spacing: 10) {
                 ForEach(0 ..< pinLength, id: \.self) { index in
                     RoundedRectangle(cornerRadius: 10)
                         .frame(width: 40, height: 45)
+                        .foregroundStyle(.white)
                         /// Showing Pin at each box with the help of Index
                         .overlay {
                             /// Safe Check
@@ -91,9 +77,12 @@ struct NumberPadPinView: View {
             )
             /// run onEnd call back after keyframe animation
             .onChange(of: animateField) { _, _ in
+                let pin = pin
+                self.pin = ""
+                
                 let totalDuration = 7 * 0.07
                 DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) {
-                    onWrongPin()
+                    onWrongPin(pin)
                 }
             }
             .padding(.top, 15)
@@ -149,35 +138,30 @@ struct NumberPadPinView: View {
                         withAnimation(.snappy, completionCriteria: .logicallyComplete) {
                             isUnlocked = true
                         } completion: {
+                            onUnlock(pin)
                             pin = ""
-                            noBiometricAccess = !isBiometricAvailable
-                            onUnlock()
                         }
                     } else {
-                        pin = ""
                         animateField.toggle()
                     }
                 }
             }
         }
         .padding()
-        .environment(\.colorScheme, .dark)
+        .background(.midnightBlue)
     }
 }
 
 #Preview {
     struct Container: View {
         @State var pin = ""
-        @State var noBiometricAccess = true
         @State var isUnlocked = false
         
         var body: some View {
             NumberPadPinView(
                 pin: $pin,
                 isUnlocked: $isUnlocked,
-                noBiometricAccess: $noBiometricAccess,
                 isPinCorrect: { $0 == "000000" },
-                lockType: .pin,
                 pinLength: 6
             )
         }

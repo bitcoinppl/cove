@@ -17,8 +17,8 @@ struct LockView<Content: View>: View {
     var bioMetricUnlockMessage: String = "Unlock your wallet"
 
     /// default calllbacks on success and failure
-    let onUnlock: () -> Void = {}
-    let onWrongPin: () -> Void = {}
+    let onUnlock: (String) -> Void = { _ in }
+    let onWrongPin: (String) -> Void = { _ in }
 
     @ViewBuilder var content: Content
 
@@ -73,9 +73,7 @@ struct LockView<Content: View>: View {
         NumberPadPinView(
             pin: $pin,
             isUnlocked: $isUnlocked,
-            noBiometricAccess: $noBiometricAccess,
             isPinCorrect: isPinCorrect,
-            lockType: lockType,
             pinLength: pinLength,
             onUnlock: onUnlock,
             onWrongPin: onWrongPin
