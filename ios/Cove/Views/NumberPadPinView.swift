@@ -30,7 +30,7 @@ struct NumberPadPinView: View {
     public init(
         title: String = "Enter Pin",
         isUnlocked: Binding<Bool> = .constant(false),
-        isPinCorrect: @escaping (String) -> Bool = { _ in true },
+        isPinCorrect: @escaping (String) -> Bool,
         pinLength: Int = 6,
         backAction: (() -> Void)? = nil,
         onUnlock: @escaping (String) -> Void = { _ in },
@@ -143,11 +143,14 @@ struct NumberPadPinView: View {
                         .tint(.white)
                     }
                     
-                    /// 0 and Back Button
+                    // take up space
+                    Button(action: {}) {}
+                    
                     Button(action: {
-                        if !pin.isEmpty { pin.removeLast() }
+                        guard pin.count < pinLength else { return }
+                        pin.append("0")
                     }, label: {
-                        Image(systemName: "delete.backward")
+                        Text("0")
                             .font(.title)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 20)
@@ -155,11 +158,11 @@ struct NumberPadPinView: View {
                     })
                     .tint(.white)
                     
+                    /// 0 and Back Button
                     Button(action: {
-                        guard pin.count < pinLength else { return }
-                        pin.append("0")
+                        if !pin.isEmpty { pin.removeLast() }
                     }, label: {
-                        Text("0")
+                        Image(systemName: "delete.backward")
                             .font(.title)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 20)

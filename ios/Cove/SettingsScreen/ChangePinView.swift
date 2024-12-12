@@ -26,6 +26,7 @@ struct ChangePinView: View {
             case .current:
                 NumberPadPinView(
                     title: "Enter Current PIN",
+                    isPinCorrect: isPinCorrect,
                     backAction: backAction,
                     onUnlock: { _ in
                         withAnimation {
@@ -37,6 +38,7 @@ struct ChangePinView: View {
             case .new:
                 NumberPadPinView(
                     title: "Enter new PIN",
+                    isPinCorrect: { _ in true },
                     backAction: backAction,
                     onUnlock: { enteredPin in
                         withAnimation {
