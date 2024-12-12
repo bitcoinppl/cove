@@ -17,6 +17,10 @@ struct NumberPadPinView: View {
     let lockType: AuthType
     let pinLength: Int
 
+    /// default calllbacks on success and failure
+    let onUnlock: () -> Void = {}
+    let onWrongPin: () -> Void = {}
+
     /// private view properties
     @State private var animateField: Bool = false
     
@@ -85,6 +89,13 @@ struct NumberPadPinView: View {
                     }
                 }
             )
+            /// run onEnd call back after keyframe animation
+            .onChange(of: animateField) { _, _ in
+                let totalDuration = 7 * 0.07
+                DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) {
+                    onWrongPin()
+                }
+            }
             .padding(.top, 15)
             .frame(maxHeight: .infinity)
             
@@ -140,6 +151,7 @@ struct NumberPadPinView: View {
                         } completion: {
                             pin = ""
                             noBiometricAccess = !isBiometricAvailable
+                            onUnlock()
                         }
                     } else {
                         pin = ""

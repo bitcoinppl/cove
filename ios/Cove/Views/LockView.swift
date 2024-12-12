@@ -15,6 +15,11 @@ struct LockView<Content: View>: View {
     var isEnabled: Bool
     var lockWhenBackground: Bool = true
     var bioMetricUnlockMessage: String = "Unlock your wallet"
+
+    /// default calllbacks on success and failure
+    let onUnlock: () -> Void = {}
+    let onWrongPin: () -> Void = {}
+
     @ViewBuilder var content: Content
 
     /// View Properties
@@ -87,7 +92,12 @@ struct LockView<Content: View>: View {
                             noBiometricAccess: $noBiometricAccess,
                             isPinCorrect: isPinCorrect,
                             lockType: lockType,
-                            pinLength: pinLength
+                            pinLength: pinLength,
+                            onUnlock: {
+                                unlockView()
+                                onUnlock()
+                            },
+                            onWrongPin: onWrongPin
                         )
                     }
                 }
@@ -96,9 +106,7 @@ struct LockView<Content: View>: View {
             }
         }
         .onChange(of: isEnabled, initial: true) { _, newValue in
-            if newValue {
-                unlockView()
-            }
+            if newValue { unlockView() }
         }
         /// Locking When App Goes Background
         .onChange(of: phase) { _, newValue in
@@ -151,7 +159,11 @@ struct LockView<Content: View>: View {
 }
 
 #Preview {
-    LockView(lockType: .both, isPinCorrect: { $0 == "111111" }, isEnabled: true) {
+    LockView(
+        lockType: .both,
+        isPinCorrect: { $0 == "111111" },
+        isEnabled: true
+    ) {
         VStack {
             Text("Hello World")
         }
