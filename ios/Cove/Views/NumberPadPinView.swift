@@ -18,8 +18,8 @@ struct NumberPadPinView: View {
     let pinLength: Int
 
     /// default calllbacks on success and failure
-    let onUnlock: () -> Void = {}
-    let onWrongPin: () -> Void = {}
+    var onUnlock: () -> Void = {}
+    var onWrongPin: () -> Void = {}
 
     /// private view properties
     @State private var animateField: Bool = false

@@ -48,57 +48,9 @@ struct LockView<Content: View>: View {
                         .ignoresSafeArea()
 
                     if (lockType == .both && !noBiometricAccess) || lockType == .biometric {
-                        Group {
-                            if noBiometricAccess {
-                                Text("Enable biometric authentication in Settings to unlock the view.")
-                                    .font(.callout)
-                                    .multilineTextAlignment(.center)
-                                    .padding(50)
-                            } else {
-                                /// Bio Metric / Pin Unlock
-                                VStack(spacing: 12) {
-                                    VStack(spacing: 6) {
-                                        Image(systemName: "faceid")
-                                            .font(.largeTitle)
-
-                                        Text("Tap to Unlock")
-                                            .font(.caption2)
-                                            .foregroundStyle(.gray)
-                                    }
-                                    .frame(width: 100, height: 100)
-                                    .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
-                                    .contentShape(.rect)
-                                    .onTapGesture {
-                                        unlockView()
-                                    }
-
-                                    if lockType == .both {
-                                        Text("Enter Pin")
-                                            .frame(width: 100, height: 40)
-                                            .background(.ultraThinMaterial,
-                                                        in: .rect(cornerRadius: 10))
-                                            .contentShape(.rect)
-                                            .onTapGesture {
-                                                noBiometricAccess = true
-                                            }
-                                    }
-                                }
-                            }
-                        }
+                        PinOrBioMetric
                     } else {
-                        NumberPadPinView(
-                            pin: $pin,
-                            isUnlocked: $isUnlocked,
-                            noBiometricAccess: $noBiometricAccess,
-                            isPinCorrect: isPinCorrect,
-                            lockType: lockType,
-                            pinLength: pinLength,
-                            onUnlock: {
-                                unlockView()
-                                onUnlock()
-                            },
-                            onWrongPin: onWrongPin
-                        )
+                        numberPadPinView
                     }
                 }
                 .environment(\.colorScheme, .dark)
@@ -106,13 +58,65 @@ struct LockView<Content: View>: View {
             }
         }
         .onChange(of: isEnabled, initial: true) { _, newValue in
-            if newValue { unlockView() }
+            if newValue { tryUnlockingView() }
         }
         /// Locking When App Goes Background
         .onChange(of: phase) { _, newValue in
             if newValue != .active, lockWhenBackground {
                 isUnlocked = false
                 pin = ""
+            }
+        }
+    }
+
+    var numberPadPinView: NumberPadPinView {
+        NumberPadPinView(
+            pin: $pin,
+            isUnlocked: $isUnlocked,
+            noBiometricAccess: $noBiometricAccess,
+            isPinCorrect: isPinCorrect,
+            lockType: lockType,
+            pinLength: pinLength,
+            onUnlock: onUnlock,
+            onWrongPin: onWrongPin
+        )
+    }
+
+    @ViewBuilder
+    var PinOrBioMetric: some View {
+        Group {
+            if noBiometricAccess {
+                Text("Enable biometric authentication in Settings to unlock the view.")
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+                    .padding(50)
+            } else {
+                /// Bio Metric / Pin Unlock
+                VStack(spacing: 12) {
+                    VStack(spacing: 6) {
+                        Image(systemName: "faceid")
+                            .font(.largeTitle)
+
+                        Text("Tap to Unlock")
+                            .font(.caption2)
+                            .foregroundStyle(.gray)
+                    }
+                    .frame(width: 100, height: 100)
+                    .background(.ultraThinMaterial, in: .rect(cornerRadius: 10))
+                    .contentShape(.rect)
+                    .onTapGesture { tryUnlockingView() }
+
+                    if lockType == .both {
+                        Text("Enter Pin")
+                            .frame(width: 100, height: 40)
+                            .background(
+                                .ultraThinMaterial,
+                                in: .rect(cornerRadius: 10)
+                            )
+                            .contentShape(.rect)
+                            .onTapGesture { noBiometricAccess = true }
+                    }
+                }
             }
         }
     }
@@ -127,7 +131,7 @@ struct LockView<Content: View>: View {
         )
     }
 
-    private func unlockView() {
+    private func tryUnlockingView() {
         /// Checking and Unlocking View
         Task {
             guard isBiometricAvailable, lockType != .pin else {
@@ -145,7 +149,9 @@ struct LockView<Content: View>: View {
                         completionCriteria: .logicallyComplete
                     ) {
                         isUnlocked = true
-                    } completion: { pin = "" }
+                    } completion: {
+                        pin = ""
+                    }
                 }
             }
         }
