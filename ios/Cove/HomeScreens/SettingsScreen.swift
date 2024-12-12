@@ -1,4 +1,9 @@
+import LocalAuthentication
 import SwiftUI
+
+private enum SheetState: Equatable {
+    case newPin, removePin, changePin, disableAuth, disableBiometric, enableAuth
+}
 
 struct SettingsScreen: View {
     @Environment(AppManager.self) private var app
@@ -8,10 +13,58 @@ struct SettingsScreen: View {
     @State private var networkChanged = false
     @State private var showConfirmationAlert = false
 
+    @State private var sheetState: TaggedItem<SheetState>? = nil
+
     let themes = allColorSchemes()
+
+    private func canUseBiometrics() -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+    }
+
+    var useAuth: Binding<Bool> {
+        Binding(
+            get: { app.isAuthEnabled },
+            set: { enable in
+                if enable { return sheetState = .init(.enableAuth) }
+
+                switch app.authType {
+                case .both, .pin: sheetState = .init(.removePin)
+                case .biometric: sheetState = .init(.disableAuth)
+                case .none: Log.error("Trying to disable auth when auth is not enabled")
+                }
+            }
+        )
+    }
+
+    var useBiometric: Binding<Bool> {
+        Binding(
+            get: { app.authType == AuthType.both || app.authType == AuthType.biometric },
+            set: { _ in sheetState = .init(.disableBiometric) }
+        )
+    }
+
+    var usePin: Binding<Bool> {
+        Binding(
+            get: { app.authType == AuthType.both || app.authType == AuthType.pin },
+            set: { turnOn in
+                if turnOn { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
+            }
+        )
+    }
 
     var body: some View {
         Form {
+            Section(header: Text("About")) {
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text("0.0.0")
+                        .foregroundColor(.secondary)
+                }
+            }
+
             Section(header: Text("Network")) {
                 Picker(
                     "Network",
@@ -49,16 +102,31 @@ struct SettingsScreen: View {
 
             NodeSelectionView()
 
-            Section(header: Text("About")) {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text("0.0.0")
-                        .foregroundColor(.secondary)
+            Section("Security") {
+                Toggle(isOn: useAuth) {
+                    Label("Require Authentication", systemImage: "lock.shield")
+                }
+
+                if app.isAuthEnabled {
+                    if canUseBiometrics() {
+                        Toggle(isOn: useBiometric) {
+                            Label("Enable Face ID", systemImage: "faceid")
+                        }
+                    }
+
+                    Toggle(isOn: usePin) {
+                        Label("Enable PIN", systemImage: "lock.fill")
+                    }
+
+                    if usePin.wrappedValue {
+                        Button(action: { sheetState = .init(.changePin) }) {
+                            Label("Change PIN", systemImage: "lock.open.rotation")
+                        }
+                    }
                 }
             }
-            .navigationTitle("Settings")
         }
+        .navigationTitle("Settings")
         .navigationBarBackButtonHidden(networkChanged)
         .toolbar {
             networkChanged
@@ -92,6 +160,7 @@ struct SettingsScreen: View {
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
+        .fullScreenCover(item: $sheetState, content: SheetContent)
         .preferredColorScheme(app.colorScheme)
         .gesture(
             networkChanged
@@ -111,6 +180,101 @@ struct SettingsScreen: View {
                     }
                 } : nil
         )
+    }
+
+    func setPin(_ pin: String) {
+        app.dispatch(action: .setPin(pin))
+        sheetState = .none
+    }
+
+    func checkPin(_ pin: String) -> Bool {
+        AuthPin().check(pin: pin)
+    }
+
+    @ViewBuilder
+    private func CancelView(_ content: () -> some View) -> some View {
+        VStack {
+            HStack {
+                Spacer()
+
+                Button("Cancel") {
+                    sheetState = .none
+                }
+                .foregroundStyle(.white)
+                .font(.headline)
+            }
+            .padding()
+
+            content()
+        }
+        .background(.midnightBlue)
+    }
+
+    @ViewBuilder
+    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
+        switch state.item {
+        case .enableAuth:
+            LockView(
+                lockType: .both,
+                isPinCorrect: { _ in true },
+                onUnlock: { pin in
+                    app.dispatch(action: .enableBiometric)
+
+                    if !pin.isEmpty {
+                        app.dispatch(action: .setPin(pin))
+                    }
+
+                    sheetState = .none
+                },
+                backAction: { sheetState = .none },
+                content: { EmptyView() }
+            )
+
+        case .newPin:
+            NewPinView(onComplete: setPin, backAction: { sheetState = .none })
+
+        case .removePin:
+            NumberPadPinView(
+                title: "Enter Current PIN",
+                isPinCorrect: checkPin,
+                backAction: { sheetState = .none },
+                onUnlock: { _ in
+                    app.dispatch(action: .disablePin)
+                    sheetState = .none
+                }
+            )
+
+        case .changePin:
+            ChangePinView(
+                isPinCorrect: checkPin,
+                backAction: { sheetState = .none },
+                onComplete: setPin
+            )
+
+        case .disableAuth:
+            LockView(
+                lockType: app.authType,
+                isPinCorrect: checkPin,
+                onUnlock: { _ in
+                    app.dispatch(action: .disableAuth)
+                    sheetState = .none
+                },
+                backAction: { sheetState = .none },
+                content: { EmptyView() }
+            )
+
+        case .disableBiometric:
+            LockView(
+                lockType: app.authType,
+                isPinCorrect: checkPin,
+                onUnlock: { _ in
+                    app.dispatch(action: .disableBiometric)
+                    sheetState = .none
+                },
+                backAction: { sheetState = .none },
+                content: { EmptyView() }
+            )
+        }
     }
 }
 

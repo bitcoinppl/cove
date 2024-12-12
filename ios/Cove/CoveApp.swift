@@ -43,7 +43,8 @@ public extension EnvironmentValues {
 
 @main
 struct CoveApp: App {
-    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var phase
 
     @State var manager: AppManager
     @State var id = UUID()
@@ -459,11 +460,22 @@ struct CoveApp: App {
                 )
                 .task {
                     await manager.rust.initOnStart()
-                    await MainActor.run {
-                        manager.asyncRuntimeReady = true
-                    }
+                    await MainActor.run { manager.asyncRuntimeReady = true }
                 }
                 .onOpenURL(perform: handleFileOpen)
+                .onChange(of: phase) { oldPhase, newPhase in
+                    Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase)")
+
+                    // TODO: only do this if PIN and/or Biometric is enabledA
+                    if newPhase == .background {
+                        UIApplication.shared.connectedScenes
+                            .compactMap { $0 as? UIWindowScene }
+                            .flatMap(\.windows)
+                            .forEach { window in
+                                window.rootViewController?.dismiss(animated: false)
+                            }
+                    }
+                }
         }
     }
 }

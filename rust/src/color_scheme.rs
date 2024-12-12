@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, strum::EnumIter)]
 pub enum FfiColorScheme {
@@ -6,17 +6,12 @@ pub enum FfiColorScheme {
     Dark,
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, strum::EnumIter)]
+#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum, strum::EnumIter)]
 pub enum ColorSchemeSelection {
     Light,
     Dark,
+    #[default]
     System,
-}
-
-impl Default for ColorSchemeSelection {
-    fn default() -> Self {
-        Self::System
-    }
 }
 
 impl ColorSchemeSelection {
@@ -29,13 +24,25 @@ impl ColorSchemeSelection {
     }
 }
 
+impl FromStr for ColorSchemeSelection {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(ColorSchemeSelection::from(s))
+    }
+}
+
 impl From<&str> for ColorSchemeSelection {
     fn from(value: &str) -> Self {
         match value {
             "Light" | "light" => Self::Light,
             "Dark" | "dark" => Self::Dark,
             "System" | "system" => Self::System,
-            _ => Self::System,
+            other => match other.to_lowercase().as_str() {
+                "light" => Self::Light,
+                "dark" => Self::Dark,
+                _ => Self::System,
+            },
         }
     }
 }

@@ -4,6 +4,7 @@ pub(crate) mod app;
 pub(crate) mod logging;
 pub(crate) mod router;
 
+pub(crate) mod auth;
 pub(crate) mod autocomplete;
 pub(crate) mod bip39;
 pub(crate) mod color;

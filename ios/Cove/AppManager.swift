@@ -15,6 +15,7 @@ import SwiftUI
 
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
+    var authType = Database().globalConfig().authType()
 
     var nfcReader = NFCReader()
 
@@ -71,6 +72,10 @@ import SwiftUI
 
     public func updateWalletVm(_ vm: WalletManager) {
         walletManager = vm
+    }
+
+    var isAuthEnabled: Bool {
+        authType != AuthType.none
     }
 
     var currentRoute: Route {
@@ -148,6 +153,12 @@ import SwiftUI
 
                 case let .feesChanged(fees):
                     self.fees = fees
+
+                case let .authTypeChanged(authType):
+                    self.authType = authType
+
+                case .hashedPinCodeChanged:
+                    ()
                 }
             }
         }

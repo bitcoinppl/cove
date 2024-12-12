@@ -5,6 +5,7 @@ pub mod error;
 pub mod global_cache;
 pub mod global_config;
 pub mod global_flag;
+pub mod macros;
 pub mod unsigned_transactions;
 pub mod wallet;
 pub mod wallet_data;

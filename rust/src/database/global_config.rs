@@ -4,6 +4,7 @@ use redb::TableDefinition;
 
 use crate::{
     app::reconcile::{Update, Updater},
+    auth::AuthType,
     color_scheme::ColorSchemeSelection,
     network::Network,
     node::Node,
@@ -11,8 +12,11 @@ use crate::{
 };
 
 use super::{error::SerdeError, Error};
+use crate::string_config_accessor;
 
 pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("global_config");
+
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone, Copy, uniffi::Enum)]
 pub enum GlobalConfigKey {
@@ -20,6 +24,8 @@ pub enum GlobalConfigKey {
     SelectedNetwork,
     SelectedNode(Network),
     ColorScheme,
+    AuthType,
+    HashedPinCode,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -30,6 +36,8 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::SelectedNode(Network::Bitcoin) => "selected_node_bitcoin",
             GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
             GlobalConfigKey::ColorScheme => "color_scheme",
+            GlobalConfigKey::AuthType => "auth_type",
+            GlobalConfigKey::HashedPinCode => "hashed_pin_code",
         }
     }
 }
@@ -55,11 +63,37 @@ pub enum GlobalConfigTableError {
 
     #[error("failed to get global config: {0}")]
     Read(String),
+
+    #[error("pin code must be hashed before saving")]
+    PinCodeMustBeHashed,
+}
+
+impl GlobalConfigTable {
+    string_config_accessor!(
+        pub auth_type,
+        GlobalConfigKey::AuthType,
+        AuthType,
+        Update::AuthTypeChanged
+    );
+
+    string_config_accessor!(
+        pub color_scheme,
+        GlobalConfigKey::ColorScheme,
+        ColorSchemeSelection,
+        Update::ColorSchemeChanged
+    );
+
+    string_config_accessor!(
+        priv_hashed_pin_code,
+        GlobalConfigKey::HashedPinCode,
+        String,
+        Update::HashedPinCodeChanged
+    );
 }
 
 #[uniffi::export]
 impl GlobalConfigTable {
-    pub fn select_wallet(&self, id: WalletId) -> Result<(), Error> {
+    pub fn select_wallet(&self, id: WalletId) -> Result<()> {
         self.set(GlobalConfigKey::SelectedWalletId, id.to_string())?;
 
         Ok(())
@@ -75,7 +109,7 @@ impl GlobalConfigTable {
         Some(wallet_id)
     }
 
-    pub fn clear_selected_wallet(&self) -> Result<(), Error> {
+    pub fn clear_selected_wallet(&self) -> Result<()> {
         self.delete(GlobalConfigKey::SelectedWalletId)?;
 
         Ok(())
@@ -100,6 +134,12 @@ impl GlobalConfigTable {
         network
     }
 
+    pub fn set_selected_network(&self, network: Network) -> Result<()> {
+        self.set(GlobalConfigKey::SelectedNetwork, network.to_string())?;
+
+        Ok(())
+    }
+
     pub fn selected_node(&self) -> Node {
         let network = self.selected_network();
         let selected_node_key = GlobalConfigKey::SelectedNode(network);
@@ -112,7 +152,7 @@ impl GlobalConfigTable {
         serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
     }
 
-    pub fn set_selected_node(&self, node: &Node) -> Result<(), Error> {
+    pub fn set_selected_node(&self, node: &Node) -> Result<()> {
         let network = node.network;
         let node_json = serde_json::to_string(node)
             .map_err(|error| SerdeError::SerializationError(error.to_string()))?;
@@ -125,29 +165,42 @@ impl GlobalConfigTable {
         Ok(())
     }
 
-    pub fn color_scheme(&self) -> ColorSchemeSelection {
-        let color_scheme = self
-            .get(GlobalConfigKey::ColorScheme)
-            .unwrap_or(None)
-            .unwrap_or("system".to_string());
-
-        ColorSchemeSelection::from(color_scheme)
+    #[uniffi::method(name = "authType")]
+    pub fn _auth_type(&self) -> AuthType {
+        self.auth_type().unwrap_or_default()
     }
 
-    pub fn set_color_scheme(&self, color_scheme: ColorSchemeSelection) -> Result<(), Error> {
-        self.set(GlobalConfigKey::ColorScheme, color_scheme.to_string())?;
-        Updater::send_update(Update::ColorSchemeChanged(color_scheme));
-
-        Ok(())
+    #[uniffi::method(name = "colorScheme")]
+    pub fn _color_scheme(&self) -> ColorSchemeSelection {
+        self.color_scheme().unwrap_or_default()
     }
 
-    pub fn set_selected_network(&self, network: Network) -> Result<(), Error> {
-        self.set(GlobalConfigKey::SelectedNetwork, network.to_string())?;
-
-        Ok(())
+    #[uniffi::method(name = "setColorScheme")]
+    pub fn _set_color_scheme(&self, color_scheme: ColorSchemeSelection) -> Result<()> {
+        self.set_color_scheme(color_scheme)
     }
 
-    pub fn get(&self, key: GlobalConfigKey) -> Result<Option<String>, Error> {
+    pub fn hashed_pin_code(&self) -> Result<String> {
+        self.priv_hashed_pin_code()
+    }
+
+    pub fn delete_hashed_pin_code(&self) -> Result<()> {
+        self.delete_priv_hashed_pin_code()
+    }
+
+    pub fn set_hashed_pin_code(&self, hashed_pin_code: String) -> Result<()> {
+        if hashed_pin_code.is_empty() {
+            return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
+        }
+
+        if hashed_pin_code.len() <= 6 {
+            return Err(GlobalConfigTableError::PinCodeMustBeHashed.into());
+        }
+
+        self.set_priv_hashed_pin_code(hashed_pin_code)
+    }
+
+    fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {
         let read_txn = self
             .db
             .begin_read()
@@ -166,7 +219,7 @@ impl GlobalConfigTable {
         Ok(value)
     }
 
-    pub fn set(&self, key: GlobalConfigKey, value: String) -> Result<(), Error> {
+    fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
         let write_txn = self
             .db
             .begin_write()
@@ -192,7 +245,7 @@ impl GlobalConfigTable {
         Ok(())
     }
 
-    pub fn delete(&self, key: GlobalConfigKey) -> Result<(), Error> {
+    pub fn delete(&self, key: GlobalConfigKey) -> Result<()> {
         let write_txn = self
             .db
             .begin_write()

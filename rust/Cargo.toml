@@ -23,6 +23,7 @@ bdk_wallet = { version = "1.0.0-beta.5", features = [
     "keys-bip39",
     "file_store",
 ], git = "https://github.com/bitcoinppl/bdk" }
+
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
@@ -31,6 +32,7 @@ bdk_esplora = { version = "0.19", git = "https://github.com/bitcoinppl/bdk", fea
     "async-https",
     "tokio",
 ] }
+
 bdk_electrum = { version = "0.19", features = [
     "use-rustls-ring",
 ], default-features = false, git = "https://github.com/bitcoinppl/bdk" }
@@ -58,6 +60,10 @@ tryhard = "0.5"
 # crypto
 rand = "0.8.5"
 zeroize = "1.8.1"
+
+# hashing
+sha2 = "0.10.8"
+argon2 = { version = "0.5.0", features = ["password-hash"] }
 
 # concurrency
 crossbeam = "0.8.4"
@@ -108,9 +114,6 @@ serde_json = "1.0"
 # bindings
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
 
-# hashing
-sha2 = "0.10.8"
-
 # bit manipulation
 num-bigint = "0.4"
 bitvec = "1.0"
@@ -144,6 +147,9 @@ winnow = "0.6.0"
 
 # sync
 arc-swap = "1.7"
+
+# macros
+paste = "1.0"
 
 [build-dependencies]
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["build"] }

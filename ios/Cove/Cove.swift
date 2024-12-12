@@ -1232,6 +1232,134 @@ public func FfiConverterTypeAmount_lower(_ value: Amount) -> UnsafeMutableRawPoi
 
 
 
+public protocol AuthPinProtocol : AnyObject {
+    
+    func check(pin: String)  -> Bool
+    
+}
+
+open class AuthPin:
+    AuthPinProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_authpin(self.pointer, $0) }
+    }
+public convenience init() {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_authpin_new($0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_authpin(pointer, $0) }
+    }
+
+    
+
+    
+open func check(pin: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_authpin_check(self.uniffiClonePointer(),
+        FfiConverterString.lower(pin),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthPin: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = AuthPin
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> AuthPin {
+        return AuthPin(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: AuthPin) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthPin {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: AuthPin, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthPin_lift(_ pointer: UnsafeMutableRawPointer) throws -> AuthPin {
+    return try FfiConverterTypeAuthPin.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthPin_lower(_ value: AuthPin) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeAuthPin.lower(value)
+}
+
+
+
+
 public protocol AutoComplete : AnyObject {
     
     func autocomplete(word: String)  -> [String]
@@ -3852,6 +3980,11 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOpt
 public protocol FfiAppProtocol : AnyObject {
     
     /**
+     * Get the auth type for the app
+     */
+    func authType()  -> AuthType
+    
+    /**
      * Frontend calls this method to send events to the rust application logic
      */
     func dispatch(action: AppAction) 
@@ -3976,6 +4109,16 @@ public convenience init() {
 
     
 
+    
+    /**
+     * Get the auth type for the app
+     */
+open func authType() -> AuthType  {
+    return try!  FfiConverterTypeAuthType.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_auth_type(self.uniffiClonePointer(),$0
+    )
+})
+}
     
     /**
      * Frontend calls this method to send events to the rust application logic
@@ -4868,13 +5011,19 @@ public func FfiConverterTypeFoundJson_lower(_ value: FoundJson) -> UnsafeMutable
 
 public protocol GlobalConfigTableProtocol : AnyObject {
     
+    func authType()  -> AuthType
+    
     func clearSelectedWallet() throws 
     
     func colorScheme()  -> ColorSchemeSelection
     
     func delete(key: GlobalConfigKey) throws 
     
+    func deleteHashedPinCode() throws 
+    
     func get(key: GlobalConfigKey) throws  -> String?
+    
+    func hashedPinCode() throws  -> String
     
     func selectWallet(id: WalletId) throws 
     
@@ -4887,6 +5036,8 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     func set(key: GlobalConfigKey, value: String) throws 
     
     func setColorScheme(colorScheme: ColorSchemeSelection) throws 
+    
+    func setHashedPinCode(hashedPinCode: String) throws 
     
     func setSelectedNetwork(network: Network) throws 
     
@@ -4944,6 +5095,13 @@ open class GlobalConfigTable:
     
 
     
+open func authType() -> AuthType  {
+    return try!  FfiConverterTypeAuthType.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_authtype(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func clearSelectedWallet()throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
     uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(self.uniffiClonePointer(),$0
     )
@@ -4952,7 +5110,7 @@ open func clearSelectedWallet()throws   {try rustCallWithError(FfiConverterTypeD
     
 open func colorScheme() -> ColorSchemeSelection  {
     return try!  FfiConverterTypeColorSchemeSelection.lift(try! rustCall() {
-    uniffi_cove_fn_method_globalconfigtable_color_scheme(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_globalconfigtable_colorscheme(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -4964,10 +5122,23 @@ open func delete(key: GlobalConfigKey)throws   {try rustCallWithError(FfiConvert
 }
 }
     
+open func deleteHashedPinCode()throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
 open func get(key: GlobalConfigKey)throws  -> String?  {
     return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
     uniffi_cove_fn_method_globalconfigtable_get(self.uniffiClonePointer(),
         FfiConverterTypeGlobalConfigKey.lower(key),$0
+    )
+})
+}
+    
+open func hashedPinCode()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    uniffi_cove_fn_method_globalconfigtable_hashed_pin_code(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -5009,8 +5180,15 @@ open func set(key: GlobalConfigKey, value: String)throws   {try rustCallWithErro
 }
     
 open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
-    uniffi_cove_fn_method_globalconfigtable_set_color_scheme(self.uniffiClonePointer(),
+    uniffi_cove_fn_method_globalconfigtable_setcolorscheme(self.uniffiClonePointer(),
         FfiConverterTypeColorSchemeSelection.lower(colorScheme),$0
+    )
+}
+}
+    
+open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(self.uniffiClonePointer(),
+        FfiConverterString.lower(hashedPinCode),$0
     )
 }
 }
@@ -12384,6 +12562,15 @@ public enum AppAction {
     )
     case updateFiatPrices
     case updateFees
+    case updateAuthType(AuthType
+    )
+    case enableAuth
+    case disableAuth
+    case enableBiometric
+    case disableBiometric
+    case setPin(String
+    )
+    case disablePin
 }
 
 
@@ -12412,6 +12599,22 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 5: return .updateFiatPrices
         
         case 6: return .updateFees
+        
+        case 7: return .updateAuthType(try FfiConverterTypeAuthType.read(from: &buf)
+        )
+        
+        case 8: return .enableAuth
+        
+        case 9: return .disableAuth
+        
+        case 10: return .enableBiometric
+        
+        case 11: return .disableBiometric
+        
+        case 12: return .setPin(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 13: return .disablePin
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -12447,6 +12650,36 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         
         case .updateFees:
             writeInt(&buf, Int32(6))
+        
+        
+        case let .updateAuthType(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeAuthType.write(v1, into: &buf)
+            
+        
+        case .enableAuth:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .disableAuth:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .enableBiometric:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .disableBiometric:
+            writeInt(&buf, Int32(11))
+        
+        
+        case let .setPin(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .disablePin:
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -12553,6 +12786,10 @@ public enum AppStateReconcileMessage {
     )
     case feesChanged(FeeResponse
     )
+    case authTypeChanged(AuthType
+    )
+    case hashedPinCodeChanged(String
+    )
 }
 
 
@@ -12584,6 +12821,12 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         )
         
         case 7: return .feesChanged(try FfiConverterTypeFeeResponse.read(from: &buf)
+        )
+        
+        case 8: return .authTypeChanged(try FfiConverterTypeAuthType.read(from: &buf)
+        )
+        
+        case 9: return .hashedPinCodeChanged(try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -12628,6 +12871,16 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
             FfiConverterTypeFeeResponse.write(v1, into: &buf)
             
+        
+        case let .authTypeChanged(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeAuthType.write(v1, into: &buf)
+            
+        
+        case let .hashedPinCodeChanged(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(v1, into: &buf)
+            
         }
     }
 }
@@ -12647,6 +12900,194 @@ public func FfiConverterTypeAppStateReconcileMessage_lower(_ value: AppStateReco
     return FfiConverterTypeAppStateReconcileMessage.lower(value)
 }
 
+
+
+
+
+public enum AuthError {
+
+    
+    
+    /**
+     * Unable to save pin to database {0:?}
+     */
+    case DatabaseSaveError(DatabaseError
+    )
+    /**
+     * Unable to get pin from database {0:?}
+     */
+    case DatabaseGetError(DatabaseError
+    )
+    /**
+     * Unable to hash pin {0}
+     */
+    case HashError(String
+    )
+    /**
+     * Unable to parse hashed pin {0}
+     */
+    case ParseHashedPinError(String
+    )
+    /**
+     * Verification failed {0}
+     */
+    case VerificationFailed(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthError: FfiConverterRustBuffer {
+    typealias SwiftType = AuthError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .DatabaseSaveError(
+            try FfiConverterTypeDatabaseError.read(from: &buf)
+            )
+        case 2: return .DatabaseGetError(
+            try FfiConverterTypeDatabaseError.read(from: &buf)
+            )
+        case 3: return .HashError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .ParseHashedPinError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 5: return .VerificationFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AuthError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .DatabaseSaveError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeDatabaseError.write(v1, into: &buf)
+            
+        
+        case let .DatabaseGetError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeDatabaseError.write(v1, into: &buf)
+            
+        
+        case let .HashError(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .ParseHashedPinError(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .VerificationFailed(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+extension AuthError: Equatable, Hashable {}
+
+extension AuthError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AuthType {
+    
+    case pin
+    case biometric
+    case both
+    case none
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthType: FfiConverterRustBuffer {
+    typealias SwiftType = AuthType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .pin
+        
+        case 2: return .biometric
+        
+        case 3: return .both
+        
+        case 4: return .none
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AuthType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .pin:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .biometric:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .both:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .none:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthType_lift(_ buf: RustBuffer) throws -> AuthType {
+    return try FfiConverterTypeAuthType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthType_lower(_ value: AuthType) -> RustBuffer {
+    return FfiConverterTypeAuthType.lower(value)
+}
+
+
+
+extension AuthType: Equatable, Hashable {}
 
 
 
@@ -14122,6 +14563,8 @@ public enum GlobalConfigKey {
     case selectedNode(Network
     )
     case colorScheme
+    case authType
+    case hashedPinCode
 }
 
 
@@ -14143,6 +14586,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         )
         
         case 4: return .colorScheme
+        
+        case 5: return .authType
+        
+        case 6: return .hashedPinCode
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14167,6 +14614,14 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .colorScheme:
             writeInt(&buf, Int32(4))
+        
+        
+        case .authType:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .hashedPinCode:
+            writeInt(&buf, Int32(6))
         
         }
     }
@@ -14202,6 +14657,7 @@ public enum GlobalConfigTableError {
     )
     case Read(String
     )
+    case PinCodeMustBeHashed
 }
 
 
@@ -14224,6 +14680,7 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
         case 2: return .Read(
             try FfiConverterString.read(from: &buf)
             )
+        case 3: return .PinCodeMustBeHashed
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14245,6 +14702,10 @@ public struct FfiConverterTypeGlobalConfigTableError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case .PinCodeMustBeHashed:
+            writeInt(&buf, Int32(3))
+        
         }
     }
 }
@@ -21156,6 +21617,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_amount_sats_string_with_unit() != 34409) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_authpin_check() != 17948) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_autocomplete_autocomplete() != 4748) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21336,6 +21800,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_slow() != 1762) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_auth_type() != 34438) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_dispatch() != 48712) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21408,16 +21875,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_fingerprint_as_uppercase() != 11522) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_authtype() != 38700) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_clear_selected_wallet() != 22146) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_color_scheme() != 18859) {
+    if (uniffi_cove_checksum_method_globalconfigtable_colorscheme() != 12515) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_delete() != 13364) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_delete_hashed_pin_code() != 4238) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_get() != 52128) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_hashed_pin_code() != 15707) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 52001) {
@@ -21435,7 +21911,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_set() != 31033) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_set_color_scheme() != 24086) {
+    if (uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 57216) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 36127) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 34312) {
@@ -21883,6 +22362,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_amount_one_sat() != 58118) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_authpin_new() != 39860) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_bip39autocomplete_new() != 41839) {

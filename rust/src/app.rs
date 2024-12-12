@@ -5,6 +5,7 @@ pub mod reconcile;
 use std::{sync::Arc, time::Duration};
 
 use crate::{
+    auth::{AuthPin, AuthType},
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
     fiat::client::{PriceResponse, FIAT_CLIENT},
@@ -18,7 +19,8 @@ use crossbeam::channel::{Receiver, Sender};
 use macros::impl_default_for;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
-use reconcile::{AppStateReconcileMessage, FfiReconcile, Updater};
+use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
+use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
 pub static APP: OnceCell<App> = OnceCell::new();
@@ -40,7 +42,7 @@ impl AppState {
 #[derive(Clone)]
 pub struct App {
     state: Arc<RwLock<AppState>>,
-    update_receiver: Arc<Receiver<AppStateReconcileMessage>>,
+    update_receiver: Arc<Receiver<AppMessage>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -51,6 +53,13 @@ pub enum AppAction {
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
+    UpdateAuthType(AuthType),
+    EnableAuth,
+    DisableAuth,
+    EnableBiometric,
+    DisableBiometric,
+    SetPin(String),
+    DisablePin,
 }
 
 #[derive(
@@ -73,10 +82,8 @@ impl App {
         crate::logging::init();
 
         // Set up the updater channel
-        let (sender, receiver): (
-            Sender<AppStateReconcileMessage>,
-            Receiver<AppStateReconcileMessage>,
-        ) = crossbeam::channel::bounded(1000);
+        let (sender, receiver): (Sender<AppMessage>, Receiver<AppMessage>) =
+            crossbeam::channel::bounded(1000);
 
         Updater::init(sender);
         let state = Arc::new(RwLock::new(AppState::new()));
@@ -162,9 +169,7 @@ impl App {
 
                 crate::task::spawn(async move {
                     match FIAT_CLIENT.get_prices().await {
-                        Ok(prices) => Updater::send_update(
-                            AppStateReconcileMessage::FiatPricesChanged(prices),
-                        ),
+                        Ok(prices) => Updater::send_update(AppMessage::FiatPricesChanged(prices)),
                         Err(error) => {
                             error!("unable to update prices: {error:?}");
                         }
@@ -178,13 +183,73 @@ impl App {
                 crate::task::spawn(async move {
                     match FEE_CLIENT.get_fees().await {
                         Ok(fees) => {
-                            Updater::send_update(AppStateReconcileMessage::FeesChanged(fees));
+                            Updater::send_update(AppMessage::FeesChanged(fees));
                         }
                         Err(error) => {
                             error!("unable to get fees: {error:?}");
                         }
                     }
                 });
+            }
+
+            AppAction::UpdateAuthType(auth_type) => {
+                debug!("AuthType changed, NEW: {auth_type:?}");
+                set_auth_type(auth_type);
+            }
+
+            AppAction::EnableAuth => {
+                let current_auth_type = FfiApp::global().auth_type();
+                if current_auth_type == AuthType::None {
+                    set_auth_type(AuthType::Biometric);
+                }
+            }
+
+            AppAction::DisableAuth => {
+                set_auth_type(AuthType::None);
+            }
+
+            AppAction::EnableBiometric => {
+                let current_auth_type = FfiApp::global().auth_type();
+                match current_auth_type {
+                    AuthType::None => set_auth_type(AuthType::Biometric),
+                    AuthType::Pin => set_auth_type(AuthType::Both),
+                    _ => {}
+                };
+            }
+
+            AppAction::DisableBiometric => {
+                let current_auth_type = FfiApp::global().auth_type();
+                match current_auth_type {
+                    AuthType::Biometric => set_auth_type(AuthType::None),
+                    AuthType::Both => set_auth_type(AuthType::Biometric),
+                    _ => {}
+                };
+            }
+
+            AppAction::SetPin(pin) => {
+                if let Err(err) = AuthPin::new().set(pin) {
+                    return error!("unable to set pin: {err:?}");
+                }
+
+                let current_auth_type = FfiApp::global().auth_type();
+                match current_auth_type {
+                    AuthType::None => set_auth_type(AuthType::Pin),
+                    AuthType::Biometric => set_auth_type(AuthType::Both),
+                    _ => {}
+                }
+            }
+
+            AppAction::DisablePin => {
+                if let Err(err) = AuthPin::new().delete() {
+                    return error!("unable to delete pin: {err:?}");
+                }
+
+                let current_auth_type = FfiApp::global().auth_type();
+                match current_auth_type {
+                    AuthType::Pin => set_auth_type(AuthType::None),
+                    AuthType::Both => set_auth_type(AuthType::Biometric),
+                    _ => {}
+                }
             }
         }
     }
@@ -201,6 +266,17 @@ impl App {
 
     pub fn get_state(&self) -> AppState {
         self.state.read().clone()
+    }
+}
+
+fn set_auth_type(auth_type: AuthType) {
+    match Database::global().global_config.set_auth_type(auth_type) {
+        Ok(_) => {
+            Updater::send_update(AppMessage::AuthTypeChanged(auth_type));
+        }
+        Err(error) => {
+            error!("unable to set auth type: {error:?}");
+        }
     }
 }
 
@@ -237,6 +313,17 @@ impl FfiApp {
         }
 
         Ok(())
+    }
+
+    /// Get the auth type for the app
+    pub fn auth_type(&self) -> AuthType {
+        Database::global()
+            .global_config
+            .auth_type()
+            .tap_err(|error| {
+                error!("unable to get auth type: {error:?}");
+            })
+            .unwrap_or_default()
     }
 
     /// Get the selected wallet
@@ -281,7 +368,7 @@ impl FfiApp {
             .router
             .reset_nested_routes_to(default_route.clone(), nested_routes.clone());
 
-        Updater::send_update(AppStateReconcileMessage::DefaultRouteChanged(
+        Updater::send_update(AppMessage::DefaultRouteChanged(
             default_route,
             nested_routes,
         ));
@@ -308,7 +395,7 @@ impl FfiApp {
             .router
             .reset_routes_to(route.clone());
 
-        Updater::send_update(AppStateReconcileMessage::DefaultRouteChanged(route, vec![]));
+        Updater::send_update(AppMessage::DefaultRouteChanged(route, vec![]));
     }
 
     pub fn state(&self) -> AppState {
@@ -359,7 +446,7 @@ impl FfiApp {
             if crate::fiat::client::init_prices().await.is_ok() {
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
+                    Updater::send_update(AppMessage::FiatPricesChanged(prices));
                 }
 
                 return;
@@ -384,7 +471,7 @@ impl FfiApp {
 
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    Updater::send_update(AppStateReconcileMessage::FiatPricesChanged(prices));
+                    Updater::send_update(AppMessage::FiatPricesChanged(prices));
                 }
             }
         });
@@ -395,7 +482,7 @@ impl FfiApp {
 
             let fees = FEE_CLIENT.get_fees().await;
             if let Ok(fees) = fees {
-                Updater::send_update(AppStateReconcileMessage::FeesChanged(fees));
+                Updater::send_update(AppMessage::FeesChanged(fees));
             }
         });
     }
