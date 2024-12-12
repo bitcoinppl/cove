@@ -11,10 +11,10 @@ struct NumberPadPinView: View {
     /// args
     var title: String
     @Binding var isUnlocked: Bool
-    
+
     let isPinCorrect: (String) -> Bool
     var pinLength: Int
-    
+
     // back button
     private var backEnabled: Bool
     var backAction: () -> Void
@@ -26,7 +26,7 @@ struct NumberPadPinView: View {
     /// private view properties
     @State private var pin: String
     @State private var animateField: Bool
-    
+
     public init(
         title: String = "Enter Pin",
         isUnlocked: Binding<Bool> = .constant(false),
@@ -37,18 +37,18 @@ struct NumberPadPinView: View {
         onWrongPin: @escaping (String) -> Void = { _ in }
     ) {
         self.title = title
-        self._isUnlocked = isUnlocked
+        _isUnlocked = isUnlocked
         self.isPinCorrect = isPinCorrect
         self.pinLength = pinLength
-        self.backEnabled = backAction != nil
+        backEnabled = backAction != nil
         self.backAction = backAction ?? {}
         self.onUnlock = onUnlock
         self.onWrongPin = onWrongPin
-        
-        self.pin = ""
-        self.animateField = false
+
+        pin = ""
+        animateField = false
     }
-        
+
     private var isBiometricAvailable: Bool {
         /// Lock Context
         let context = LAContext()
@@ -73,7 +73,7 @@ struct NumberPadPinView: View {
                 .font(.title.bold())
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(.white)
-            
+
             /// Adding Wiggling Animation for Wrong Password With Keyframe Animator
             HStack(spacing: 10) {
                 ForEach(0 ..< pinLength, id: \.self) { index in
@@ -86,7 +86,7 @@ struct NumberPadPinView: View {
                             if pin.count > index {
                                 let index = pin.index(pin.startIndex, offsetBy: index)
                                 let string = String(pin[index])
-                                
+
                                 Text(string)
                                     .font(.title.bold())
                                     .foregroundStyle(.black)
@@ -117,7 +117,7 @@ struct NumberPadPinView: View {
             .onChange(of: animateField) { _, _ in
                 let pin = pin
                 self.pin = ""
-                
+
                 let totalDuration = 7 * 0.07
                 DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration) {
                     onWrongPin(pin)
@@ -125,7 +125,7 @@ struct NumberPadPinView: View {
             }
             .padding(.top, 15)
             .frame(maxHeight: .infinity)
-            
+
             /// Custom Number Pad
             GeometryReader { _ in
                 LazyVGrid(columns: Array(repeating: GridItem(), count: 3), content: {
@@ -142,10 +142,10 @@ struct NumberPadPinView: View {
                         })
                         .tint(.white)
                     }
-                    
+
                     // take up space
                     Button(action: {}) {}
-                    
+
                     Button(action: {
                         guard pin.count < pinLength else { return }
                         pin.append("0")
@@ -157,7 +157,7 @@ struct NumberPadPinView: View {
                             .contentShape(.rect)
                     })
                     .tint(.white)
-                    
+
                     /// 0 and Back Button
                     Button(action: {
                         if !pin.isEmpty { pin.removeLast() }
@@ -197,7 +197,7 @@ struct NumberPadPinView: View {
     struct Container: View {
         @State var pin = ""
         @State var isUnlocked = false
-        
+
         var body: some View {
             NumberPadPinView(
                 isUnlocked: $isUnlocked,
@@ -206,6 +206,6 @@ struct NumberPadPinView: View {
             )
         }
     }
-                
+
     return Container()
 }

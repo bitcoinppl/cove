@@ -58,14 +58,14 @@ struct LockView<Content: View>: View {
         self.content = content()
 
         // back
-        self.backEnabled = backAction != nil
+        backEnabled = backAction != nil
         self.backAction = backAction ?? {}
 
         // private
-        self.animateField = false
-        self.isUnlocked = false
-        self.noBiometricAccess = false
-        self.pinLength = 6
+        animateField = false
+        isUnlocked = false
+        noBiometricAccess = false
+        pinLength = 6
     }
 
     var body: some View {

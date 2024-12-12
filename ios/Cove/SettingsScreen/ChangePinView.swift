@@ -47,7 +47,7 @@ struct ChangePinView: View {
                     }
                 )
 
-            case .confirm(let pinToConfirm):
+            case let .confirm(pinToConfirm):
                 NumberPadPinView(
                     title: "Confirm New PIN",
                     isPinCorrect: { $0 == pinToConfirm },
