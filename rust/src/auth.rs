@@ -55,7 +55,7 @@ pub enum AuthError {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
-pub struct AuthPin {}
+pub struct AuthPin;
 
 #[uniffi::export]
 impl AuthPin {

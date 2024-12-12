@@ -46,6 +46,6 @@ macro_rules! string_config_accessor {
 
     // Private interface
     ($fn_name:ident, $key:expr, $return_type:ty, $update_variant:path) => {
-        string_config_accessor!(@impl , $fn_name, $key, $return_type, $update_variant);
+        string_config_accessor!(@impl, $fn_name, $key, $return_type, $update_variant);
     };
 }

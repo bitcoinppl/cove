@@ -165,9 +165,14 @@ impl GlobalConfigTable {
         Ok(())
     }
 
+    #[uniffi::method(name = "authType")]
+    pub fn _auth_type(&self) -> AuthType {
+        self.auth_type().unwrap_or_default()
+    }
+
     #[uniffi::method(name = "colorScheme")]
-    pub fn _color_scheme(&self) -> Result<ColorSchemeSelection> {
-        self.color_scheme()
+    pub fn _color_scheme(&self) -> ColorSchemeSelection {
+        self.color_scheme().unwrap_or_default()
     }
 
     #[uniffi::method(name = "setColorScheme")]

@@ -5,7 +5,7 @@ pub mod reconcile;
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    auth::AuthType,
+    auth::{AuthPin, AuthType},
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
     fiat::client::{PriceResponse, FIAT_CLIENT},
@@ -219,7 +219,9 @@ impl App {
             }
 
             AppAction::SetPin(pin) => {
-                todo!("HASH and SAVE PIN {pin}",);
+                if let Err(err) = AuthPin::new().set(pin) {
+                    error!("unable to set pin: {err:?}");
+                }
             }
 
             AppAction::DisablePin => {
@@ -227,7 +229,9 @@ impl App {
                 match current_auth_type {
                     AuthType::Pin => set_auth_type(AuthType::None),
                     AuthType::Both => set_auth_type(AuthType::Biometric),
-                    AuthType::None | AuthType::Biometric => {}
+                    AuthType::None | AuthType::Biometric => {
+                        AuthPin::new().delete().unwrap_or_default();
+                    }
                 }
             }
         }

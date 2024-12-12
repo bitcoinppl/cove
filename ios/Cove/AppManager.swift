@@ -15,7 +15,7 @@ import SwiftUI
 
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
-    var authType = try? Database().globalConfig().authType() ?? AuthType.none
+    var authType = Database().globalConfig().authType()
 
     var nfcReader = NFCReader()
 
@@ -156,6 +156,9 @@ import SwiftUI
 
                 case let .authTypeChanged(authType):
                     self.authType = authType
+
+                case .hashedPinCodeChanged:
+                    ()
                 }
             }
         }

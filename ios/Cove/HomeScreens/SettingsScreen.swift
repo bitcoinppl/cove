@@ -1,6 +1,11 @@
 import LocalAuthentication
 import SwiftUI
 
+private enum SheetState: Equatable {
+    case newPin
+    case removePin
+}
+
 struct SettingsScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -8,6 +13,8 @@ struct SettingsScreen: View {
     @State private var notificationFrequency = 1
     @State private var networkChanged = false
     @State private var showConfirmationAlert = false
+
+    @State private var sheetState: TaggedItem<SheetState>? = nil
 
     let themes = allColorSchemes()
 
@@ -20,19 +27,37 @@ struct SettingsScreen: View {
     var useAuth: Binding<Bool> {
         Binding(
             get: { app.isAuthEnabled },
-            set: { app.dispatch(action: .toggleAuth) }
+            set: { _ in app.dispatch(action: .toggleAuth) }
         )
     }
 
     var useBiometric: Binding<Bool> {
         Binding(
-            get: { app.authType == .both || app.authType == .biometric },
-            set: { app.dispatch(action: .toggleBiometric) }
+            get: { app.authType == AuthType.both || app.authType == AuthType.biometric },
+            set: { _ in app.dispatch(action: .toggleBiometric) }
+        )
+    }
+
+    var usePin: Binding<Bool> {
+        Binding(
+            get: { app.authType == AuthType.both || app.authType == AuthType.pin },
+            set: { enabled in
+                if enabled { sheetState = .init(.removePin) } else { sheetState = .init(.newPin) }
+            }
         )
     }
 
     var body: some View {
         Form {
+            Section(header: Text("About")) {
+                HStack {
+                    Text("Version")
+                    Spacer()
+                    Text("0.0.0")
+                        .foregroundColor(.secondary)
+                }
+            }
+
             Section(header: Text("Network")) {
                 Picker(
                     "Network",
@@ -75,25 +100,22 @@ struct SettingsScreen: View {
                     Label("Require Authentication", systemImage: "lock.shield")
                 }
 
-                if useAuth {
+                if app.isAuthEnabled {
                     if canUseBiometrics() {
-                        Toggle(isOn: $useBiometric) {
+                        Toggle(isOn: useBiometric) {
                             Label("Enable Face ID", systemImage: "faceid")
                         }
                     }
 
-                    Toggle(isOn: $usePIN) {
-                        Label("Enable PIN", systemImage: "key.fill")
+                    Toggle(isOn: usePin) {
+                        Label("Enable PIN", systemImage: "lock.fill")
                     }
-                }
-            }
 
-            Section(header: Text("About")) {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text("0.0.0")
-                        .foregroundColor(.secondary)
+                    if usePin.wrappedValue {
+                        Button(action: {}) {
+                            Label("Change PIN", systemImage: "lock.open.rotation")
+                        }
+                    }
                 }
             }
         }
@@ -131,6 +153,7 @@ struct SettingsScreen: View {
                 secondaryButton: .cancel(Text("Cancel"))
             )
         }
+        .fullScreenCover(item: $sheetState, content: SheetContent)
         .preferredColorScheme(app.colorScheme)
         .gesture(
             networkChanged
@@ -150,6 +173,16 @@ struct SettingsScreen: View {
                     }
                 } : nil
         )
+    }
+
+    @ViewBuilder
+    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
+        switch state.item {
+        case .newPin:
+            EmptyView()
+        case .removePin:
+            EmptyView()
+        }
     }
 }
 
