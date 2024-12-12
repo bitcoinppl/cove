@@ -23,7 +23,6 @@ struct LockView<Content: View>: View {
     @ViewBuilder var content: Content
 
     /// View Properties
-    @State private var pin: String = ""
     @State private var animateField: Bool = false
     @State private var isUnlocked: Bool = false
     @State private var noBiometricAccess: Bool = false
@@ -64,14 +63,12 @@ struct LockView<Content: View>: View {
         .onChange(of: phase) { _, newValue in
             if newValue != .active, lockWhenBackground {
                 isUnlocked = false
-                pin = ""
             }
         }
     }
 
     var numberPadPinView: NumberPadPinView {
         NumberPadPinView(
-            pin: $pin,
             isUnlocked: $isUnlocked,
             isPinCorrect: isPinCorrect,
             pinLength: pinLength,
@@ -142,13 +139,8 @@ struct LockView<Content: View>: View {
             /// Requesting Biometric Unlock
             if await (try? bioMetricUnlock()) ?? false {
                 await MainActor.run {
-                    withAnimation(
-                        .snappy,
-                        completionCriteria: .logicallyComplete
-                    ) {
+                    withAnimation(.snappy) {
                         isUnlocked = true
-                    } completion: {
-                        pin = ""
                     }
                 }
             }

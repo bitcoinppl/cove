@@ -10,7 +10,6 @@ import SwiftUI
 struct NumberPadPinView: View {
     /// args
     var title: String = "Enter Pin"
-    @Binding var pin: String
     @Binding var isUnlocked: Bool
     
     let isPinCorrect: (String) -> Bool
@@ -21,6 +20,7 @@ struct NumberPadPinView: View {
     var onWrongPin: (String) -> Void = { _ in }
 
     /// private view properties
+    @State private var pin: String = ""
     @State private var animateField: Bool = false
     
     private var isBiometricAvailable: Bool {
@@ -159,7 +159,6 @@ struct NumberPadPinView: View {
         
         var body: some View {
             NumberPadPinView(
-                pin: $pin,
                 isUnlocked: $isUnlocked,
                 isPinCorrect: { $0 == "000000" },
                 pinLength: 6
