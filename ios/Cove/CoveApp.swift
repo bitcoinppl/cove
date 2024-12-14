@@ -349,31 +349,33 @@ struct CoveApp: App {
 
     @ViewBuilder
     var BodyView: some View {
-        SidebarContainer {
-            NavigationStack(path: $manager.router.routes) {
-                RouteView(manager: manager)
-                    .navigationDestination(
-                        for: Route.self,
-                        destination: { route in
-                            RouteView(manager: manager, route: route)
-                        }
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button(action: {
-                                withAnimation {
-                                    manager.toggleSidebar()
-                                }
-                            }) {
-                                Image(systemName: "line.horizontal.3")
-                                    .foregroundStyle(navBarColor)
+        LockView(lockType: manager.authType, isPinCorrect: { pin in AuthPin().check(pin: pin) }, isEnabled: manager.isAuthEnabled) {
+            SidebarContainer {
+                NavigationStack(path: $manager.router.routes) {
+                    RouteView(manager: manager)
+                        .navigationDestination(
+                            for: Route.self,
+                            destination: { route in
+                                RouteView(manager: manager, route: route)
                             }
-                            .contentShape(Rectangle())
-                            .foregroundStyle(navBarColor)
+                        )
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button(action: {
+                                    withAnimation {
+                                        manager.toggleSidebar()
+                                    }
+                                }) {
+                                    Image(systemName: "line.horizontal.3")
+                                        .foregroundStyle(navBarColor)
+                                }
+                                .contentShape(Rectangle())
+                                .foregroundStyle(navBarColor)
+                            }
                         }
-                    }
+                }
+                .tint(routeToTint)
             }
-            .tint(routeToTint)
         }
         .environment(manager)
     }
