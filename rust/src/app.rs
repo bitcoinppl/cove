@@ -127,7 +127,7 @@ impl App {
         match event {
             AppAction::UpdateRoute { routes } => {
                 debug!(
-                    "Route change OLD: {:?}, NEW: {:?}",
+                    "route change old: {:?}, new: {:?}",
                     state.read().router.routes,
                     routes
                 );
@@ -136,7 +136,7 @@ impl App {
             }
 
             AppAction::ChangeNetwork { network } => {
-                debug!("Network change, NEW: {:?}", network);
+                debug!("network change, new: {:?}", network);
 
                 Database::global()
                     .global_config
@@ -145,7 +145,7 @@ impl App {
             }
 
             AppAction::ChangeColorScheme(color_scheme) => {
-                debug!("Color scheme change, NEW: {:?}", color_scheme);
+                debug!("color scheme change, NEW: {:?}", color_scheme);
 
                 Database::global()
                     .global_config
@@ -154,7 +154,7 @@ impl App {
             }
 
             AppAction::SetSelectedNode(node) => {
-                debug!("Selected node change, NEW: {:?}", node);
+                debug!("selected node change, NEW: {:?}", node);
 
                 match Database::global().global_config.set_selected_node(&node) {
                     Ok(_) => {}
@@ -165,7 +165,7 @@ impl App {
             }
 
             AppAction::UpdateFiatPrices => {
-                debug!("Updating fiat prices");
+                debug!("updating fiat prices");
 
                 crate::task::spawn(async move {
                     match FIAT_CLIENT.get_prices().await {
@@ -178,7 +178,7 @@ impl App {
             }
 
             AppAction::UpdateFees => {
-                debug!("Updating fees");
+                debug!("updating fees");
 
                 crate::task::spawn(async move {
                     match FEE_CLIENT.get_fees().await {
@@ -193,11 +193,12 @@ impl App {
             }
 
             AppAction::UpdateAuthType(auth_type) => {
-                debug!("AuthType changed, NEW: {auth_type:?}");
+                debug!("authType changed, NEW: {auth_type:?}");
                 set_auth_type(auth_type);
             }
 
             AppAction::EnableAuth => {
+                debug!("enable auth");
                 let current_auth_type = FfiApp::global().auth_type();
                 if current_auth_type == AuthType::None {
                     set_auth_type(AuthType::Biometric);
@@ -205,10 +206,13 @@ impl App {
             }
 
             AppAction::DisableAuth => {
+                debug!("disable auth");
                 set_auth_type(AuthType::None);
             }
 
             AppAction::EnableBiometric => {
+                debug!("enable biometric");
+
                 let current_auth_type = FfiApp::global().auth_type();
                 match current_auth_type {
                     AuthType::None => set_auth_type(AuthType::Biometric),
@@ -218,15 +222,19 @@ impl App {
             }
 
             AppAction::DisableBiometric => {
+                debug!("disable biometric");
+
                 let current_auth_type = FfiApp::global().auth_type();
                 match current_auth_type {
                     AuthType::Biometric => set_auth_type(AuthType::None),
-                    AuthType::Both => set_auth_type(AuthType::Biometric),
+                    AuthType::Both => set_auth_type(AuthType::Pin),
                     _ => {}
                 };
             }
 
             AppAction::SetPin(pin) => {
+                debug!("set pin");
+
                 if let Err(err) = AuthPin::new().set(pin) {
                     return error!("unable to set pin: {err:?}");
                 }
@@ -240,6 +248,8 @@ impl App {
             }
 
             AppAction::DisablePin => {
+                debug!("disable pin");
+
                 if let Err(err) = AuthPin::new().delete() {
                     return error!("unable to delete pin: {err:?}");
                 }
