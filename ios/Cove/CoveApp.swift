@@ -468,8 +468,7 @@ struct CoveApp: App {
                 .onChange(of: phase) { oldPhase, newPhase in
                     Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase)")
 
-                    // TODO: only do this if PIN and/or Biometric is enabledA
-                    if newPhase == .background {
+                    if manager.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
                         UIApplication.shared.connectedScenes
                             .compactMap { $0 as? UIWindowScene }
                             .flatMap(\.windows)
