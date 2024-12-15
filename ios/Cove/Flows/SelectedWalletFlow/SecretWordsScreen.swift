@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct SecretWordsScreen: View {
+    @Environment(AppManager.self) private var app
+
     let id: WalletId
 
     // private
@@ -103,6 +105,7 @@ struct SecretWordsScreen: View {
         }
         .padding()
         .onAppear {
+            app.lock()
             guard words == nil else { return }
             do { words = try Mnemonic(id: id) }
             catch { errorMessage = error.localizedDescription }
@@ -131,8 +134,10 @@ struct SecretWordsScreen: View {
 
 #Preview("12") {
     SecretWordsScreen(id: WalletId(), words: Mnemonic.preview(numberOfBip39Words: .twelve))
+        .environment(AppManager())
 }
 
 #Preview("24") {
     SecretWordsScreen(id: WalletId(), words: Mnemonic.preview(numberOfBip39Words: .twentyFour))
+        .environment(AppManager())
 }

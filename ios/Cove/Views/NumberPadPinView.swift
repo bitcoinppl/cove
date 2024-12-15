@@ -10,9 +10,10 @@ import SwiftUI
 struct NumberPadPinView: View {
     /// args
     var title: String
-    @Binding var isUnlocked: Bool
+    @Binding var lockState: LockState
 
     let isPinCorrect: (String) -> Bool
+    var showPin: Bool
     var pinLength: Int
 
     // back button
@@ -29,16 +30,18 @@ struct NumberPadPinView: View {
 
     public init(
         title: String = "Enter Pin",
-        isUnlocked: Binding<Bool> = .constant(false),
+        lockState: Binding<LockState> = .constant(.unlocked),
         isPinCorrect: @escaping (String) -> Bool,
+        showPin: Bool = true,
         pinLength: Int = 6,
         backAction: (() -> Void)? = nil,
         onUnlock: @escaping (String) -> Void = { _ in },
         onWrongPin: @escaping (String) -> Void = { _ in }
     ) {
         self.title = title
-        _isUnlocked = isUnlocked
+        _lockState = lockState
         self.isPinCorrect = isPinCorrect
+        self.showPin = showPin
         self.pinLength = pinLength
         backEnabled = backAction != nil
         self.backAction = backAction ?? {}
@@ -56,23 +59,14 @@ struct NumberPadPinView: View {
     }
 
     var body: some View {
-        VStack(spacing: 15) {
-            if backEnabled {
-                HStack {
-                    Spacer()
-                    Button(action: backAction) {
-                        Text("Cancel")
-                    }
-                    .font(.headline.bold())
-                    .foregroundStyle(.white)
-                }
-                .padding(.bottom, 10)
-            }
-
+        VStack(spacing: 16) {
             Text(title)
                 .font(.title.bold())
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(.white)
+                .padding(.vertical)
+
+            Spacer()
 
             /// Adding Wiggling Animation for Wrong Password With Keyframe Animator
             HStack(spacing: 10) {
@@ -85,10 +79,11 @@ struct NumberPadPinView: View {
                             /// Safe Check
                             if pin.count > index {
                                 let index = pin.index(pin.startIndex, offsetBy: index)
-                                let string = String(pin[index])
+                                let string = showPin ? String(pin[index]) : "●"
 
                                 Text(string)
-                                    .font(.title.bold())
+                                    .font(showPin ? .title : .body)
+                                    .fontWeight(.bold)
                                     .foregroundStyle(.black)
                             }
                         }
@@ -124,60 +119,70 @@ struct NumberPadPinView: View {
                 }
             }
             .padding(.top, 15)
-            .frame(maxHeight: .infinity)
+
+            Spacer()
+            Spacer()
 
             /// Custom Number Pad
-            GeometryReader { _ in
-                LazyVGrid(columns: Array(repeating: GridItem(), count: 3), content: {
-                    ForEach(1 ... 9, id: \.self) { number in
-                        Button(action: {
-                            guard pin.count < pinLength else { return }
-                            pin.append(String(number))
-                        }, label: {
-                            Text(String(number))
-                                .font(.title)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
-                                .contentShape(.rect)
-                        })
-                        .tint(.white)
-                    }
-
-                    // take up space
-                    Button(action: {}) {}
-
+            LazyVGrid(columns: Array(repeating: GridItem(), count: 3), content: {
+                ForEach(1 ... 9, id: \.self) { number in
                     Button(action: {
                         guard pin.count < pinLength else { return }
-                        pin.append("0")
+                        pin.append(String(number))
                     }, label: {
-                        Text("0")
+                        Text(String(number))
                             .font(.title)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 20)
                             .contentShape(.rect)
                     })
                     .tint(.white)
+                }
 
-                    /// 0 and Back Button
-                    Button(action: {
-                        if !pin.isEmpty { pin.removeLast() }
-                    }, label: {
-                        Image(systemName: "delete.backward")
-                            .font(.title)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 20)
-                            .contentShape(.rect)
-                    })
-                    .tint(.white)
+                // show back button if enabled
+                Group {
+                    if backEnabled {
+                        Button(action: backAction) {
+                            Text("Cancel")
+                        }
+                        .foregroundStyle(.white)
+                    } else {
+                        // take up space
+                        Button(action: {}) {}
+                    }
+                }
+
+                Button(action: {
+                    guard pin.count < pinLength else { return }
+                    pin.append("0")
+                }, label: {
+                    Text("0")
+                        .font(.title)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .contentShape(.rect)
                 })
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            }
+                .tint(.white)
+
+                /// 0 and Back Button
+                Button(action: {
+                    if !pin.isEmpty { pin.removeLast() }
+                }, label: {
+                    Image(systemName: "delete.backward")
+                        .font(.title)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .contentShape(.rect)
+                })
+                .tint(.white)
+            })
+            .padding(.vertical)
             .onChange(of: pin) { _, newValue in
                 if newValue.count == pinLength {
                     /// Validate Pin
                     if isPinCorrect(pin) {
                         withAnimation(.snappy, completionCriteria: .logicallyComplete) {
-                            isUnlocked = true
+                            lockState = .unlocked
                         } completion: {
                             onUnlock(pin)
                             pin = ""
@@ -196,12 +201,30 @@ struct NumberPadPinView: View {
 #Preview {
     struct Container: View {
         @State var pin = ""
-        @State var isUnlocked = false
+        @State var lockState: LockState = .locked
 
         var body: some View {
             NumberPadPinView(
-                isUnlocked: $isUnlocked,
+                lockState: $lockState,
                 isPinCorrect: { $0 == "000000" },
+                pinLength: 6
+            )
+        }
+    }
+
+    return Container()
+}
+
+#Preview("hidden pin") {
+    struct Container: View {
+        @State var pin = ""
+        @State var lockState: LockState = .locked
+
+        var body: some View {
+            NumberPadPinView(
+                lockState: $lockState,
+                isPinCorrect: { $0 == "000000" },
+                showPin: false,
                 pinLength: 6
             )
         }

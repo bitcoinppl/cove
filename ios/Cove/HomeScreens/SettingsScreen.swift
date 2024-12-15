@@ -2,7 +2,7 @@ import LocalAuthentication
 import SwiftUI
 
 private enum SheetState: Equatable {
-    case newPin, removePin, changePin, disableAuth, disableBiometric, enableAuth
+    case newPin, removePin, changePin, disableAuth, disableBiometric, enableAuth, enableBiometric
 }
 
 struct SettingsScreen: View {
@@ -30,9 +30,8 @@ struct SettingsScreen: View {
                 if enable { return sheetState = .init(.enableAuth) }
 
                 switch app.authType {
-                case .both, .pin: sheetState = .init(.removePin)
-                case .biometric: sheetState = .init(.disableAuth)
                 case .none: Log.error("Trying to disable auth when auth is not enabled")
+                default: sheetState = .init(.disableAuth)
                 }
             }
         )
@@ -41,15 +40,19 @@ struct SettingsScreen: View {
     var useBiometric: Binding<Bool> {
         Binding(
             get: { app.authType == AuthType.both || app.authType == AuthType.biometric },
-            set: { _ in sheetState = .init(.disableBiometric) }
+            set: { enable in
+                if enable { sheetState = .init(.enableBiometric) }
+                else { sheetState = .init(.disableBiometric) }
+            }
         )
     }
 
     var usePin: Binding<Bool> {
         Binding(
             get: { app.authType == AuthType.both || app.authType == AuthType.pin },
-            set: { turnOn in
-                if turnOn { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
+            set: { enable in
+                if enable { sheetState = .init(.newPin) }
+                else { sheetState = .init(.removePin) }
             }
         )
     }
@@ -253,7 +256,7 @@ struct SettingsScreen: View {
 
         case .disableAuth:
             LockView(
-                lockType: app.authType,
+                lockType: app.authType == .biometric ? .biometric : .pin,
                 isPinCorrect: checkPin,
                 onUnlock: { _ in
                     app.dispatch(action: .disableAuth)
@@ -269,6 +272,18 @@ struct SettingsScreen: View {
                 isPinCorrect: checkPin,
                 onUnlock: { _ in
                     app.dispatch(action: .disableBiometric)
+                    sheetState = .none
+                },
+                backAction: { sheetState = .none },
+                content: { EmptyView() }
+            )
+
+        case .enableBiometric:
+            LockView(
+                lockType: .biometric,
+                isPinCorrect: { _ in true },
+                onUnlock: { _ in
+                    app.dispatch(action: .enableBiometric)
                     sheetState = .none
                 },
                 backAction: { sheetState = .none },

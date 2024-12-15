@@ -494,7 +494,6 @@ struct SendFlowSetAmountScreen: View {
         sendAmountFiat = manager.fiatAmountToString(fiatAmount)
 
         if oldValue.contains(","), metadata.selectedUnit == .sat {
-            print("old value: \(oldValue) CONTIANS ,")
             setFormattedAmount(String(amountSats))
         }
     }

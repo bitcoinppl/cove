@@ -45,11 +45,14 @@ public extension EnvironmentValues {
 struct CoveApp: App {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var phase
+    @AppStorage("lockedAt") var lockedAt: Date = .init()
 
-    @State var manager: AppManager
+    @State var app: AppManager
     @State var id = UUID()
 
+    @State var showCover: Bool = true
     @State var scannedCode: TaggedItem<StringOrData>? = .none
+    @State var coverClearTask: Task<Void, Never>?
 
     @ViewBuilder
     private func alertMessage(alert: TaggedItem<AppAlertState>) -> some View {
@@ -92,8 +95,8 @@ struct CoveApp: App {
         switch alert.item {
         case let .duplicateWallet(walletId):
             Button("OK") {
-                manager.alertState = .none
-                try? manager.rust.selectWallet(id: walletId)
+                app.alertState = .none
+                try? app.rust.selectWallet(id: walletId)
             }
         case .invalidWordGroup,
              .errorImportingHotWallet,
@@ -102,7 +105,7 @@ struct CoveApp: App {
              .errorImportingHardwareWallet,
              .invalidFileFormat:
             Button("OK") {
-                manager.alertState = .none
+                app.alertState = .none
             }
         case let .addressWrongNetwork(address: address, network: _, currentNetwork: _):
             Button("Copy Address") {
@@ -110,7 +113,7 @@ struct CoveApp: App {
             }
 
             Button("Cancel") {
-                manager.alertState = .none
+                app.alertState = .none
             }
         case let .noWalletSelected(address):
             Button("Copy Address") {
@@ -118,7 +121,7 @@ struct CoveApp: App {
             }
 
             Button("Cancel") {
-                manager.alertState = .none
+                app.alertState = .none
             }
         case let .foundAddress(address, amount):
             Button("Copy Address") {
@@ -130,23 +133,23 @@ struct CoveApp: App {
                     let route = RouteFactory().sendSetAmount(
                         id: id, address: address, amount: amount
                     )
-                    manager.pushRoute(route)
-                    manager.alertState = .none
+                    app.pushRoute(route)
+                    app.alertState = .none
                 }
             }
 
             Button("Cancel") {
-                manager.alertState = .none
+                app.alertState = .none
             }
         case .noCameraPermission:
             Button("OK") {
-                manager.alertState = .none
+                app.alertState = .none
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
         case .failedToScanQr, .noUnsignedTransactionFound:
             Button("OK") {
-                manager.alertState = .none
+                app.alertState = .none
             }
         }
     }
@@ -156,23 +159,23 @@ struct CoveApp: App {
         _ = Keychain(keychain: KeychainAccessor())
         _ = Device(device: DeviceAccesor())
 
-        let manager = AppManager()
-        self.manager = manager
+        let app = AppManager()
+        self.app = app
     }
 
     private var showingAlert: Binding<Bool> {
         Binding(
-            get: { manager.alertState != nil },
+            get: { app.alertState != nil },
             set: { newValue in
                 if !newValue {
-                    manager.alertState = .none
+                    app.alertState = .none
                 }
             }
         )
     }
 
     var navBarColor: Color {
-        switch manager.currentRoute {
+        switch app.currentRoute {
         case .newWallet(.hotWallet(.create)):
             Color.white
         case .newWallet(.hotWallet(.verifyWords)):
@@ -187,7 +190,6 @@ struct CoveApp: App {
     @MainActor
     func importHotWallet(_ words: [String]) {
         do {
-            let app = manager
             let manager = ImportWalletManager()
             let walletMetadata = try manager.rust.importWallet(enteredWords: [words])
             try app.rust.selectWallet(id: walletMetadata.id)
@@ -195,38 +197,36 @@ struct CoveApp: App {
             switch error {
             case let .InvalidWordGroup(error):
                 Log.debug("Invalid words: \(error)")
-                manager.alertState = TaggedItem(.invalidWordGroup)
+                app.alertState = TaggedItem(.invalidWordGroup)
             case let .WalletAlreadyExists(walletId):
-                manager.alertState = TaggedItem(.duplicateWallet(walletId))
+                app.alertState = TaggedItem(.duplicateWallet(walletId))
             default:
                 Log.error("Unable to import wallet: \(error)")
-                manager.alertState = TaggedItem(
+                app.alertState = TaggedItem(
                     .errorImportingHotWallet(error.localizedDescription))
             }
         } catch {
             Log.error("Unknown error \(error)")
-            manager.alertState = TaggedItem(
+            app.alertState = TaggedItem(
                 .errorImportingHotWallet(error.localizedDescription))
         }
     }
 
     func importColdWallet(_ export: HardwareExport) {
-        let app = manager
-
         do {
             let wallet = try Wallet.newFromExport(export: export)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
-            manager.alertState = TaggedItem(.importedSuccessfully)
+            app.alertState = TaggedItem(.importedSuccessfully)
             try app.rust.selectWallet(id: id)
         } catch let WalletError.WalletAlreadyExists(id) {
-            manager.alertState = TaggedItem(.duplicateWallet(id))
+            app.alertState = TaggedItem(.duplicateWallet(id))
 
             if (try? app.rust.selectWallet(id: id)) == nil {
-                manager.alertState = TaggedItem(.unableToSelectWallet)
+                app.alertState = TaggedItem(.unableToSelectWallet)
             }
         } catch {
-            manager.alertState = TaggedItem(
+            app.alertState = TaggedItem(
                 .errorImportingHardwareWallet(error.localizedDescription))
         }
     }
@@ -238,12 +238,12 @@ struct CoveApp: App {
         let selectedWallet = Database().globalConfig().selectedWallet()
 
         if selectedWallet == nil {
-            manager.alertState = TaggedItem(AppAlertState.noWalletSelected(address))
+            app.alertState = TaggedItem(AppAlertState.noWalletSelected(address))
             return
         }
 
         if network != currentNetwork {
-            manager.alertState = TaggedItem(
+            app.alertState = TaggedItem(
                 AppAlertState.addressWrongNetwork(
                     address: address, network: network, currentNetwork: currentNetwork
                 ))
@@ -251,7 +251,7 @@ struct CoveApp: App {
         }
 
         let amount = addressWithNetwork.amount()
-        manager.alertState = TaggedItem(.foundAddress(address, amount))
+        app.alertState = TaggedItem(.foundAddress(address, amount))
     }
 
     func handleTransaction(_ transaction: BitcoinTransaction) {
@@ -263,7 +263,7 @@ struct CoveApp: App {
         let txnRecord = db.getTx(txId: transaction.txId())
 
         guard let txnRecord else {
-            manager.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
             return
         }
 
@@ -271,7 +271,7 @@ struct CoveApp: App {
             id: txnRecord.walletId(), details: txnRecord.confirmDetails()
         )
 
-        manager.pushRoute(route)
+        app.pushRoute(route)
     }
 
     func handleFileOpen(_ url: URL) {
@@ -293,7 +293,7 @@ struct CoveApp: App {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
-                manager.alertState = TaggedItem(
+                app.alertState = TaggedItem(
                     .invalidFileFormat(multiFormatError.localizedDescription))
 
             case let FileHandlerError.OpenFile(error):
@@ -329,12 +329,12 @@ struct CoveApp: App {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
                 Log.error("Unrecognized format mulit format error: \(multiFormatError)")
-                manager.alertState = TaggedItem(
+                app.alertState = TaggedItem(
                     .invalidFileFormat(multiFormatError.localizedDescription))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
-                manager.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
+                app.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
             }
         }
     }
@@ -343,43 +343,57 @@ struct CoveApp: App {
     func SheetContent(_ state: TaggedItem<AppSheetState>) -> some View {
         switch state.item {
         case .qr:
-            QrCodeScanView(app: manager, scannedCode: $scannedCode)
+            QrCodeScanView(app: app, scannedCode: $scannedCode)
         }
     }
 
     @ViewBuilder
     var BodyView: some View {
-        SidebarContainer {
-            NavigationStack(path: $manager.router.routes) {
-                RouteView(manager: manager)
-                    .navigationDestination(
-                        for: Route.self,
-                        destination: { route in
-                            RouteView(manager: manager, route: route)
-                        }
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button(action: {
-                                withAnimation {
-                                    manager.toggleSidebar()
+        Group {
+            if showCover {
+                CoverView()
+            } else {
+                LockView(
+                    lockType: app.authType,
+                    isPinCorrect: app.checkPin,
+                    showPin: false,
+                    lockState: $app.lockState,
+                    onUnlock: { _ in showCover = false }
+                ) {
+                    SidebarContainer {
+                        NavigationStack(path: $app.router.routes) {
+                            RouteView(app: app)
+                                .navigationDestination(
+                                    for: Route.self,
+                                    destination: { route in
+                                        RouteView(app: app, route: route)
+                                    }
+                                )
+                                .toolbar {
+                                    ToolbarItem(placement: .navigationBarLeading) {
+                                        Button(action: {
+                                            withAnimation {
+                                                app.toggleSidebar()
+                                            }
+                                        }) {
+                                            Image(systemName: "line.horizontal.3")
+                                                .foregroundStyle(navBarColor)
+                                        }
+                                        .contentShape(Rectangle())
+                                        .foregroundStyle(navBarColor)
+                                    }
                                 }
-                            }) {
-                                Image(systemName: "line.horizontal.3")
-                                    .foregroundStyle(navBarColor)
-                            }
-                            .contentShape(Rectangle())
-                            .foregroundStyle(navBarColor)
                         }
+                        .tint(routeToTint)
                     }
+                }
             }
-            .tint(routeToTint)
         }
-        .environment(manager)
+        .environment(app)
     }
 
     var routeToTint: Color {
-        switch manager.router.routes.last {
+        switch app.router.routes.last {
         case .settings, .walletSettings:
             .blue
         default:
@@ -392,14 +406,14 @@ struct CoveApp: App {
             id = UUID()
         }
 
-        manager.dispatch(action: AppAction.updateRoute(routes: new))
+        app.dispatch(action: AppAction.updateRoute(routes: new))
     }
 
     func onChangeQr(
         _: TaggedItem<StringOrData>?, _ scannedCode: TaggedItem<StringOrData>?
     ) {
         guard let scannedCode else { return }
-        manager.sheetState = .none
+        app.sheetState = .none
         handleScannedCode(scannedCode.item)
     }
 
@@ -415,66 +429,101 @@ struct CoveApp: App {
         handleScannedCode(StringOrData(scannedMessage))
     }
 
+    func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
+        Log.debug(
+            "[SCENE PHASE]: \(oldPhase) --> \(newPhase) && using biometrics: \(app.isUsingBiometrics)"
+        )
+
+        if app.isAuthEnabled, !app.isUsingBiometrics, oldPhase == .active,
+           newPhase == .inactive
+        {
+            coverClearTask?.cancel()
+            showCover = true
+
+            // prevent getting stuck on show cover
+            coverClearTask = Task {
+                try? await Task.sleep(for: .milliseconds(200))
+                showCover = false
+            }
+
+            app.lockState = .locked
+            lockedAt = Date.now
+        }
+
+        // close all open sheets when going into the background
+        if app.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
+            lockedAt = Date.now
+
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .forEach { window in
+                    window.rootViewController?.dismiss(animated: false)
+                }
+        }
+
+        if app.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
+            showCover = false
+
+            // less than 15 seconds, auto unlock if PIN only
+            // TODO: make this configurable and put in DB
+            if app.authType == .pin, Date.now.timeIntervalSince(lockedAt) < 15 {
+                app.lockState = .locked
+            }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             BodyView
                 .implementPopupView()
                 .id(id)
                 .environment(\.navigate) { route in
-                    manager.pushRoute(route)
+                    app.pushRoute(route)
                 }
-                .environment(manager)
-                .preferredColorScheme(manager.colorScheme)
-                .onChange(of: manager.router.routes, onChangeRoute)
-                .onChange(of: manager.selectedNetwork) { id = UUID() }
+                .environment(app)
+                .preferredColorScheme(app.colorScheme)
+                .onChange(of: app.router.routes, onChangeRoute)
+                .onChange(of: app.selectedNetwork) { id = UUID() }
                 // QR code scanning
                 .onChange(of: scannedCode, onChangeQr)
                 // NFC scanning
-                .onChange(of: manager.nfcReader.scannedMessage, onChangeNfc)
-                .onChange(of: manager.nfcReader.scannedMessageData, onChangeNfcData)
+                .onChange(of: app.nfcReader.scannedMessage, onChangeNfc)
+                .onChange(of: app.nfcReader.scannedMessageData, onChangeNfcData)
                 .alert(
-                    manager.alertState?.item.title() ?? "Alert",
+                    app.alertState?.item.title() ?? "Alert",
                     isPresented: showingAlert,
-                    presenting: manager.alertState,
+                    presenting: app.alertState,
                     actions: alertButtons,
                     message: alertMessage
                 )
-                .sheet(item: $manager.sheetState, content: SheetContent)
+                .sheet(item: $app.sheetState, content: SheetContent)
                 .gesture(
-                    manager.router.routes.isEmpty
+                    app.router.routes.isEmpty
                         ? DragGesture()
                         .onChanged { gesture in
                             if gesture.startLocation.x < 25, gesture.translation.width > 100 {
                                 withAnimation(.spring()) {
-                                    manager.isSidebarVisible = true
+                                    app.isSidebarVisible = true
                                 }
                             }
                         }
                         .onEnded { gesture in
                             if gesture.startLocation.x < 20, gesture.translation.width > 50 {
                                 withAnimation(.spring()) {
-                                    manager.isSidebarVisible = true
+                                    app.isSidebarVisible = true
                                 }
                             }
                         } : nil
                 )
                 .task {
-                    await manager.rust.initOnStart()
-                    await MainActor.run { manager.asyncRuntimeReady = true }
+                    await app.rust.initOnStart()
+                    await MainActor.run { app.asyncRuntimeReady = true }
                 }
                 .onOpenURL(perform: handleFileOpen)
-                .onChange(of: phase) { oldPhase, newPhase in
-                    Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase)")
-
-                    // TODO: only do this if PIN and/or Biometric is enabledA
-                    if newPhase == .background {
-                        UIApplication.shared.connectedScenes
-                            .compactMap { $0 as? UIWindowScene }
-                            .flatMap(\.windows)
-                            .forEach { window in
-                                window.rootViewController?.dismiss(animated: false)
-                            }
-                    }
+                .onChange(of: phase, initial: true, handleScenePhaseChange)
+                .onAppear {
+                    if app.isAuthEnabled { app.lockState = .locked } else { app.lockState = .unlocked }
                 }
         }
     }
