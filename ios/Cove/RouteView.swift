@@ -2,19 +2,19 @@ import ActivityIndicatorView
 import SwiftUI
 
 struct RouteView: View {
-    @Bindable var manager: AppManager
+    @Bindable var app: AppManager
     @State var route: Route
 
-    init(manager: AppManager, route: Route? = nil) {
-        self.manager = manager
-        self.route = route ?? manager.router.default
+    init(app: AppManager, route: Route? = nil) {
+        self.app = app
+        self.route = route ?? app.router.default
     }
 
     var body: some View {
         ZStack {
-            if manager.asyncRuntimeReady {
-                routeToView(manager: manager, route: route)
-                    .id(manager.routeId)
+            if app.asyncRuntimeReady {
+                routeToView(app: app, route: route)
+                    .id(app.routeId)
             } else {
                 VStack {
                     ActivityIndicatorView(
@@ -26,7 +26,7 @@ struct RouteView: View {
                 }
             }
         }
-        .onChange(of: manager.router.default) { _, newRoute in
+        .onChange(of: app.router.default) { _, newRoute in
             route = newRoute
         }
         .tint(.blue)
@@ -35,26 +35,28 @@ struct RouteView: View {
 }
 
 @MainActor @ViewBuilder
-func routeToView(manager: AppManager, route: Route) -> some View {
-    switch route {
-    case let .loadAndReset(resetTo: routes, afterMillis: time):
-        LoadAndResetView(nextRoute: routes.routes, loadingTimeMs: Int(time))
-    case let .walletSettings(id):
-        WalletSettingsContainer(id: id)
-            .environment(manager)
-    case .settings:
-        SettingsScreen()
-    case .listWallets:
-        ListWalletsScreen(manager: manager)
-    case let .newWallet(route: route):
-        NewWalletContainer(route: route)
-    case let .selectedWallet(walletId):
-        SelectedWalletContainer(id: walletId)
-    case let .secretWords(id: walletId):
-        SecretWordsScreen(id: walletId)
-    case let .transactionDetails(id: id, details: details):
-        TransactionsDetailScreen(id: id, transactionDetails: details)
-    case let .send(sendRoute):
-        SendRouteContainer(sendRoute: sendRoute)
+func routeToView(app: AppManager, route: Route) -> some View {
+    Group {
+        switch route {
+        case let .loadAndReset(resetTo: routes, afterMillis: time):
+            LoadAndResetView(nextRoute: routes.routes, loadingTimeMs: Int(time))
+        case let .walletSettings(id):
+            WalletSettingsContainer(id: id)
+        case .settings:
+            SettingsScreen()
+        case .listWallets:
+            ListWalletsScreen()
+        case let .newWallet(route: route):
+            NewWalletContainer(route: route)
+        case let .selectedWallet(walletId):
+            SelectedWalletContainer(id: walletId)
+        case let .secretWords(id: walletId):
+            SecretWordsScreen(id: walletId)
+        case let .transactionDetails(id: id, details: details):
+            TransactionsDetailScreen(id: id, transactionDetails: details)
+        case let .send(sendRoute):
+            SendRouteContainer(sendRoute: sendRoute)
+        }
     }
+    .environment(app)
 }

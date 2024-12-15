@@ -262,6 +262,7 @@ private var isBiometricAvailable: Bool {
             Text("Hello World")
         }
     }
+    .environment(AppManager())
 }
 
 #Preview("need permissions") {
@@ -270,4 +271,27 @@ private var isBiometricAvailable: Bool {
             Text("Hello World")
         }
     }
+    .environment(AppManager())
+}
+
+#Preview("with navigation") {
+    NavigationStack {
+        LockView(lockType: .pin, isPinCorrect: { $0 == "111111" }) {
+            VStack {
+                Text("Hello World")
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    ()
+                }
+            }
+
+            ToolbarItem(placement: .principal) {
+                Text("Lock").foregroundStyle(.white)
+            }
+        }
+    }
+    .environment(AppManager())
 }

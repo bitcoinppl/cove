@@ -22,6 +22,8 @@ import SwiftUI
     var prices: PriceResponse?
     var fees: FeeResponse?
 
+    var lockState: LockState = .locked
+
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
@@ -75,6 +77,10 @@ import SwiftUI
 
     public func updateWalletVm(_ vm: WalletManager) {
         walletManager = vm
+    }
+
+    public func checkPin(_ pin: String) -> Bool {
+        AuthPin().check(pin: pin)
     }
 
     var isAuthEnabled: Bool {

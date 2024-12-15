@@ -8,13 +8,11 @@
 import SwiftUI
 
 struct ListWalletsScreen: View {
-    let manager: AppManager
+    @Environment(AppManager.self) private var app
     @State var wallets: [WalletMetadata]
     @Environment(\.navigate) private var navigate
 
-    init(manager: AppManager) {
-        self.manager = manager
-
+    init() {
         do {
             wallets = try Database().wallets().all()
             Log.debug("Wallets: \(wallets)")
@@ -40,24 +38,24 @@ struct ListWalletsScreen: View {
                     }
                     .frame(width: 300, height: 200)
                     .onTapGesture {
-                        try? manager.rust.selectWallet(id: wallet.id)
+                        try? app.rust.selectWallet(id: wallet.id)
                     }
                 }
                 .padding(.top, 10)
             }
         }
         .onAppear {
-            if manager.numberOfWallets < 2 {
+            if app.numberOfWallets < 2 {
                 // wallet empty make a new one
                 if wallets.isEmpty {
                     Log.debug("No wallets found, going to new wallet screen")
-                    manager.resetRoute(to: RouteFactory().newWalletSelect())
+                    app.resetRoute(to: RouteFactory().newWalletSelect())
                     return
                 }
 
                 // only has one wallet, so go directly to it
                 if let wallet = wallets.first {
-                    manager.resetRoute(to: Route.selectedWallet(wallet.id))
+                    app.resetRoute(to: Route.selectedWallet(wallet.id))
                 }
             }
         }
@@ -69,5 +67,6 @@ struct ListWalletsScreen: View {
 }
 
 #Preview {
-    ListWalletsScreen(manager: AppManager())
+    ListWalletsScreen()
+        .environment(AppManager())
 }

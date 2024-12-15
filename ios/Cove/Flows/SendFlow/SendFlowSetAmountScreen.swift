@@ -230,8 +230,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                           selectedFeeRate != nil,
-                           Address.isValid(address)
+                            selectedFeeRate != nil,
+                            Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -443,8 +443,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -457,8 +457,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -494,7 +494,6 @@ struct SendFlowSetAmountScreen: View {
         sendAmountFiat = manager.fiatAmountToString(fiatAmount)
 
         if oldValue.contains(","), metadata.selectedUnit == .sat {
-            print("old value: \(oldValue) CONTIANS ,")
             setFormattedAmount(String(amountSats))
         }
     }
@@ -640,10 +639,10 @@ struct SendFlowSetAmountScreen: View {
 
         guard
             let feeRateOptions = try? await manager.rust
-            .feeRateOptionsWithTotalFee(
-                feeRateOptions: feeRateOptionsBase, amount: amount,
-                address: address
-            )
+                .feeRateOptionsWithTotalFee(
+                    feeRateOptions: feeRateOptionsBase, amount: amount,
+                    address: address
+                )
         else { return }
 
         await MainActor.run {
