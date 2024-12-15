@@ -427,7 +427,7 @@ struct CoveApp: App {
     }
 
     func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
-        Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase) || using biometrics: \(manager.isUsingBiometrics) ")
+        Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase) && using biometrics: \(manager.isUsingBiometrics) ")
         if manager.isAuthEnabled, !manager.isUsingBiometrics, oldPhase == .active, newPhase == .inactive {
             showCover = true
             lockState = .locked
@@ -437,7 +437,6 @@ struct CoveApp: App {
         // close all open sheets when going into the background
         if manager.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
             showCover = true
-            lockState = .locked
             lockedAt = Date.now
 
             UIApplication.shared.connectedScenes
@@ -451,8 +450,9 @@ struct CoveApp: App {
         if manager.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
             showCover = false
 
-            // less than 5 seconds, auto unlock
-            if manager.authType == .pin, Date.now.timeIntervalSince(lockedAt) < 5 {
+            // less than 15 seconds, auto unlock if PIN only
+            // TODO: make this configurable and put in DB
+            if manager.authType == .pin, Date.now.timeIntervalSince(lockedAt) < 15 {
                 lockState = .unlocked
             }
         }
