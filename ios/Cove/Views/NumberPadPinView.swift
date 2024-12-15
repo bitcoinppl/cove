@@ -10,7 +10,7 @@ import SwiftUI
 struct NumberPadPinView: View {
     /// args
     var title: String
-    @Binding var isUnlocked: Bool
+    @Binding var lockState: LockState
 
     let isPinCorrect: (String) -> Bool
     var pinLength: Int
@@ -29,7 +29,7 @@ struct NumberPadPinView: View {
 
     public init(
         title: String = "Enter Pin",
-        isUnlocked: Binding<Bool> = .constant(false),
+        lockState: Binding<LockState> = .constant(.unlocked),
         isPinCorrect: @escaping (String) -> Bool,
         pinLength: Int = 6,
         backAction: (() -> Void)? = nil,
@@ -37,7 +37,7 @@ struct NumberPadPinView: View {
         onWrongPin: @escaping (String) -> Void = { _ in }
     ) {
         self.title = title
-        _isUnlocked = isUnlocked
+        _lockState = lockState
         self.isPinCorrect = isPinCorrect
         self.pinLength = pinLength
         backEnabled = backAction != nil
@@ -177,7 +177,7 @@ struct NumberPadPinView: View {
                     /// Validate Pin
                     if isPinCorrect(pin) {
                         withAnimation(.snappy, completionCriteria: .logicallyComplete) {
-                            isUnlocked = true
+                            lockState = .unlocked
                         } completion: {
                             onUnlock(pin)
                             pin = ""
@@ -196,11 +196,11 @@ struct NumberPadPinView: View {
 #Preview {
     struct Container: View {
         @State var pin = ""
-        @State var isUnlocked = false
+        @State var lockState: LockState = .locked
 
         var body: some View {
             NumberPadPinView(
-                isUnlocked: $isUnlocked,
+                lockState: $lockState,
                 isPinCorrect: { $0 == "000000" },
                 pinLength: 6
             )

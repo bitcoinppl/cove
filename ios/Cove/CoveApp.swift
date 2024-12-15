@@ -49,6 +49,7 @@ struct CoveApp: App {
     @State var manager: AppManager
     @State var id = UUID()
 
+    @State var lockState: LockState = .locked
     @State var scannedCode: TaggedItem<StringOrData>? = .none
 
     @ViewBuilder
@@ -349,7 +350,7 @@ struct CoveApp: App {
 
     @ViewBuilder
     var BodyView: some View {
-        LockView(lockType: manager.authType, isPinCorrect: { pin in AuthPin().check(pin: pin) }, isEnabled: manager.isAuthEnabled) {
+        LockView(lockType: manager.authType, isPinCorrect: { pin in AuthPin().check(pin: pin) }, lockState: $lockState) {
             SidebarContainer {
                 NavigationStack(path: $manager.router.routes) {
                     RouteView(manager: manager)
@@ -475,6 +476,15 @@ struct CoveApp: App {
                             .forEach { window in
                                 window.rootViewController?.dismiss(animated: false)
                             }
+
+                        lockState = .locked
+                    }
+                }
+                .onAppear {
+                    if manager.isAuthEnabled {
+                        lockState = .locked
+                    } else {
+                        lockState = .unlocked
                     }
                 }
         }

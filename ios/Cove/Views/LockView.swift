@@ -12,11 +12,14 @@ private enum Screen {
     case biometric, pin
 }
 
+enum LockState: Equatable {
+    case locked, unlocked
+}
+
 struct LockView<Content: View>: View {
     /// Args: Lock Properties
     var lockType: AuthType
     var isPinCorrect: (String) -> Bool
-    var isEnabled: Bool
     var bioMetricUnlockMessage: String
 
     /// default calllbacks on success and failure
@@ -25,13 +28,16 @@ struct LockView<Content: View>: View {
 
     @ViewBuilder var content: Content
 
+    // lock state
+    private let lockStateBinding: Binding<LockState>?
+    @State private var innerLockState: LockState = .locked
+
     /// back button
     private var backEnabled: Bool
     var _backAction: (() -> Void)?
 
     /// View Properties
     @State private var animateField: Bool
-    @State private var isUnlocked: Bool
     @State private var screen: Screen = .biometric
 
     /// private consts
@@ -43,7 +49,7 @@ struct LockView<Content: View>: View {
     init(
         lockType: AuthType,
         isPinCorrect: @escaping (String) -> Bool,
-        isEnabled: Bool = true,
+        lockState: Binding<LockState>? = nil,
         bioMetricUnlockMessage: String = "Unlock your wallet",
         onUnlock: @escaping (String) -> Void = { _ in },
         onWrongPin: @escaping (String) -> Void = { _ in },
@@ -51,8 +57,11 @@ struct LockView<Content: View>: View {
         @ViewBuilder content: () -> Content
     ) {
         self.lockType = lockType
+
+        innerLockState = .locked
+        lockStateBinding = lockState
+
         self.isPinCorrect = isPinCorrect
-        self.isEnabled = isEnabled
         self.bioMetricUnlockMessage = bioMetricUnlockMessage
         self.onUnlock = onUnlock
         self.onWrongPin = onWrongPin
@@ -68,7 +77,6 @@ struct LockView<Content: View>: View {
 
         // private
         animateField = false
-        isUnlocked = false
         pinLength = 6
     }
 
@@ -86,6 +94,13 @@ struct LockView<Content: View>: View {
         }
     }
 
+    private var lockState: Binding<LockState> {
+        lockStateBinding ?? Binding(
+            get: { innerLockState },
+            set: { innerLockState = $0 }
+        )
+    }
+
     var body: some View {
         GeometryReader {
             let size = $0.size
@@ -93,7 +108,7 @@ struct LockView<Content: View>: View {
             content
                 .frame(width: size.width, height: size.height)
 
-            if isEnabled, !isUnlocked {
+            if lockState.wrappedValue == .locked {
                 ZStack {
                     Rectangle()
                         .fill(.black)
@@ -121,14 +136,14 @@ struct LockView<Content: View>: View {
                 .transition(.offset(y: size.height + 100))
             }
         }
-        .onChange(of: isEnabled, initial: true) { _, newValue in
-            if newValue { tryUnlockingView() }
+        .onChange(of: lockState.wrappedValue, initial: true) { _, newValue in
+            if case .locked = newValue { tryUnlockingView() }
         }
     }
 
     var numberPadPinView: NumberPadPinView {
         NumberPadPinView(
-            isUnlocked: $isUnlocked,
+            lockState: lockState,
             isPinCorrect: isPinCorrect,
             pinLength: pinLength,
             backAction: backEnabled ? backAction : nil,
@@ -140,7 +155,7 @@ struct LockView<Content: View>: View {
     @ViewBuilder
     var PermissionsNeeded: some View {
         VStack(spacing: 20) {
-            Text("Enable biometric authentication in Settings to unlock the view.")
+            Text("Cove needs permissions to FaceID to unlock your wallet. Please open settings and enable FaceID.")
                 .font(.callout)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 50)
@@ -169,13 +184,17 @@ struct LockView<Content: View>: View {
             .onTapGesture { tryUnlockingView() }
 
             if lockType == .both {
-                Text("Enter Pin")
-                    .frame(width: 100, height: 40)
-                    .background(
-                        .ultraThinMaterial,
-                        in: .rect(cornerRadius: 10)
-                    )
-                    .contentShape(.rect)
+                Button(action: { screen = .pin }) {
+                    Text("Enter Pin")
+                        .frame(width: 100, height: 40)
+                        .background(
+                            .ultraThinMaterial,
+                            in: .rect(cornerRadius: 10)
+                        )
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
             }
         }
     }
@@ -197,7 +216,7 @@ struct LockView<Content: View>: View {
             if await (try? bioMetricUnlock()) ?? false {
                 await MainActor.run {
                     withAnimation(.snappy, completionCriteria: .logicallyComplete) {
-                        isUnlocked = true
+                        lockState.wrappedValue = .unlocked
                     } completion: {
                         onUnlock("")
                     }
@@ -214,11 +233,7 @@ private var isBiometricAvailable: Bool {
 }
 
 #Preview("normal") {
-    LockView(
-        lockType: .both,
-        isPinCorrect: { $0 == "111111" },
-        isEnabled: true
-    ) {
+    LockView(lockType: .both, isPinCorrect: { $0 == "111111" }) {
         VStack {
             Text("Hello World")
         }
@@ -226,11 +241,7 @@ private var isBiometricAvailable: Bool {
 }
 
 #Preview("need permissions") {
-    LockView(
-        lockType: .biometric,
-        isPinCorrect: { $0 == "111111" },
-        isEnabled: true
-    ) {
+    LockView(lockType: .biometric, isPinCorrect: { $0 == "111111" }) {
         VStack {
             Text("Hello World")
         }
