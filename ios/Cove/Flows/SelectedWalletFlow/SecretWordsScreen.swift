@@ -105,6 +105,7 @@ struct SecretWordsScreen: View {
         }
         .padding()
         .onAppear {
+            app.lock()
             guard words == nil else { return }
             do { words = try Mnemonic(id: id) }
             catch { errorMessage = error.localizedDescription }

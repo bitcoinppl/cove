@@ -117,21 +117,21 @@ struct LockView<Content: View>: View {
                         .ignoresSafeArea()
 
                     switch (screen, lockType, isBiometricAvailable) {
-                    case (_, .biometric, true):
-                        PinOrBioMetric
-                    case (_, .biometric, false):
-                        PermissionsNeeded
-                    case (_, .pin, _):
-                        numberPadPinView
-                    case (.biometric, .both, true):
-                        PinOrBioMetric
-                    case (.biometric, .both, false):
-                        numberPadPinView
-                    case (.pin, .both, _):
-                        numberPadPinView
-                    case (_, .none, _):
-                        let _ = Log.error("inalid lock type none for screen")
-                        EmptyView()
+                        case (_, .biometric, false):
+                            PermissionsNeeded
+                        case (_, .biometric, true):
+                            PinOrBioMetric
+                        case (.biometric, .both, true):
+                            PinOrBioMetric
+                        case (_, .pin, _):
+                            numberPadPinView
+                        case (.biometric, .both, false):
+                            numberPadPinView
+                        case (.pin, .both, _):
+                            numberPadPinView
+                        case (_, .none, _):
+                            let _ = Log.error("inalid lock type none for screen")
+                            EmptyView()
                     }
                 }
                 .environment(\.colorScheme, .dark)
@@ -211,6 +211,7 @@ struct LockView<Content: View>: View {
                 .foregroundStyle(.white)
             }
         }
+        .frame(maxHeight: .infinity)
     }
 
     private func bioMetricUnlock() async throws -> Bool {

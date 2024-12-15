@@ -79,6 +79,11 @@ import SwiftUI
         walletManager = vm
     }
 
+    public func lock() {
+        guard isAuthEnabled else { return }
+        lockState = .locked
+    }
+
     public func checkPin(_ pin: String) -> Bool {
         AuthPin().check(pin: pin)
     }
