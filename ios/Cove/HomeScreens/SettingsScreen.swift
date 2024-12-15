@@ -256,7 +256,7 @@ struct SettingsScreen: View {
 
         case .disableAuth:
             LockView(
-                lockType: app.authType,
+                lockType: app.authType == .biometric ? .biometric : .pin,
                 isPinCorrect: checkPin,
                 onUnlock: { _ in
                     app.dispatch(action: .disableAuth)
