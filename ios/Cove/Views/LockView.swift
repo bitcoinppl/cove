@@ -17,6 +17,8 @@ enum LockState: Equatable {
 }
 
 struct LockView<Content: View>: View {
+    @Environment(AppManager.self) var app
+
     /// Args: Lock Properties
     var lockType: AuthType
     var isPinCorrect: (String) -> Bool
@@ -136,8 +138,20 @@ struct LockView<Content: View>: View {
                 .transition(.offset(y: size.height + 100))
             }
         }
-        .onChange(of: lockState.wrappedValue, initial: true) { _, newValue in
-            if case .locked = newValue { tryUnlockingView() }
+        .onChange(of: lockState.wrappedValue) { _, state in
+            if state == .locked { tryUnlockingView() }
+        }
+        .onChange(of: phase) { old, phase in
+            if old == .inactive, phase == .background, lockType == .both {
+                screen = .biometric
+            }
+
+            if old == .background, phase == .inactive, lockState.wrappedValue == .locked {
+                tryUnlockingView()
+            }
+        }
+        .onAppear {
+            tryUnlockingView()
         }
     }
 
@@ -210,17 +224,27 @@ struct LockView<Content: View>: View {
     }
 
     private func tryUnlockingView() {
+        guard lockType == .biometric || lockType == .both else { return }
+        guard !app.isUsingBiometrics else { return }
+        guard isBiometricAvailable else { return }
+        guard lockState.wrappedValue == .locked else { return }
+
         /// Checking and Unlocking View
         Task {
             /// Requesting Biometric Unlock
+            app.isUsingBiometrics = true
+
             if await (try? bioMetricUnlock()) ?? false {
                 await MainActor.run {
                     withAnimation(.snappy, completionCriteria: .logicallyComplete) {
                         lockState.wrappedValue = .unlocked
                     } completion: {
+                        app.isUsingBiometrics = false
                         onUnlock("")
                     }
                 }
+            } else {
+                await MainActor.run { app.isUsingBiometrics = false }
             }
         }
     }

@@ -45,9 +45,12 @@ public extension EnvironmentValues {
 struct CoveApp: App {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var phase
+    @AppStorage("lockedAt") var lockedAt: Date = .init()
 
     @State var manager: AppManager
     @State var id = UUID()
+
+    @State var showCover: Bool = true
 
     @State var lockState: LockState = .locked
     @State var scannedCode: TaggedItem<StringOrData>? = .none
@@ -350,32 +353,37 @@ struct CoveApp: App {
 
     @ViewBuilder
     var BodyView: some View {
-        LockView(lockType: manager.authType, isPinCorrect: { pin in AuthPin().check(pin: pin) }, lockState: $lockState) {
-            SidebarContainer {
-                NavigationStack(path: $manager.router.routes) {
-                    RouteView(manager: manager)
-                        .navigationDestination(
-                            for: Route.self,
-                            destination: { route in
-                                RouteView(manager: manager, route: route)
-                            }
-                        )
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button(action: {
-                                    withAnimation {
-                                        manager.toggleSidebar()
+        Group {
+            if showCover { CoverView() }
+            else {
+                LockView(lockType: manager.authType, isPinCorrect: { pin in AuthPin().check(pin: pin) }, lockState: $lockState) {
+                    SidebarContainer {
+                        NavigationStack(path: $manager.router.routes) {
+                            RouteView(manager: manager)
+                                .navigationDestination(
+                                    for: Route.self,
+                                    destination: { route in
+                                        RouteView(manager: manager, route: route)
                                     }
-                                }) {
-                                    Image(systemName: "line.horizontal.3")
+                                )
+                                .toolbar {
+                                    ToolbarItem(placement: .navigationBarLeading) {
+                                        Button(action: {
+                                            withAnimation {
+                                                manager.toggleSidebar()
+                                            }
+                                        }) {
+                                            Image(systemName: "line.horizontal.3")
+                                                .foregroundStyle(navBarColor)
+                                        }
+                                        .contentShape(Rectangle())
                                         .foregroundStyle(navBarColor)
+                                    }
                                 }
-                                .contentShape(Rectangle())
-                                .foregroundStyle(navBarColor)
-                            }
                         }
+                        .tint(routeToTint)
+                    }
                 }
-                .tint(routeToTint)
             }
         }
         .environment(manager)
@@ -416,6 +424,38 @@ struct CoveApp: App {
         guard let scannedMessage else { return }
         if scannedMessage.isEmpty { return }
         handleScannedCode(StringOrData(scannedMessage))
+    }
+
+    func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
+        Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase) || using biometrics: \(manager.isUsingBiometrics) ")
+        if manager.isAuthEnabled, !manager.isUsingBiometrics, oldPhase == .active, newPhase == .inactive {
+            showCover = true
+            lockState = .locked
+            lockedAt = Date.now
+        }
+
+        // close all open sheets when going into the background
+        if manager.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
+            showCover = true
+            lockState = .locked
+            lockedAt = Date.now
+
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .forEach { window in
+                    window.rootViewController?.dismiss(animated: false)
+                }
+        }
+
+        if manager.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
+            showCover = false
+
+            // less than 5 seconds, auto unlock
+            if manager.authType == .pin, Date.now.timeIntervalSince(lockedAt) < 5 {
+                lockState = .unlocked
+            }
+        }
     }
 
     var body: some Scene {
@@ -466,20 +506,7 @@ struct CoveApp: App {
                     await MainActor.run { manager.asyncRuntimeReady = true }
                 }
                 .onOpenURL(perform: handleFileOpen)
-                .onChange(of: phase) { oldPhase, newPhase in
-                    Log.debug("[SCENE PHASE]: \(oldPhase) --> \(newPhase)")
-
-                    if manager.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
-                        UIApplication.shared.connectedScenes
-                            .compactMap { $0 as? UIWindowScene }
-                            .flatMap(\.windows)
-                            .forEach { window in
-                                window.rootViewController?.dismiss(animated: false)
-                            }
-
-                        lockState = .locked
-                    }
-                }
+                .onChange(of: phase, initial: true, handleScenePhaseChange)
                 .onAppear {
                     if manager.isAuthEnabled {
                         lockState = .locked

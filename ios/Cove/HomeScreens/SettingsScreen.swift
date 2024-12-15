@@ -30,9 +30,8 @@ struct SettingsScreen: View {
                 if enable { return sheetState = .init(.enableAuth) }
 
                 switch app.authType {
-                case .both, .pin: sheetState = .init(.removePin)
-                case .biometric: sheetState = .init(.disableAuth)
                 case .none: Log.error("Trying to disable auth when auth is not enabled")
+                default: sheetState = .init(.disableAuth)
                 }
             }
         )
