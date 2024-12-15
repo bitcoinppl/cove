@@ -9,7 +9,7 @@ import SwiftUI
 
 struct SecretWordsScreen: View {
     @Environment(AppManager.self) private var app
-    
+
     let id: WalletId
 
     // private
@@ -28,11 +28,11 @@ struct SecretWordsScreen: View {
     var rows: [GridItem] {
         Array(repeating: .init(.fixed(rowHeight)), count: numberOfRows)
     }
-    
+
     var body: some View {
         VStack {
             Spacer()
-                
+
             Group {
                 if let words {
                     GroupBox {
@@ -45,7 +45,7 @@ struct SecretWordsScreen: View {
                                         .fontDesign(.monospaced)
                                         .multilineTextAlignment(.leading)
                                         .minimumScaleFactor(0.5)
-                                        
+
                                     Text(word.word)
                                         .fontWeight(.bold)
                                         .fontDesign(.monospaced)
@@ -53,7 +53,7 @@ struct SecretWordsScreen: View {
                                         .minimumScaleFactor(0.75)
                                         .lineLimit(1)
                                         .fixedSize()
-                                        
+
                                     Spacer()
                                 }
                             }
@@ -65,31 +65,31 @@ struct SecretWordsScreen: View {
                 } else {
                     Text(errorMessage ?? "Loading...")
                 }
-                    
+
                 Spacer()
                 Spacer()
                 Spacer()
-                    
+
                 VStack(spacing: 12) {
                     HStack {
                         Text("Recovery Words")
                             .font(.system(size: 36, weight: .semibold))
                             .foregroundColor(.white)
                             .multilineTextAlignment(.leading)
-                            
+
                         Spacer()
                     }
-                        
+
                     HStack {
                         Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has you recovery words, controls your Bitcoin.")
                             .multilineTextAlignment(.leading)
                             .font(.footnote)
                             .foregroundStyle(.lightGray.opacity(0.75))
                             .fixedSize(horizontal: false, vertical: true)
-                            
+
                         Spacer()
                     }
-                        
+
                     HStack {
                         Text("Please save these words in a secure location.")
                             .font(.subheadline)
@@ -97,7 +97,7 @@ struct SecretWordsScreen: View {
                             .fontWeight(.bold)
                             .foregroundStyle(.white)
                             .opacity(0.9)
-                            
+
                         Spacer()
                     }
                 }

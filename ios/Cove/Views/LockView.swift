@@ -120,21 +120,21 @@ struct LockView<Content: View>: View {
                         .ignoresSafeArea()
 
                     switch (screen, lockType, isBiometricAvailable) {
-                        case (_, .biometric, false):
-                            PermissionsNeeded
-                        case (_, .biometric, true):
-                            BiometricView
-                        case (.biometric, .both, true):
-                            BiometricView
-                        case (_, .pin, _):
-                            numberPadPinView
-                        case (.biometric, .both, false):
-                            numberPadPinView
-                        case (.pin, .both, _):
-                            numberPadPinView
-                        case (_, .none, _):
-                            let _ = Log.error("inalid lock type none for screen")
-                            EmptyView()
+                    case (_, .biometric, false):
+                        PermissionsNeeded
+                    case (_, .biometric, true):
+                        BiometricView
+                    case (.biometric, .both, true):
+                        BiometricView
+                    case (_, .pin, _):
+                        numberPadPinView
+                    case (.biometric, .both, false):
+                        numberPadPinView
+                    case (.pin, .both, _):
+                        numberPadPinView
+                    case (_, .none, _):
+                        let _ = Log.error("inalid lock type none for screen")
+                        EmptyView()
                     }
                 }
                 .environment(\.colorScheme, .dark)
