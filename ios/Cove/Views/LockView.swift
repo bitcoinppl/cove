@@ -22,6 +22,7 @@ struct LockView<Content: View>: View {
     /// Args: Lock Properties
     var lockType: AuthType
     var isPinCorrect: (String) -> Bool
+    var showPin: Bool
     var bioMetricUnlockMessage: String
 
     /// default calllbacks on success and failure
@@ -51,6 +52,7 @@ struct LockView<Content: View>: View {
     init(
         lockType: AuthType,
         isPinCorrect: @escaping (String) -> Bool,
+        showPin: Bool = true,
         lockState: Binding<LockState>? = nil,
         bioMetricUnlockMessage: String = "Unlock your wallet",
         onUnlock: @escaping (String) -> Void = { _ in },
@@ -64,6 +66,7 @@ struct LockView<Content: View>: View {
         lockStateBinding = lockState
 
         self.isPinCorrect = isPinCorrect
+        self.showPin = showPin
         self.bioMetricUnlockMessage = bioMetricUnlockMessage
         self.onUnlock = onUnlock
         self.onWrongPin = onWrongPin
@@ -120,9 +123,9 @@ struct LockView<Content: View>: View {
                         case (_, .biometric, false):
                             PermissionsNeeded
                         case (_, .biometric, true):
-                            PinOrBioMetric
+                            BiometricView
                         case (.biometric, .both, true):
-                            PinOrBioMetric
+                            BiometricView
                         case (_, .pin, _):
                             numberPadPinView
                         case (.biometric, .both, false):
@@ -159,6 +162,7 @@ struct LockView<Content: View>: View {
         NumberPadPinView(
             lockState: lockState,
             isPinCorrect: isPinCorrect,
+            showPin: showPin,
             pinLength: pinLength,
             backAction: backEnabled ? backAction : nil,
             onUnlock: onUnlock,
@@ -182,7 +186,7 @@ struct LockView<Content: View>: View {
     }
 
     @ViewBuilder
-    var PinOrBioMetric: some View {
+    var BiometricView: some View {
         VStack(spacing: 12) {
             VStack(spacing: 6) {
                 Image(systemName: "faceid")

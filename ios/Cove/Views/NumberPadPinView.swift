@@ -13,6 +13,7 @@ struct NumberPadPinView: View {
     @Binding var lockState: LockState
 
     let isPinCorrect: (String) -> Bool
+    var showPin: Bool
     var pinLength: Int
 
     // back button
@@ -31,6 +32,7 @@ struct NumberPadPinView: View {
         title: String = "Enter Pin",
         lockState: Binding<LockState> = .constant(.unlocked),
         isPinCorrect: @escaping (String) -> Bool,
+        showPin: Bool = true,
         pinLength: Int = 6,
         backAction: (() -> Void)? = nil,
         onUnlock: @escaping (String) -> Void = { _ in },
@@ -39,6 +41,7 @@ struct NumberPadPinView: View {
         self.title = title
         _lockState = lockState
         self.isPinCorrect = isPinCorrect
+        self.showPin = showPin
         self.pinLength = pinLength
         backEnabled = backAction != nil
         self.backAction = backAction ?? {}
@@ -76,10 +79,11 @@ struct NumberPadPinView: View {
                             /// Safe Check
                             if pin.count > index {
                                 let index = pin.index(pin.startIndex, offsetBy: index)
-                                let string = String(pin[index])
+                                let string = showPin ? String(pin[index]) : "●"
 
                                 Text(string)
-                                    .font(.title.bold())
+                                    .font(showPin ? .title : .body)
+                                    .fontWeight(.bold)
                                     .foregroundStyle(.black)
                             }
                         }
@@ -203,6 +207,24 @@ struct NumberPadPinView: View {
             NumberPadPinView(
                 lockState: $lockState,
                 isPinCorrect: { $0 == "000000" },
+                pinLength: 6
+            )
+        }
+    }
+
+    return Container()
+}
+
+#Preview("hidden pin") {
+    struct Container: View {
+        @State var pin = ""
+        @State var lockState: LockState = .locked
+
+        var body: some View {
+            NumberPadPinView(
+                lockState: $lockState,
+                isPinCorrect: { $0 == "000000" },
+                showPin: false,
                 pinLength: 6
             )
         }

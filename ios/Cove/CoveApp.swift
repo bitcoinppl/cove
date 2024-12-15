@@ -356,6 +356,7 @@ struct CoveApp: App {
                 LockView(
                     lockType: app.authType,
                     isPinCorrect: app.checkPin,
+                    showPin: false,
                     lockState: $app.lockState,
                     onUnlock: { _ in showCover = false }
                 ) {
