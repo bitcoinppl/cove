@@ -3975,7 +3975,7 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOpt
 
 
 /**
- * Representation of our app over FFI. Essentially a wrapper of [`App`].
+ * Representation of our app over FFI. Essenially a wrapper of [`App`].
  */
 public protocol FfiAppProtocol : AnyObject {
     
@@ -4048,7 +4048,7 @@ public protocol FfiAppProtocol : AnyObject {
 }
 
 /**
- * Representation of our app over FFI. Essentially a wrapper of [`App`].
+ * Representation of our app over FFI. Essenially a wrapper of [`App`].
  */
 open class FfiApp:
     FfiAppProtocol {
@@ -5268,6 +5268,8 @@ public protocol GlobalFlagTableProtocol : AnyObject {
     
     func get(key: GlobalFlagKey) throws  -> Bool
     
+    func getBoolConfig(key: GlobalFlagKey)  -> Bool
+    
     func set(key: GlobalFlagKey, value: Bool) throws 
     
     func toggleBoolConfig(key: GlobalFlagKey) throws 
@@ -5327,6 +5329,14 @@ open class GlobalFlagTable:
 open func get(key: GlobalFlagKey)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
     uniffi_cove_fn_method_globalflagtable_get(self.uniffiClonePointer(),
+        FfiConverterTypeGlobalFlagKey.lower(key),$0
+    )
+})
+}
+    
+open func getBoolConfig(key: GlobalFlagKey) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalflagtable_get_bool_config(self.uniffiClonePointer(),
         FfiConverterTypeGlobalFlagKey.lower(key),$0
     )
 })
@@ -7272,6 +7282,181 @@ public func FfiConverterTypeRouteFactory_lift(_ pointer: UnsafeMutableRawPointer
 #endif
 public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRouteFactory.lower(value)
+}
+
+
+
+
+public protocol RustAuthManagerProtocol : AnyObject {
+    
+    /**
+     * Get the auth type for the app
+     */
+    func authType()  -> AuthType
+    
+    /**
+     * Action from the frontend to change the state of the view model
+     */
+    func dispatch(action: AuthManagerAction) 
+    
+    func listenForUpdates(reconciler: AuthManagerReconciler) 
+    
+    func send(message: AuthManagerReconcileMessage) 
+    
+    func setAuthType(authType: AuthType) 
+    
+}
+
+open class RustAuthManager:
+    RustAuthManagerProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_rustauthmanager(self.pointer, $0) }
+    }
+public convenience init() {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_rustauthmanager_new($0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustauthmanager(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Get the auth type for the app
+     */
+open func authType() -> AuthType  {
+    return try!  FfiConverterTypeAuthType.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_auth_type(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Action from the frontend to change the state of the view model
+     */
+open func dispatch(action: AuthManagerAction)  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_dispatch(self.uniffiClonePointer(),
+        FfiConverterTypeAuthManagerAction.lower(action),$0
+    )
+}
+}
+    
+open func listenForUpdates(reconciler: AuthManagerReconciler)  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_listen_for_updates(self.uniffiClonePointer(),
+        FfiConverterCallbackInterfaceAuthManagerReconciler.lower(reconciler),$0
+    )
+}
+}
+    
+open func send(message: AuthManagerReconcileMessage)  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_send(self.uniffiClonePointer(),
+        FfiConverterTypeAuthManagerReconcileMessage.lower(message),$0
+    )
+}
+}
+    
+open func setAuthType(authType: AuthType)  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_set_auth_type(self.uniffiClonePointer(),
+        FfiConverterTypeAuthType.lower(authType),$0
+    )
+}
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustAuthManager: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = RustAuthManager
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> RustAuthManager {
+        return RustAuthManager(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: RustAuthManager) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustAuthManager {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: RustAuthManager, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustAuthManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> RustAuthManager {
+    return try FfiConverterTypeRustAuthManager.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeRustAuthManager.lower(value)
 }
 
 
@@ -10693,6 +10878,55 @@ public func FfiConverterTypeAppState_lower(_ value: AppState) -> RustBuffer {
 }
 
 
+public struct AuthManagerState {
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init() {
+    }
+}
+
+
+
+extension AuthManagerState: Equatable, Hashable {
+    public static func ==(lhs: AuthManagerState, rhs: AuthManagerState) -> Bool {
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthManagerState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthManagerState {
+        return
+            AuthManagerState()
+    }
+
+    public static func write(_ value: AuthManagerState, into buf: inout [UInt8]) {
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthManagerState_lift(_ buf: RustBuffer) throws -> AuthManagerState {
+    return try FfiConverterTypeAuthManagerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthManagerState_lower(_ value: AuthManagerState) -> RustBuffer {
+    return FfiConverterTypeAuthManagerState.lower(value)
+}
+
+
 public struct Balance {
     public var immature: Amount
     public var trustedPending: Amount
@@ -12562,15 +12796,6 @@ public enum AppAction {
     )
     case updateFiatPrices
     case updateFees
-    case updateAuthType(AuthType
-    )
-    case enableAuth
-    case disableAuth
-    case enableBiometric
-    case disableBiometric
-    case setPin(String
-    )
-    case disablePin
 }
 
 
@@ -12599,22 +12824,6 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 5: return .updateFiatPrices
         
         case 6: return .updateFees
-        
-        case 7: return .updateAuthType(try FfiConverterTypeAuthType.read(from: &buf)
-        )
-        
-        case 8: return .enableAuth
-        
-        case 9: return .disableAuth
-        
-        case 10: return .enableBiometric
-        
-        case 11: return .disableBiometric
-        
-        case 12: return .setPin(try FfiConverterString.read(from: &buf)
-        )
-        
-        case 13: return .disablePin
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -12650,36 +12859,6 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         
         case .updateFees:
             writeInt(&buf, Int32(6))
-        
-        
-        case let .updateAuthType(v1):
-            writeInt(&buf, Int32(7))
-            FfiConverterTypeAuthType.write(v1, into: &buf)
-            
-        
-        case .enableAuth:
-            writeInt(&buf, Int32(8))
-        
-        
-        case .disableAuth:
-            writeInt(&buf, Int32(9))
-        
-        
-        case .enableBiometric:
-            writeInt(&buf, Int32(10))
-        
-        
-        case .disableBiometric:
-            writeInt(&buf, Int32(11))
-        
-        
-        case let .setPin(v1):
-            writeInt(&buf, Int32(12))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case .disablePin:
-            writeInt(&buf, Int32(13))
         
         }
     }
@@ -13012,6 +13191,157 @@ extension AuthError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AuthManagerAction {
+    
+    case updateAuthType(AuthType
+    )
+    case enableBiometric
+    case disableBiometric
+    case setPin(String
+    )
+    case disablePin
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
+    typealias SwiftType = AuthManagerAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthManagerAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .updateAuthType(try FfiConverterTypeAuthType.read(from: &buf)
+        )
+        
+        case 2: return .enableBiometric
+        
+        case 3: return .disableBiometric
+        
+        case 4: return .setPin(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .disablePin
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AuthManagerAction, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .updateAuthType(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeAuthType.write(v1, into: &buf)
+            
+        
+        case .enableBiometric:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .disableBiometric:
+            writeInt(&buf, Int32(3))
+        
+        
+        case let .setPin(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .disablePin:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthManagerAction_lift(_ buf: RustBuffer) throws -> AuthManagerAction {
+    return try FfiConverterTypeAuthManagerAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthManagerAction_lower(_ value: AuthManagerAction) -> RustBuffer {
+    return FfiConverterTypeAuthManagerAction.lower(value)
+}
+
+
+
+extension AuthManagerAction: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AuthManagerReconcileMessage {
+    
+    case authTypeChanged(AuthType
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = AuthManagerReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthManagerReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .authTypeChanged(try FfiConverterTypeAuthType.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AuthManagerReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .authTypeChanged(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeAuthType.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthManagerReconcileMessage_lift(_ buf: RustBuffer) throws -> AuthManagerReconcileMessage {
+    return try FfiConverterTypeAuthManagerReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthManagerReconcileMessage_lower(_ value: AuthManagerReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeAuthManagerReconcileMessage.lower(value)
+}
+
+
+
+extension AuthManagerReconcileMessage: Equatable, Hashable {}
+
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -14725,6 +15055,7 @@ extension GlobalConfigTableError: Foundation.LocalizedError {
 public enum GlobalFlagKey {
     
     case completedOnboarding
+    case wipeMePinEnabled
 }
 
 
@@ -14740,6 +15071,8 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case 1: return .completedOnboarding
         
+        case 2: return .wipeMePinEnabled
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -14750,6 +15083,10 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case .completedOnboarding:
             writeInt(&buf, Int32(1))
+        
+        
+        case .wipeMePinEnabled:
+            writeInt(&buf, Int32(2))
         
         }
     }
@@ -19574,6 +19911,111 @@ extension XpubError: Foundation.LocalizedError {
 
 
 
+public protocol AuthManagerReconciler : AnyObject {
+    
+    /**
+     * Tells the frontend to reconcile the manager changes
+     */
+    func reconcile(message: AuthManagerReconcileMessage) 
+    
+}
+
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceAuthManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceAuthManagerReconciler] = [UniffiVTableCallbackInterfaceAuthManagerReconciler(
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceAuthManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeAuthManagerReconcileMessage.lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterCallbackInterfaceAuthManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface AuthManagerReconciler: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitAuthManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_authmanagerreconciler(UniffiCallbackInterfaceAuthManagerReconciler.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceAuthManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<AuthManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceAuthManagerReconciler : FfiConverter {
+    typealias SwiftType = AuthManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+
+
 public protocol DeviceAccess : AnyObject {
     
     func timezone()  -> String
@@ -21926,6 +22368,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalflagtable_get() != 42810) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalflagtable_get_bool_config() != 34785) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalflagtable_set() != 23016) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22050,6 +22495,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_set_amount() != 33578) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_auth_type() != 13301) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_dispatch() != 58198) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_listen_for_updates() != 6029) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_send() != 55296) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_set_auth_type() != 20435) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 61781) {
@@ -22451,6 +22911,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_routefactory_new() != 4959) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rustauthmanager_new() != 30134) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 63844) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22502,6 +22965,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_wordvalidator_preview() != 53831) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_authmanagerreconciler_reconcile() != 44010) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_deviceaccess_timezone() != 16696) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22528,6 +22994,7 @@ private let initializationResult: InitializationResult = {
     }
 
     uniffiCallbackInitAutoComplete()
+    uniffiCallbackInitAuthManagerReconciler()
     uniffiCallbackInitDeviceAccess()
     uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitImportWalletManagerReconciler()

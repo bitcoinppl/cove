@@ -27,9 +27,6 @@ import SwiftUI
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
-    @MainActor
-    var isUsingBiometrics: Bool = false
-
     @ObservationIgnored
     weak var walletManager: WalletManager?
 

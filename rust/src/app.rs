@@ -5,7 +5,7 @@ pub mod reconcile;
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    auth::{AuthPin, AuthType},
+    auth::AuthType,
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
     fiat::client::{PriceResponse, FIAT_CLIENT},
@@ -53,11 +53,6 @@ pub enum AppAction {
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
-    UpdateAuthType(AuthType),
-    EnableBiometric,
-    DisableBiometric,
-    SetPin(String),
-    DisablePin,
 }
 
 #[derive(
@@ -143,7 +138,7 @@ impl App {
             }
 
             AppAction::ChangeColorScheme(color_scheme) => {
-                debug!("color scheme change, NEW: {:?}", color_scheme);
+                debug!("color scheme change, new: {:?}", color_scheme);
 
                 Database::global()
                     .global_config
@@ -152,7 +147,7 @@ impl App {
             }
 
             AppAction::SetSelectedNode(node) => {
-                debug!("selected node change, NEW: {:?}", node);
+                debug!("selected node change, new: {:?}", node);
 
                 match Database::global().global_config.set_selected_node(&node) {
                     Ok(_) => {}
@@ -189,63 +184,6 @@ impl App {
                     }
                 });
             }
-
-            AppAction::UpdateAuthType(auth_type) => {
-                debug!("authType changed, new: {auth_type:?}");
-                set_auth_type(auth_type);
-            }
-
-            AppAction::EnableBiometric => {
-                debug!("enable biometric");
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::None => set_auth_type(AuthType::Biometric),
-                    AuthType::Pin => set_auth_type(AuthType::Both),
-                    _ => {}
-                };
-            }
-
-            AppAction::DisableBiometric => {
-                debug!("disable biometric");
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::Biometric => set_auth_type(AuthType::None),
-                    AuthType::Both => set_auth_type(AuthType::Pin),
-                    _ => {}
-                };
-            }
-
-            AppAction::SetPin(pin) => {
-                debug!("set pin");
-
-                if let Err(err) = AuthPin::new().set(pin) {
-                    return error!("unable to set pin: {err:?}");
-                }
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::None => set_auth_type(AuthType::Pin),
-                    AuthType::Biometric => set_auth_type(AuthType::Both),
-                    _ => {}
-                }
-            }
-
-            AppAction::DisablePin => {
-                debug!("disable pin");
-
-                if let Err(err) = AuthPin::new().delete() {
-                    return error!("unable to delete pin: {err:?}");
-                }
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::Pin => set_auth_type(AuthType::None),
-                    AuthType::Both => set_auth_type(AuthType::Biometric),
-                    _ => {}
-                }
-            }
         }
     }
 
@@ -264,18 +202,7 @@ impl App {
     }
 }
 
-fn set_auth_type(auth_type: AuthType) {
-    match Database::global().global_config.set_auth_type(auth_type) {
-        Ok(_) => {
-            Updater::send_update(AppMessage::AuthTypeChanged(auth_type));
-        }
-        Err(error) => {
-            error!("unable to set auth type: {error:?}");
-        }
-    }
-}
-
-/// Representation of our app over FFI. Essentially a wrapper of [`App`].
+/// Representation of our app over FFI. Essenially a wrapper of [`App`].
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct FfiApp;
 

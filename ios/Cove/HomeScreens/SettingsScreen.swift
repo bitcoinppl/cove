@@ -2,18 +2,24 @@ import LocalAuthentication
 import SwiftUI
 
 private enum SheetState: Equatable {
-    case newPin, removePin, changePin, disableAuth, disableBiometric, enableAuth, enableBiometric
+    case newPin, removePin, changePin, disableBiometric, enableAuth, enableBiometric
+}
+
+private enum AlertState: Equatable {
+    case networkChanged(Network)
+    case confirmEnableWipeMePin
 }
 
 struct SettingsScreen: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
     @State private var notificationFrequency = 1
     @State private var networkChanged = false
-    @State private var showConfirmationAlert = false
 
     @State private var sheetState: TaggedItem<SheetState>? = nil
+    @State private var alertState: TaggedItem<AlertState>? = nil
 
     let themes = allColorSchemes()
 
@@ -47,9 +53,9 @@ struct SettingsScreen: View {
 
     var toggleWipeMePin: Binding<Bool> {
         Binding(
-            get: { app.authType == AuthType.both || app.authType == AuthType.pin },
+            get: { false },
             set: { enable in
-                if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
+                if enable { alertState = .init(.confirmEnableWipeMePin) }
             }
         )
     }
@@ -118,7 +124,7 @@ struct SettingsScreen: View {
                         Label("Change PIN", systemImage: "lock.open.rotation")
                     }
 
-                    Toggle(isOn: Binding.constant(false)) {
+                    Toggle(isOn: toggleWipeMePin) {
                         Label("Enable Wipe Data PIN", systemImage: "trash.slash")
                     }
                 }
@@ -131,7 +137,7 @@ struct SettingsScreen: View {
                 ? ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: {
                         if networkChanged {
-                            showConfirmationAlert = true
+                            alertState = .init(.networkChanged(app.selectedNetwork))
                         } else {
                             dismiss()
                         }
@@ -147,18 +153,14 @@ struct SettingsScreen: View {
                     }
                 } : nil
         }
-        .alert(isPresented: $showConfirmationAlert) {
-            Alert(
-                title: Text("⚠️ Network Changed ⚠️"),
-                message: Text("You've changed your network to \(app.selectedNetwork)"),
-                primaryButton: .destructive(Text("Yes, Change Network")) {
-                    app.resetRoute(to: .listWallets)
-                    dismiss()
-                },
-                secondaryButton: .cancel(Text("Cancel"))
-            )
-        }
         .fullScreenCover(item: $sheetState, content: SheetContent)
+        .alert(
+            alertTitle,
+            isPresented: showingAlert,
+            presenting: alertState,
+            actions: { MyAlert($0).actions },
+            message: { MyAlert($0).message }
+        )
         .preferredColorScheme(app.colorScheme)
         .gesture(
             networkChanged
@@ -166,14 +168,14 @@ struct SettingsScreen: View {
                 .onChanged { gesture in
                     if gesture.startLocation.x < 25, gesture.translation.width > 100 {
                         withAnimation(.spring()) {
-                            showConfirmationAlert = true
+                            alertState = .init(.networkChanged(app.selectedNetwork))
                         }
                     }
                 }
                 .onEnded { gesture in
                     if gesture.startLocation.x < 20, gesture.translation.width > 50 {
                         withAnimation(.spring()) {
-                            showConfirmationAlert = true
+                            alertState = .init(.networkChanged(app.selectedNetwork))
                         }
                     }
                 } : nil
@@ -181,12 +183,8 @@ struct SettingsScreen: View {
     }
 
     func setPin(_ pin: String) {
-        app.dispatch(action: .setPin(pin))
+        auth.dispatch(action: .setPin(pin))
         sheetState = .none
-    }
-
-    func checkPin(_ pin: String) -> Bool {
-        AuthPin().check(pin: pin)
     }
 
     @ViewBuilder
@@ -208,6 +206,62 @@ struct SettingsScreen: View {
         .background(.midnightBlue)
     }
 
+    // MARK: Alerts
+
+    private var showingAlert: Binding<Bool> {
+        Binding(
+            get: { alertState != nil },
+            set: { if !$0 { alertState = .none } }
+        )
+    }
+
+    private var alertTitle: String {
+        guard let alertState else { return "Error" }
+        return MyAlert(alertState).title
+    }
+
+    private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
+        switch alert.item {
+        case let .networkChanged(network):
+            return AlertBuilder(
+                title: "⚠️ Network Changed ⚠️",
+                message: "You've changed your network to \(network)",
+                actions: {
+                    Button("Yes, Change Network") {
+                        app.resetRoute(to: .listWallets)
+                        dismiss()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+            )
+
+        case .confirmEnableWipeMePin:
+            return AlertBuilder(
+                title: "Are you sure?",
+                message:
+                """
+
+                Enabling the Wipe Data PIN will let you chose a PIN that if entered will wipe all Cove wallet data on this device.
+
+                If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet. 
+
+                Please make sure you have a backup of your wallet before enabling this.
+                """,
+                actions: {
+                    Button("Yes, Enable Wipe Data PIN") {
+                        // app.dispatch(action: .enableWipeMePin)
+                        dismiss()
+                    }
+                    Button("Cancel", role: .cancel) {
+                        alertState = .none
+                    }
+                }
+            )
+        }
+    }
+
+    // MARK: Sheets
+
     @ViewBuilder
     private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
@@ -217,8 +271,8 @@ struct SettingsScreen: View {
                     lockType: .biometric,
                     isPinCorrect: { _ in true },
                     onUnlock: { pin in
-                        app.dispatch(action: .enableBiometric)
-                        if !pin.isEmpty { app.dispatch(action: .setPin(pin)) }
+                        auth.dispatch(action: .enableBiometric)
+                        if !pin.isEmpty { auth.dispatch(action: .setPin(pin)) }
 
                         sheetState = .none
                     },
@@ -235,39 +289,27 @@ struct SettingsScreen: View {
         case .removePin:
             NumberPadPinView(
                 title: "Enter Current PIN",
-                isPinCorrect: checkPin,
+                isPinCorrect: auth.checkPin,
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
-                    app.dispatch(action: .disablePin)
+                    auth.dispatch(action: .disablePin)
                     sheetState = .none
                 }
             )
 
         case .changePin:
             ChangePinView(
-                isPinCorrect: checkPin,
+                isPinCorrect: auth.checkPin,
                 backAction: { sheetState = .none },
                 onComplete: setPin
             )
 
-        case .disableAuth:
-            LockView(
-                lockType: app.authType == .biometric ? .biometric : .pin,
-                isPinCorrect: checkPin,
-                onUnlock: { _ in
-                    app.dispatch(action: .disableAuth)
-                    sheetState = .none
-                },
-                backAction: { sheetState = .none },
-                content: { EmptyView() }
-            )
-
         case .disableBiometric:
             LockView(
-                lockType: app.authType,
-                isPinCorrect: checkPin,
+                lockType: auth.authType,
+                isPinCorrect: app.checkPin,
                 onUnlock: { _ in
-                    app.dispatch(action: .disableBiometric)
+                    auth.dispatch(action: .disableBiometric)
                     sheetState = .none
                 },
                 backAction: { sheetState = .none },
@@ -279,7 +321,7 @@ struct SettingsScreen: View {
                 lockType: .biometric,
                 isPinCorrect: { _ in true },
                 onUnlock: { _ in
-                    app.dispatch(action: .enableBiometric)
+                    auth.dispatch(action: .enableBiometric)
                     sheetState = .none
                 },
                 backAction: { sheetState = .none },
