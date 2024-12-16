@@ -23,36 +23,33 @@ struct SettingsScreen: View {
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    var useAuth: Binding<Bool> {
+    var toggleBiometric: Binding<Bool> {
         Binding(
-            get: { app.isAuthEnabled },
+            get: { app.authType == AuthType.both || app.authType == AuthType.biometric },
             set: { enable in
-                if enable { return sheetState = .init(.enableAuth) }
-
-                switch app.authType {
-                case .none: Log.error("Trying to disable auth when auth is not enabled")
-                default: sheetState = .init(.disableAuth)
+                if enable {
+                    sheetState = .init(.enableBiometric)
+                } else {
+                    sheetState = .init(.disableBiometric)
                 }
             }
         )
     }
 
-    var useBiometric: Binding<Bool> {
+    var togglePin: Binding<Bool> {
         Binding(
-            get: { app.authType == AuthType.both || app.authType == AuthType.biometric },
+            get: { app.authType == AuthType.both || app.authType == AuthType.pin },
             set: { enable in
-                if enable { sheetState = .init(.enableBiometric) }
-                else { sheetState = .init(.disableBiometric) }
+                if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
             }
         )
     }
 
-    var usePin: Binding<Bool> {
+    var toggleWipeMePin: Binding<Bool> {
         Binding(
             get: { app.authType == AuthType.both || app.authType == AuthType.pin },
             set: { enable in
-                if enable { sheetState = .init(.newPin) }
-                else { sheetState = .init(.removePin) }
+                if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
             }
         )
     }
@@ -106,25 +103,23 @@ struct SettingsScreen: View {
             NodeSelectionView()
 
             Section("Security") {
-                Toggle(isOn: useAuth) {
-                    Label("Require Authentication", systemImage: "lock.shield")
+                if canUseBiometrics() {
+                    Toggle(isOn: toggleBiometric) {
+                        Label("Enable Face ID", systemImage: "faceid")
+                    }
                 }
 
-                if app.isAuthEnabled {
-                    if canUseBiometrics() {
-                        Toggle(isOn: useBiometric) {
-                            Label("Enable Face ID", systemImage: "faceid")
-                        }
+                Toggle(isOn: togglePin) {
+                    Label("Enable PIN", systemImage: "lock")
+                }
+
+                if togglePin.wrappedValue {
+                    Button(action: { sheetState = .init(.changePin) }) {
+                        Label("Change PIN", systemImage: "lock.open.rotation")
                     }
 
-                    Toggle(isOn: usePin) {
-                        Label("Enable PIN", systemImage: "lock.fill")
-                    }
-
-                    if usePin.wrappedValue {
-                        Button(action: { sheetState = .init(.changePin) }) {
-                            Label("Change PIN", systemImage: "lock.open.rotation")
-                        }
+                    Toggle(isOn: Binding.constant(false)) {
+                        Label("Enable Wipe Data PIN", systemImage: "trash.slash")
                     }
                 }
             }
@@ -217,21 +212,22 @@ struct SettingsScreen: View {
     private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
         switch state.item {
         case .enableAuth:
-            LockView(
-                lockType: .both,
-                isPinCorrect: { _ in true },
-                onUnlock: { pin in
-                    app.dispatch(action: .enableBiometric)
+            if canUseBiometrics() {
+                LockView(
+                    lockType: .biometric,
+                    isPinCorrect: { _ in true },
+                    onUnlock: { pin in
+                        app.dispatch(action: .enableBiometric)
+                        if !pin.isEmpty { app.dispatch(action: .setPin(pin)) }
 
-                    if !pin.isEmpty {
-                        app.dispatch(action: .setPin(pin))
-                    }
-
-                    sheetState = .none
-                },
-                backAction: { sheetState = .none },
-                content: { EmptyView() }
-            )
+                        sheetState = .none
+                    },
+                    backAction: { sheetState = .none },
+                    content: { EmptyView() }
+                )
+            } else {
+                NewPinView(onComplete: setPin, backAction: { sheetState = .none })
+            }
 
         case .newPin:
             NewPinView(onComplete: setPin, backAction: { sheetState = .none })

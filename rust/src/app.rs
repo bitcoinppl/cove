@@ -54,8 +54,6 @@ pub enum AppAction {
     UpdateFiatPrices,
     UpdateFees,
     UpdateAuthType(AuthType),
-    EnableAuth,
-    DisableAuth,
     EnableBiometric,
     DisableBiometric,
     SetPin(String),
@@ -193,21 +191,8 @@ impl App {
             }
 
             AppAction::UpdateAuthType(auth_type) => {
-                debug!("authType changed, NEW: {auth_type:?}");
+                debug!("authType changed, new: {auth_type:?}");
                 set_auth_type(auth_type);
-            }
-
-            AppAction::EnableAuth => {
-                debug!("enable auth");
-                let current_auth_type = FfiApp::global().auth_type();
-                if current_auth_type == AuthType::None {
-                    set_auth_type(AuthType::Biometric);
-                }
-            }
-
-            AppAction::DisableAuth => {
-                debug!("disable auth");
-                set_auth_type(AuthType::None);
             }
 
             AppAction::EnableBiometric => {
