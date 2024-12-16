@@ -443,7 +443,7 @@ struct CoveApp: App {
             // prevent getting stuck on show cover
             coverClearTask = Task {
                 try? await Task.sleep(for: .milliseconds(200))
-                showCover = false
+                if phase == .active { showCover = false }
             }
 
             app.lockState = .locked
@@ -452,6 +452,7 @@ struct CoveApp: App {
 
         // close all open sheets when going into the background
         if app.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
+            coverClearTask?.cancel()
             lockedAt = Date.now
 
             UIApplication.shared.connectedScenes
