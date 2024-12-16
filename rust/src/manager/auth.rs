@@ -13,7 +13,7 @@ use crate::{
 
 type Message = AuthManagerReconcileMessage;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum AuthManagerReconcileMessage {
     AuthTypeChanged(AuthType),
 }
@@ -46,6 +46,7 @@ pub enum AuthManagerAction {
     DisableBiometric,
     SetPin(String),
     DisablePin,
+    SetWipeDataPin(String),
 }
 
 #[uniffi::export]
@@ -84,12 +85,24 @@ impl RustAuthManager {
             .unwrap_or_default()
     }
 
-    fn send(&self, message: Message) {
-        if let Err(error) = self.reconciler.send(message) {
-            error!("unable to send message: {error:?}");
+    /// Check if the PIN matches the wipe data pin
+    pub fn check_wipe_data_pin(&self, pin: String) -> bool {
+        let wipe_data_pin = Database::global()
+            .global_config
+            .wipe_data_pin()
+            .unwrap_or_default();
+
+        pin == wipe_data_pin
+    }
+
+    /// Delete the wipe data pin
+    pub fn delete_wipe_data_pin(&self) {
+        if let Err(error) = Database::global().global_config.delete_wipe_data_pin() {
+            error!("unable to delete wipe data pin: {error:?}");
         }
     }
 
+    // private
     fn set_auth_type(&self, auth_type: AuthType) {
         match Database::global().global_config.set_auth_type(auth_type) {
             Ok(_) => {
@@ -98,6 +111,12 @@ impl RustAuthManager {
             Err(error) => {
                 error!("unable to set auth type: {error:?}");
             }
+        }
+    }
+
+    fn send(&self, message: Message) {
+        if let Err(error) = self.reconciler.send(message) {
+            error!("unable to send message: {error:?}");
         }
     }
 
@@ -155,6 +174,13 @@ impl RustAuthManager {
                     AuthType::Pin => self.set_auth_type(AuthType::None),
                     AuthType::Both => self.set_auth_type(AuthType::Biometric),
                     _ => {}
+                }
+            }
+
+            Action::SetWipeDataPin(pin) => {
+                debug!("set wipe data pin");
+                if let Err(error) = Database::global().global_config.set_wipe_data_pin(pin) {
+                    error!("unable to set wipe data pin: {error:?}");
                 }
             }
         }

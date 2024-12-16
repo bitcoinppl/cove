@@ -11,7 +11,6 @@ pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("glo
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
 pub enum GlobalFlagKey {
     CompletedOnboarding,
-    WipeMePinEnabled,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]

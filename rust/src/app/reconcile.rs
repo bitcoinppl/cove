@@ -20,6 +20,7 @@ pub enum AppStateReconcileMessage {
     FeesChanged(FeeResponse),
     AuthTypeChanged(AuthType),
     HashedPinCodeChanged(String),
+    WipeDataPinChanged(String),
 }
 
 // alias for easier imports on the rust side

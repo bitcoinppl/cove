@@ -21,7 +21,11 @@ import SwiftUI
         AuthPin().check(pin: pin)
     }
 
-    func reconcile(message: AuthManagerReconcileMessage) {
+    public func checkWipeMePin(_ pin: String) -> Bool {
+        AuthPin().check(pin: pin)
+    }
+  
+    func reconcile(message: Aut hManagerReconcileMessage) {
         logger.debug("reconcile: \(message)")
 
         Task {
