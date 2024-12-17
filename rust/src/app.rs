@@ -13,7 +13,7 @@ use crate::{
     node::Node,
     router::{Route, RouteFactory, Router},
     transaction::fees::client::{FeeResponse, FEE_CLIENT},
-    wallet::metadata::WalletId,
+    wallet::metadata::{WalletId, WalletType},
 };
 use crossbeam::channel::{Receiver, Sender};
 use macros::impl_default_for;
@@ -267,6 +267,17 @@ impl FfiApp {
     pub fn num_wallets(&self) -> u16 {
         let network = Database::global().global_config.selected_network();
         Database::global().wallets().len(network).unwrap_or(0)
+    }
+
+    /// Get wallets that have not been backed up and verified
+    pub fn unverified_wallet_ids(&self) -> Vec<WalletId> {
+        let all_wallets = Database::global().wallets().all().unwrap_or_default();
+
+        all_wallets
+            .into_iter()
+            .filter(|wallet| wallet.wallet_type == WalletType::Hot && !wallet.verified)
+            .map(|wallet| wallet.id)
+            .collect::<Vec<WalletId>>()
     }
 
     /// Load and reset the default route after 800ms delay
