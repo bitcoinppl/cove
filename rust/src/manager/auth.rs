@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use crossbeam::channel::{Receiver, Sender};
 use macros::impl_default_for;
+use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
@@ -12,6 +13,8 @@ use crate::{
 };
 
 type Message = AuthManagerReconcileMessage;
+
+pub static AUTH_MANAGER: LazyLock<Arc<RustAuthManager>> = LazyLock::new(RustAuthManager::init);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum AuthManagerReconcileMessage {
@@ -47,12 +50,11 @@ pub enum AuthManagerAction {
     SetPin(String),
     DisablePin,
     SetWipeDataPin(String),
+    DisableWipeDataPin,
 }
 
-#[uniffi::export]
 impl RustAuthManager {
-    #[uniffi::constructor]
-    pub fn new() -> Self {
+    fn init() -> Arc<Self> {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
@@ -60,6 +62,15 @@ impl RustAuthManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
+        .into()
+    }
+}
+
+#[uniffi::export]
+impl RustAuthManager {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        AUTH_MANAGER.clone()
     }
 
     #[uniffi::method]
@@ -181,6 +192,13 @@ impl RustAuthManager {
                 debug!("set wipe data pin");
                 if let Err(error) = Database::global().global_config.set_wipe_data_pin(pin) {
                     error!("unable to set wipe data pin: {error:?}");
+                }
+            }
+
+            Action::DisableWipeDataPin => {
+                debug!("disable wipe data pin");
+                if let Err(error) = Database::global().global_config.delete_wipe_data_pin() {
+                    error!("unable to delete wipe data pin: {error:?}");
                 }
             }
         }
