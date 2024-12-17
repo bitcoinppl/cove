@@ -92,7 +92,7 @@ impl AuthPin {
             .hashed_pin_code()
             .unwrap_or_default();
 
-        self.verify(&pin, &hashed_pin).is_ok()
+        self.verify(pin, &hashed_pin).is_ok()
     }
 
     pub fn verify(&self, pin: &str, hashed_pin: &str) -> Result<()> {
@@ -136,7 +136,7 @@ mod tests {
     fn test_verify_pin() {
         let auth = AuthPin::new();
         let hashed = auth.hash("123456".to_string()).unwrap();
-        let result = auth.verify("123456".to_string(), hashed);
+        let result = auth.verify("123456", &hashed);
         assert!(result.is_ok());
     }
 }
