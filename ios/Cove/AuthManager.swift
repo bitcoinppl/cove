@@ -3,24 +3,28 @@ import SwiftUI
 @Observable class AuthManager: AuthManagerReconciler {
     private let logger = Log(id: "AuthManager")
     var rust: RustAuthManager
-    var authType = Database().globalConfig().authType()
+    var type = Database().globalConfig().authType()
     var lockState: LockState = .locked
+    var isWipeDataPinEnabled: Bool
 
     @MainActor
     var isUsingBiometrics: Bool = false
 
     public init() {
-        rust = RustAuthManager()
+        let rust = RustAuthManager()
+        self.rust = rust
+        isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
+
         rust.listenForUpdates(reconciler: self)
     }
-    
+
     public func lock() {
         guard isAuthEnabled else { return }
         lockState = .locked
     }
 
     public var isAuthEnabled: Bool {
-        authType != AuthType.none
+        type != AuthType.none
     }
 
     public func checkPin(_ pin: String) -> Bool {
@@ -28,8 +32,18 @@ import SwiftUI
             return true
         }
 
-        if self.checkWipeDataPin(pin) {
-            // TODO: delete all data
+        if checkWipeDataPin(pin) {
+            AppManager().rust.dangerousWipeAllData()
+
+            // reset auth maanger
+            rust = RustAuthManager()
+            lockState = .unlocked
+            type = .none
+
+            // reset app manager
+            AppManager().reset()
+
+            return true
         }
 
         return false
@@ -46,7 +60,10 @@ import SwiftUI
             await MainActor.run {
                 switch message {
                 case let .authTypeChanged(authType):
-                    self.authType = authType
+                    self.type = authType
+
+                case .wipeDataPinChanged:
+                    self.isWipeDataPinEnabled = self.rust.isWipeDataPinEnabled()
                 }
             }
         }

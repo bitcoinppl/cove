@@ -2,12 +2,23 @@ import LocalAuthentication
 import SwiftUI
 
 private enum SheetState: Equatable {
-    case newPin, removePin, changePin, disableBiometric, enableAuth, enableBiometric
+    case newPin,
+         removePin,
+         changePin,
+         disableBiometric,
+         enableAuth,
+         enableBiometric,
+         enableWipeDataPin
 }
 
 private enum AlertState: Equatable {
     case networkChanged(Network)
+    case unverifiedWallets(WalletId)
     case confirmEnableWipeMePin
+    case noteNoFaceIdWhenWipeMePin
+    case notePinRequired
+    case noteFaceIdDisabling
+    case wipeDataSetPinError(String)
 }
 
 struct SettingsScreen: View {
@@ -31,12 +42,19 @@ struct SettingsScreen: View {
 
     var toggleBiometric: Binding<Bool> {
         Binding(
-            get: { auth.authType == AuthType.both || auth.authType == AuthType.biometric },
+            get: { auth.type == AuthType.both || auth.type == AuthType.biometric },
             set: { enable in
-                if enable {
-                    sheetState = .init(.enableBiometric)
-                } else {
+                // disable
+                if !enable {
                     sheetState = .init(.disableBiometric)
+                    return
+                }
+
+                // enable
+                if auth.isWipeDataPinEnabled {
+                    alertState = .init(.noteNoFaceIdWhenWipeMePin)
+                } else {
+                    sheetState = .init(.enableBiometric)
                 }
             }
         )
@@ -44,7 +62,7 @@ struct SettingsScreen: View {
 
     var togglePin: Binding<Bool> {
         Binding(
-            get: { auth.authType == AuthType.both || auth.authType == AuthType.pin },
+            get: { auth.type == AuthType.both || auth.type == AuthType.pin },
             set: { enable in
                 if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
             }
@@ -53,9 +71,31 @@ struct SettingsScreen: View {
 
     var toggleWipeMePin: Binding<Bool> {
         Binding(
-            get: { false },
+            get: { auth.isWipeDataPinEnabled },
             set: { enable in
-                if enable { alertState = .init(.confirmEnableWipeMePin) }
+                // enable
+                if enable {
+                    if !app.rust.unverifiedWalletIds().isEmpty {
+                        alertState = .init(
+                            .unverifiedWallets(app.rust.unverifiedWalletIds().first!))
+                        return
+                    }
+
+                    if auth.type == .biometric {
+                        alertState = .init(.notePinRequired)
+                        return
+                    }
+
+                    if auth.type == .both {
+                        alertState = .init(.noteFaceIdDisabling)
+                        return
+                    }
+
+                    alertState = .init(.confirmEnableWipeMePin)
+                }
+
+                // disable
+                if !enable { auth.dispatch(action: .disableWipeDataPin) }
             }
         )
     }
@@ -131,6 +171,7 @@ struct SettingsScreen: View {
             }
         }
         .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(networkChanged)
         .toolbar {
             networkChanged
@@ -165,20 +206,20 @@ struct SettingsScreen: View {
         .gesture(
             networkChanged
                 ? DragGesture()
-                    .onChanged { gesture in
-                        if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                            withAnimation(.spring()) {
-                                alertState = .init(.networkChanged(app.selectedNetwork))
-                            }
+                .onChanged { gesture in
+                    if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                        withAnimation(.spring()) {
+                            alertState = .init(.networkChanged(app.selectedNetwork))
                         }
                     }
-                    .onEnded { gesture in
-                        if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                            withAnimation(.spring()) {
-                                alertState = .init(.networkChanged(app.selectedNetwork))
-                            }
+                }
+                .onEnded { gesture in
+                    if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                        withAnimation(.spring()) {
+                            alertState = .init(.networkChanged(app.selectedNetwork))
                         }
-                    } : nil
+                    }
+                } : nil
         )
     }
 
@@ -220,10 +261,10 @@ struct SettingsScreen: View {
         return MyAlert(alertState).title
     }
 
-    private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
+    private func MyAlert(_ alert: TaggedItem<AlertState>) -> AnyAlertBuilder {
         switch alert.item {
         case let .networkChanged(network):
-            return AlertBuilder(
+            AlertBuilder(
                 title: "⚠️ Network Changed ⚠️",
                 message: "You've changed your network to \(network)",
                 actions: {
@@ -231,34 +272,96 @@ struct SettingsScreen: View {
                         app.resetRoute(to: .listWallets)
                         dismiss()
                     }
-                    Button("Cancel", role: .cancel) {}
+                    Button("Cancel", role: .cancel) { alertState = .none }
                 }
-            )
+            ).eraseToAny()
+
+        case let .unverifiedWallets(walletId):
+            AlertBuilder(
+                title: "Can't Enable Wipe Data PIN",
+                message: """
+                You have wallets that have not been backed up. Please back up your wallets before enabling the Wipe Data PIN.\
+                If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet.
+                """,
+                actions: {
+                    Button("Go To Wallet") {
+                        try? app.rust.selectWallet(id: walletId)
+                    }
+
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                }
+            ).eraseToAny()
 
         case .confirmEnableWipeMePin:
-            return AlertBuilder(
+            AlertBuilder(
                 title: "Are you sure?",
                 message:
-                    """
+                """
 
-                    Enabling the Wipe Data PIN will let you chose a PIN that if entered will wipe all Cove wallet data on this device.
+                Enabling the Wipe Data PIN will let you chose a PIN that if entered will wipe all Cove wallet data on this device.
 
-                    If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet. 
+                If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet. 
 
-                    Please make sure you have a backup of your wallet before enabling this.
-
-                    Note: Enabling the Wipe Data PIN will disable FaceID auth if its enabled.
-                    """,
+                Please make sure you have a backup of your wallet before enabling this.
+                """,
                 actions: {
                     Button("Yes, Enable Wipe Data PIN") {
-                        // app.dispatch(action: .enableWipeMePin)
-                        dismiss()
-                    }
-                    Button("Cancel", role: .cancel) {
                         alertState = .none
+                        sheetState = .init(.enableWipeDataPin)
+                    }
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                }
+            ).eraseToAny()
+
+        case .notePinRequired:
+            AlertBuilder(
+                title: "PIN is required",
+                message: "Setting a PIN is required to have a wipe data PIN",
+                actions: { Button("OK") { alertState = .none } }
+            ).eraseToAny()
+
+        case .noteFaceIdDisabling:
+            AlertBuilder(
+                title: "Disable FaceID Unlock?",
+                message: """
+
+                Enabling the wipe data PIN will disable FaceID unlock for Cove. 
+
+                Going forward, you will have to use your PIN to unlock Cove.
+                """,
+                actions: {
+                    Button("Disable FaceID", role: .destructive) {
+                        auth.dispatch(action: .disableBiometric)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.350) {
+                            alertState = .init(.confirmEnableWipeMePin)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                }
+            ).eraseToAny()
+
+        case .noteNoFaceIdWhenWipeMePin:
+            AlertBuilder(
+                title: "Can't do that",
+                message: "You can't have both Wipe Data PIN and FaceID active at the same time",
+                actions: {
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                    Button("Disable Wipe Data PIN", role: .destructive) {
+                        auth.dispatch(action: .disableWipeDataPin)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.350) {
+                            auth.dispatch(action: .enableBiometric)
+                        }
                     }
                 }
+            ).eraseToAny()
+
+        case let .wipeDataSetPinError(error):
+            AlertBuilder(
+                title: "Something went wrong!",
+                message: error,
+                actions: { Button("OK") { alertState = .none } }
             )
+            .eraseToAny()
         }
     }
 
@@ -295,6 +398,7 @@ struct SettingsScreen: View {
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
                     auth.dispatch(action: .disablePin)
+                    auth.dispatch(action: .disableWipeDataPin)
                     sheetState = .none
                 }
             )
@@ -303,12 +407,22 @@ struct SettingsScreen: View {
             ChangePinView(
                 isPinCorrect: auth.checkPin,
                 backAction: { sheetState = .none },
-                onComplete: setPin
+                onComplete: { pin in
+                    sheetState = .none
+
+                    if auth.checkWipeDataPin(pin) {
+                        return alertState = .init(
+                            .wipeDataSetPinError("Can't update PIN because its the same as your wipe data PIN")
+                        )
+                    }
+
+                    setPin(pin)
+                }
             )
 
         case .disableBiometric:
             LockView(
-                lockType: auth.authType,
+                lockType: auth.type,
                 isPinCorrect: auth.checkPin,
                 onUnlock: { _ in
                     auth.dispatch(action: .disableBiometric)
@@ -329,6 +443,24 @@ struct SettingsScreen: View {
                 backAction: { sheetState = .none },
                 content: { EmptyView() }
             )
+
+        case .enableWipeDataPin:
+            WipeDataPinView(
+                onComplete: setWipeDataPin,
+                backAction: {
+                    sheetState = .none
+                }
+            )
+        }
+    }
+
+    func setWipeDataPin(_ pin: String) {
+        sheetState = .none
+
+        do { try auth.rust.setWipeDataPin(pin: pin) }
+        catch {
+            let error = error as! AuthManagerError
+            alertState = .init(.wipeDataSetPinError(error.describe))
         }
     }
 }

@@ -2,14 +2,13 @@ use std::sync::{Arc, LazyLock};
 
 use crossbeam::channel::{Receiver, Sender};
 use macros::impl_default_for;
-use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
 
 use crate::{
     auth::{AuthPin, AuthType},
-    database::Database,
+    database::{self, Database},
 };
 
 type Message = AuthManagerReconcileMessage;
@@ -19,6 +18,7 @@ pub static AUTH_MANAGER: LazyLock<Arc<RustAuthManager>> = LazyLock::new(RustAuth
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum AuthManagerReconcileMessage {
     AuthTypeChanged(AuthType),
+    WipeDataPinChanged,
 }
 
 #[uniffi::export(callback_interface)]
@@ -26,8 +26,6 @@ pub trait AuthManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the manager changes
     fn reconcile(&self, message: AuthManagerReconcileMessage);
 }
-
-impl_default_for!(RustAuthManager);
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustAuthManager {
@@ -47,10 +45,41 @@ pub enum AuthManagerAction {
     UpdateAuthType(AuthType),
     EnableBiometric,
     DisableBiometric,
-    SetPin(String),
     DisablePin,
-    SetWipeDataPin(String),
+    SetPin(String),
     DisableWipeDataPin,
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
+type Error = AuthManagerError;
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum AuthManagerError {
+    #[error("Unable to set the wipe data PIN, because {0}")]
+    WipeDataSet(#[from] WipeDataPinError),
+
+    #[error("There was a database error: {0}")]
+    DatabaseError(#[from] database::Error),
+}
+
+#[uniffi::export]
+fn auth_manager_error_to_string(error: AuthManagerError) -> String {
+    error.to_string()
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum WipeDataPinError {
+    /// Unable to set wipe data pin, because PIN is not enabled
+    #[error("PIN is not enabled")]
+    PinNotEnabled,
+
+    /// Unable to set wipe data pin, because its the same as the current pin
+    #[error("its is the same as the current pin")]
+    SameAsCurrentPin,
+
+    /// Unable to set wipe data pin, because biometrics is enabled
+    #[error("biometrics is enabled")]
+    BiometricsEnabled,
 }
 
 impl RustAuthManager {
@@ -73,7 +102,6 @@ impl RustAuthManager {
         AUTH_MANAGER.clone()
     }
 
-    #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn AuthManagerReconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
@@ -96,8 +124,45 @@ impl RustAuthManager {
             .unwrap_or_default()
     }
 
-    /// Check if the PIN matches the wipe data pin
+    /// Check if the wipe data pin is enabled
+    pub fn is_wipe_data_pin_enabled(&self) -> bool {
+        let pin = Database::global()
+            .global_config
+            .wipe_data_pin()
+            .unwrap_or_default();
+
+        !pin.is_empty()
+    }
+
+    /// Set the wipe data pin
+    pub fn set_wipe_data_pin(&self, pin: String) -> Result<()> {
+        let auth_type = self.auth_type();
+
+        if auth_type == AuthType::None {
+            return Err(WipeDataPinError::PinNotEnabled.into());
+        }
+
+        if auth_type == AuthType::Biometric || auth_type == AuthType::Both {
+            return Err(WipeDataPinError::BiometricsEnabled.into());
+        }
+
+        if AuthPin::new().check(&pin) {
+            return Err(WipeDataPinError::SameAsCurrentPin.into());
+        }
+
+        // set the pin
+        Database::global().global_config.set_wipe_data_pin(pin)?;
+        self.send(Message::WipeDataPinChanged);
+
+        Ok(())
+    }
+
+    /// Check to see if the passed in PIN matches the wipe data PIN
     pub fn check_wipe_data_pin(&self, pin: String) -> bool {
+        if pin.is_empty() {
+            return false;
+        }
+
         let wipe_data_pin = Database::global()
             .global_config
             .wipe_data_pin()
@@ -111,6 +176,8 @@ impl RustAuthManager {
         if let Err(error) = Database::global().global_config.delete_wipe_data_pin() {
             error!("unable to delete wipe data pin: {error:?}");
         }
+
+        self.send(Message::WipeDataPinChanged);
     }
 
     // private
@@ -188,19 +255,7 @@ impl RustAuthManager {
                 }
             }
 
-            Action::SetWipeDataPin(pin) => {
-                debug!("set wipe data pin");
-                if let Err(error) = Database::global().global_config.set_wipe_data_pin(pin) {
-                    error!("unable to set wipe data pin: {error:?}");
-                }
-            }
-
-            Action::DisableWipeDataPin => {
-                debug!("disable wipe data pin");
-                if let Err(error) = Database::global().global_config.delete_wipe_data_pin() {
-                    error!("unable to delete wipe data pin: {error:?}");
-                }
-            }
+            Action::DisableWipeDataPin => self.delete_wipe_data_pin(),
         }
     }
 }

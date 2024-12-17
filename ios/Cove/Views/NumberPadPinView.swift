@@ -179,13 +179,15 @@ struct NumberPadPinView: View {
             .padding(.vertical)
             .onChange(of: pin) { _, newValue in
                 if newValue.count == pinLength {
+                    let pin = newValue
+
                     /// Validate Pin
                     if isPinCorrect(pin) {
                         withAnimation(.snappy, completionCriteria: .logicallyComplete) {
                             lockState = .unlocked
                         } completion: {
                             onUnlock(pin)
-                            pin = ""
+                            self.pin = ""
                         }
                     } else {
                         animateField.toggle()

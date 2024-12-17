@@ -2944,6 +2944,8 @@ public func FfiConverterTypeConfirmedTransaction_lower(_ value: ConfirmedTransac
 
 public protocol DatabaseProtocol : AnyObject {
     
+    func dangerousResetAllData() 
+    
     func globalConfig()  -> GlobalConfigTable
     
     func unsignedTransactions()  -> UnsignedTransactionsTable
@@ -3008,6 +3010,12 @@ public convenience init() {
 
     
 
+    
+open func dangerousResetAllData()  {try! rustCall() {
+    uniffi_cove_fn_method_database_dangerous_reset_all_data(self.uniffiClonePointer(),$0
+    )
+}
+}
     
 open func globalConfig() -> GlobalConfigTable  {
     return try!  FfiConverterTypeGlobalConfigTable.lift(try! rustCall() {
@@ -3985,6 +3993,11 @@ public protocol FfiAppProtocol : AnyObject {
     func authType()  -> AuthType
     
     /**
+     * DANGER: This will wipe all wallet data on this device
+     */
+    func dangerousWipeAllData() 
+    
+    /**
      * Frontend calls this method to send events to the rust application logic
      */
     func dispatch(action: AppAction) 
@@ -4044,6 +4057,11 @@ public protocol FfiAppProtocol : AnyObject {
     func selectWallet(id: WalletId, nextRoute: Route?) throws 
     
     func state()  -> AppState
+    
+    /**
+     * Get wallets that have not been backed up and verified
+     */
+    func unverifiedWalletIds()  -> [WalletId]
     
 }
 
@@ -4118,6 +4136,15 @@ open func authType() -> AuthType  {
     uniffi_cove_fn_method_ffiapp_auth_type(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+    /**
+     * DANGER: This will wipe all wallet data on this device
+     */
+open func dangerousWipeAllData()  {try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(self.uniffiClonePointer(),$0
+    )
+}
 }
     
     /**
@@ -4286,6 +4313,16 @@ open func selectWallet(id: WalletId, nextRoute: Route? = nil)throws   {try rustC
 open func state() -> AppState  {
     return try!  FfiConverterTypeAppState.lift(try! rustCall() {
     uniffi_cove_fn_method_ffiapp_state(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get wallets that have not been backed up and verified
+     */
+open func unverifiedWalletIds() -> [WalletId]  {
+    return try!  FfiConverterSequenceTypeWalletId.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -7295,7 +7332,7 @@ public protocol RustAuthManagerProtocol : AnyObject {
     func authType()  -> AuthType
     
     /**
-     * Check if the PIN matches the wipe data pin
+     * Check to see if the passed in PIN matches the wipe data PIN
      */
     func checkWipeDataPin(pin: String)  -> Bool
     
@@ -7309,11 +7346,21 @@ public protocol RustAuthManagerProtocol : AnyObject {
      */
     func dispatch(action: AuthManagerAction) 
     
+    /**
+     * Check if the wipe data pin is enabled
+     */
+    func isWipeDataPinEnabled()  -> Bool
+    
     func listenForUpdates(reconciler: AuthManagerReconciler) 
     
     func send(message: AuthManagerReconcileMessage) 
     
     func setAuthType(authType: AuthType) 
+    
+    /**
+     * Set the wipe data pin
+     */
+    func setWipeDataPin(pin: String) throws 
     
 }
 
@@ -7385,7 +7432,7 @@ open func authType() -> AuthType  {
 }
     
     /**
-     * Check if the PIN matches the wipe data pin
+     * Check to see if the passed in PIN matches the wipe data PIN
      */
 open func checkWipeDataPin(pin: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
@@ -7414,6 +7461,16 @@ open func dispatch(action: AuthManagerAction)  {try! rustCall() {
 }
 }
     
+    /**
+     * Check if the wipe data pin is enabled
+     */
+open func isWipeDataPinEnabled() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_is_wipe_data_pin_enabled(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func listenForUpdates(reconciler: AuthManagerReconciler)  {try! rustCall() {
     uniffi_cove_fn_method_rustauthmanager_listen_for_updates(self.uniffiClonePointer(),
         FfiConverterCallbackInterfaceAuthManagerReconciler.lower(reconciler),$0
@@ -7431,6 +7488,16 @@ open func send(message: AuthManagerReconcileMessage)  {try! rustCall() {
 open func setAuthType(authType: AuthType)  {try! rustCall() {
     uniffi_cove_fn_method_rustauthmanager_set_auth_type(self.uniffiClonePointer(),
         FfiConverterTypeAuthType.lower(authType),$0
+    )
+}
+}
+    
+    /**
+     * Set the wipe data pin
+     */
+open func setWipeDataPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError.lift) {
+    uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(self.uniffiClonePointer(),
+        FfiConverterString.lower(pin),$0
     )
 }
 }
@@ -13211,11 +13278,10 @@ public enum AuthManagerAction {
     )
     case enableBiometric
     case disableBiometric
+    case disablePin
     case setPin(String
     )
-    case disablePin
-    case setWipeDataPin(String
-    )
+    case disableWipeDataPin
 }
 
 
@@ -13236,13 +13302,12 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
         
         case 3: return .disableBiometric
         
-        case 4: return .setPin(try FfiConverterString.read(from: &buf)
+        case 4: return .disablePin
+        
+        case 5: return .setPin(try FfiConverterString.read(from: &buf)
         )
         
-        case 5: return .disablePin
-        
-        case 6: return .setWipeDataPin(try FfiConverterString.read(from: &buf)
-        )
+        case 6: return .disableWipeDataPin
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -13265,19 +13330,18 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .setPin(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
         case .disablePin:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .setPin(v1):
             writeInt(&buf, Int32(5))
-        
-        
-        case let .setWipeDataPin(v1):
-            writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case .disableWipeDataPin:
+            writeInt(&buf, Int32(6))
+        
         }
     }
 }
@@ -13303,6 +13367,71 @@ extension AuthManagerAction: Equatable, Hashable {}
 
 
 
+
+public enum AuthManagerError {
+
+    
+    
+    case WipeDataSet(WipeDataPinError
+    )
+    case DatabaseError(DatabaseError
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
+    typealias SwiftType = AuthManagerError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthManagerError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .WipeDataSet(
+            try FfiConverterTypeWipeDataPinError.read(from: &buf)
+            )
+        case 2: return .DatabaseError(
+            try FfiConverterTypeDatabaseError.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AuthManagerError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .WipeDataSet(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeWipeDataPinError.write(v1, into: &buf)
+            
+        
+        case let .DatabaseError(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeDatabaseError.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+extension AuthManagerError: Equatable, Hashable {}
+
+extension AuthManagerError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -13310,6 +13439,7 @@ public enum AuthManagerReconcileMessage {
     
     case authTypeChanged(AuthType
     )
+    case wipeDataPinChanged
 }
 
 
@@ -13326,6 +13456,8 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
         case 1: return .authTypeChanged(try FfiConverterTypeAuthType.read(from: &buf)
         )
         
+        case 2: return .wipeDataPinChanged
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -13338,6 +13470,10 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
             writeInt(&buf, Int32(1))
             FfiConverterTypeAuthType.write(v1, into: &buf)
             
+        
+        case .wipeDataPinChanged:
+            writeInt(&buf, Int32(2))
+        
         }
     }
 }
@@ -19842,6 +19978,78 @@ extension WalletType: Equatable, Hashable {}
 
 
 
+public enum WipeDataPinError {
+
+    
+    
+    /**
+     * Unable to set wipe data pin, because PIN is not enabled
+     */
+    case PinNotEnabled
+    /**
+     * Unable to set wipe data pin, because its the same as the current pin
+     */
+    case SameAsCurrentPin
+    /**
+     * Unable to set wipe data pin, because biometrics is enabled
+     */
+    case BiometricsEnabled
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWipeDataPinError: FfiConverterRustBuffer {
+    typealias SwiftType = WipeDataPinError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WipeDataPinError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .PinNotEnabled
+        case 2: return .SameAsCurrentPin
+        case 3: return .BiometricsEnabled
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WipeDataPinError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .PinNotEnabled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .SameAsCurrentPin:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .BiometricsEnabled:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+extension WipeDataPinError: Equatable, Hashable {}
+
+extension WipeDataPinError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
 public enum XpubError {
 
     
@@ -21541,6 +21749,31 @@ fileprivate struct FfiConverterSequenceSequenceTypeGroupedWord: FfiConverterRust
     }
 }
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeWalletId: FfiConverterRustBuffer {
+    typealias SwiftType = [WalletId]
+
+    public static func write(_ value: [WalletId], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWalletId.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WalletId] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WalletId]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWalletId.read(from: &buf))
+        }
+        return seq
+    }
+}
+
 
 /**
  * Typealias from the type name used in the UDL file to the builtin type.  This
@@ -21717,6 +21950,13 @@ public func allNetworks() -> [Network]  {
 public func allUnits() -> [Unit]  {
     return try!  FfiConverterSequenceTypeUnit.lift(try! rustCall() {
     uniffi_cove_fn_func_all_units($0
+    )
+})
+}
+public func authManagerErrorToString(error: AuthManagerError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_auth_manager_error_to_string(
+        FfiConverterTypeAuthManagerError.lower(error),$0
     )
 })
 }
@@ -21951,6 +22191,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_all_units() != 36925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_auth_manager_error_to_string() != 12061) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_balance_zero() != 63807) {
@@ -22193,6 +22436,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_confirmedtransaction_sent_and_received() != 3525) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 31513) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_database_global_config() != 4476) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22265,6 +22511,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_auth_type() != 34438) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 63122) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_dispatch() != 48712) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22308,6 +22557,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_state() != 19551) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 20710) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffinfcreader_data_from_records() != 32962) {
@@ -22520,13 +22772,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_auth_type() != 13301) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustauthmanager_check_wipe_data_pin() != 49775) {
+    if (uniffi_cove_checksum_method_rustauthmanager_check_wipe_data_pin() != 50482) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_delete_wipe_data_pin() != 30374) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_dispatch() != 58198) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled() != 29022) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_listen_for_updates() != 6029) {
@@ -22536,6 +22791,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_set_auth_type() != 20435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 20226) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 61781) {
