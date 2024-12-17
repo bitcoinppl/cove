@@ -7295,6 +7295,16 @@ public protocol RustAuthManagerProtocol : AnyObject {
     func authType()  -> AuthType
     
     /**
+     * Check if the PIN matches the wipe data pin
+     */
+    func checkWipeDataPin(pin: String)  -> Bool
+    
+    /**
+     * Delete the wipe data pin
+     */
+    func deleteWipeDataPin() 
+    
+    /**
      * Action from the frontend to change the state of the view model
      */
     func dispatch(action: AuthManagerAction) 
@@ -7372,6 +7382,26 @@ open func authType() -> AuthType  {
     uniffi_cove_fn_method_rustauthmanager_auth_type(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+    /**
+     * Check if the PIN matches the wipe data pin
+     */
+open func checkWipeDataPin(pin: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_check_wipe_data_pin(self.uniffiClonePointer(),
+        FfiConverterString.lower(pin),$0
+    )
+})
+}
+    
+    /**
+     * Delete the wipe data pin
+     */
+open func deleteWipeDataPin()  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_delete_wipe_data_pin(self.uniffiClonePointer(),$0
+    )
+}
 }
     
     /**
@@ -12965,10 +12995,6 @@ public enum AppStateReconcileMessage {
     )
     case feesChanged(FeeResponse
     )
-    case authTypeChanged(AuthType
-    )
-    case hashedPinCodeChanged(String
-    )
 }
 
 
@@ -13000,12 +13026,6 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         )
         
         case 7: return .feesChanged(try FfiConverterTypeFeeResponse.read(from: &buf)
-        )
-        
-        case 8: return .authTypeChanged(try FfiConverterTypeAuthType.read(from: &buf)
-        )
-        
-        case 9: return .hashedPinCodeChanged(try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -13049,16 +13069,6 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case let .feesChanged(v1):
             writeInt(&buf, Int32(7))
             FfiConverterTypeFeeResponse.write(v1, into: &buf)
-            
-        
-        case let .authTypeChanged(v1):
-            writeInt(&buf, Int32(8))
-            FfiConverterTypeAuthType.write(v1, into: &buf)
-            
-        
-        case let .hashedPinCodeChanged(v1):
-            writeInt(&buf, Int32(9))
-            FfiConverterString.write(v1, into: &buf)
             
         }
     }
@@ -13204,6 +13214,8 @@ public enum AuthManagerAction {
     case setPin(String
     )
     case disablePin
+    case setWipeDataPin(String
+    )
 }
 
 
@@ -13228,6 +13240,9 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
         )
         
         case 5: return .disablePin
+        
+        case 6: return .setWipeDataPin(try FfiConverterString.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -13258,6 +13273,11 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
         case .disablePin:
             writeInt(&buf, Int32(5))
         
+        
+        case let .setWipeDataPin(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
         }
     }
 }
@@ -14895,6 +14915,7 @@ public enum GlobalConfigKey {
     case colorScheme
     case authType
     case hashedPinCode
+    case wipeDataPin
 }
 
 
@@ -14920,6 +14941,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 5: return .authType
         
         case 6: return .hashedPinCode
+        
+        case 7: return .wipeDataPin
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14952,6 +14975,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .hashedPinCode:
             writeInt(&buf, Int32(6))
+        
+        
+        case .wipeDataPin:
+            writeInt(&buf, Int32(7))
         
         }
     }
@@ -15055,7 +15082,6 @@ extension GlobalConfigTableError: Foundation.LocalizedError {
 public enum GlobalFlagKey {
     
     case completedOnboarding
-    case wipeMePinEnabled
 }
 
 
@@ -15071,8 +15097,6 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case 1: return .completedOnboarding
         
-        case 2: return .wipeMePinEnabled
-        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -15083,10 +15107,6 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case .completedOnboarding:
             writeInt(&buf, Int32(1))
-        
-        
-        case .wipeMePinEnabled:
-            writeInt(&buf, Int32(2))
         
         }
     }
@@ -22498,6 +22518,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_auth_type() != 13301) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_check_wipe_data_pin() != 49775) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_delete_wipe_data_pin() != 30374) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_dispatch() != 58198) {

@@ -31,7 +31,7 @@ struct SettingsScreen: View {
 
     var toggleBiometric: Binding<Bool> {
         Binding(
-            get: { app.authType == AuthType.both || app.authType == AuthType.biometric },
+            get: { auth.authType == AuthType.both || auth.authType == AuthType.biometric },
             set: { enable in
                 if enable {
                     sheetState = .init(.enableBiometric)
@@ -44,7 +44,7 @@ struct SettingsScreen: View {
 
     var togglePin: Binding<Bool> {
         Binding(
-            get: { app.authType == AuthType.both || app.authType == AuthType.pin },
+            get: { auth.authType == AuthType.both || auth.authType == AuthType.pin },
             set: { enable in
                 if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
             }
@@ -165,20 +165,20 @@ struct SettingsScreen: View {
         .gesture(
             networkChanged
                 ? DragGesture()
-                .onChanged { gesture in
-                    if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                        withAnimation(.spring()) {
-                            alertState = .init(.networkChanged(app.selectedNetwork))
+                    .onChanged { gesture in
+                        if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                            withAnimation(.spring()) {
+                                alertState = .init(.networkChanged(app.selectedNetwork))
+                            }
                         }
                     }
-                }
-                .onEnded { gesture in
-                    if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                        withAnimation(.spring()) {
-                            alertState = .init(.networkChanged(app.selectedNetwork))
+                    .onEnded { gesture in
+                        if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                            withAnimation(.spring()) {
+                                alertState = .init(.networkChanged(app.selectedNetwork))
+                            }
                         }
-                    }
-                } : nil
+                    } : nil
         )
     }
 
@@ -239,14 +239,16 @@ struct SettingsScreen: View {
             return AlertBuilder(
                 title: "Are you sure?",
                 message:
-                """
+                    """
 
-                Enabling the Wipe Data PIN will let you chose a PIN that if entered will wipe all Cove wallet data on this device.
+                    Enabling the Wipe Data PIN will let you chose a PIN that if entered will wipe all Cove wallet data on this device.
 
-                If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet. 
+                    If you wipe the data without having a back up of your wallet, you will lose the bitcoin in that wallet. 
 
-                Please make sure you have a backup of your wallet before enabling this.
-                """,
+                    Please make sure you have a backup of your wallet before enabling this.
+
+                    Note: Enabling the Wipe Data PIN will disable FaceID auth if its enabled.
+                    """,
                 actions: {
                     Button("Yes, Enable Wipe Data PIN") {
                         // app.dispatch(action: .enableWipeMePin)
@@ -307,7 +309,7 @@ struct SettingsScreen: View {
         case .disableBiometric:
             LockView(
                 lockType: auth.authType,
-                isPinCorrect: app.checkPin,
+                isPinCorrect: auth.checkPin,
                 onUnlock: { _ in
                     auth.dispatch(action: .disableBiometric)
                     sheetState = .none

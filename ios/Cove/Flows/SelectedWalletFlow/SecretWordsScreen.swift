@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SecretWordsScreen: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
 
     let id: WalletId
 
@@ -105,7 +106,7 @@ struct SecretWordsScreen: View {
         }
         .padding()
         .onAppear {
-            app.lock()
+            auth.lock()
             guard words == nil else { return }
             do { words = try Mnemonic(id: id) }
             catch { errorMessage = error.localizedDescription }

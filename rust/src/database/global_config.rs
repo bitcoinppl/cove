@@ -74,8 +74,7 @@ impl GlobalConfigTable {
     string_config_accessor!(
         pub auth_type,
         GlobalConfigKey::AuthType,
-        AuthType,
-        Update::AuthTypeChanged
+        AuthType
     );
 
     string_config_accessor!(

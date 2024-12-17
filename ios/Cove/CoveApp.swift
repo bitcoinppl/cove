@@ -359,10 +359,10 @@ struct CoveApp: App {
                 CoverView()
             } else {
                 LockView(
-                    lockType: app.authType,
-                    isPinCorrect: app.checkPin,
+                    lockType: auth.authType,
+                    isPinCorrect: auth.checkPin,
                     showPin: false,
-                    lockState: $app.lockState,
+                    lockState: $auth.lockState,
                     onUnlock: { _ in showCover = false }
                 ) {
                     SidebarContainer {
@@ -452,12 +452,12 @@ struct CoveApp: App {
                 if phase == .active { showCover = false }
             }
 
-            app.lockState = .locked
+            auth.lockState = .locked
             lockedAt = Date.now
         }
 
         // close all open sheets when going into the background
-        if app.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
+        if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
             coverClearTask?.cancel()
             lockedAt = Date.now
 
@@ -469,13 +469,13 @@ struct CoveApp: App {
                 }
         }
 
-        if app.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
+        if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
             showCover = false
 
             // less than 15 seconds, auto unlock if PIN only
             // TODO: make this configurable and put in DB
-            if app.authType == .pin, Date.now.timeIntervalSince(lockedAt) < 15 {
-                app.lockState = .locked
+            if auth.authType == .pin, Date.now.timeIntervalSince(lockedAt) < 15 {
+                auth.lockState = .locked
             }
         }
     }
@@ -530,10 +530,10 @@ struct CoveApp: App {
                 .onOpenURL(perform: handleFileOpen)
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
                 .onAppear {
-                    if app.isAuthEnabled {
-                        app.lockState = .locked
+                    if auth.isAuthEnabled {
+                        auth.lockState = .locked
                     } else {
-                        app.lockState = .unlocked
+                        auth.lockState = .unlocked
                     }
                 }
         }

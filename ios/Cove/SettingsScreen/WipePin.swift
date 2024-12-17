@@ -13,6 +13,7 @@ private enum PinState {
 
 struct WipePin: View {
     @Environment(AppManager.self) var app
+    @Environment(AuthManager.self) var auth
 
     /// args
     var onComplete: (String) -> Void
@@ -27,7 +28,7 @@ struct WipePin: View {
             case .pin:
                 NumberPadPinView(
                     title: "Enter Current PIN",
-                    isPinCorrect: app.checkPin,
+                    isPinCorrect: auth.checkPin,
                     showPin: false,
                     backAction: backAction,
                     onUnlock: { _ in

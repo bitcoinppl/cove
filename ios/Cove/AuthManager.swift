@@ -4,6 +4,7 @@ import SwiftUI
     private let logger = Log(id: "AuthManager")
     var rust: RustAuthManager
     var authType = Database().globalConfig().authType()
+    var lockState: LockState = .locked
 
     @MainActor
     var isUsingBiometrics: Bool = false
@@ -12,20 +13,33 @@ import SwiftUI
         rust = RustAuthManager()
         rust.listenForUpdates(reconciler: self)
     }
+    
+    public func lock() {
+        guard isAuthEnabled else { return }
+        lockState = .locked
+    }
 
     public var isAuthEnabled: Bool {
         authType != AuthType.none
     }
 
     public func checkPin(_ pin: String) -> Bool {
-        AuthPin().check(pin: pin)
+        if AuthPin().check(pin: pin) {
+            return true
+        }
+
+        if self.checkWipeDataPin(pin) {
+            // TODO: delete all data
+        }
+
+        return false
     }
 
-    public func checkWipeMePin(_ pin: String) -> Bool {
-        AuthPin().check(pin: pin)
+    public func checkWipeDataPin(_ pin: String) -> Bool {
+        rust.checkWipeDataPin(pin: pin)
     }
-  
-    func reconcile(message: Aut hManagerReconcileMessage) {
+
+    func reconcile(message: AuthManagerReconcileMessage) {
         logger.debug("reconcile: \(message)")
 
         Task {
