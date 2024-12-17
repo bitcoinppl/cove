@@ -9,6 +9,7 @@ use crate::{
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
     fiat::client::{PriceResponse, FIAT_CLIENT},
+    keychain::Keychain,
     network::Network,
     node::Node,
     router::{Route, RouteFactory, Router},
@@ -357,6 +358,36 @@ impl FfiApp {
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
         Ok(fees)
+    }
+
+    /// DANGER: This will wipe all wallet data on this device
+    pub fn dangerous_wipe_all_data(&self) {
+        let database = Database::global();
+        let keychain = Keychain::global();
+
+        let wallets = Database::global().wallets().all().unwrap_or_default();
+
+        for wallet in wallets {
+            let wallet_id = &wallet.id;
+
+            // delete the wallet from the database
+            if let Err(error) = database.wallets.delete(wallet_id) {
+                error!("Unable to delete wallet from database: {error}");
+            }
+
+            // delete the secret key from the keychain
+            keychain.delete_wallet_key(wallet_id);
+
+            // delete the xpub from keychain
+            keychain.delete_wallet_xpub(wallet_id);
+
+            // delete the wallet persisted bdk data
+            if let Err(error) = crate::wallet::delete_data_path(&wallet_id) {
+                error!("Unable to delete wallet persisted bdk data: {error}");
+            }
+        }
+
+        database.dangerous_reset_all_data();
     }
 
     /// Frontend calls this method to send events to the rust application logic

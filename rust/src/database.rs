@@ -12,6 +12,7 @@ pub mod wallet_data;
 
 use std::{path::PathBuf, sync::Arc};
 
+use arc_swap::ArcSwap;
 use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
@@ -23,7 +24,7 @@ use tracing::{error, info};
 
 use crate::consts::ROOT_DATA_DIR;
 
-pub static DATABASE: OnceCell<Database> = OnceCell::new();
+pub static DATABASE: OnceCell<ArcSwap<Database>> = OnceCell::new();
 
 pub type Error = error::DatabaseError;
 
@@ -37,16 +38,10 @@ pub struct Database {
     pub unsigned_transactions: UnsignedTransactionsTable,
 }
 
-impl Default for Database {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[uniffi::export]
 impl Database {
     #[uniffi::constructor(name = "new")]
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         Self::global().clone()
     }
 
@@ -61,34 +56,53 @@ impl Database {
     pub fn unsigned_transactions(&self) -> UnsignedTransactionsTable {
         self.unsigned_transactions.clone()
     }
+
+    pub fn dangerous_reset_all_data(&self) {
+        let current_location = ROOT_DATA_DIR.join("cove.db");
+
+        if let Err(error) = std::fs::remove_file(&current_location) {
+            error!("unable to delete database: {error}");
+            return;
+        }
+
+        DATABASE
+            .get()
+            .expect("database not initialized")
+            .swap(Self::init());
+    }
 }
 
 impl Database {
-    pub fn global() -> &'static Database {
-        DATABASE.get_or_init(|| {
-            let db = get_or_create_database();
+    pub fn global() -> Arc<Database> {
+        let db = DATABASE.get_or_init(|| ArcSwap::new(Self::init())).load();
+        Arc::clone(&db)
+    }
 
-            let write_txn = db.begin_write().expect("failed to begin write transaction");
-            let db = Arc::new(db);
+    fn init() -> Arc<Database> {
+        let db = get_or_create_database();
 
-            let wallets = WalletsTable::new(db.clone(), &write_txn);
-            let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
-            let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
-            let global_cache = GlobalCacheTable::new(db.clone(), &write_txn);
-            let unsigned_transactions = UnsignedTransactionsTable::new(db.clone(), &write_txn);
+        let write_txn = db.begin_write().expect("failed to begin write transaction");
+        let db = Arc::new(db);
 
-            write_txn
-                .commit()
-                .expect("failed to commit write transaction");
+        let wallets = WalletsTable::new(db.clone(), &write_txn);
+        let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
+        let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
+        let global_cache = GlobalCacheTable::new(db.clone(), &write_txn);
+        let unsigned_transactions = UnsignedTransactionsTable::new(db.clone(), &write_txn);
 
-            Database {
-                wallets,
-                global_flag,
-                global_config,
-                global_cache,
-                unsigned_transactions,
-            }
-        })
+        write_txn
+            .commit()
+            .expect("failed to commit write transaction");
+
+        let db = Database {
+            wallets,
+            global_flag,
+            global_config,
+            global_cache,
+            unsigned_transactions,
+        };
+
+        Arc::new(db)
     }
 }
 

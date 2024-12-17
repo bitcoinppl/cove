@@ -21,7 +21,6 @@ import SwiftUI
     var prices: PriceResponse?
     var fees: FeeResponse?
 
-
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
@@ -72,6 +71,15 @@ import SwiftUI
 
     public func updateWalletVm(_ vm: WalletManager) {
         walletManager = vm
+    }
+
+    /// Reset the manager state
+    public func reset() {
+        rust = FfiApp()
+        database = Database()
+
+        let state = rust.state()
+        router = state.router
     }
 
     var currentRoute: Route {

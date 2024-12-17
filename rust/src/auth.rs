@@ -86,10 +86,19 @@ impl AuthPin {
             .map_err(AuthError::DatabaseSaveError)
     }
 
-    pub fn verify(&self, pin: String, hashed_pin: String) -> Result<()> {
+    pub fn check(&self, pin: &str) -> bool {
+        let hashed_pin = Database::global()
+            .global_config
+            .hashed_pin_code()
+            .unwrap_or_default();
+
+        self.verify(&pin, &hashed_pin).is_ok()
+    }
+
+    pub fn verify(&self, pin: &str, hashed_pin: &str) -> Result<()> {
         let argon2 = Argon2::default();
 
-        let parsed_hash = PasswordHash::new(&hashed_pin).map_err(|error| {
+        let parsed_hash = PasswordHash::new(hashed_pin).map_err(|error| {
             AuthError::ParseHashedPinError(format!("unable to parse hashed pin: {error}"))
         })?;
 
@@ -106,14 +115,9 @@ impl AuthPin {
         Self {}
     }
 
-    #[uniffi::method]
-    pub fn check(&self, pin: String) -> bool {
-        let hashed_pin = Database::global()
-            .global_config
-            .hashed_pin_code()
-            .unwrap_or_default();
-
-        self.verify(pin, hashed_pin).is_ok()
+    #[uniffi::method(name = "check")]
+    pub fn _check(&self, pin: String) -> bool {
+        self.check(&pin)
     }
 }
 
