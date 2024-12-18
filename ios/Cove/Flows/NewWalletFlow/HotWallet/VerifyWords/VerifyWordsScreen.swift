@@ -420,6 +420,7 @@ enum CheckState: Equatable {
                 verificationComplete: Binding.constant(false)
             )
             .environment(AppManager())
+            .environment(AuthManager())
         }
     }
 
