@@ -321,7 +321,7 @@ struct VerifyWordsScreen: View {
             }
             .padding(.vertical)
 
-            if !isMiniDevice { Spacer() }
+            Spacer()
 
             HStack {
                 DotMenuView(selected: 3, size: 5)
@@ -343,7 +343,7 @@ struct VerifyWordsScreen: View {
                         "To confirm that you've securely saved your recovery phrase, please select the correct word"
                     )
                     .font(.footnote)
-                    .foregroundStyle(.lightGray.opacity(0.75))
+                    .foregroundStyle(.coveLightGray.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
@@ -353,7 +353,7 @@ struct VerifyWordsScreen: View {
             if !isMiniDevice { Spacer() }
 
             Divider()
-                .overlay(.lightGray.opacity(0.50))
+                .overlay(.coveLightGray.opacity(0.50))
 
             VStack(spacing: 16) {
                 Button(action: { activeAlert = .words }) {
@@ -369,7 +369,7 @@ struct VerifyWordsScreen: View {
                 }
             }
             // mini and se only
-            .safeAreaPadding(.bottom, isMiniDevice ? 20 : 0)
+            .safeAreaPadding(.bottom, isMiniDevice ? 30 : 0)
         }
         .padding()
         .alert(item: $activeAlert) { alertType in
