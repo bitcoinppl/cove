@@ -85,7 +85,7 @@ struct SecretWordsScreen: View {
                         Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has you recovery words, controls your Bitcoin.")
                             .multilineTextAlignment(.leading)
                             .font(.footnote)
-                            .foregroundStyle(.lightGray.opacity(0.75))
+                            .foregroundStyle(.coveLightGray.opacity(0.75))
                             .fixedSize(horizontal: false, vertical: true)
 
                         Spacer()

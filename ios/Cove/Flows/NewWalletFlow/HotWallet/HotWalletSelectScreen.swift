@@ -44,7 +44,7 @@ struct HotWalletSelectScreen: View {
             }
 
             Divider()
-                .overlay(.lightGray.opacity(0.50))
+                .overlay(.coveLightGray.opacity(0.50))
 
             VStack(spacing: 24) {
                 Button(action: {

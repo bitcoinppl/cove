@@ -53,7 +53,7 @@ struct NewWalletSelectScreen: View {
             }
 
             Divider()
-                .overlay(.lightGray.opacity(0.50))
+                .overlay(.coveLightGray.opacity(0.50))
 
             HStack(spacing: 14) {
                 Button(action: { showSelectDialog = true }) {

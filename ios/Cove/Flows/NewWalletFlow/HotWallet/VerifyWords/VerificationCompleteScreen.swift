@@ -48,14 +48,14 @@ struct VerificationCompleteScreen: View {
                         "All set! You’ve successfully verified your recovery words and can now access your wallet."
                     )
                     .font(.footnote)
-                    .foregroundStyle(.lightGray.opacity(0.75))
+                    .foregroundStyle(.coveLightGray.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
                 }
             }
 
-            Divider().overlay(Color.lightGray.opacity(0.50))
+            Divider().overlay(Color.coveLightGray.opacity(0.50))
 
             Button("Go To Wallet") {
                 do {
