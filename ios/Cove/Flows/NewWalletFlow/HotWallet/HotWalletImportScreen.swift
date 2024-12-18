@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+private let rowHeight = 30.0
+private let numberOfRows = 6
+
 struct HotWalletImportScreen: View {
     // public
     let autocomplete = Bip39AutoComplete()
@@ -24,8 +27,6 @@ struct HotWalletImportScreen: View {
     @State private var duplicateWallet: DuplicateWalletItem? = .none
 
     @State private var focusField: Int?
-
-    @StateObject private var keyboardObserver = KeyboardObserver()
 
     @State var manager: ImportWalletManager = .init()
     @State private var validator: WordValidator? = nil
@@ -62,15 +63,7 @@ struct HotWalletImportScreen: View {
         }
 
         importType = .manual
-        enteredWords = numberOfWords.inGroups()
-    }
-
-    var keyboardIsShowing: Bool {
-        keyboardObserver.keyboardIsShowing
-    }
-
-    var cardHeight: CGFloat {
-        keyboardIsShowing ? 350 : 450
+        enteredWords = numberOfWords.inGroups(of: 12)
     }
 
     var buttonIsDisabled: Bool {
@@ -81,12 +74,6 @@ struct HotWalletImportScreen: View {
     var isAllWordsValid: Bool {
         !enteredWords.joined().map { word in autocomplete.isValidWord(word: word) }.contains(
             false)
-    }
-
-    var navDisplay: NavigationBarItem.TitleDisplayMode {
-        withAnimation {
-            keyboardIsShowing ? .inline : .large
-        }
     }
 
     var lastIndex: Int {
@@ -200,44 +187,33 @@ struct HotWalletImportScreen: View {
     }
 
     @ViewBuilder
-    var NextOrImportButton: some View {
-        if tabIndex == lastIndex {
-            Button("Import") { importWallet() }
-                .buttonStyle(GradientButtonStyle(disabled: !isAllWordsValid))
-                .padding(.top, 20)
-
-        } else {
-            Button("Next") {
-                withAnimation {
-                    tabIndex += 1
-                }
-            }
-            .buttonStyle(GlassyButtonStyle(disabled: buttonIsDisabled))
-            .disabled(buttonIsDisabled)
-            .foregroundStyle(Color.red)
-            .padding(.top, 20)
+    var ImportButton: some View {
+        Button("Import wallet") {
+            importWallet()
         }
+        .font(.subheadline)
+        .fontWeight(.medium)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .padding(.vertical, 20)
+        .background(Color.btnPrimary)
+        .foregroundColor(.midnightBlue)
+        .cornerRadius(10)
     }
 
     @ViewBuilder
     var MainContent: some View {
-        VStack {
-            TabView(selection: $tabIndex) {
-                ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
-                    VStack {
-                        CardTab(
-                            fields: $enteredWords[index],
-                            groupIndex: index,
-                            filteredSuggestions: $filteredSuggestions,
-                            focusField: $focusField,
-                            allEnteredWords: enteredWords,
-                            numberOfWords: numberOfWords
-                        )
-                        .tag(index)
-                        .padding(.bottom, keyboardIsShowing ? 60 : 20)
-                    }
-                }
-                .padding(.horizontal, 30)
+        TabView(selection: $tabIndex) {
+            ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
+                CardTab(
+                    fields: $enteredWords[index],
+                    groupIndex: index,
+                    filteredSuggestions: $filteredSuggestions,
+                    focusField: $focusField,
+                    allEnteredWords: enteredWords,
+                    numberOfWords: numberOfWords
+                )
+                .tag(index)
             }
         }
     }
@@ -249,79 +225,47 @@ struct HotWalletImportScreen: View {
             GroupBox {
                 MainContent
             }
-            .frame(height: cardHeight)
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-            .navigationTitle("Import Wallet")
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .navigationBarTitleDisplayMode(navDisplay)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    KeyboardAutoCompleteView
-                }
+            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+            .cornerRadius(10)
+            .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 100)
+
+            if numberOfWords == .twentyFour {
+                DotMenuView(selected: tabIndex, size: 5, total: 2)
             }
-            .padding(.top, keyboardIsShowing ? 80 : 0)
-            .padding(.horizontal, 30)
-            .cornerRadius(20)
 
             Spacer()
 
-            NextOrImportButton.padding(.bottom, 24)
+            ImportButton
+        }
+        .padding()
+        .padding(.bottom, 24)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                KeyboardAutoCompleteView
+            }
 
-            HStack {
-                Button(action: {
-                    isPresentingScanner = true
-                }) {
-                    HStack {
-                        Image(systemName: "qrcode.viewfinder")
-                            .font(.system(size: 20))
+            ToolbarItem(placement: .principal) {
+                Text("Import Wallet")
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+            }
 
-                        Text("QR")
-                    }
-                    .padding()
-                    .frame(minWidth: 60)
-                    .foregroundColor(.white)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                .black.opacity(0.7), .black, .black.opacity(0.8),
-                            ]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(10)
-                    .shadow(color: .gray.opacity(0.5), radius: 5, x: 0, y: 2)
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Button(action: {
-                    nfcReader.scan()
-                }) {
-                    HStack {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                HStack(spacing: 5) {
+                    Button(action: nfcReader.scan) {
                         Image(systemName: "wave.3.right")
-                            .font(.system(size: 18))
-
-                        Text("NFC")
+                            .font(.subheadline)
+                            .foregroundColor(.white)
                     }
-                    .padding()
-                    .frame(minWidth: 60)
-                    .foregroundColor(.white)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                .black.opacity(0.7), .black, .black.opacity(0.8),
-                            ]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(10)
-                    .shadow(color: .gray.opacity(0.5), radius: 5, x: 0, y: 2)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
 
-            Spacer()
+                    Button(action: { isPresentingScanner = true }) {
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                    }
+                }
+            }
         }
         .onChange(of: focusField) {
             filteredSuggestions = []
@@ -366,7 +310,7 @@ struct HotWalletImportScreen: View {
             // if its the last word on the non last card and all words are valid words, then go to next tab
             // focusField will already have changed by now
             if let focusField,
-               !buttonIsDisabled, tabIndex < lastIndex, focusField % 6 == 1
+               !buttonIsDisabled, tabIndex < lastIndex, focusField % 12 == 1
             {
                 withAnimation {
                     tabIndex += 1
@@ -382,7 +326,6 @@ struct HotWalletImportScreen: View {
                 Log.error("Error NFC word parsing: \(error)")
             }
         }
-
         .onChange(of: nfcReader.scannedMessageData) { _, data in
             // received data, probably a SeedQR in NFC
             guard let data else { return }
@@ -402,6 +345,16 @@ struct HotWalletImportScreen: View {
                 task.cancel()
             }
         }
+        .background(
+            Image(.newWalletPattern)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(height: screenHeight * 0.75, alignment: .topTrailing)
+                .frame(maxWidth: .infinity)
+                .opacity(0.5)
+        )
+        .background(Color.midnightBlue)
+        .tint(.white)
     }
 
     func setWords(_ words: [[String]]) {
@@ -437,18 +390,14 @@ private struct CardTab: View {
     let allEnteredWords: [[String]]
     let numberOfWords: NumberOfBip39Words
 
-    @StateObject private var keyboardObserver = KeyboardObserver()
+    let cardSpacing: CGFloat = 20
 
-    var keyboardIsShowing: Bool {
-        keyboardObserver.keyboardIsShowing
-    }
-
-    var cardSpacing: CGFloat {
-        keyboardIsShowing ? 15 : 20
+    var rows: [GridItem] {
+        Array(repeating: .init(.fixed(rowHeight)), count: numberOfRows)
     }
 
     var body: some View {
-        VStack(spacing: cardSpacing) {
+        LazyHGrid(rows: rows, spacing: cardSpacing) {
             ForEach(Array(fields.enumerated()), id: \.offset) { index, _ in
                 AutocompleteField(
                     number: (groupIndex * 6) + (index + 1),
@@ -509,21 +458,14 @@ private struct AutocompleteField: View {
 
     var body: some View {
         HStack {
-            Text("\(String(format: "%02d", number)). ")
+            Text("\(String(format: "%d", number)). ")
+                .font(.subheadline)
                 .foregroundColor(.secondary)
+
+            Spacer()
 
             textField
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .overlay(
-            Group {
-                if let color = borderColor {
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(color, lineWidth: 2)
-                }
-            }
-        )
         .onAppear {
             if !text.isEmpty, autocomplete.isBip39Word(word: text) {
                 state = .valid
@@ -547,82 +489,78 @@ private struct AutocompleteField: View {
     }
 
     var textField: some View {
-        TextField(
-            "", text: $text,
-            prompt: Text("enter secret word...")
-                .foregroundColor(.secondary)
-        )
-        .foregroundColor(textColor)
-        .frame(alignment: .trailing)
-        .padding(.trailing, 8)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled(true)
-        .keyboardType(.asciiCapable)
-        .focused($isFocused)
-        .onChange(of: isFocused) {
-            if !isFocused {
-                showSuggestions = false
-                return
-            }
-
-            filteredSuggestions = autocomplete.autocomplete(word: text, allWords: allEnteredWords)
-
-            if isFocused {
-                focusField = number
-            }
-        }
-        .onSubmit {
-            submitFocusField()
-        }
-        .onChange(of: focusField) { _, fieldNumber in
-            guard let fieldNumber else { return }
-            if number == fieldNumber {
-                isFocused = true
-            }
-        }
-        .onChange(of: text) { oldText, newText in
-            filteredSuggestions = autocomplete.autocomplete(
-                word: newText, allWords: allEnteredWords
-            )
-
-            if oldText.count > newText.count {
-                // erasing, reset state
-                state = .initial
-            }
-
-            // empty is always initial
-            if newText == "" {
-                state = .initial
-                return
-            }
-
-            // invalid, no words match
-            if filteredSuggestions.isEmpty {
-                state = .invalid
-                return
-            }
-
-            // if only one suggestion left and if we added a letter (not backspace)
-            // then auto select the first selection, because we want auto selection
-            // but also allow the user to fix a wrong word
-            if let word = filteredSuggestions.last,
-               filteredSuggestions.count == 1, oldText.count < newText.count
-            {
-                state = .valid
-                filteredSuggestions = []
-
-                if text != word {
-                    text = word
-                    submitFocusField()
+        TextField("", text: $text)
+            .font(.subheadline)
+            .foregroundColor(textColor)
+            .frame(alignment: .trailing)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled(true)
+            .keyboardType(.asciiCapable)
+            .focused($isFocused)
+            .onChange(of: isFocused) {
+                if !isFocused {
+                    showSuggestions = false
                     return
                 }
+
+                filteredSuggestions = autocomplete.autocomplete(word: text, allWords: allEnteredWords)
+
+                if isFocused {
+                    focusField = number
+                }
             }
-        }
-        .onAppear {
-            if let focusField, focusField == number {
-                isFocused = true
+            .onSubmit {
+                submitFocusField()
             }
-        }
+            .onChange(of: focusField) { _, fieldNumber in
+                guard let fieldNumber else { return }
+                if number == fieldNumber {
+                    isFocused = true
+                }
+            }
+            .onChange(of: text) { oldText, newText in
+                filteredSuggestions = autocomplete.autocomplete(
+                    word: newText, allWords: allEnteredWords
+                )
+
+                if oldText.count > newText.count {
+                    // erasing, reset state
+                    state = .initial
+                }
+
+                // empty is always initial
+                if newText == "" {
+                    state = .initial
+                    return
+                }
+
+                // invalid, no words match
+                if filteredSuggestions.isEmpty {
+                    state = .invalid
+                    return
+                }
+
+                // if only one suggestion left and if we added a letter (not backspace)
+                // then auto select the first selection, because we want auto selection
+                // but also allow the user to fix a wrong word
+                if let word = filteredSuggestions.last,
+                   filteredSuggestions.count == 1, oldText.count < newText.count
+                {
+                    state = .valid
+                    filteredSuggestions = []
+
+                    if text != word {
+                        text = word
+                        submitFocusField()
+                        return
+                    }
+                }
+            }
+            .onAppear {
+                if let focusField, focusField == number {
+                    isFocused = true
+                }
+            }
     }
 }
 

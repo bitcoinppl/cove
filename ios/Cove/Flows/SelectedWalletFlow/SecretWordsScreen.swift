@@ -136,9 +136,11 @@ struct SecretWordsScreen: View {
 #Preview("12") {
     SecretWordsScreen(id: WalletId(), words: Mnemonic.preview(numberOfBip39Words: .twelve))
         .environment(AppManager())
+        .environment(AuthManager())
 }
 
 #Preview("24") {
     SecretWordsScreen(id: WalletId(), words: Mnemonic.preview(numberOfBip39Words: .twentyFour))
         .environment(AppManager())
+        .environment(AuthManager())
 }
