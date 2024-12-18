@@ -48,6 +48,8 @@ struct CoveApp: App {
     @AppStorage("lockedAt") var lockedAt: Date = .init()
 
     @State var app: AppManager
+    @State var auth: AuthManager
+
     @State var id = UUID()
 
     @State var showCover: Bool = true
@@ -160,7 +162,10 @@ struct CoveApp: App {
         _ = Device(device: DeviceAccesor())
 
         let app = AppManager()
+        let auth = AuthManager()
+
         self.app = app
+        self.auth = auth
     }
 
     private var showingAlert: Binding<Bool> {
@@ -354,10 +359,10 @@ struct CoveApp: App {
                 CoverView()
             } else {
                 LockView(
-                    lockType: app.authType,
-                    isPinCorrect: app.checkPin,
+                    lockType: auth.type,
+                    isPinCorrect: auth.checkPin,
                     showPin: false,
-                    lockState: $app.lockState,
+                    lockState: $auth.lockState,
                     onUnlock: { _ in showCover = false }
                 ) {
                     SidebarContainer {
@@ -390,6 +395,7 @@ struct CoveApp: App {
             }
         }
         .environment(app)
+        .environment(auth)
     }
 
     var routeToTint: Color {
@@ -431,10 +437,13 @@ struct CoveApp: App {
 
     func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
         Log.debug(
-            "[SCENE PHASE]: \(oldPhase) --> \(newPhase) && using biometrics: \(app.isUsingBiometrics)"
+            "[SCENE PHASE]: \(oldPhase) --> \(newPhase) && using biometrics: \(auth.isUsingBiometrics)"
         )
 
-        if app.isAuthEnabled, !app.isUsingBiometrics, oldPhase == .active,
+        if !auth.isAuthEnabled { showCover = false }
+        if newPhase == .active { showCover = false }
+
+        if auth.isAuthEnabled, !auth.isUsingBiometrics, oldPhase == .active,
            newPhase == .inactive
         {
             coverClearTask?.cancel()
@@ -443,15 +452,16 @@ struct CoveApp: App {
             // prevent getting stuck on show cover
             coverClearTask = Task {
                 try? await Task.sleep(for: .milliseconds(200))
-                showCover = false
+                if phase == .active { showCover = false }
             }
 
-            app.lockState = .locked
+            auth.lockState = .locked
             lockedAt = Date.now
         }
 
         // close all open sheets when going into the background
-        if app.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
+        if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
+            coverClearTask?.cancel()
             lockedAt = Date.now
 
             UIApplication.shared.connectedScenes
@@ -462,13 +472,13 @@ struct CoveApp: App {
                 }
         }
 
-        if app.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
+        if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
             showCover = false
 
-            // less than 15 seconds, auto unlock if PIN only
+            // less than 1 seconds, auto unlock if PIN only
             // TODO: make this configurable and put in DB
-            if app.authType == .pin, Date.now.timeIntervalSince(lockedAt) < 15 {
-                app.lockState = .locked
+            if auth.type == .pin, Date.now.timeIntervalSince(lockedAt) < 1 {
+                auth.lockState = .unlocked
             }
         }
     }
@@ -523,7 +533,11 @@ struct CoveApp: App {
                 .onOpenURL(perform: handleFileOpen)
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
                 .onAppear {
-                    if app.isAuthEnabled { app.lockState = .locked } else { app.lockState = .unlocked }
+                    if auth.isAuthEnabled {
+                        auth.lockState = .locked
+                    } else {
+                        auth.lockState = .unlocked
+                    }
                 }
         }
     }

@@ -15,20 +15,14 @@ import SwiftUI
 
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
-    var authType = Database().globalConfig().authType()
 
     var nfcReader = NFCReader()
 
     var prices: PriceResponse?
     var fees: FeeResponse?
 
-    var lockState: LockState = .locked
-
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
-
-    @MainActor
-    var isUsingBiometrics: Bool = false
 
     @ObservationIgnored
     weak var walletManager: WalletManager?
@@ -79,17 +73,13 @@ import SwiftUI
         walletManager = vm
     }
 
-    public func lock() {
-        guard isAuthEnabled else { return }
-        lockState = .locked
-    }
+    /// Reset the manager state
+    public func reset() {
+        rust = FfiApp()
+        database = Database()
 
-    public func checkPin(_ pin: String) -> Bool {
-        AuthPin().check(pin: pin)
-    }
-
-    var isAuthEnabled: Bool {
-        authType != AuthType.none
+        let state = rust.state()
+        router = state.router
     }
 
     var currentRoute: Route {
@@ -167,12 +157,6 @@ import SwiftUI
 
                 case let .feesChanged(fees):
                     self.fees = fees
-
-                case let .authTypeChanged(authType):
-                    self.authType = authType
-
-                case .hashedPinCodeChanged:
-                    ()
                 }
             }
         }

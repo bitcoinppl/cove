@@ -18,6 +18,7 @@ enum LockState: Equatable {
 
 struct LockView<Content: View>: View {
     @Environment(AppManager.self) var app
+    @Environment(AuthManager.self) var auth
 
     /// Args: Lock Properties
     var lockType: AuthType
@@ -73,9 +74,10 @@ struct LockView<Content: View>: View {
         self.content = content()
 
         // back
-        let backEnabled = if backAction != nil { true } else {
-            lockType == .both && isBiometricAvailable
-        }
+        let backEnabled =
+            if backAction != nil { true } else {
+                lockType == .both && isBiometricAvailable
+            }
 
         self.backEnabled = backEnabled
         _backAction = backAction
@@ -100,10 +102,11 @@ struct LockView<Content: View>: View {
     }
 
     private var lockState: Binding<LockState> {
-        lockStateBinding ?? Binding(
-            get: { innerLockState },
-            set: { innerLockState = $0 }
-        )
+        lockStateBinding
+            ?? Binding(
+                get: { innerLockState },
+                set: { innerLockState = $0 }
+            )
     }
 
     var body: some View {
@@ -173,10 +176,12 @@ struct LockView<Content: View>: View {
     @ViewBuilder
     var PermissionsNeeded: some View {
         VStack(spacing: 20) {
-            Text("Cove needs permissions to FaceID to unlock your wallet. Please open settings and enable FaceID.")
-                .font(.callout)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 50)
+            Text(
+                "Cove needs permissions to FaceID to unlock your wallet. Please open settings and enable FaceID."
+            )
+            .font(.callout)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 50)
 
             Button("Open Settings") {
                 let url = URL(string: UIApplication.openSettingsURLString)!
@@ -230,26 +235,26 @@ struct LockView<Content: View>: View {
 
     private func tryUnlockingView() {
         guard lockType == .biometric || lockType == .both else { return }
-        guard !app.isUsingBiometrics else { return }
+        guard !auth.isUsingBiometrics else { return }
         guard isBiometricAvailable else { return }
         guard lockState.wrappedValue == .locked else { return }
 
         /// Checking and Unlocking View
         Task {
             /// Requesting Biometric Unlock
-            app.isUsingBiometrics = true
+            auth.isUsingBiometrics = true
 
             if await (try? bioMetricUnlock()) ?? false {
                 await MainActor.run {
                     withAnimation(.snappy, completionCriteria: .logicallyComplete) {
                         lockState.wrappedValue = .unlocked
                     } completion: {
-                        app.isUsingBiometrics = false
+                        auth.isUsingBiometrics = false
                         onUnlock("")
                     }
                 }
             } else {
-                await MainActor.run { app.isUsingBiometrics = false }
+                await MainActor.run { auth.isUsingBiometrics = false }
             }
         }
     }

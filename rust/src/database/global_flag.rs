@@ -84,6 +84,10 @@ impl GlobalFlagTable {
         Ok(())
     }
 
+    pub fn get_bool_config(&self, key: GlobalFlagKey) -> bool {
+        self.get(key).unwrap_or(false)
+    }
+
     pub fn toggle_bool_config(&self, key: GlobalFlagKey) -> Result<(), Error> {
         let value = self.get(key)?;
 

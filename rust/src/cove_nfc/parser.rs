@@ -434,7 +434,6 @@ mod tests {
         let mut descriptor = *DESCRIPTOR;
         let message = parse_ndef_message(&mut descriptor).unwrap();
 
-        println!("{message:?}");
         assert_eq!(message.len(), 1);
 
         let record = &message[0];

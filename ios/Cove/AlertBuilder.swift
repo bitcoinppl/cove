@@ -6,6 +6,18 @@
 //
 import SwiftUI
 
+struct AnyAlertBuilder: AlertBuilderProtocol {
+    let title: String
+    let message: AnyView
+    let actions: AnyView
+
+    init(_ alert: some AlertBuilderProtocol) {
+        title = alert.title
+        message = AnyView(alert.message)
+        actions = AnyView(alert.actions)
+    }
+}
+
 protocol AlertBuilderProtocol {
     associatedtype Message: View
     associatedtype Actions: View
@@ -38,5 +50,9 @@ struct AlertBuilder<Actions: View, Message: View>: AlertBuilderProtocol {
         self.title = title
         self.message = Text(message)
         self.actions = actions()
+    }
+
+    func eraseToAny() -> AnyAlertBuilder {
+        AnyAlertBuilder(self)
     }
 }

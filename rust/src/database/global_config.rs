@@ -26,6 +26,7 @@ pub enum GlobalConfigKey {
     ColorScheme,
     AuthType,
     HashedPinCode,
+    WipeDataPin,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -38,6 +39,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::ColorScheme => "color_scheme",
             GlobalConfigKey::AuthType => "auth_type",
             GlobalConfigKey::HashedPinCode => "hashed_pin_code",
+            GlobalConfigKey::WipeDataPin => "wipe_data_pin",
         }
     }
 }
@@ -72,8 +74,7 @@ impl GlobalConfigTable {
     string_config_accessor!(
         pub auth_type,
         GlobalConfigKey::AuthType,
-        AuthType,
-        Update::AuthTypeChanged
+        AuthType
     );
 
     string_config_accessor!(
@@ -83,12 +84,8 @@ impl GlobalConfigTable {
         Update::ColorSchemeChanged
     );
 
-    string_config_accessor!(
-        priv_hashed_pin_code,
-        GlobalConfigKey::HashedPinCode,
-        String,
-        Update::HashedPinCodeChanged
-    );
+    string_config_accessor!(pub wipe_data_pin, GlobalConfigKey::WipeDataPin, String);
+    string_config_accessor!(priv_hashed_pin_code, GlobalConfigKey::HashedPinCode, String);
 }
 
 #[uniffi::export]

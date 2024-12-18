@@ -5,15 +5,16 @@ pub mod reconcile;
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    auth::{AuthPin, AuthType},
+    auth::AuthType,
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
     fiat::client::{PriceResponse, FIAT_CLIENT},
+    keychain::Keychain,
     network::Network,
     node::Node,
     router::{Route, RouteFactory, Router},
     transaction::fees::client::{FeeResponse, FEE_CLIENT},
-    wallet::metadata::WalletId,
+    wallet::metadata::{WalletId, WalletType},
 };
 use crossbeam::channel::{Receiver, Sender};
 use macros::impl_default_for;
@@ -53,13 +54,6 @@ pub enum AppAction {
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
-    UpdateAuthType(AuthType),
-    EnableAuth,
-    DisableAuth,
-    EnableBiometric,
-    DisableBiometric,
-    SetPin(String),
-    DisablePin,
 }
 
 #[derive(
@@ -145,7 +139,7 @@ impl App {
             }
 
             AppAction::ChangeColorScheme(color_scheme) => {
-                debug!("color scheme change, NEW: {:?}", color_scheme);
+                debug!("color scheme change, new: {:?}", color_scheme);
 
                 Database::global()
                     .global_config
@@ -154,7 +148,7 @@ impl App {
             }
 
             AppAction::SetSelectedNode(node) => {
-                debug!("selected node change, NEW: {:?}", node);
+                debug!("selected node change, new: {:?}", node);
 
                 match Database::global().global_config.set_selected_node(&node) {
                     Ok(_) => {}
@@ -191,76 +185,6 @@ impl App {
                     }
                 });
             }
-
-            AppAction::UpdateAuthType(auth_type) => {
-                debug!("authType changed, NEW: {auth_type:?}");
-                set_auth_type(auth_type);
-            }
-
-            AppAction::EnableAuth => {
-                debug!("enable auth");
-                let current_auth_type = FfiApp::global().auth_type();
-                if current_auth_type == AuthType::None {
-                    set_auth_type(AuthType::Biometric);
-                }
-            }
-
-            AppAction::DisableAuth => {
-                debug!("disable auth");
-                set_auth_type(AuthType::None);
-            }
-
-            AppAction::EnableBiometric => {
-                debug!("enable biometric");
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::None => set_auth_type(AuthType::Biometric),
-                    AuthType::Pin => set_auth_type(AuthType::Both),
-                    _ => {}
-                };
-            }
-
-            AppAction::DisableBiometric => {
-                debug!("disable biometric");
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::Biometric => set_auth_type(AuthType::None),
-                    AuthType::Both => set_auth_type(AuthType::Pin),
-                    _ => {}
-                };
-            }
-
-            AppAction::SetPin(pin) => {
-                debug!("set pin");
-
-                if let Err(err) = AuthPin::new().set(pin) {
-                    return error!("unable to set pin: {err:?}");
-                }
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::None => set_auth_type(AuthType::Pin),
-                    AuthType::Biometric => set_auth_type(AuthType::Both),
-                    _ => {}
-                }
-            }
-
-            AppAction::DisablePin => {
-                debug!("disable pin");
-
-                if let Err(err) = AuthPin::new().delete() {
-                    return error!("unable to delete pin: {err:?}");
-                }
-
-                let current_auth_type = FfiApp::global().auth_type();
-                match current_auth_type {
-                    AuthType::Pin => set_auth_type(AuthType::None),
-                    AuthType::Both => set_auth_type(AuthType::Biometric),
-                    _ => {}
-                }
-            }
         }
     }
 
@@ -279,18 +203,7 @@ impl App {
     }
 }
 
-fn set_auth_type(auth_type: AuthType) {
-    match Database::global().global_config.set_auth_type(auth_type) {
-        Ok(_) => {
-            Updater::send_update(AppMessage::AuthTypeChanged(auth_type));
-        }
-        Err(error) => {
-            error!("unable to set auth type: {error:?}");
-        }
-    }
-}
-
-/// Representation of our app over FFI. Essentially a wrapper of [`App`].
+/// Representation of our app over FFI. Essenially a wrapper of [`App`].
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct FfiApp;
 
@@ -355,6 +268,17 @@ impl FfiApp {
     pub fn num_wallets(&self) -> u16 {
         let network = Database::global().global_config.selected_network();
         Database::global().wallets().len(network).unwrap_or(0)
+    }
+
+    /// Get wallets that have not been backed up and verified
+    pub fn unverified_wallet_ids(&self) -> Vec<WalletId> {
+        let all_wallets = Database::global().wallets().all().unwrap_or_default();
+
+        all_wallets
+            .into_iter()
+            .filter(|wallet| wallet.wallet_type == WalletType::Hot && !wallet.verified)
+            .map(|wallet| wallet.id)
+            .collect::<Vec<WalletId>>()
     }
 
     /// Load and reset the default route after 800ms delay
@@ -434,6 +358,36 @@ impl FfiApp {
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
         Ok(fees)
+    }
+
+    /// DANGER: This will wipe all wallet data on this device
+    pub fn dangerous_wipe_all_data(&self) {
+        let database = Database::global();
+        let keychain = Keychain::global();
+
+        let wallets = Database::global().wallets().all().unwrap_or_default();
+
+        for wallet in wallets {
+            let wallet_id = &wallet.id;
+
+            // delete the wallet from the database
+            if let Err(error) = database.wallets.delete(wallet_id) {
+                error!("Unable to delete wallet from database: {error}");
+            }
+
+            // delete the secret key from the keychain
+            keychain.delete_wallet_key(wallet_id);
+
+            // delete the xpub from keychain
+            keychain.delete_wallet_xpub(wallet_id);
+
+            // delete the wallet persisted bdk data
+            if let Err(error) = crate::wallet::delete_data_path(wallet_id) {
+                error!("Unable to delete wallet persisted bdk data: {error}");
+            }
+        }
+
+        database.dangerous_reset_all_data();
     }
 
     /// Frontend calls this method to send events to the rust application logic
