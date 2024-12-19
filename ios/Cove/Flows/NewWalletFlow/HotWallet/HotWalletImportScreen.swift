@@ -10,6 +10,16 @@ import SwiftUI
 private let rowHeight = 30.0
 private let numberOfRows = 6
 
+private enum AlertState: Equatable {
+    case invalidWords
+    case duplicateWallet(WalletId)
+    case scanError(String)
+}
+
+private enum SheetState: Equatable {
+    case qrCode
+}
+
 struct HotWalletImportScreen: View {
     // public
     let autocomplete = Bip39AutoComplete()
@@ -20,10 +30,7 @@ struct HotWalletImportScreen: View {
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
 
-    @State private var isPresentingScanner = false
     @State private var tabIndex: Int = 0
-
-    @State private var showErrorAlert = false
     @State private var duplicateWallet: DuplicateWalletItem? = .none
 
     @State private var focusField: Int?
@@ -33,6 +40,10 @@ struct HotWalletImportScreen: View {
 
     @State var enteredWords: [[String]] = [[]]
     @State var filteredSuggestions: [String] = []
+
+    // alerts & sheets
+    @State private var alertState: TaggedItem<AlertState>? = .none
+    @State private var sheetState: TaggedItem<SheetState>? = .none
 
     // qr code scanning
     @Environment(\.dismiss) var dismiss
@@ -50,7 +61,7 @@ struct HotWalletImportScreen: View {
 
         switch importType {
         case .manual: ()
-        case .qr: isPresentingScanner = true
+        case .qr: sheetState = .init(.qrCode)
         case .nfc:
             let task = Task {
                 try await Task.sleep(for: .milliseconds(200))
@@ -110,8 +121,7 @@ struct HotWalletImportScreen: View {
             }
         } catch {
             Log.error("Seed QR failed to scan: \(error.localizedDescription)")
-            scanError = TaggedString(error.localizedDescription)
-            isPresentingScanner = false
+            sheetState = .none
 
             // reset multiqr on error
             multiQr = nil
@@ -127,7 +137,7 @@ struct HotWalletImportScreen: View {
             switch error {
             case let .InvalidWordGroup(error):
                 Log.debug("Invalid words: \(error)")
-                self.showErrorAlert = true
+                alertState = .init(.invalidWords)
             case let .WalletAlreadyExists(walletId):
                 duplicateWallet = DuplicateWalletItem(id: UUID(), walletId: walletId)
             case let .WalletImportError(error):
@@ -218,6 +228,36 @@ struct HotWalletImportScreen: View {
         }
     }
 
+    @ToolbarContentBuilder
+    var ToolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            KeyboardAutoCompleteView
+        }
+
+        ToolbarItem(placement: .principal) {
+            Text("Import Wallet")
+                .font(.callout)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
+        }
+
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            HStack(spacing: 5) {
+                Button(action: nfcReader.scan) {
+                    Image(systemName: "wave.3.right")
+                        .font(.subheadline)
+                        .foregroundColor(.white)
+                }
+
+                Button(action: { sheetState = .init(.qrCode) }) {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.subheadline)
+                        .foregroundColor(.white)
+                }
+            }
+        }
+    }
+
     var body: some View {
         VStack {
             Spacer()
@@ -239,108 +279,17 @@ struct HotWalletImportScreen: View {
         }
         .padding()
         .padding(.bottom, 24)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                KeyboardAutoCompleteView
-            }
-
-            ToolbarItem(placement: .principal) {
-                Text("Import Wallet")
-                    .font(.callout)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-            }
-
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                HStack(spacing: 5) {
-                    Button(action: nfcReader.scan) {
-                        Image(systemName: "wave.3.right")
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                    }
-
-                    Button(action: { isPresentingScanner = true }) {
-                        Image(systemName: "qrcode.viewfinder")
-                            .font(.subheadline)
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-        }
-        .onChange(of: focusField) {
-            filteredSuggestions = []
-        }
-        .alert("Words not valid", isPresented: $showErrorAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(
-                "The words you entered does not create a valid wallet. Please check the words and try again."
-            )
-        }
-        .alert(item: $duplicateWallet) { duplicate in
-            Alert(
-                title: Text("Duplicate Wallet"),
-                message: Text("This wallet has already been imported!"),
-                dismissButton: .default(Text("OK")) {
-                    try? app.rust.selectWallet(id: duplicate.walletId)
-                    app.resetRoute(to: .selectedWallet(duplicate.walletId))
-                }
-            )
-        }
-        .alert(item: $scanError) { error in
-            Alert(
-                title: Text("Error Scanning QR Code"),
-                message: Text(error.value),
-                dismissButton: .default(Text("OK")) {
-                    scanError = nil
-                }
-            )
-        }
-        .sheet(isPresented: $isPresentingScanner) {
-            ScannerView(
-                codeTypes: [.qr],
-                scanMode: .oncePerCode,
-                scanInterval: 0.1
-            ) { response in
-                handleScan(result: response)
-            }
-        }
+        .toolbar { ToolbarContent }
+        .sheet(item: $sheetState, content: SheetContent)
+        .alert(alertTitle, isPresented: showingAlert, presenting: alertState, actions: { MyAlert($0).actions })
         .onAppear(perform: initOnAppear)
-        .onChange(of: enteredWords) {
-            // if its the last word on the non last card and all words are valid words, then go to next tab
-            // focusField will already have changed by now
-            if let focusField,
-               !buttonIsDisabled, tabIndex < lastIndex, focusField % 12 == 1
-            {
-                withAnimation {
-                    tabIndex += 1
-                }
-            }
-        }
-        .onChange(of: nfcReader.scannedMessage) { _, msg in
-            guard let msg else { return }
-            do {
-                let words = try groupedPlainWordsOf(mnemonic: msg, groups: 6)
-                setWords(words)
-            } catch {
-                Log.error("Error NFC word parsing: \(error)")
-            }
-        }
-        .onChange(of: nfcReader.scannedMessageData) { _, data in
-            // received data, probably a SeedQR in NFC
-            guard let data else { return }
-            do {
-                let seedQR = try SeedQr.newFromData(data: data)
-                let words = seedQR.groupedPlainWords()
-                setWords(words)
-            } catch {
-                Log.error("Error NFC word parsing from data: \(error)")
-            }
-        }
+        .onChange(of: focusField) { filteredSuggestions = [] }
+        .onChange(of: enteredWords, onChangeEnteredWords)
+        .onChange(of: nfcReader.scannedMessage, onChangeScannedMessage)
+        .onChange(of: nfcReader.scannedMessageData, onChangeScannedMessageData)
         .onDisappear {
             nfcReader.resetReader()
             nfcReader.session = nil
-
             for task in tasks {
                 task.cancel()
             }
@@ -357,6 +306,107 @@ struct HotWalletImportScreen: View {
         .tint(.white)
     }
 
+    // MARK: Alerts
+
+    private var showingAlert: Binding<Bool> {
+        Binding(
+            get: { alertState != nil },
+            set: { if !$0 { alertState = .none } }
+        )
+    }
+
+    private var alertTitle: String {
+        guard let alertState else { return "Error" }
+        return MyAlert(alertState).title
+    }
+
+    private func MyAlert(_ alert: TaggedItem<AlertState>) -> some AlertBuilderProtocol {
+        let singleOkCancel = {
+            Button("Ok", role: .cancel) {
+                alertState = .none
+            }
+        }
+
+        switch alert.item {
+        case .invalidWords:
+            return AlertBuilder(
+                title: "Words not valid",
+                message: "The words you entered does not create a valid wallet. Please check the words and try again.",
+                actions: singleOkCancel
+            )
+        case let .duplicateWallet(walletId):
+            return AlertBuilder(
+                title: "Duplicate Wallet",
+                message: "This wallet has already been imported!",
+                actions: {
+                    Button("OK", role: .cancel) {
+                        alertState = .none
+                        try? app.rust.selectWallet(id: walletId)
+                        app.resetRoute(to: .selectedWallet(walletId))
+                    }
+                }
+            )
+        case let .scanError(error):
+            return AlertBuilder(
+                title: "Error Scanning QR Code",
+                message: error,
+                actions: singleOkCancel
+            )
+        }
+    }
+
+    // MARK: Sheet
+
+    @ViewBuilder
+    private func SheetContent(_ state: TaggedItem<SheetState>) -> some View {
+        switch state.item {
+        case .qrCode:
+            ScannerView(
+                codeTypes: [.qr],
+                scanMode: .oncePerCode,
+                scanInterval: 0.1
+            ) { response in
+                handleScan(result: response)
+            }
+        }
+    }
+
+    // MARK: OnChange Functions
+
+    func onChangeEnteredWords(_: [[String]]?, _: [[String]]?) {
+        // if its the last word on the non last card and all words are valid words, then go to next tab
+        // focusField will already have changed by now
+        if let focusField,
+           !buttonIsDisabled, tabIndex < lastIndex, focusField % 12 == 1
+        {
+            withAnimation {
+                tabIndex += 1
+            }
+        }
+    }
+
+    func onChangeScannedMessage(_: String?, _ msg: String?) {
+        guard let msg else { return }
+        do {
+            let words = try groupedPlainWordsOf(mnemonic: msg, groups: 6)
+            setWords(words)
+        } catch {
+            Log.error("Error NFC word parsing: \(error)")
+        }
+    }
+
+    func onChangeScannedMessageData(_: Data?, _ data: Data?) {
+        // received data, probably a SeedQR in NFC
+        guard let data else { return }
+        do {
+            let seedQR = try SeedQr.newFromData(data: data)
+            let words = seedQR.groupedPlainWords()
+            setWords(words)
+        } catch {
+            Log.error("Error NFC word parsing from data: \(error)")
+        }
+    }
+
     func setWords(_ words: [[String]]) {
         let numberOfWords = words.compactMap(\.count).reduce(0, +)
         switch numberOfWords {
@@ -366,7 +416,8 @@ struct HotWalletImportScreen: View {
             Log.warn("Invalid number of words: \(numberOfWords)")
             scanError = TaggedString(
                 "Invalid number of words: \(numberOfWords), we only support 12 or 24 words")
-            isPresentingScanner = false
+
+            sheetState = .none
             return
         }
 
@@ -376,7 +427,7 @@ struct HotWalletImportScreen: View {
         nfcReader.session = nil
 
         enteredWords = words
-        isPresentingScanner = false
+        sheetState = .none
         tabIndex = lastIndex
     }
 }
@@ -475,9 +526,7 @@ private struct AutocompleteField: View {
 
     func submitFocusField() {
         filteredSuggestions = []
-        guard let focusField else {
-            return
-        }
+        guard let focusField else { return }
 
         if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
             state = .valid
@@ -503,11 +552,11 @@ private struct AutocompleteField: View {
                     return
                 }
 
-                filteredSuggestions = autocomplete.autocomplete(word: text, allWords: allEnteredWords)
+                filteredSuggestions = autocomplete.autocomplete(
+                    word: text, allWords: allEnteredWords
+                )
 
-                if isFocused {
-                    focusField = number
-                }
+                if isFocused { focusField = number }
             }
             .onSubmit {
                 submitFocusField()
