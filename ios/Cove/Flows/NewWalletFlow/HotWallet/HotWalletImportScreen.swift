@@ -7,9 +7,6 @@
 
 import SwiftUI
 
-private let rowHeight = 30.0
-private let numberOfRows = 6
-
 private enum AlertState: Equatable {
     case invalidWords
     case duplicateWallet(WalletId)
@@ -211,23 +208,6 @@ struct HotWalletImportScreen: View {
         .cornerRadius(10)
     }
 
-    @ViewBuilder
-    var MainContent: some View {
-        TabView(selection: $tabIndex) {
-            ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
-                CardTab(
-                    fields: $enteredWords[index],
-                    groupIndex: index,
-                    filteredSuggestions: $filteredSuggestions,
-                    focusField: $focusField,
-                    allEnteredWords: enteredWords,
-                    numberOfWords: numberOfWords
-                )
-                .tag(index)
-            }
-        }
-    }
-
     @ToolbarContentBuilder
     var ToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .keyboard) {
@@ -262,12 +242,13 @@ struct HotWalletImportScreen: View {
         VStack {
             Spacer()
 
-            GroupBox {
-                MainContent
-            }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-            .cornerRadius(10)
-            .frame(maxHeight: rowHeight * CGFloat(numberOfRows) + 100)
+            HotWalletImportCard(
+                numberOfWords: numberOfWords,
+                tabIndex: $tabIndex,
+                enteredWords: $enteredWords,
+                filteredSuggestions: $filteredSuggestions,
+                focusField: $focusField
+            )
 
             if numberOfWords == .twentyFour {
                 DotMenuView(selected: tabIndex, size: 5, total: 2)
@@ -429,187 +410,6 @@ struct HotWalletImportScreen: View {
         enteredWords = words
         sheetState = .none
         tabIndex = lastIndex
-    }
-}
-
-private struct CardTab: View {
-    @Binding var fields: [String]
-    let groupIndex: Int
-    @Binding var filteredSuggestions: [String]
-    @Binding var focusField: Int?
-
-    let allEnteredWords: [[String]]
-    let numberOfWords: NumberOfBip39Words
-
-    let cardSpacing: CGFloat = 20
-
-    var rows: [GridItem] {
-        Array(repeating: .init(.fixed(rowHeight)), count: numberOfRows)
-    }
-
-    var body: some View {
-        LazyHGrid(rows: rows, spacing: cardSpacing) {
-            ForEach(Array(fields.enumerated()), id: \.offset) { index, _ in
-                AutocompleteField(
-                    number: (groupIndex * 6) + (index + 1),
-                    autocomplete: Bip39WordSpecificAutocomplete(
-                        wordNumber: UInt16((groupIndex * 6) + (index + 1)),
-                        numberOfWords: numberOfWords
-                    ),
-                    allEnteredWords: allEnteredWords,
-                    numberOfWords: numberOfWords,
-                    text: $fields[index],
-                    filteredSuggestions: $filteredSuggestions,
-                    focusField: $focusField
-                )
-            }
-        }
-    }
-}
-
-private struct AutocompleteField: View {
-    let number: Int
-    let autocomplete: Bip39WordSpecificAutocomplete
-    let allEnteredWords: [[String]]
-    let numberOfWords: NumberOfBip39Words
-
-    @Binding var text: String
-    @Binding var filteredSuggestions: [String]
-    @Binding var focusField: Int?
-
-    @State private var state: FieldState = .initial
-    @State private var showSuggestions = false
-    @State private var offset: CGPoint = .zero
-    @FocusState private var isFocused: Bool
-
-    private enum FieldState {
-        case initial
-        case valid
-        case invalid
-    }
-
-    var borderColor: Color? {
-        switch state {
-        case .initial: .none
-        case .valid: Color.green.opacity(0.6)
-        case .invalid: Color.red.opacity(0.7)
-        }
-    }
-
-    var textColor: Color {
-        switch state {
-        case .initial:
-            .secondary
-        case .valid:
-            .green.opacity(0.8)
-        case .invalid:
-            .red
-        }
-    }
-
-    var body: some View {
-        HStack {
-            Text("\(String(format: "%d", number)). ")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            Spacer()
-
-            textField
-        }
-        .onAppear {
-            if !text.isEmpty, autocomplete.isBip39Word(word: text) {
-                state = .valid
-            }
-        }
-    }
-
-    func submitFocusField() {
-        filteredSuggestions = []
-        guard let focusField else { return }
-
-        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
-            state = .valid
-        } else {
-            state = .invalid
-        }
-
-        self.focusField = min(focusField + 1, numberOfWords.toWordCount())
-    }
-
-    var textField: some View {
-        TextField("", text: $text)
-            .font(.subheadline)
-            .foregroundColor(textColor)
-            .frame(alignment: .trailing)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .keyboardType(.asciiCapable)
-            .focused($isFocused)
-            .onChange(of: isFocused) {
-                if !isFocused {
-                    showSuggestions = false
-                    return
-                }
-
-                filteredSuggestions = autocomplete.autocomplete(
-                    word: text, allWords: allEnteredWords
-                )
-
-                if isFocused { focusField = number }
-            }
-            .onSubmit {
-                submitFocusField()
-            }
-            .onChange(of: focusField) { _, fieldNumber in
-                guard let fieldNumber else { return }
-                if number == fieldNumber {
-                    isFocused = true
-                }
-            }
-            .onChange(of: text) { oldText, newText in
-                filteredSuggestions = autocomplete.autocomplete(
-                    word: newText, allWords: allEnteredWords
-                )
-
-                if oldText.count > newText.count {
-                    // erasing, reset state
-                    state = .initial
-                }
-
-                // empty is always initial
-                if newText == "" {
-                    state = .initial
-                    return
-                }
-
-                // invalid, no words match
-                if filteredSuggestions.isEmpty {
-                    state = .invalid
-                    return
-                }
-
-                // if only one suggestion left and if we added a letter (not backspace)
-                // then auto select the first selection, because we want auto selection
-                // but also allow the user to fix a wrong word
-                if let word = filteredSuggestions.last,
-                   filteredSuggestions.count == 1, oldText.count < newText.count
-                {
-                    state = .valid
-                    filteredSuggestions = []
-
-                    if text != word {
-                        text = word
-                        submitFocusField()
-                        return
-                    }
-                }
-            }
-            .onAppear {
-                if let focusField, focusField == number {
-                    isFocused = true
-                }
-            }
     }
 }
 

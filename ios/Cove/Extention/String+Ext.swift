@@ -53,6 +53,13 @@ extension String {
     func addressSpacedOut() -> String {
         addressStringSpacedOut(address: self)
     }
+
+    func padLeft(with: String, toLength: Int) -> String {
+        if self.count >= toLength { return self }
+
+        let padding = String(repeating: with, count: toLength - self.count)
+        return padding + self
+    }
 }
 
 extension String? {
