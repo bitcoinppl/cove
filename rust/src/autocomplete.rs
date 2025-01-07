@@ -31,6 +31,28 @@ impl Bip39AutoComplete {
 }
 
 #[uniffi::export]
+impl Bip39AutoComplete {
+    /// Find the next invalid or empty field number
+    #[uniffi::method]
+    pub fn next_field_number(&self, current_field_number: u8, entered_words: Vec<String>) -> u8 {
+        let current_index = current_field_number.checked_sub(1).unwrap_or(0) as usize;
+        let next_index = (current_index + 1).min(entered_words.len());
+
+        println!("current_field_number: {current_field_number}, entered_words: {entered_words:?} next_index: {next_index}",);
+
+        for (index, word) in entered_words[next_index..].iter().enumerate() {
+            // return the field number of the next empty or invalid word
+            if word.is_empty() || !is_bip39_word(word) {
+                return (next_index + index + 1) as u8;
+            }
+        }
+
+        // could not find a valid field, stay put
+        current_field_number
+    }
+}
+
+#[uniffi::export]
 impl AutoComplete for Bip39AutoComplete {
     #[uniffi::method]
     fn autocomplete(&self, word: String) -> Vec<String> {
@@ -51,7 +73,7 @@ impl AutoComplete for Bip39AutoComplete {
 
     #[uniffi::method]
     fn is_valid_word(&self, word: String) -> bool {
-        is_bip39_word(word)
+        is_bip39_word(&word)
     }
 }
 
@@ -119,14 +141,21 @@ impl Bip39WordSpecificAutocomplete {
     pub fn is_bip39_word(&self, word: String) -> bool {
         match self {
             Self::Regular(ac) => ac.is_valid_word(word),
-            Self::LastWord(_number_of_words) => is_bip39_word(word),
+            Self::LastWord(_number_of_words) => is_bip39_word(&word),
+        }
+    }
+
+    #[uniffi::method]
+    pub fn next_field_number(&self, current_field_number: u8, entered_words: Vec<String>) -> u8 {
+        match self {
+            Self::Regular(ac) => ac.next_field_number(current_field_number, entered_words),
+            Self::LastWord(_) => current_field_number,
         }
     }
 }
 
-fn is_bip39_word(word: String) -> bool {
+fn is_bip39_word(word: &str) -> bool {
     let word = word.to_ascii_lowercase();
-
     bip39::Language::English
         .word_list()
         .contains(&word.as_str())

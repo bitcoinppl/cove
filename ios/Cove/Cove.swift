@@ -1846,6 +1846,11 @@ public protocol Bip39AutoCompleteProtocol : AnyObject {
     
     func isValidWord(word: String)  -> Bool
     
+    /**
+     * Find the next invalid or empty field number
+     */
+    func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String])  -> UInt8
+    
 }
 
 open class Bip39AutoComplete:
@@ -1921,6 +1926,18 @@ open func isValidWord(word: String) -> Bool  {
 })
 }
     
+    /**
+     * Find the next invalid or empty field number
+     */
+open func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String]) -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_fn_method_bip39autocomplete_next_field_number(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(currentFieldNumber),
+        FfiConverterSequenceString.lower(enteredWords),$0
+    )
+})
+}
+    
 
 }
 
@@ -1985,6 +2002,8 @@ public protocol Bip39WordSpecificAutocompleteProtocol : AnyObject {
     func isBip39Word(word: String)  -> Bool
     
     func isValidWord(word: String, allWords: [[String]])  -> Bool
+    
+    func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String])  -> UInt8
     
 }
 
@@ -2069,6 +2088,15 @@ open func isValidWord(word: String, allWords: [[String]]) -> Bool  {
     uniffi_cove_fn_method_bip39wordspecificautocomplete_is_valid_word(self.uniffiClonePointer(),
         FfiConverterString.lower(word),
         FfiConverterSequenceSequenceString.lower(allWords),$0
+    )
+})
+}
+    
+open func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String]) -> UInt8  {
+    return try!  FfiConverterUInt8.lift(try! rustCall() {
+    uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(currentFieldNumber),
+        FfiConverterSequenceString.lower(enteredWords),$0
     )
 })
 }
@@ -22352,6 +22380,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_bip39autocomplete_is_valid_word() != 19081) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_bip39autocomplete_next_field_number() != 24967) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_bip39wordspecificautocomplete_autocomplete() != 34680) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -22359,6 +22390,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_bip39wordspecificautocomplete_is_valid_word() != 4400) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number() != 39232) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_bitcointransaction_normalize_tx_id() != 15620) {

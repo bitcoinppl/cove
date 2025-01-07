@@ -190,8 +190,13 @@ private struct AutocompleteField: View {
             state = .invalid
         }
 
-        let focusFieldNumber = focusField?.fieldNumber ?? 1
-        var nextFieldNumber = min(focusFieldNumber + 1, numberOfWords.toWordCount())
+        let currentFocusField = UInt8(focusField?.fieldNumber ?? 1)
+
+        let nextFieldNumber = autocomplete.nextFieldNumber(
+            currentFieldNumber: currentFocusField,
+            enteredWords: allEnteredWords.flatMap(\.self)
+        )
+
         focusField = ImportFieldNumber(nextFieldNumber)
     }
 
@@ -218,6 +223,8 @@ private struct AutocompleteField: View {
             }
             .onSubmit { submitFocusField() }
             .onChange(of: text) { oldText, newText in
+                text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+
                 filteredSuggestions = autocomplete.autocomplete(
                     word: newText, allWords: allEnteredWords
                 )

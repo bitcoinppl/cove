@@ -51,7 +51,13 @@ enum ImportFieldNumber: Int, Hashable, CaseIterable {
     init(_ fieldNumber: Int) {
         self = Self(rawValue: fieldNumber - 1) ?? .one
     }
+
+    init(_ fieldNumber: UInt8) {
+        self = .init(Int(fieldNumber))
+    }
 }
+
+private let groupsOf = 12
 
 struct HotWalletImportScreen: View {
     // public
@@ -108,7 +114,7 @@ struct HotWalletImportScreen: View {
 
         focusField = .one
         importType = .manual
-        enteredWords = numberOfWords.inGroups(of: 12)
+        enteredWords = numberOfWords.inGroups(of: groupsOf)
     }
 
     var buttonIsDisabled: Bool {
@@ -196,16 +202,16 @@ struct HotWalletImportScreen: View {
                 Button(word) {
                     let focusFieldNumber = min(focusField?.fieldNumber ?? 1, numberOfWords.toWordCount())
 
-                    var (outerIndex, remainder) = focusFieldNumber.quotientAndRemainder(dividingBy: 6)
+                    var (outerIndex, remainder) = focusFieldNumber.quotientAndRemainder(dividingBy: groupsOf)
                     var innerIndex = remainder - 1
 
                     // adjust for last word
                     if innerIndex < 0 {
-                        innerIndex = 5
+                        innerIndex = groupsOf - 1
                         outerIndex = outerIndex - 1
                     }
 
-                    if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
+                    if innerIndex >= groupsOf || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
                         Log.error(
                             "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusFieldNumber)"
                         )
@@ -214,8 +220,11 @@ struct HotWalletImportScreen: View {
 
                     enteredWords[outerIndex][innerIndex] = word
 
-                    // if its not the last word, go to next focusField
-                    let newFocusFieldNumber = min(focusField?.fieldNumber ?? 1 + 1, numberOfWords.toWordCount())
+                    let newFocusFieldNumber = autocomplete.nextFieldNumber(
+                        currentFieldNumber: UInt8(focusFieldNumber),
+                        enteredWords: enteredWords.flatMap(\.self)
+                    )
+
                     focusField = ImportFieldNumber(newFocusFieldNumber)
                     filteredSuggestions = []
                 }
@@ -308,6 +317,9 @@ struct HotWalletImportScreen: View {
         .onChange(of: enteredWords, onChangeEnteredWords)
         .onChange(of: nfcReader.scannedMessage, onChangeScannedMessage)
         .onChange(of: nfcReader.scannedMessageData, onChangeScannedMessageData)
+        .onChange(of: focusField) { old, new in
+            if new == nil { focusField = old }
+        }
         .onDisappear {
             nfcReader.resetReader()
             nfcReader.session = nil
