@@ -194,41 +194,51 @@ struct HotWalletImportScreen: View {
         }
     }
 
+    func selectWordInKeyboard(_ word: String) {
+        let focusFieldNumber = min(focusField?.fieldNumber ?? 1, numberOfWords.toWordCount())
+
+        var (outerIndex, remainder) = focusFieldNumber.quotientAndRemainder(dividingBy: groupsOf)
+        var innerIndex = remainder - 1
+
+        // adjust for last word
+        if innerIndex < 0 {
+            innerIndex = groupsOf - 1
+            outerIndex = outerIndex - 1
+        }
+
+        if innerIndex >= groupsOf || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
+            Log.error(
+                "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusFieldNumber)"
+            )
+            return
+        }
+
+        enteredWords[outerIndex][innerIndex] = word
+
+        let newFocusFieldNumber = Int(
+            autocomplete.nextFieldNumber(
+                currentFieldNumber: UInt8(focusFieldNumber),
+                enteredWords: enteredWords.flatMap(\.self)
+            )
+        )
+
+        focusField = ImportFieldNumber(newFocusFieldNumber)
+
+        // going to new page
+        if (newFocusFieldNumber % groupsOf) == 1 {
+            tabIndex = Int(newFocusFieldNumber / groupsOf)
+        }
+
+        filteredSuggestions = []
+    }
+
     @ViewBuilder
     var KeyboardAutoCompleteView: some View {
         HStack {
             ForEach(filteredSuggestions, id: \.self) { word in
                 Spacer()
-                Button(word) {
-                    let focusFieldNumber = min(focusField?.fieldNumber ?? 1, numberOfWords.toWordCount())
-
-                    var (outerIndex, remainder) = focusFieldNumber.quotientAndRemainder(dividingBy: groupsOf)
-                    var innerIndex = remainder - 1
-
-                    // adjust for last word
-                    if innerIndex < 0 {
-                        innerIndex = groupsOf - 1
-                        outerIndex = outerIndex - 1
-                    }
-
-                    if innerIndex >= groupsOf || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
-                        Log.error(
-                            "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusFieldNumber)"
-                        )
-                        return
-                    }
-
-                    enteredWords[outerIndex][innerIndex] = word
-
-                    let newFocusFieldNumber = autocomplete.nextFieldNumber(
-                        currentFieldNumber: UInt8(focusFieldNumber),
-                        enteredWords: enteredWords.flatMap(\.self)
-                    )
-
-                    focusField = ImportFieldNumber(newFocusFieldNumber)
-                    filteredSuggestions = []
-                }
-                .foregroundColor(.secondary)
+                Button(word, action: { selectWordInKeyboard(word) })
+                    .foregroundColor(.secondary)
                 Spacer()
 
                 // only show divider in the middle
@@ -313,8 +323,7 @@ struct HotWalletImportScreen: View {
             actions: { MyAlert($0).actions }
         )
         .onAppear(perform: initOnAppear)
-        .onChange(of: focusField) { filteredSuggestions = [] }
-        .onChange(of: enteredWords, onChangeEnteredWords)
+        .onChange(of: focusField, onChangeFocusField)
         .onChange(of: nfcReader.scannedMessage, onChangeScannedMessage)
         .onChange(of: nfcReader.scannedMessageData, onChangeScannedMessageData)
         .onChange(of: focusField) { old, new in
@@ -407,13 +416,15 @@ struct HotWalletImportScreen: View {
 
     // MARK: OnChange Functions
 
-    func onChangeEnteredWords(_: [[String]]?, _: [[String]]?) {
-        // if its the last word on the non last card and all words are valid words, then go to next tab
-        // focusField will already have changed by now
-        let focusFieldNumber = focusField?.fieldNumber ?? 1
-        if !buttonIsDisabled, tabIndex < lastIndex, focusFieldNumber % 12 == 1 {
+    func onChangeFocusField(_ old: ImportFieldNumber?, _ new: ImportFieldNumber?) {
+        // clear suggestions when focus changes
+        filteredSuggestions = []
+
+        // check if we should move to next page
+        let focusFieldNumber = new?.fieldNumber ?? old?.fieldNumber ?? 1
+        if (focusFieldNumber % groupsOf) == 1 {
             withAnimation {
-                tabIndex += 1
+                tabIndex = Int(focusFieldNumber / groupsOf)
             }
         }
     }

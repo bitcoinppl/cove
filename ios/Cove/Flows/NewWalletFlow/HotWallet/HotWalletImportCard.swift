@@ -26,6 +26,7 @@ struct HotWalletImportCard: View {
                 ForEach(Array(enteredWords.enumerated()), id: \.offset) { index, _ in
                     CardTab(
                         fields: $enteredWords[index],
+                        tabIndex: $tabIndex,
                         groupIndex: index,
                         filteredSuggestions: $filteredSuggestions,
                         focusField: $focusField,
@@ -52,6 +53,7 @@ struct HotWalletImportCard: View {
 
 private struct CardTab: View {
     @Binding var fields: [String]
+    @Binding var tabIndex: Int
     let groupIndex: Int
     @Binding var filteredSuggestions: [String]
 
@@ -78,6 +80,7 @@ private struct CardTab: View {
                         ),
                         allEnteredWords: allEnteredWords,
                         numberOfWords: numberOfWords,
+                        tabIndex: $tabIndex,
                         text: $fields[index],
                         filteredSuggestions: $filteredSuggestions,
                         focusField: $focusField
@@ -98,6 +101,7 @@ private struct AutocompleteField: View {
     let allEnteredWords: [[String]]
     let numberOfWords: NumberOfBip39Words
 
+    @Binding var tabIndex: Int
     @Binding var text: String
     @Binding var filteredSuggestions: [String]
     @FocusState.Binding var focusField: ImportFieldNumber?
@@ -181,23 +185,31 @@ private struct AutocompleteField: View {
         .frame(maxWidth: .infinity)
     }
 
+    var groupsOf: Int {
+        allEnteredWords[0].count
+    }
+
     func submitFocusField() {
         filteredSuggestions = []
 
-        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
-            state = .valid
-        } else {
-            state = .invalid
-        }
-
         let currentFocusField = UInt8(focusField?.fieldNumber ?? 1)
-
-        let nextFieldNumber = autocomplete.nextFieldNumber(
-            currentFieldNumber: currentFocusField,
-            enteredWords: allEnteredWords.flatMap(\.self)
-        )
+        let nextFieldNumber = Int(
+            autocomplete.nextFieldNumber(
+                currentFieldNumber: currentFocusField,
+                enteredWords: allEnteredWords.flatMap(\.self)
+            ))
 
         focusField = ImportFieldNumber(nextFieldNumber)
+
+        if (nextFieldNumber % groupsOf) == 1 {
+            withAnimation {
+                tabIndex = Int(nextFieldNumber / groupsOf)
+            }
+        }
+
+        if text == "" { return state = .typing }
+        if autocomplete.isValidWord(word: text, allWords: allEnteredWords) { return state = .valid }
+        state = .invalid
     }
 
     var textField: some View {
@@ -220,6 +232,15 @@ private struct AutocompleteField: View {
                 filteredSuggestions = autocomplete.autocomplete(
                     word: text, allWords: allEnteredWords
                 )
+            }
+            .onChange(of: focusField) { _, _ in
+                if text == "" { return }
+
+                if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
+                    state = .valid
+                } else {
+                    state = .invalid
+                }
             }
             .onSubmit { submitFocusField() }
             .onChange(of: text) { oldText, newText in
