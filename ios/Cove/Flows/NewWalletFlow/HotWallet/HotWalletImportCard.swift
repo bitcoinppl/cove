@@ -10,6 +10,8 @@ import SwiftUI
 private let rowHeight = 30.0
 private let numberOfRows = 6
 
+private let groupsOf = HotWalletImportScreen.GROUPS_OF
+
 struct HotWalletImportCard: View {
     var numberOfWords: NumberOfBip39Words
 
@@ -73,9 +75,9 @@ private struct CardTab: View {
             LazyHGrid(rows: rows, spacing: cardSpacing) {
                 ForEach(Array(fields.enumerated()), id: \.offset) { index, _ in
                     AutocompleteField(
-                        number: (groupIndex * 6) + (index + 1),
+                        number: (groupIndex * groupsOf) + (index + 1),
                         autocomplete: Bip39WordSpecificAutocomplete(
-                            wordNumber: UInt16((groupIndex * 6) + (index + 1)),
+                            wordNumber: UInt16((groupIndex * groupsOf) + (index + 1)),
                             numberOfWords: numberOfWords
                         ),
                         allEnteredWords: allEnteredWords,
@@ -183,10 +185,6 @@ private struct AutocompleteField: View {
             }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    var groupsOf: Int {
-        allEnteredWords[0].count
     }
 
     func submitFocusField() {

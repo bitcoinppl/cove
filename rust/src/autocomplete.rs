@@ -37,7 +37,6 @@ impl Bip39AutoComplete {
     #[uniffi::method]
     pub fn next_field_number(&self, current_field_number: u8, entered_words: Vec<String>) -> u8 {
         let current_index = current_field_number.checked_sub(1).unwrap_or(0) as usize;
-        debug!("current_field_number: {current_field_number}, current_index: {current_index}, entered_words: {entered_words:?}");
 
         // look over the entire group, this way we find the first empty or invalid word, even if
         // its an index before the current one

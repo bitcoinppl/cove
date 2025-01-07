@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+private let groupsOf = HotWalletImportScreen.GROUPS_OF
+
 private enum AlertState: Equatable {
     case invalidWords
     case duplicateWallet(WalletId)
@@ -57,7 +59,10 @@ enum ImportFieldNumber: Int, Hashable, CaseIterable {
     }
 }
 
-private let groupsOf = 12
+// consts
+extension HotWalletImportScreen {
+    static let GROUPS_OF = 12
+}
 
 struct HotWalletImportScreen: View {
     // public
