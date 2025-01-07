@@ -16,7 +16,8 @@ struct HotWalletImportCard: View {
     @Binding var tabIndex: Int
     @Binding var enteredWords: [[String]]
     @Binding var filteredSuggestions: [String]
-    @Binding var focusField: Int?
+
+    @FocusState.Binding var focusField: ImportFieldNumber?
 
     @ViewBuilder
     var MainContent: some View {
@@ -53,7 +54,8 @@ private struct CardTab: View {
     @Binding var fields: [String]
     let groupIndex: Int
     @Binding var filteredSuggestions: [String]
-    @Binding var focusField: Int?
+
+    @FocusState.Binding var focusField: ImportFieldNumber?
 
     let allEnteredWords: [[String]]
     let numberOfWords: NumberOfBip39Words
@@ -89,6 +91,8 @@ private struct CardTab: View {
 }
 
 private struct AutocompleteField: View {
+    @Environment(\.colorScheme) var colorScheme
+
     let number: Int
     let autocomplete: Bip39WordSpecificAutocomplete
     let allEnteredWords: [[String]]
@@ -96,15 +100,15 @@ private struct AutocompleteField: View {
 
     @Binding var text: String
     @Binding var filteredSuggestions: [String]
-    @Binding var focusField: Int?
+    @FocusState.Binding var focusField: ImportFieldNumber?
 
     @State private var state: FieldState = .initial
     @State private var showSuggestions = false
     @State private var offset: CGPoint = .zero
-    @FocusState private var isFocused: Bool
 
     private enum FieldState {
         case initial
+        case typing
         case valid
         case invalid
     }
@@ -112,6 +116,7 @@ private struct AutocompleteField: View {
     var borderColor: Color? {
         switch state {
         case .initial: .none
+        case .typing: .none
         case .valid: Color.green.opacity(0.6)
         case .invalid: Color.red.opacity(0.7)
         }
@@ -121,6 +126,8 @@ private struct AutocompleteField: View {
         switch state {
         case .initial:
             .secondary.opacity(0.45)
+        case .typing:
+            .primary
         case .valid:
             .green.opacity(0.8)
         case .invalid:
@@ -128,26 +135,42 @@ private struct AutocompleteField: View {
         }
     }
 
+    var numberColor: Color {
+        switch state {
+        case .initial:
+            .secondary.opacity(0.45)
+        default:
+            .secondary
+        }
+    }
+
+    var isFocused: Bool {
+        if focusField == nil { return number == 1 }
+        return focusField == ImportFieldNumber(number)
+    }
+
     var body: some View {
         HStack {
             Text("\(String(format: "%d", number)).".padLeft(with: " ", toLength: 3))
                 .font(.subheadline)
                 .fontDesign(.monospaced)
-                .foregroundColor(textColor)
+                .foregroundColor(numberColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .fixedSize(horizontal: true, vertical: true)
                 .frame(alignment: .leading)
 
             ZStack(alignment: .centerFirstTextBaseline) {
-                Line()
-                    .stroke(textColor, lineWidth: 1)
-                    .frame(height: 1)
-                    .frame(maxWidth: .infinity)
-                    .padding(.trailing, 5)
+                if state == .initial || state == .typing {
+                    Line()
+                        .stroke(textColor, lineWidth: 1)
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.trailing, 5)
+                }
 
                 textField
-                    .offset(y: -2)
+                    .offset(y: state == .typing ? -4 : 0)
             }
         }
         .onAppear {
@@ -160,7 +183,6 @@ private struct AutocompleteField: View {
 
     func submitFocusField() {
         filteredSuggestions = []
-        guard let focusField else { return }
 
         if autocomplete.isValidWord(word: text, allWords: allEnteredWords) {
             state = .valid
@@ -168,18 +190,22 @@ private struct AutocompleteField: View {
             state = .invalid
         }
 
-        self.focusField = min(focusField + 1, numberOfWords.toWordCount())
+        let focusFieldNumber = focusField?.fieldNumber ?? 1
+        var nextFieldNumber = min(focusFieldNumber + 1, numberOfWords.toWordCount())
+        focusField = ImportFieldNumber(nextFieldNumber)
     }
 
     var textField: some View {
         TextField("", text: $text)
             .font(.subheadline)
+            .fontWeight(.bold)
             .foregroundColor(textColor)
             .frame(alignment: .trailing)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled(true)
             .keyboardType(.asciiCapable)
-            .focused($isFocused)
+            .focused($focusField, equals: ImportFieldNumber(number))
+            .tint(colorScheme == .dark ? .white : .black)
             .onChange(of: isFocused) {
                 if !isFocused {
                     showSuggestions = false
@@ -189,39 +215,25 @@ private struct AutocompleteField: View {
                 filteredSuggestions = autocomplete.autocomplete(
                     word: text, allWords: allEnteredWords
                 )
-
-                if isFocused { focusField = number }
             }
-            .onSubmit {
-                submitFocusField()
-            }
-            .onChange(of: focusField) { _, fieldNumber in
-                guard let fieldNumber else { return }
-                if number == fieldNumber {
-                    isFocused = true
-                }
-            }
+            .onSubmit { submitFocusField() }
             .onChange(of: text) { oldText, newText in
                 filteredSuggestions = autocomplete.autocomplete(
                     word: newText, allWords: allEnteredWords
                 )
 
-                if oldText.count > newText.count {
-                    // erasing, reset state
-                    state = .initial
-                }
+                // initial set to typing
+                if newText.count > oldText.count { state = .typing }
 
-                // empty is always initial
-                if newText == "" {
-                    state = .initial
-                    return
-                }
+                // erasing, reset state to typing
+                if oldText.count > newText.count { return state = .typing }
+
+                // empty is always initial, or typing
+                if newText.isEmpty, isFocused { return state = .typing }
+                if newText.isEmpty, !isFocused { return state = .initial }
 
                 // invalid, no words match
-                if filteredSuggestions.isEmpty {
-                    state = .invalid
-                    return
-                }
+                if filteredSuggestions.isEmpty { return state = .invalid }
 
                 // if only one suggestion left and if we added a letter (not backspace)
                 // then auto select the first selection, because we want auto selection
@@ -239,11 +251,6 @@ private struct AutocompleteField: View {
                     }
                 }
             }
-            .onAppear {
-                if let focusField, focusField == number {
-                    isFocused = true
-                }
-            }
     }
 }
 
@@ -252,7 +259,7 @@ private struct AutocompleteField: View {
         @State var tabIndex: Int = 0
         @State var enteredWords: [[String]] = Array(repeating: Array(repeating: "", count: 12), count: 2)
         @State var filteredSuggestions: [String] = []
-        @State var focusField: Int? = nil
+        @FocusState var focusField: ImportFieldNumber?
 
         var body: some View {
             HotWalletImportCard(

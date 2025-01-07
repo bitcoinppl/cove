@@ -17,6 +17,42 @@ private enum SheetState: Equatable {
     case qrCode
 }
 
+enum ImportFieldNumber: Int, Hashable, CaseIterable {
+    case one
+    case two
+    case three
+    case four
+    case five
+    case six
+    case seven
+    case eight
+    case nine
+    case ten
+    case eleven
+    case twelve
+    case thirteen
+    case fourteen
+    case fifteen
+    case sixteen
+    case seventeen
+    case eighteen
+    case nineteen
+    case twenty
+    case twentyOne
+    case twentyTwo
+    case twentyThree
+    case twentyFour
+
+    //  0 index, covertr to field number
+    var fieldNumber: Int {
+        rawValue + 1
+    }
+
+    init(_ fieldNumber: Int) {
+        self = Self(rawValue: fieldNumber - 1) ?? .one
+    }
+}
+
 struct HotWalletImportScreen: View {
     // public
     let autocomplete = Bip39AutoComplete()
@@ -30,7 +66,7 @@ struct HotWalletImportScreen: View {
     @State private var tabIndex: Int = 0
     @State private var duplicateWallet: DuplicateWalletItem? = .none
 
-    @State private var focusField: Int?
+    @FocusState var focusField: ImportFieldNumber?
 
     @State var manager: ImportWalletManager = .init()
     @State private var validator: WordValidator? = nil
@@ -70,6 +106,7 @@ struct HotWalletImportScreen: View {
             tasks.append(task)
         }
 
+        focusField = .one
         importType = .manual
         enteredWords = numberOfWords.inGroups(of: 12)
     }
@@ -157,10 +194,9 @@ struct HotWalletImportScreen: View {
             ForEach(filteredSuggestions, id: \.self) { word in
                 Spacer()
                 Button(word) {
-                    guard let focusFieldUnchecked = focusField else { return }
+                    let focusFieldNumber = min(focusField?.fieldNumber ?? 1, numberOfWords.toWordCount())
 
-                    let focusField = min(focusFieldUnchecked, numberOfWords.toWordCount())
-                    var (outerIndex, remainder) = focusField.quotientAndRemainder(dividingBy: 6)
+                    var (outerIndex, remainder) = focusFieldNumber.quotientAndRemainder(dividingBy: 6)
                     var innerIndex = remainder - 1
 
                     // adjust for last word
@@ -171,7 +207,7 @@ struct HotWalletImportScreen: View {
 
                     if innerIndex > 5 || outerIndex > lastIndex || outerIndex < 0 || innerIndex < 0 {
                         Log.error(
-                            "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusField)"
+                            "Something went wrong: innerIndex: \(innerIndex), outerIndex: \(outerIndex), lastIndex: \(lastIndex), focusField: \(focusFieldNumber)"
                         )
                         return
                     }
@@ -179,7 +215,8 @@ struct HotWalletImportScreen: View {
                     enteredWords[outerIndex][innerIndex] = word
 
                     // if its not the last word, go to next focusField
-                    self.focusField = min(focusField + 1, numberOfWords.toWordCount())
+                    let newFocusFieldNumber = min(focusField?.fieldNumber ?? 1 + 1, numberOfWords.toWordCount())
+                    focusField = ImportFieldNumber(newFocusFieldNumber)
                     filteredSuggestions = []
                 }
                 .foregroundColor(.secondary)
@@ -262,7 +299,10 @@ struct HotWalletImportScreen: View {
         .padding(.bottom, 24)
         .toolbar { ToolbarContent }
         .sheet(item: $sheetState, content: SheetContent)
-        .alert(alertTitle, isPresented: showingAlert, presenting: alertState, actions: { MyAlert($0).actions })
+        .alert(
+            alertTitle, isPresented: showingAlert, presenting: alertState,
+            actions: { MyAlert($0).actions }
+        )
         .onAppear(perform: initOnAppear)
         .onChange(of: focusField) { filteredSuggestions = [] }
         .onChange(of: enteredWords, onChangeEnteredWords)
@@ -312,7 +352,8 @@ struct HotWalletImportScreen: View {
         case .invalidWords:
             return AlertBuilder(
                 title: "Words not valid",
-                message: "The words you entered does not create a valid wallet. Please check the words and try again.",
+                message:
+                "The words you entered does not create a valid wallet. Please check the words and try again.",
                 actions: singleOkCancel
             )
         case let .duplicateWallet(walletId):
@@ -357,9 +398,8 @@ struct HotWalletImportScreen: View {
     func onChangeEnteredWords(_: [[String]]?, _: [[String]]?) {
         // if its the last word on the non last card and all words are valid words, then go to next tab
         // focusField will already have changed by now
-        if let focusField,
-           !buttonIsDisabled, tabIndex < lastIndex, focusField % 12 == 1
-        {
+        let focusFieldNumber = focusField?.fieldNumber ?? 1
+        if !buttonIsDisabled, tabIndex < lastIndex, focusFieldNumber % 12 == 1 {
             withAnimation {
                 tabIndex += 1
             }
