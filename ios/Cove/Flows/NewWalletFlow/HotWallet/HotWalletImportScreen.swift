@@ -74,6 +74,10 @@ struct HotWalletImportScreen: View {
     @Environment(\.navigate) private var navigate
     @Environment(AppManager.self) private var app
 
+    // fade in keyboard
+    @State private var showScreen: Bool = false
+    @State private var showScreenOpacity: Double = 1
+
     @State private var tabIndex: Int = 0
     @State private var duplicateWallet: DuplicateWalletItem? = .none
 
@@ -300,16 +304,37 @@ struct HotWalletImportScreen: View {
     }
 
     var body: some View {
+        ZStack {
+            MainContent
+
+            if !showScreen {
+                Rectangle()
+                    .fill(.black)
+                    .opacity(showScreenOpacity)
+                    .ignoresSafeArea()
+            }
+        }
+        .onAppear {
+            withAnimation(.easeIn(duration: 1.60)) {
+                showScreenOpacity = 0
+            } completion: { showScreen = true }
+        }
+    }
+
+    @ViewBuilder
+    var MainContent: some View {
         VStack {
             Spacer()
 
-            HotWalletImportCard(
-                numberOfWords: numberOfWords,
-                tabIndex: $tabIndex,
-                enteredWords: $enteredWords,
-                filteredSuggestions: $filteredSuggestions,
-                focusField: $focusField
-            )
+            ZStack {
+                HotWalletImportCard(
+                    numberOfWords: numberOfWords,
+                    tabIndex: $tabIndex,
+                    enteredWords: $enteredWords,
+                    filteredSuggestions: $filteredSuggestions,
+                    focusField: $focusField
+                )
+            }
 
             if numberOfWords == .twentyFour {
                 DotMenuView(selected: tabIndex, size: 5, total: 2)
