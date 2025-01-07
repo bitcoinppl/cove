@@ -1,6 +1,5 @@
 use crate::mnemonic::NumberOfBip39Words;
 use macros::impl_default_for;
-use tracing::debug;
 
 #[uniffi::export(with_foreign)]
 pub trait AutoComplete: Send + Sync + std::fmt::Debug + 'static {
@@ -36,7 +35,7 @@ impl Bip39AutoComplete {
     /// Find the next invalid or empty field number
     #[uniffi::method]
     pub fn next_field_number(&self, current_field_number: u8, entered_words: Vec<String>) -> u8 {
-        let current_index = current_field_number.checked_sub(1).unwrap_or(0) as usize;
+        let current_index = current_field_number.saturating_sub(1) as usize;
 
         // look over the entire group, this way we find the first empty or invalid word, even if
         // its an index before the current one

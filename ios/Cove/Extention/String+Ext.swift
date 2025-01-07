@@ -55,9 +55,9 @@ extension String {
     }
 
     func padLeft(with: String, toLength: Int) -> String {
-        if self.count >= toLength { return self }
+        if count >= toLength { return self }
 
-        let padding = String(repeating: with, count: toLength - self.count)
+        let padding = String(repeating: with, count: toLength - count)
         return padding + self
     }
 }
