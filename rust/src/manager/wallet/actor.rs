@@ -11,7 +11,7 @@ use crate::{
 use act_zero::*;
 use bdk_chain::{
     bitcoin::Psbt,
-    spk_client::{FullScanResult, SyncResult},
+    spk_client::{FullScanResponse, SyncResponse},
 };
 use bdk_wallet::KeychainKind;
 use bitcoin::params::Params;
@@ -414,7 +414,7 @@ impl WalletActor {
 
     async fn handle_full_scan_complete(
         &mut self,
-        full_scan_result: Result<FullScanResult<KeychainKind>, crate::node::client::Error>,
+        full_scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
     ) -> ActorResult<()> {
         debug!("applying full scan result");
 
@@ -436,7 +436,7 @@ impl WalletActor {
 
     async fn handle_incremental_scan_complete(
         &mut self,
-        sync_result: Result<SyncResult, crate::node::client::Error>,
+        sync_result: Result<SyncResponse, crate::node::client::Error>,
     ) -> ActorResult<()> {
         let sync_result = sync_result?;
         self.wallet.apply_update(sync_result)?;

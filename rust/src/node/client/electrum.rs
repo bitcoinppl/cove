@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
-use bdk_chain::{
-    bitcoin::Address,
-    spk_client::{FullScanRequest, FullScanResult, SyncRequest, SyncResult},
-    ConfirmationBlockTime, TxGraph,
-};
+use bdk_chain::{bitcoin::Address, ConfirmationBlockTime, TxGraph};
+use bdk_core::spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse};
 use bdk_electrum::{
     electrum_client::{Client, ElectrumApi as _},
     BdkElectrumClient,
@@ -67,7 +64,7 @@ impl ElectrumClient {
         &self,
         request: FullScanRequest<KeychainKind>,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
-    ) -> Result<FullScanResult<KeychainKind>, Error> {
+    ) -> Result<FullScanResponse<KeychainKind>, Error> {
         debug!("start populate_tx_cache");
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();
@@ -95,7 +92,7 @@ impl ElectrumClient {
         &self,
         request: SyncRequest<(KeychainKind, u32)>,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
-    ) -> Result<SyncResult, Error> {
+    ) -> Result<SyncResponse, Error> {
         debug!("start populate_tx_cache");
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();

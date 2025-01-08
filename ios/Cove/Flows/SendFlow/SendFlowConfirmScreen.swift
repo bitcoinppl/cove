@@ -123,7 +123,7 @@ struct SendFlowConfirmScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
 
-            SwipeToSendView()
+            SwipeToSendView(onConfirm: {})
                 .padding(.horizontal)
                 .padding(.bottom, 6)
                 .padding(.top, 20)

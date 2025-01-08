@@ -8,8 +8,12 @@ import Foundation
 import SwiftUI
 
 struct SwipeToSendView: View {
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorScheme) var colorScheme
 
+    // args
+    let onConfirm: () -> Void
+
+    // private
     @State private var offset: CGFloat = 0
     @State private var isDragging = false
     @State private var containerWidth = screenWidth
@@ -31,6 +35,10 @@ struct SwipeToSendView: View {
         }
 
         return 1.0 - percentDragged - 0.07
+    }
+
+    init(onConfirm: @escaping () -> Void) {
+        self.onConfirm = onConfirm
     }
 
     var body: some View {
@@ -84,7 +92,7 @@ struct SwipeToSendView: View {
                                     offset = maxOffset
                                 }
 
-                                // TODO: Add your send action here
+                                onConfirm()
                             } else {
                                 withAnimation {
                                     offset = 0
@@ -104,7 +112,7 @@ struct SwipeToSendView: View {
 
 #Preview {
     VStack {
-        SwipeToSendView()
+        SwipeToSendView(onConfirm: { print("CONFIRMED") })
     }
     .padding(12)
 }

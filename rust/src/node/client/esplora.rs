@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bdk_chain::{
     bitcoin::Address,
-    spk_client::{FullScanRequest, FullScanResult, SyncRequest, SyncResult},
+    spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
 };
 use bdk_esplora::{
     esplora_client::{self, r#async::AsyncClient},
@@ -69,7 +69,7 @@ impl EsploraClient {
     pub async fn full_scan(
         &self,
         request: FullScanRequest<KeychainKind>,
-    ) -> Result<FullScanResult<KeychainKind>, Error> {
+    ) -> Result<FullScanResponse<KeychainKind>, Error> {
         self.client
             .full_scan(request, self.options.stop_gap, self.options.batch_size)
             .await
@@ -79,7 +79,7 @@ impl EsploraClient {
     pub async fn sync(
         &self,
         request: SyncRequest<(KeychainKind, u32)>,
-    ) -> Result<SyncResult, Error> {
+    ) -> Result<SyncResponse, Error> {
         debug!(
             "starting esplora sync, batch size: {}",
             self.options.batch_size

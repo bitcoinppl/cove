@@ -134,17 +134,19 @@ impl Transaction {
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
         match tx.chain_position {
-            BdkChainPosition::Unconfirmed(last_seen) => {
+            BdkChainPosition::Unconfirmed { last_seen } => {
                 let unconfirmed = UnconfirmedTransaction {
                     txid,
                     sent_and_received,
-                    last_seen,
+                    last_seen: last_seen.unwrap_or_default(),
                     fiat,
                 };
 
                 Self::Unconfirmed(Arc::new(unconfirmed))
             }
-            BdkChainPosition::Confirmed(block_time) => {
+            BdkChainPosition::Confirmed {
+                anchor: block_time, ..
+            } => {
                 let confirmed_at =
                     jiff::Timestamp::from_second(block_time.confirmation_time as i64)
                         .expect("all blocktimes after unix epoch");
@@ -218,10 +220,13 @@ impl From<BdkTxIn> for TxIn {
 impl From<BdkChainPosition<&ConfirmationBlockTime>> for ChainPosition {
     fn from(chain_position: BdkChainPosition<&ConfirmationBlockTime>) -> Self {
         match chain_position {
-            BdkChainPosition::Unconfirmed(height) => Self::Unconfirmed(height),
-            BdkChainPosition::Confirmed(confirmation_blocktime) => {
-                Self::Confirmed(*confirmation_blocktime)
+            BdkChainPosition::Unconfirmed { last_seen } => {
+                Self::Unconfirmed(last_seen.unwrap_or_default())
             }
+            BdkChainPosition::Confirmed {
+                anchor: confirmation_blocktime,
+                ..
+            } => Self::Confirmed(*confirmation_blocktime),
         }
     }
 }

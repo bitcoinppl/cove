@@ -19,28 +19,20 @@ default = ["uniffi/cli"]
 macros = { path = "./crates/macros" }
 
 # bdk / bitcoin
-bdk_wallet = { version = "1.0.0-beta.5", features = [
-    "keys-bip39",
-    "file_store",
-], git = "https://github.com/bitcoinppl/bdk" }
-
+bdk_core = { version = "0.4" }
+bdk_wallet = { version = "1.0.0", features = ["keys-bip39", "file_store"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
-# bdk_esplora = {  version = "0.19", features = ["async-https"] }
-bdk_esplora = { version = "0.19", git = "https://github.com/bitcoinppl/bdk", features = [
-    "async-https",
-    "tokio",
-] }
-
-bdk_electrum = { version = "0.19", features = [
+bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
+bdk_electrum = { version = "0.20", features = [
     "use-rustls-ring",
-], default-features = false, git = "https://github.com/bitcoinppl/bdk" }
+], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # store bdk wallet data
-bdk_file_store = { version = "0.17.0", git = "http://github.com/bitcoinppl/bdk" }
-bdk_chain = { version = "0.20.0", git = "https://github.com/bitcoinppl/bdk" }
+bdk_file_store = { version = "0.18.0" }
+bdk_chain = { version = "0.21.0" }
 
 # import / export hardware wallet public keys
 pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = [
