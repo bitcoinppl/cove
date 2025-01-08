@@ -9,6 +9,7 @@ use bdk_esplora::{
     EsploraAsyncExt as _,
 };
 use bdk_wallet::KeychainKind;
+use bitcoin::Txid;
 use tap::TapFallible as _;
 use tracing::debug;
 
@@ -89,6 +90,15 @@ impl EsploraClient {
             .sync(request, self.options.batch_size)
             .await
             .map_err(Error::EsploraScan)
+    }
+
+    pub async fn broadcast_transaction(&self, txn: bitcoin::Transaction) -> Result<Txid, Error> {
+        self.client
+            .broadcast(&txn)
+            .await
+            .map_err(Error::EsploraBroadcast)?;
+
+        Ok(txn.compute_txid())
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {

@@ -14,6 +14,7 @@ use bdk_wallet::{
     },
     KeychainKind,
 };
+use bitcoin::{Transaction, Txid};
 use tracing::debug;
 
 use crate::node::Node;
@@ -64,6 +65,12 @@ pub enum Error {
 
     #[error("failed to get a address: {0}")]
     ElectrumAddress(electrum_client::Error),
+
+    #[error("failed to broadcast transaction: {0}")]
+    EsploraBroadcast(esplora_client::Error),
+
+    #[error("failed to broadcast transaction: {0}")]
+    ElectrumBroadcast(electrum_client::Error),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -183,6 +190,13 @@ impl NodeClient {
                 let address = client.check_address_for_txn(address).await?;
                 Ok(address)
             }
+        }
+    }
+
+    pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
+        match self {
+            NodeClient::Esplora(client) => client.broadcast_transaction(txn).await,
+            NodeClient::Electrum(client) => client.broadcast_transaction(txn).await,
         }
     }
 }

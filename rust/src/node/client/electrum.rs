@@ -7,6 +7,7 @@ use bdk_electrum::{
     BdkElectrumClient,
 };
 use bdk_wallet::KeychainKind;
+use bitcoin::{Transaction, Txid};
 use tap::TapFallible as _;
 use tracing::debug;
 
@@ -124,6 +125,19 @@ impl ElectrumClient {
         .map_err(Error::ElectrumAddress)?;
 
         Ok(!txns.is_empty())
+    }
+
+    pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
+        let client = self.client.clone();
+        let tx_id = crate::unblock::run_blocking(move || {
+            client
+                .inner
+                .transaction_broadcast(&txn)
+                .map_err(Error::ElectrumBroadcast)
+        })
+        .await?;
+
+        Ok(tx_id)
     }
 
     fn default_options() -> NodeClientOptions {
