@@ -104,7 +104,7 @@ struct SidebarView: View {
                             .frame(maxWidth: .infinity)
                         }
                         .padding()
-                        .background(Color.lightGray.opacity(0.06))
+                        .background(Color.coveLightGray.opacity(0.06))
                         .cornerRadius(10)
                         .contentShape(
                             .contextMenuPreview,
@@ -132,7 +132,7 @@ struct SidebarView: View {
 
                 VStack(spacing: 32) {
                     Divider()
-                        .overlay(.lightGray)
+                        .overlay(.coveLightGray)
                         .opacity(0.50)
 
                     HStack {

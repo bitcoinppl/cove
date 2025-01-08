@@ -66,7 +66,7 @@ struct WordsView: View {
                     "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever, has you recovery words, controls your Bitcoin."
                 )
                 .font(.subheadline)
-                .foregroundStyle(.lightGray)
+                .foregroundStyle(.coveLightGray)
                 .multilineTextAlignment(.leading)
                 .opacity(0.70)
                 .fixedSize(horizontal: false, vertical: true)
@@ -86,7 +86,7 @@ struct WordsView: View {
             }
 
             Divider()
-                .overlay(.lightGray.opacity(0.50))
+                .overlay(.coveLightGray.opacity(0.50))
 
             VStack(spacing: 24) {
                 Group {

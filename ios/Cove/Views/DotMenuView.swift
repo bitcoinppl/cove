@@ -28,7 +28,7 @@ struct DotMenuView: View {
                         }
                 } else {
                     Circle()
-                        .fill(.lightGray.opacity(0.5))
+                        .fill(.coveLightGray.opacity(0.5))
                         .frame(width: size, height: size)
                 }
             }
