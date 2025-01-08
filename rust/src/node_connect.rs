@@ -26,6 +26,8 @@ pub const TESTNET_ESPLORA: [(&str, &str); 2] = [
 pub const TESTNET_ELECTRUM: [(&str, &str); 1] =
     [("testnet.hsmiths.com", "ssl://testnet.hsmiths.com:53012")];
 
+pub const SIGNET_ESPLORA: [(&str, &str); 1] = [("mutinynet", "https://mutinynet.com/api")];
+
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct NodeSelector {
     network: Network,
@@ -221,6 +223,11 @@ fn node_list(network: Network) -> Vec<Node> {
 
             nodes
         }
+
+        Network::Signet => SIGNET_ESPLORA
+            .iter()
+            .map(|(name, url)| Node::new_esplora(name.to_string(), url.to_string(), network))
+            .collect::<Vec<Node>>(),
     }
 }
 
@@ -268,6 +275,7 @@ fn default_node_selection() -> NodeSelection {
     let (name, url) = match network {
         Network::Bitcoin => BITCOIN_ESPLORA[0],
         Network::Testnet => TESTNET_ESPLORA[0],
+        Network::Signet => SIGNET_ESPLORA[0],
     };
 
     NodeSelection::Preset(Node::new_esplora(

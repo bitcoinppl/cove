@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 pub enum Network {
     Bitcoin,
     Testnet,
+    Signet,
 }
 
 use strum::IntoEnumIterator;
@@ -39,6 +40,8 @@ impl TryFrom<&str> for Network {
         match value {
             "bitcoin" | "Bitcoin" => Ok(Network::Bitcoin),
             "testnet" | "Testnet" => Ok(Network::Testnet),
+            "signet" | "Signet" => Ok(Network::Signet),
+            "mutinynet" | "Mutinynet" => Ok(Network::Signet),
             _ => Err(format!("Unknown network: {}", value)),
         }
     }
@@ -49,6 +52,7 @@ impl From<Network> for bitcoin::Network {
         match network {
             Network::Bitcoin => bitcoin::Network::Bitcoin,
             Network::Testnet => bitcoin::Network::Testnet,
+            Network::Signet => bitcoin::Network::Signet,
         }
     }
 }
@@ -68,6 +72,7 @@ impl From<Network> for Params {
         match network {
             Network::Bitcoin => Params::MAINNET,
             Network::Testnet => Params::TESTNET3,
+            Network::Signet => Params::SIGNET,
         }
     }
 }
