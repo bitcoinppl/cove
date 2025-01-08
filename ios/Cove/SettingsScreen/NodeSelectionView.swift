@@ -158,6 +158,9 @@ struct NodeSelectionView: View {
             }
             checkUrlTask = task
         }
+        .onChange(of: nodeList) { _, _ in
+            selectedNodeName = nodeSelector.selectedNode().name
+        }
         .alert(isPresented: $showParseUrlAlert) {
             Alert(
                 title: Text("Unable to parse URL"),

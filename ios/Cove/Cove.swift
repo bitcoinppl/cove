@@ -16494,6 +16494,7 @@ public enum Network {
     
     case bitcoin
     case testnet
+    case signet
 }
 
 
@@ -16511,6 +16512,8 @@ public struct FfiConverterTypeNetwork: FfiConverterRustBuffer {
         
         case 2: return .testnet
         
+        case 3: return .signet
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -16525,6 +16528,10 @@ public struct FfiConverterTypeNetwork: FfiConverterRustBuffer {
         
         case .testnet:
             writeInt(&buf, Int32(2))
+        
+        
+        case .signet:
+            writeInt(&buf, Int32(3))
         
         }
     }
