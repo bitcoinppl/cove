@@ -1,6 +1,7 @@
 use crate::{
     database::Database,
     manager::wallet::Error,
+    mnemonic,
     node::client::NodeClient,
     transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
     wallet::{
@@ -17,9 +18,11 @@ use bdk_wallet::KeychainKind;
 use bitcoin::params::Params;
 use bitcoin_units::Amount;
 use crossbeam::channel::Sender;
-use eyre::Context as _;
+use eyre::{Context as _, OptionExt};
 use std::time::{Duration, UNIX_EPOCH};
 use tracing::{debug, error, info};
+
+use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
 use super::WalletManagerReconcileMessage;
 
@@ -170,12 +173,41 @@ impl WalletActor {
         Produces::ok(details)
     }
 
-    pub async fn sign_and_broadcast_transaction(&mut self, psbt: Psbt) -> ActorResult<()> {
-        let external_signers = self.wallet.bdk.get_signers(KeychainKind::External);
-        let internal_signers = self.wallet.bdk.get_signers(KeychainKind::Internal);
+    pub async fn sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> ActorResult<()> {
+        let network = self.wallet.network;
+        let mnemonic = Mnemonic::try_from_id(&self.wallet.metadata.id)
+            .map_err(|error| Error::GetMnemonicError(error.to_string()))?;
 
-        println!("External signers: {:?}", external_signers);
-        println!("Internal signers: {:?}", internal_signers);
+        let descriptors =
+            mnemonic.into_descriptors(None, network, self.wallet.metadata.address_type);
+
+        let create_params = descriptors.into_create_params().network(network.into());
+
+        // create a new temp wallet with the descriptors
+        let wallet = create_params
+            .create_wallet_no_persist()
+            .map_err(|error| Error::SignTransactionError(error.to_string()))?;
+
+        let finalized = wallet
+            .sign(&mut psbt, Default::default())
+            .map_err(|error| Error::SignTransactionError(error.to_string()))?;
+
+        if !finalized {
+            return Err(
+                Error::SignTransactionError("transaction not finalized!".to_string()).into(),
+            );
+        }
+
+        let transaction = psbt
+            .extract_tx()
+            .wrap_err("failed to extract transaction")?;
+
+        self.node_client
+            .as_ref()
+            .ok_or_eyre("node client not set")?
+            .broadcast_transaction(transaction)
+            .await
+            .map_err(|error| Error::BroadcastTransactionError(error.to_string()))?;
 
         Produces::ok(())
     }

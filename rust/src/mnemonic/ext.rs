@@ -3,12 +3,10 @@ use bdk_wallet::{
     keys::{DerivableKey as _, ExtendedKey},
 };
 
-use bip39::Mnemonic;
-
-use super::MnemonicExt;
+use super::{Mnemonic, MnemonicExt};
 use crate::{keys::Descriptors, wallet::WalletAddressType};
 
-impl MnemonicExt for Mnemonic {
+impl MnemonicExt for bip39::Mnemonic {
     fn into_descriptors(
         self,
         passphrase: Option<String>,
@@ -51,5 +49,20 @@ impl MnemonicExt for Mnemonic {
             .expect("never fail proper mnemonic");
 
         xkey.into_xpub(network, &Secp256k1::new())
+    }
+}
+
+impl MnemonicExt for Mnemonic {
+    fn into_descriptors(
+        self,
+        passphrase: Option<String>,
+        network: impl Into<crate::network::Network>,
+        address_type: WalletAddressType,
+    ) -> Descriptors {
+        self.0.into_descriptors(passphrase, network, address_type)
+    }
+
+    fn xpub(&self, network: Network) -> Xpub {
+        self.0.xpub(network)
     }
 }
