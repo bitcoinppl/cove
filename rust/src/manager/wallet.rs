@@ -166,6 +166,9 @@ pub enum WalletManagerError {
 
     #[error("unable to get confirm details: {0}")]
     GetConfirmDetailsError(String),
+
+    #[error("unable to sign and broadcast transaction: {0}")]
+    UnableToSignAndBroadcastTransaction(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -300,6 +303,16 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn balance(&self) -> Balance {
         call!(self.actor.balance()).await.unwrap_or_default()
+    }
+
+    #[uniffi::method]
+    pub async fn sign_and_broadcast_transaction(&self, psbt: Arc<Psbt>) -> Result<(), Error> {
+        let psbt = Arc::unwrap_or_clone(psbt);
+        call!(self.actor.sign_and_broadcast_transaction(psbt.into()))
+            .await
+            .map_err(|error| Error::UnableToSignAndBroadcastTransaction(error.to_string()))?;
+
+        Ok(())
     }
 
     #[uniffi::method]

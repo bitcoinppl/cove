@@ -1,12 +1,12 @@
 //
-//  LoadAndResetView.swift
+//  LoadAndResetContainer.swift
 //  Cove
 //
 //  Created by Praveen Perera on 10/21/24.
 //
 import SwiftUI
 
-struct LoadAndResetView: View {
+struct LoadAndResetContainer: View {
     @Environment(AppManager.self) var app
     let nextRoute: [Route]
     let loadingTimeMs: Int
@@ -22,5 +22,5 @@ struct LoadAndResetView: View {
 }
 
 #Preview {
-    LoadAndResetView(nextRoute: [.listWallets], loadingTimeMs: 100).environment(AppManager())
+    LoadAndResetContainer(nextRoute: [.listWallets], loadingTimeMs: 100).environment(AppManager())
 }

@@ -70,6 +70,10 @@ impl ConfirmDetails {
             && self.sending_to == rhs.sending_to
     }
 
+    pub fn psbt(&self) -> Psbt {
+        self.psbt.clone()
+    }
+
     pub fn psbt_to_hex(&self) -> String {
         self.psbt.serialize_hex()
     }

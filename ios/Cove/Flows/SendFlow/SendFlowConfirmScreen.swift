@@ -123,11 +123,15 @@ struct SendFlowConfirmScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
 
-            SwipeToSendView(onConfirm: {})
-                .padding(.horizontal)
-                .padding(.bottom, 6)
-                .padding(.top, 20)
-                .background(Color.coveBg)
+            SwipeToSendView(onConfirm: {
+                Task {
+                    try? await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
+                }
+            })
+            .padding(.horizontal)
+            .padding(.bottom, 6)
+            .padding(.top, 20)
+            .background(Color.coveBg)
         }
     }
 }

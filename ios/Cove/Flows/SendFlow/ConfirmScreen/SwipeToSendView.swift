@@ -92,6 +92,7 @@ struct SwipeToSendView: View {
                                     offset = maxOffset
                                 }
 
+                                print("confirming")
                                 onConfirm()
                             } else {
                                 withAnimation {

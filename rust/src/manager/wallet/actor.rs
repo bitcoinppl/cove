@@ -170,6 +170,16 @@ impl WalletActor {
         Produces::ok(details)
     }
 
+    pub async fn sign_and_broadcast_transaction(&mut self, psbt: Psbt) -> ActorResult<()> {
+        let external_signers = self.wallet.bdk.get_signers(KeychainKind::External);
+        let internal_signers = self.wallet.bdk.get_signers(KeychainKind::Internal);
+
+        println!("External signers: {:?}", external_signers);
+        println!("Internal signers: {:?}", internal_signers);
+
+        Produces::ok(())
+    }
+
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
         let address = self.wallet.peek_address(KeychainKind::External, index);
         Produces::ok(address.into())
