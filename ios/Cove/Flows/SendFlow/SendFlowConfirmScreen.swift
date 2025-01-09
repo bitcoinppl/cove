@@ -10,6 +10,7 @@ import SwiftUI
 
 struct SendFlowConfirmScreen: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
 
     let id: WalletId
     @State var manager: WalletManager
@@ -132,6 +133,10 @@ struct SendFlowConfirmScreen: View {
             .padding(.bottom, 6)
             .padding(.top, 20)
             .background(Color.coveBg)
+            .onAppear {
+                // accessing seed words for signing, lock so we can re-auth
+                if metadata.walletType == .hot { auth.lock() }
+            }
         }
     }
 }

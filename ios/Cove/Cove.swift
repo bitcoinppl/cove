@@ -18092,8 +18092,6 @@ public enum Route {
     
     case loadAndReset(resetTo: [BoxedRoute], afterMillis: UInt32
     )
-    case authAndSend(sendTo: BoxedRoute
-    )
     case listWallets
     case selectedWallet(WalletId
     )
@@ -18124,29 +18122,26 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 1: return .loadAndReset(resetTo: try FfiConverterSequenceTypeBoxedRoute.read(from: &buf), afterMillis: try FfiConverterUInt32.read(from: &buf)
         )
         
-        case 2: return .authAndSend(sendTo: try FfiConverterTypeBoxedRoute.read(from: &buf)
+        case 2: return .listWallets
+        
+        case 3: return .selectedWallet(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 3: return .listWallets
-        
-        case 4: return .selectedWallet(try FfiConverterTypeWalletId.read(from: &buf)
+        case 4: return .walletSettings(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 5: return .walletSettings(try FfiConverterTypeWalletId.read(from: &buf)
+        case 5: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
         )
         
-        case 6: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
+        case 6: return .settings
+        
+        case 7: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 7: return .settings
-        
-        case 8: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
+        case 8: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
         )
         
-        case 9: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
-        )
-        
-        case 10: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
+        case 9: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -18163,47 +18158,42 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             FfiConverterUInt32.write(afterMillis, into: &buf)
             
         
-        case let .authAndSend(sendTo):
-            writeInt(&buf, Int32(2))
-            FfiConverterTypeBoxedRoute.write(sendTo, into: &buf)
-            
-        
         case .listWallets:
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(2))
         
         
         case let .selectedWallet(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(3))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
         case let .walletSettings(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
         case let .newWallet(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeNewWalletRoute.write(v1, into: &buf)
             
         
         case .settings:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
         
         
         case let .secretWords(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
         case let .transactionDetails(id,details):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeTransactionDetails.write(details, into: &buf)
             
         
         case let .send(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeSendRoute.write(v1, into: &buf)
             
         }
