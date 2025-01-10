@@ -20156,7 +20156,11 @@ public enum WalletManagerError {
     )
     case GetConfirmDetailsError(String
     )
-    case UnableToSignAndBroadcastTransaction(String
+    case GetMnemonicError(String
+    )
+    case SignTransactionError(String
+    )
+    case BroadcastTransactionError(String
     )
 }
 
@@ -20226,7 +20230,13 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 19: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 20: return .UnableToSignAndBroadcastTransaction(
+        case 20: return .GetMnemonicError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 21: return .SignTransactionError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 22: return .BroadcastTransactionError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -20334,8 +20344,18 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .UnableToSignAndBroadcastTransaction(v1):
+        case let .GetMnemonicError(v1):
             writeInt(&buf, Int32(20))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .SignTransactionError(v1):
+            writeInt(&buf, Int32(21))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .BroadcastTransactionError(v1):
+            writeInt(&buf, Int32(22))
             FfiConverterString.write(v1, into: &buf)
             
         }

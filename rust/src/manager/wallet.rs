@@ -314,11 +314,7 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn sign_and_broadcast_transaction(&self, psbt: Arc<Psbt>) -> Result<(), Error> {
         let psbt = Arc::unwrap_or_clone(psbt);
-        let _ = call!(self.actor.sign_and_broadcast_transaction(psbt.into()))
-            .await
-            .tap_err(|error| {
-                error!("failed to sign and broadcast transaction: {error}");
-            });
+        send!(self.actor.sign_and_broadcast_transaction(psbt.into()));
 
         Ok(())
     }
