@@ -1,6 +1,6 @@
 use crate::{
     database::Database,
-    manager::wallet::{Error, WalletManagerError},
+    manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::client::NodeClient,
     transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
@@ -69,6 +69,18 @@ impl Actor for WalletActor {
             Error::NodeConnectionFailed(error_string) => {
                 self.send(WalletManagerReconcileMessage::NodeConnectionFailed(
                     error_string,
+                ));
+            }
+
+            Error::SignAndBroadcastError(error_string) => {
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error_string),
+                ));
+            }
+
+            Error::GetConfirmDetailsError(error_string) => {
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::ConfirmDetails(error_string),
                 ));
             }
 

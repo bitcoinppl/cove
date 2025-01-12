@@ -18461,6 +18461,76 @@ extension SeedQrError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum SendFlowErrorAlert {
+    
+    case signAndBroadcast(String
+    )
+    case confirmDetails(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowErrorAlert: FfiConverterRustBuffer {
+    typealias SwiftType = SendFlowErrorAlert
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowErrorAlert {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .signAndBroadcast(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .confirmDetails(try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendFlowErrorAlert, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .signAndBroadcast(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .confirmDetails(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowErrorAlert_lift(_ buf: RustBuffer) throws -> SendFlowErrorAlert {
+    return try FfiConverterTypeSendFlowErrorAlert.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowErrorAlert_lower(_ value: SendFlowErrorAlert) -> RustBuffer {
+    return FfiConverterTypeSendFlowErrorAlert.lower(value)
+}
+
+
+
+extension SendFlowErrorAlert: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum SendRoute {
     
     case setAmount(id: WalletId, address: Address?, amount: Amount?
@@ -20156,11 +20226,7 @@ public enum WalletManagerError {
     )
     case GetConfirmDetailsError(String
     )
-    case GetMnemonicError(String
-    )
-    case SignTransactionError(String
-    )
-    case BroadcastTransactionError(String
+    case SignAndBroadcastError(String
     )
 }
 
@@ -20230,13 +20296,7 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         case 19: return .GetConfirmDetailsError(
             try FfiConverterString.read(from: &buf)
             )
-        case 20: return .GetMnemonicError(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 21: return .SignTransactionError(
-            try FfiConverterString.read(from: &buf)
-            )
-        case 22: return .BroadcastTransactionError(
+        case 20: return .SignAndBroadcastError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -20344,18 +20404,8 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .GetMnemonicError(v1):
+        case let .SignAndBroadcastError(v1):
             writeInt(&buf, Int32(20))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .SignTransactionError(v1):
-            writeInt(&buf, Int32(21))
-            FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .BroadcastTransactionError(v1):
-            writeInt(&buf, Int32(22))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -20412,6 +20462,8 @@ public enum WalletManagerReconcileMessage {
     case walletScannerResponse(ScannerResponse
     )
     case unsignedTransactionsChanged
+    case sendFlowError(SendFlowErrorAlert
+    )
 }
 
 
@@ -20452,6 +20504,9 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         )
         
         case 10: return .unsignedTransactionsChanged
+        
+        case 11: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -20508,6 +20563,11 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case .unsignedTransactionsChanged:
             writeInt(&buf, Int32(10))
         
+        
+        case let .sendFlowError(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterTypeSendFlowErrorAlert.write(v1, into: &buf)
+            
         }
     }
 }

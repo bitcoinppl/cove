@@ -194,7 +194,8 @@ struct SelectedWalletScreen: View {
             ZStack {
                 VStack(spacing: 0) {
                     Color.midnightBlue.frame(height: screenHeight * 0.35)
-                    Color.black.opacity(colorScheme == .dark ? 0.9 : 0).frame(height: screenHeight * 0.65)
+                    Color.black.opacity(colorScheme == .dark ? 0.9 : 0).frame(
+                        height: screenHeight * 0.65)
                 }
                 .edgesIgnoringSafeArea(.all)
                 .background(.white)

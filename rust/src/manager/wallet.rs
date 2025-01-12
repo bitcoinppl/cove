@@ -56,6 +56,8 @@ pub enum WalletManagerReconcileMessage {
     WalletScannerResponse(ScannerResponse),
 
     UnsignedTransactionsChanged,
+
+    SendFlowError(SendFlowErrorAlert),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -84,6 +86,12 @@ pub enum WalletLoadState {
 pub enum WalletErrorAlert {
     NodeConnectionFailed(String),
     NoBalance,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SendFlowErrorAlert {
+    SignAndBroadcast(String),
+    ConfirmDetails(String),
 }
 
 #[uniffi::export(callback_interface)]

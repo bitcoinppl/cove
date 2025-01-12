@@ -11,9 +11,14 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var loadState: WalletLoadState = .loading
     var balance: Balance = .init()
     var fiatBalance: Double?
-    var errorAlert: WalletErrorAlert? = nil
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
+
+    // general wallet errors
+    var errorAlert: WalletErrorAlert? = nil
+
+    // errors in SendFlow, could extract out to its own presenter later
+    var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
     public init(id: WalletId) throws {
         self.id = id
@@ -151,6 +156,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
                 case let .unknownError(error):
                     // TODO: show to user
                     self.logger.error("Unknown error \(error)")
+
+                case let .sendFlowError(error):
+                    self.sendFlowErrorAlert = TaggedItem(error)
                 }
             }
         }

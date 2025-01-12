@@ -65,6 +65,13 @@ public struct SendRouteContainer: View {
                     return
                 }
             }
+            .alert(
+                alertTitle,
+                isPresented: showingAlert,
+                presenting: manager.sendFlowErrorAlert,
+                actions: { MyAlert($0).actions },
+                message: { MyAlert($0).message }
+            )
             .onDisappear {
                 presenter.disappearing = true
             }
@@ -72,6 +79,42 @@ public struct SendRouteContainer: View {
         } else {
             ProgressView()
                 .onAppear(perform: initOnAppear)
+        }
+    }
+
+    // MARK: Alerts
+
+    private var showingAlert: Binding<Bool> {
+        Binding(
+            get: { manager?.sendFlowErrorAlert != nil },
+            set: { if !$0 { manager?.sendFlowErrorAlert = .none } }
+        )
+    }
+
+    private var alertTitle: String {
+        guard let alert = manager?.sendFlowErrorAlert else { return "Error" }
+        return MyAlert(alert).title
+    }
+
+    private func MyAlert(_ alert: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
+        switch alert.item {
+        case let .confirmDetails(error):
+            AlertBuilder(
+                title: "Unable to Confirm Transaction",
+                message: error.capitalized,
+                actions: {
+                    Button("OK", action: { manager?.sendFlowErrorAlert = .none })
+                }
+            ).eraseToAny()
+
+        case let .signAndBroadcast(error):
+            AlertBuilder(
+                title: "Unable to Sign and Broadcast Transaction",
+                message: error.capitalized,
+                actions: {
+                    Button("OK", action: { manager?.sendFlowErrorAlert = .none })
+                }
+            ).eraseToAny()
         }
     }
 }
