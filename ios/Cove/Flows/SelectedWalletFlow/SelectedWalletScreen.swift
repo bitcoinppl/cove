@@ -205,7 +205,7 @@ struct SelectedWalletScreen: View {
                 }
             }
             .refreshable {
-                try? await manager.rust.forceWalletScan()
+                await manager.rust.forceWalletScan()
                 let _ = try? await manager.rust.forceUpdateHeight()
             }
             .onAppear { UIRefreshControl.appearance().tintColor = UIColor.white }

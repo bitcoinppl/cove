@@ -327,6 +327,8 @@ impl RustWalletManager {
                 Error::SignAndBroadcastError("sign and broadcast failed".to_string())
             })?;
 
+        self.force_wallet_scan().await;
+
         Ok(())
     }
 
@@ -347,6 +349,8 @@ impl RustWalletManager {
         if let Err(error) = self.delete_unsigned_transaction(tx_id.into()) {
             error!("unable to delete unsigned transaction record: {error}");
         }
+
+        self.force_wallet_scan().await;
 
         Ok(())
     }
@@ -599,15 +603,13 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn force_wallet_scan(&self) -> Result<(), Error> {
+    pub async fn force_wallet_scan(&self) {
         debug!("force_wallet_scan: {}", self.id);
 
         let actor = self.actor.clone();
         tokio::spawn(async move {
             send!(actor.wallet_scan_and_notify(true));
         });
-
-        Ok(())
     }
 
     #[uniffi::method]

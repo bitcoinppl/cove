@@ -8184,7 +8184,7 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func forceUpdateHeight() async throws  -> UInt32
     
-    func forceWalletScan() async throws 
+    func forceWalletScan() async 
     
     func getConfirmDetails(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> ConfirmDetails
     
@@ -8564,9 +8564,9 @@ open func forceUpdateHeight()async throws  -> UInt32  {
         )
 }
     
-open func forceWalletScan()async throws   {
+open func forceWalletScan()async   {
     return
-        try  await uniffiRustCallAsync(
+        try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_fn_method_rustwalletmanager_force_wallet_scan(
                     self.uniffiClonePointer()
@@ -8577,7 +8577,8 @@ open func forceWalletScan()async throws   {
             completeFunc: ffi_cove_rust_future_complete_void,
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: nil
+            
         )
 }
     
@@ -24046,7 +24047,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_force_update_height() != 23832) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_force_wallet_scan() != 18975) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_force_wallet_scan() != 44725) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_confirm_details() != 38134) {
