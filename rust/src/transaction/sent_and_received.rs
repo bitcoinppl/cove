@@ -42,8 +42,18 @@ impl SentAndReceived {
     pub fn amount(&self) -> Amount {
         match &self.direction {
             TransactionDirection::Incoming => self.received,
-            TransactionDirection::Outgoing => self.sent,
+            TransactionDirection::Outgoing => self.external_sent(),
         }
+    }
+
+    #[uniffi::method]
+    pub fn external_sent(&self) -> Amount {
+        // external sent doesn't make sense for incoming transactions
+        if self.direction == TransactionDirection::Incoming {
+            return self.sent;
+        }
+
+        self.sent - self.received
     }
 
     #[uniffi::method]

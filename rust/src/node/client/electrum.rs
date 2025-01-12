@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
-use bdk_chain::{
-    bitcoin::Address,
-    spk_client::{FullScanRequest, FullScanResult, SyncRequest, SyncResult},
-    ConfirmationBlockTime, TxGraph,
-};
+use bdk_chain::{bitcoin::Address, ConfirmationBlockTime, TxGraph};
+use bdk_core::spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse};
 use bdk_electrum::{
     electrum_client::{Client, ElectrumApi as _},
     BdkElectrumClient,
 };
 use bdk_wallet::KeychainKind;
+use bitcoin::{Transaction, Txid};
 use tap::TapFallible as _;
 use tracing::debug;
 
@@ -67,7 +65,7 @@ impl ElectrumClient {
         &self,
         request: FullScanRequest<KeychainKind>,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
-    ) -> Result<FullScanResult<KeychainKind>, Error> {
+    ) -> Result<FullScanResponse<KeychainKind>, Error> {
         debug!("start populate_tx_cache");
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();
@@ -95,7 +93,7 @@ impl ElectrumClient {
         &self,
         request: SyncRequest<(KeychainKind, u32)>,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
-    ) -> Result<SyncResult, Error> {
+    ) -> Result<SyncResponse, Error> {
         debug!("start populate_tx_cache");
         let client = self.client.clone();
         let tx_graph = tx_graph.clone();
@@ -127,6 +125,19 @@ impl ElectrumClient {
         .map_err(Error::ElectrumAddress)?;
 
         Ok(!txns.is_empty())
+    }
+
+    pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
+        let client = self.client.clone();
+        let tx_id = crate::unblock::run_blocking(move || {
+            client
+                .inner
+                .transaction_broadcast(&txn)
+                .map_err(Error::ElectrumBroadcast)
+        })
+        .await?;
+
+        Ok(tx_id)
     }
 
     fn default_options() -> NodeClientOptions {

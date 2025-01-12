@@ -2,7 +2,7 @@ pub mod client;
 
 use crate::{
     network::Network,
-    node_connect::{NodeSelection, BITCOIN_ELECTRUM, TESTNET_ESPLORA},
+    node_connect::{NodeSelection, BITCOIN_ELECTRUM, SIGNET_ESPLORA, TESTNET_ESPLORA},
 };
 
 use client::NodeClient;
@@ -61,6 +61,16 @@ impl Node {
                     name: name.to_string(),
                     network,
                     api_type: ApiType::Electrum,
+                    url: url.to_string(),
+                }
+            }
+
+            Network::Signet => {
+                let (name, url) = SIGNET_ESPLORA[0];
+                Self {
+                    name: name.to_string(),
+                    network,
+                    api_type: ApiType::Esplora,
                     url: url.to_string(),
                 }
             }

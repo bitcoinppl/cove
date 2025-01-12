@@ -5,7 +5,12 @@ pub mod number_of_bip39_words;
 pub mod parse;
 pub mod word_access;
 
-use crate::{keys::Descriptors, seed_qr::SeedQr, wallet::WalletAddressType};
+use crate::{
+    keychain::{Keychain, KeychainError},
+    keys::Descriptors,
+    seed_qr::SeedQr,
+    wallet::{metadata::WalletId, WalletAddressType},
+};
 use derive_more::{AsRef, Deref, From, Into};
 
 use bdk_chain::bitcoin::{bip32::Xpub, Network};
@@ -15,6 +20,28 @@ pub type GroupedWord = grouped_word::GroupedWord;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, Into, From, AsRef, Deref)]
 pub struct Mnemonic(bip39::Mnemonic);
+
+pub type Error = MnemonicError;
+
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum MnemonicError {
+    #[error("failed to get wallet keychain")]
+    GetWalletKeychain(#[from] KeychainError),
+
+    #[error("mnemonic is not available available for wallet id: {0}")]
+    NotAvailable(WalletId),
+}
+
+impl Mnemonic {
+    pub fn try_from_id(id: &WalletId) -> Result<Self, Error> {
+        let keychain = Keychain::global();
+        let mnemonic = keychain
+            .get_wallet_key(id)?
+            .ok_or(Error::NotAvailable(id.clone()))?;
+
+        Ok(Self(mnemonic))
+    }
+}
 
 // traits
 pub trait WordAccess {

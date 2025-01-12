@@ -411,9 +411,11 @@ struct SettingsScreen: View {
                     sheetState = .none
 
                     if auth.checkWipeDataPin(pin) {
-                        return alertState = .init(
-                            .wipeDataSetPinError("Can't update PIN because its the same as your wipe data PIN")
+                        alertState = .init(
+                            .wipeDataSetPinError(
+                                "Can't update PIN because its the same as your wipe data PIN")
                         )
+                        return
                     }
 
                     setPin(pin)
@@ -457,8 +459,7 @@ struct SettingsScreen: View {
     func setWipeDataPin(_ pin: String) {
         sheetState = .none
 
-        do { try auth.rust.setWipeDataPin(pin: pin) }
-        catch {
+        do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
             alertState = .init(.wipeDataSetPinError(error.describe))
         }

@@ -15,7 +15,10 @@ use tracing::{debug, error, warn};
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
-    fiat::{client::FIAT_CLIENT, FiatCurrency},
+    fiat::{
+        client::{PriceResponse, FIAT_CLIENT},
+        FiatCurrency,
+    },
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     psbt::Psbt,
@@ -26,6 +29,7 @@ use crate::{
             client::{FeeResponse, FEES, FEE_CLIENT},
             FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
         },
+        ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
         Amount, BdkAmount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
     },
@@ -48,7 +52,7 @@ pub enum WalletManagerReconcileMessage {
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
-    WalletBalanceChanged(Balance),
+    WalletBalanceChanged(Arc<Balance>),
 
     WalletError(WalletManagerError),
     UnknownError(String),
@@ -56,6 +60,8 @@ pub enum WalletManagerReconcileMessage {
     WalletScannerResponse(ScannerResponse),
 
     UnsignedTransactionsChanged,
+
+    SendFlowError(SendFlowErrorAlert),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -84,6 +90,12 @@ pub enum WalletLoadState {
 pub enum WalletErrorAlert {
     NodeConnectionFailed(String),
     NoBalance,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum SendFlowErrorAlert {
+    SignAndBroadcast(String),
+    ConfirmDetails(String),
 }
 
 #[uniffi::export(callback_interface)]
@@ -164,8 +176,11 @@ pub enum WalletManagerError {
     #[error("insufficient funds: {0}")]
     InsufficientFunds(String),
 
-    #[error("unable to get confirm details: {0}")]
+    #[error("Unable to get confirm details, {0}")]
     GetConfirmDetailsError(String),
+
+    #[error("Unable to sign and broadcast transaction, {0}")]
+    SignAndBroadcastError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -287,6 +302,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn delete_unsigned_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
+        debug!("deleting unsigned transaction: {tx_id:?}");
         let db = Database::global();
         db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
 
@@ -303,6 +319,39 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub async fn sign_and_broadcast_transaction(&self, psbt: Arc<Psbt>) -> Result<(), Error> {
+        let psbt = Arc::unwrap_or_clone(psbt);
+        call!(self.actor.sign_and_broadcast_transaction(psbt.into()))
+            .await
+            .map_err(|_error| {
+                Error::SignAndBroadcastError("sign and broadcast failed".to_string())
+            })?;
+
+        Ok(())
+    }
+
+    #[uniffi::method]
+    pub async fn broadcast_transaction(
+        &self,
+        signed_transaction: Arc<BitcoinTransaction>,
+    ) -> Result<(), Error> {
+        let txn = Arc::unwrap_or_clone(signed_transaction);
+        let tx_id = txn.tx_id();
+
+        call!(self.actor.broadcast_transaction(txn.into()))
+            .await
+            .map_err(|_error| {
+                Error::SignAndBroadcastError("broadcast transaction failed".to_string())
+            })?;
+
+        if let Err(error) = self.delete_unsigned_transaction(tx_id.into()) {
+            error!("unable to delete unsigned transaction record: {error}");
+        }
+
+        Ok(())
+    }
+
+    #[uniffi::method]
     pub async fn get_max_send_amount(
         &self,
         fee: Arc<FeeRateOptionWithTotalFee>,
@@ -311,7 +360,7 @@ impl RustWalletManager {
             .await
             .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
-        let confirmed: BdkAmount = Arc::unwrap_or_clone(balance.confirmed).into();
+        let confirmed: BdkAmount = balance.trusted_spendable();
         let fee: BdkAmount = fee.total_fee.into();
 
         let available: Amount = confirmed
@@ -329,7 +378,7 @@ impl RustWalletManager {
             .await
             .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
-        self.amount_in_fiat(balance.confirmed, currency).await
+        self.amount_in_fiat(balance.total().into(), currency).await
     }
 
     #[uniffi::method]
@@ -386,6 +435,15 @@ impl RustWalletManager {
 
         let fiat = amount.thousands_fiat();
         format!("${fiat} {}", self.metadata.read().selected_fiat_currency)
+    }
+
+    #[uniffi::method]
+    pub fn convert_and_display_fiat(&self, amount: Arc<Amount>, prices: PriceResponse) -> String {
+        let currency = self.metadata.read().selected_fiat_currency;
+        let price = prices.get_for_currency(currency) as f64;
+        let fiat = amount.as_btc() * price;
+
+        self.display_fiat_amount(fiat)
     }
 
     #[uniffi::method]
@@ -753,7 +811,9 @@ impl RustWalletManager {
         let fee_rate: FeeRate = Arc::unwrap_or_clone(fee_rate);
         let details = call!(self.actor.get_confirm_details(psbt.into(), fee_rate.into()))
             .await
-            .map_err(|error| Error::GetConfirmDetailsError(error.to_string()))?;
+            .map_err(|_| {
+                Error::GetConfirmDetailsError("failed to get confirm details".to_string())
+            })?;
 
         Ok(details)
     }

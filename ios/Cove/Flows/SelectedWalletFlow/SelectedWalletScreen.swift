@@ -131,7 +131,7 @@ struct SelectedWalletScreen: View {
     var MainContent: some View {
         VStack(spacing: 0) {
             WalletBalanceHeaderView(
-                balance: manager.balance.confirmed,
+                balance: manager.balance.total(),
                 metadata: manager.walletMetadata,
                 updater: updater,
                 showReceiveSheet: showReceiveSheet
@@ -190,16 +190,25 @@ struct SelectedWalletScreen: View {
 
     var body: some View {
         VStack {
-            ScrollView {
-                MainContent
+            // set background colors below the scrollview
+            ZStack {
+                VStack(spacing: 0) {
+                    Color.midnightBlue.frame(height: screenHeight * 0.35)
+                    Color.black.opacity(colorScheme == .dark ? 0.9 : 0).frame(
+                        height: screenHeight * 0.65)
+                }
+                .edgesIgnoringSafeArea(.all)
+                .background(.white)
+
+                ScrollView {
+                    MainContent
+                }
             }
             .refreshable {
                 try? await manager.rust.forceWalletScan()
                 let _ = try? await manager.rust.forceUpdateHeight()
             }
-            .onAppear {
-                UIRefreshControl.appearance().tintColor = UIColor.white
-            }
+            .onAppear { UIRefreshControl.appearance().tintColor = UIColor.white }
             .scrollIndicators(.hidden)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)
@@ -208,9 +217,8 @@ struct SelectedWalletScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        .onChange(of: manager.walletMetadata.discoveryState) {
-            _,
-                newValue in setSheetState(newValue)
+        .onChange(of: manager.walletMetadata.discoveryState) { _, newValue in
+            setSheetState(newValue)
         }
         .onAppear { setSheetState(manager.walletMetadata.discoveryState) }
         .onAppear(perform: manager.validateMetadata)

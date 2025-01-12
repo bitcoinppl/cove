@@ -26,6 +26,7 @@ struct SendFlowSetAmountScreen: View {
 
     // private
     @State private var isLoading: Bool = true
+    @State private var loadingOpacity: CGFloat = 1
 
     @FocusState private var _privateFocusField: SendFlowSetAmountPresenter.FocusField?
     @State private var scrollPosition: ScrollPosition = .init(
@@ -185,8 +186,8 @@ struct SendFlowSetAmountScreen: View {
 
                 app.pushRoute(route)
             } catch {
+                // error alert is displayed at the top level container, but we can log it here
                 Log.error("unable to get confirm details: \(error)")
-                setAlertState(.unableToBuildTxn(error.localizedDescription))
             }
         }
     }
@@ -206,7 +207,7 @@ struct SendFlowSetAmountScreen: View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
 
             // MARK: CONTENT
 
@@ -258,9 +259,13 @@ struct SendFlowSetAmountScreen: View {
 
                 if isLoading {
                     ZStack {
-                        Color.primary.ignoresSafeArea(.all).opacity(
-                            isLoading ? 1 : 0)
+                        Rectangle()
+                            .fill(.black)
+                            .opacity(loadingOpacity)
+                            .ignoresSafeArea()
+
                         ProgressView().tint(.white)
+                            .opacity(loadingOpacity)
                     }
                 }
             }
@@ -285,9 +290,13 @@ struct SendFlowSetAmountScreen: View {
         }
         .task {
             Task {
-                try? await Task.sleep(for: .milliseconds(600))
                 await MainActor.run {
-                    withAnimation {
+                    withAnimation(
+                        .easeInOut(duration: 1.5).delay(0.4),
+                        completionCriteria: .removed
+                    ) {
+                        loadingOpacity = 0
+                    } completion: {
                         isLoading = false
                     }
                 }
@@ -390,7 +399,7 @@ struct SendFlowSetAmountScreen: View {
             return false
         }
 
-        let balance = Double(manager.balance.confirmed.asSats())
+        let balance = Double(manager.balance.spendable().asSats())
         let amountSats = amountSats(amount)
 
         if amountSats < 10000 {
@@ -526,14 +535,6 @@ struct SendFlowSetAmountScreen: View {
         )
 
         _privateFocusField = newField
-
-        if oldField == .amount {
-            if !validateAmount(displayAlert: true) { return }
-        }
-
-        if oldField == .address {
-            if !validateAddress(displayAlert: true) { return }
-        }
 
         let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
         if newField == .amount {

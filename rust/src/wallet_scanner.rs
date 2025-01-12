@@ -255,7 +255,7 @@ impl WalletScanner {
         let any_still_running = self.workers.iter().any(|worker| {
             worker
                 .as_ref()
-                .map_or(false, |worker| worker.state == WorkerState::Started)
+                .is_some_and(|worker| worker.state == WorkerState::Started)
         });
 
         // all workers are done, send the response
@@ -287,7 +287,7 @@ impl WalletScanner {
         let any_still_running = self.workers.iter().any(|worker| {
             worker
                 .as_ref()
-                .map_or(false, |worker| worker.state == WorkerState::Started)
+                .is_some_and(|worker| worker.state == WorkerState::Started)
         });
 
         // all workers are done, send the response

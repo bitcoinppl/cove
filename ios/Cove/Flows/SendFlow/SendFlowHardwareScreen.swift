@@ -63,7 +63,7 @@ struct SendFlowHardwareScreen: View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
 
             // MARK: CONTENT
 
@@ -215,9 +215,14 @@ struct SendFlowHardwareScreen: View {
             let file = try result.get()
             let fileContents = try FileReader(for: file).read()
 
-            let txnRecord = try getTxnRecordFromHex(fileContents)
+            let (txnRecord, signedTransaction) = try txnRecordAndSignedTxn(fileContents)
+
             let route = RouteFactory()
-                .sendConfirm(id: txnRecord.walletId(), details: txnRecord.confirmDetails())
+                .sendConfirm(
+                    id: txnRecord.walletId(),
+                    details: txnRecord.confirmDetails(),
+                    signedTransaction: signedTransaction
+                )
 
             app.pushRoute(route)
         } catch {
@@ -242,7 +247,11 @@ struct SendFlowHardwareScreen: View {
             let txnRecord = try db.getTxThrow(txId: bitcoinTransaction.txId())
 
             let route = RouteFactory()
-                .sendConfirm(id: txnRecord.walletId(), details: txnRecord.confirmDetails())
+                .sendConfirm(
+                    id: txnRecord.walletId(),
+                    details: txnRecord.confirmDetails(),
+                    signedTransaction: bitcoinTransaction
+                )
 
             app.pushRoute(route)
         } catch {
@@ -250,10 +259,13 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
-    func getTxnRecordFromHex(_ hex: String) throws -> UnsignedTransactionRecord {
+    func txnRecordAndSignedTxn(_ hex: String) throws -> (
+        UnsignedTransactionRecord, BitcoinTransaction
+    ) {
         let bitcoinTransaction = try BitcoinTransaction(txHex: hex)
         let db = Database().unsignedTransactions()
-        return try db.getTxThrow(txId: bitcoinTransaction.txId())
+        let record = try db.getTxThrow(txId: bitcoinTransaction.txId())
+        return (record, bitcoinTransaction)
     }
 
     @ViewBuilder
@@ -399,9 +411,12 @@ struct SendFlowHardwareScreen: View {
             }
 
             do {
-                let txnRecord = try getTxnRecordFromHex(code)
+                let (txnRecord, signedTransaction) = try txnRecordAndSignedTxn(code)
                 let route = RouteFactory()
-                    .sendConfirm(id: txnRecord.walletId(), details: txnRecord.confirmDetails())
+                    .sendConfirm(
+                        id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
+                        signedTransaction: signedTransaction
+                    )
                 app.pushRoute(route)
             } catch {
                 alertState = .init(.pasteError(error.localizedDescription))

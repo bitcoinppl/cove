@@ -3,17 +3,18 @@ pub mod esplora;
 
 use bdk_chain::{
     bitcoin::Address,
-    spk_client::{SyncRequest, SyncResult},
+    spk_client::{SyncRequest, SyncResponse},
 };
 use bdk_electrum::electrum_client;
 use bdk_esplora::esplora_client;
 use bdk_wallet::{
     chain::{
-        spk_client::{FullScanRequest, FullScanResult},
+        spk_client::{FullScanRequest, FullScanResponse},
         ConfirmationBlockTime, TxGraph,
     },
     KeychainKind,
 };
+use bitcoin::{Transaction, Txid};
 use tracing::debug;
 
 use crate::node::Node;
@@ -64,6 +65,12 @@ pub enum Error {
 
     #[error("failed to get a address: {0}")]
     ElectrumAddress(electrum_client::Error),
+
+    #[error("failed to broadcast transaction: {0}")]
+    EsploraBroadcast(esplora_client::Error),
+
+    #[error("failed to broadcast transaction: {0}")]
+    ElectrumBroadcast(electrum_client::Error),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -143,7 +150,7 @@ impl NodeClient {
         &self,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
         full_scan_request: FullScanRequest<KeychainKind>,
-    ) -> Result<FullScanResult<KeychainKind>, Error> {
+    ) -> Result<FullScanResponse<KeychainKind>, Error> {
         let full_scan_result = match self {
             NodeClient::Esplora(client) => {
                 debug!("starting esplora full scan");
@@ -163,7 +170,7 @@ impl NodeClient {
         &self,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
         scan_request: SyncRequest<(KeychainKind, u32)>,
-    ) -> Result<SyncResult, Error> {
+    ) -> Result<SyncResponse, Error> {
         let scan_result = match self {
             NodeClient::Esplora(client) => client.sync(scan_request).await?,
             NodeClient::Electrum(client) => client.sync(scan_request, tx_graph).await?,
@@ -183,6 +190,13 @@ impl NodeClient {
                 let address = client.check_address_for_txn(address).await?;
                 Ok(address)
             }
+        }
+    }
+
+    pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
+        match self {
+            NodeClient::Esplora(client) => client.broadcast_transaction(txn).await,
+            NodeClient::Electrum(client) => client.broadcast_transaction(txn).await,
         }
     }
 }

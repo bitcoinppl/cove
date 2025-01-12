@@ -84,7 +84,7 @@ public extension SendRoute {
     func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
-        case let .confirm(id: id, details: _): id
+        case let .confirm(id: id, details: _, signedTransaction: _): id
         case let .hardwareExport(id: id, details: _): id
         }
     }

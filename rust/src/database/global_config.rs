@@ -36,6 +36,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::SelectedNetwork => "selected_network",
             GlobalConfigKey::SelectedNode(Network::Bitcoin) => "selected_node_bitcoin",
             GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
+            GlobalConfigKey::SelectedNode(Network::Signet) => "selected_node_signet",
             GlobalConfigKey::ColorScheme => "color_scheme",
             GlobalConfigKey::AuthType => "auth_type",
             GlobalConfigKey::HashedPinCode => "hashed_pin_code",

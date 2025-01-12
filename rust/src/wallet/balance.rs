@@ -1,33 +1,33 @@
-use std::sync::Arc;
-
 use crate::transaction::Amount;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
-pub struct Balance {
-    pub immature: Arc<Amount>,
-    pub trusted_pending: Arc<Amount>,
-    pub untrusted_pending: Arc<Amount>,
-    pub confirmed: Arc<Amount>,
-}
-
-impl Default for Balance {
-    fn default() -> Self {
-        bdk_wallet::Balance::default().into()
-    }
-}
-
-impl From<bdk_wallet::Balance> for Balance {
-    fn from(balance: bdk_wallet::Balance) -> Self {
-        Self {
-            immature: Arc::new(balance.immature.into()),
-            trusted_pending: Arc::new(balance.trusted_pending.into()),
-            untrusted_pending: Arc::new(balance.untrusted_pending.into()),
-            confirmed: Arc::new(balance.confirmed.into()),
-        }
-    }
-}
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Default,
+    uniffi::Object,
+    derive_more::From,
+    derive_more::Into,
+    derive_more::Deref,
+    derive_more::AsRef,
+)]
+pub struct Balance(pub bdk_wallet::Balance);
 
 #[uniffi::export]
-fn balance_zero() -> Balance {
-    Balance::default()
+impl Balance {
+    #[uniffi::constructor]
+    pub fn zero() -> Self {
+        Balance::default()
+    }
+
+    #[uniffi::method]
+    pub fn total(&self) -> Amount {
+        self.0.total().into()
+    }
+
+    #[uniffi::method]
+    pub fn spendable(&self) -> Amount {
+        self.0.trusted_spendable().into()
+    }
 }

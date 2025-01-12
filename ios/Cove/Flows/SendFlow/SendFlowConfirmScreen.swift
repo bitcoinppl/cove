@@ -10,11 +10,21 @@ import SwiftUI
 
 struct SendFlowConfirmScreen: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
 
     let id: WalletId
     @State var manager: WalletManager
     let details: ConfirmDetails
+    let signedTransaction: BitcoinTransaction?
+
     let prices: PriceResponse? = nil
+
+    // private
+    @State private var isShowingAlert = false
+    @State private var sendState: SendState = .idle
+
+    // popover to change btc and sats
+    @State private var showingMenu: Bool = false
 
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
@@ -35,7 +45,7 @@ struct SendFlowConfirmScreen: View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
 
             // MARK: CONTENT
 
@@ -62,47 +72,59 @@ struct SendFlowConfirmScreen: View {
                     }
                     .padding(.top, 10)
 
-                    // Balance Section
+                    // the amount in sats or btc
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
+                            Spacer()
+
                             Text(manager.amountFmt(details.sendingAmount()))
                                 .font(.system(size: 48, weight: .bold))
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
+                                .multilineTextAlignment(.trailing)
+                                .padding(.trailing, metadata.selectedUnit == .sat ? 10 : 2)
 
-                            Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 16)
-                                .contentShape(
-                                    .contextMenuPreview,
-                                    RoundedRectangle(cornerRadius: 8)
-                                )
-                                .contextMenu {
-                                    Button {
-                                        manager.dispatch(
-                                            action: .updateUnit(.sat))
-                                    } label: {
-                                        Text("sats")
-                                    }
+                            Button(action: { showingMenu.toggle() }) {
+                                HStack(spacing: 0) {
+                                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
 
-                                    Button {
-                                        manager.dispatch(
-                                            action: .updateUnit(.btc))
-                                    } label: {
-                                        Text("btc")
-                                    }
-                                } preview: {
-                                    Text(
-                                        metadata.selectedUnit == .sat
-                                            ? "sats" : "btc"
-                                    )
-                                    .padding(.vertical, 10)
-                                    .padding(.horizontal)
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .padding(.top, 2)
+                                        .padding(.leading, 4)
                                 }
-                                .offset(y: -5)
-                                .offset(x: -16)
+                                .frame(alignment: .trailing)
+                            }
+                            .foregroundStyle(.primary)
+                            .padding(.vertical, 10)
+                            .padding(.leading, 16)
+                            .popover(isPresented: $showingMenu) {
+                                VStack(alignment: .center, spacing: 0) {
+                                    Button("sats") {
+                                        manager.dispatch(action: .updateUnit(.sat))
+                                        showingMenu = false
+                                    }
+                                    .padding(12)
+                                    .buttonStyle(.plain)
+
+                                    Divider()
+
+                                    Button("btc") {
+                                        manager.dispatch(action: .updateUnit(.btc))
+                                        showingMenu = false
+                                    }
+                                    .padding(12)
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .frame(minWidth: 120, maxWidth: 200)
+                                .presentationCompactAdaptation(.popover)
+                                .foregroundStyle(.primary.opacity(0.8))
+                            }
                         }
-                        .offset(x: 32)
+                        .frame(alignment: .trailing)
 
                         Text(fiatAmount)
                             .font(.title3)
@@ -115,7 +137,7 @@ struct SendFlowConfirmScreen: View {
 
                     Divider()
 
-                    SendFlowDetailsView(manager: manager, details: details)
+                    SendFlowDetailsView(manager: manager, details: details, prices: prices)
                 }
             }
             .scrollIndicators(.hidden)
@@ -123,11 +145,42 @@ struct SendFlowConfirmScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
 
-            SwipeToSendView()
-                .padding(.horizontal)
-                .padding(.bottom, 6)
-                .padding(.top, 20)
-                .background(Color.coveBg)
+            SwipeToSendView(sendState: $sendState) {
+                sendState = .sending
+                Task {
+                    do {
+                        if let txn = signedTransaction {
+                            _ = try await manager.rust.broadcastTransaction(signedTransaction: txn)
+                        } else {
+                            _ = try await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
+                        }
+                        sendState = .sent
+                        isShowingAlert = true
+                    } catch {
+                        sendState = .error
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 6)
+            .padding(.top, 20)
+            .background(Color.coveBg)
+            .onAppear {
+                // accessing seed words for signing, lock so we can re-auth
+                if metadata.walletType == .hot { auth.lock() }
+            }
+            .alert(
+                "Sent!",
+                isPresented: $isShowingAlert,
+                actions: {
+                    Button("OK") {
+                        app.resetRoute(to: Route.selectedWallet(id))
+                    }
+                },
+                message: {
+                    Text("Transaction was successfully sent!")
+                }
+            )
         }
     }
 }
@@ -138,9 +191,11 @@ struct SendFlowConfirmScreen: View {
             SendFlowConfirmScreen(
                 id: WalletId(),
                 manager: WalletManager(preview: "preview_only"),
-                details: ConfirmDetails.previewNew()
+                details: ConfirmDetails.previewNew(),
+                signedTransaction: nil
             )
             .environment(AppManager())
+            .environment(AuthManager())
         }
     }
 }

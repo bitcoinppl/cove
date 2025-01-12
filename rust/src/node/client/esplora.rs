@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use bdk_chain::{
     bitcoin::Address,
-    spk_client::{FullScanRequest, FullScanResult, SyncRequest, SyncResult},
+    spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
 };
 use bdk_esplora::{
     esplora_client::{self, r#async::AsyncClient},
     EsploraAsyncExt as _,
 };
 use bdk_wallet::KeychainKind;
+use bitcoin::Txid;
 use tap::TapFallible as _;
 use tracing::debug;
 
@@ -69,7 +70,7 @@ impl EsploraClient {
     pub async fn full_scan(
         &self,
         request: FullScanRequest<KeychainKind>,
-    ) -> Result<FullScanResult<KeychainKind>, Error> {
+    ) -> Result<FullScanResponse<KeychainKind>, Error> {
         self.client
             .full_scan(request, self.options.stop_gap, self.options.batch_size)
             .await
@@ -79,7 +80,7 @@ impl EsploraClient {
     pub async fn sync(
         &self,
         request: SyncRequest<(KeychainKind, u32)>,
-    ) -> Result<SyncResult, Error> {
+    ) -> Result<SyncResponse, Error> {
         debug!(
             "starting esplora sync, batch size: {}",
             self.options.batch_size
@@ -89,6 +90,15 @@ impl EsploraClient {
             .sync(request, self.options.batch_size)
             .await
             .map_err(Error::EsploraScan)
+    }
+
+    pub async fn broadcast_transaction(&self, txn: bitcoin::Transaction) -> Result<Txid, Error> {
+        self.client
+            .broadcast(&txn)
+            .await
+            .map_err(Error::EsploraBroadcast)?;
+
+        Ok(txn.compute_txid())
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {

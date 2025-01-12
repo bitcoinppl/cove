@@ -1,6 +1,7 @@
 use crate::{
     database::Database,
-    manager::wallet::Error,
+    manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
+    mnemonic,
     node::client::NodeClient,
     transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
     wallet::{
@@ -11,15 +12,18 @@ use crate::{
 use act_zero::*;
 use bdk_chain::{
     bitcoin::Psbt,
-    spk_client::{FullScanResult, SyncResult},
+    spk_client::{FullScanResponse, SyncResponse},
 };
 use bdk_wallet::KeychainKind;
-use bitcoin::params::Params;
+use bitcoin::{params::Params, Transaction as BdkTransaction};
 use bitcoin_units::Amount;
 use crossbeam::channel::Sender;
 use eyre::Context as _;
 use std::time::{Duration, UNIX_EPOCH};
+use tap::TapFallible as _;
 use tracing::{debug, error, info};
+
+use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
 use super::WalletManagerReconcileMessage;
 
@@ -65,6 +69,18 @@ impl Actor for WalletActor {
             Error::NodeConnectionFailed(error_string) => {
                 self.send(WalletManagerReconcileMessage::NodeConnectionFailed(
                     error_string,
+                ));
+            }
+
+            Error::SignAndBroadcastError(_) => {
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
+                ));
+            }
+
+            Error::GetConfirmDetailsError(_) => {
+                self.send(WalletManagerReconcileMessage::SendFlowError(
+                    SendFlowErrorAlert::ConfirmDetails(error.to_string()),
                 ));
             }
 
@@ -131,32 +147,41 @@ impl WalletActor {
         psbt: Psbt,
         fee_rate: BdkFeeRate,
     ) -> ActorResult<ConfirmDetails> {
-        let output = psbt
+        #[inline(always)]
+        fn error(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            WalletManagerError::GetConfirmDetailsError(s.to_string()).into()
+        }
+
+        let external_outputs = psbt
             .unsigned_tx
             .output
             .iter()
             .filter(|output| !self.wallet.is_mine(output.script_pubkey.clone()))
             .collect::<Vec<&bitcoin::TxOut>>();
 
-        if output.is_empty() {
-            return Err(eyre::eyre!("no addess to send to found").into());
+        if external_outputs.len() > 1 {
+            return Err(error(
+                "multiple address to send to found, not currently supported",
+            ));
         }
 
-        if output.len() > 1 {
-            return Err(
-                eyre::eyre!("multiple address to send to found, not currently supported").into(),
-            );
-        }
+        // if there is an external output, use that
+        // otherwise this is a consolidation txn, sending to the same wallet so use the first output
+        let output = external_outputs
+            .first()
+            .cloned()
+            .or_else(|| psbt.unsigned_tx.output.first())
+            .ok_or_else(|| error("no addess to send to found"))?;
 
         let params = Params::from(self.wallet.network());
-        let sending_to = bitcoin::Address::from_script(&output[0].script_pubkey, params)
+        let sending_to = bitcoin::Address::from_script(&output.script_pubkey, params)
             .context("unable to get address from script")?;
 
-        let sending_amount = output[0].value;
+        let sending_amount = output.value;
         let fee = psbt.fee()?;
         let spending_amount = sending_amount
             .checked_add(fee)
-            .ok_or_else(|| eyre::eyre!("fee overflow, cannot calculate spending amount"))?;
+            .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
 
         let details = ConfirmDetails {
             spending_amount: spending_amount.into(),
@@ -168,6 +193,66 @@ impl WalletActor {
         };
 
         Produces::ok(details)
+    }
+
+    pub async fn sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> ActorResult<()> {
+        fn err(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            Error::SignAndBroadcastError(s.to_string()).into()
+        }
+
+        // TODO: temporary, remove to allow sending on mainnet
+        if self.wallet.network == crate::network::Network::Bitcoin {
+            return Err(err("sending on mainnet not supported yet"));
+        }
+
+        let network = self.wallet.network;
+        let mnemonic = Mnemonic::try_from_id(&self.wallet.metadata.id)
+            .tap_err(|error| error!("failed to get mnemonic for wallet: {error}"))
+            .map_err(|_| err("failed to get mnemonic for wallet"))?;
+
+        let descriptors =
+            mnemonic.into_descriptors(None, network, self.wallet.metadata.address_type);
+
+        let create_params = descriptors.into_create_params().network(network.into());
+
+        // create a new temp wallet with the descriptors
+        let wallet = create_params
+            .create_wallet_no_persist()
+            .tap_err(|error| error!("failed to create wallet: {error}"))
+            .map_err(|_| err("unable to sign"))?;
+
+        let finalized = wallet
+            .sign(&mut psbt, Default::default())
+            .tap_err(|error| error!("failed to sign: {error}"))
+            .map_err(|_| err("unable to sign"))?;
+
+        if !finalized {
+            return Err(err("transaction not finalized, unable to sign"));
+        }
+
+        let transaction = psbt
+            .extract_tx()
+            .tap_err(|error| error!("failed to extract transaction: {error}"))
+            .map_err(|_| err("failed to extract transaction"))?;
+
+        self.broadcast_transaction(transaction).await?;
+
+        Produces::ok(())
+    }
+
+    pub async fn broadcast_transaction(&mut self, transaction: BdkTransaction) -> ActorResult<()> {
+        fn err(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            Error::SignAndBroadcastError(s.to_string()).into()
+        }
+
+        self.node_client
+            .as_ref()
+            .ok_or_else(|| err("node client not set"))?
+            .broadcast_transaction(transaction)
+            .await
+            .map_err(|_error| err("failed to broadcast transaction, try again"))?;
+
+        Produces::ok(())
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
@@ -212,7 +297,7 @@ impl WalletActor {
                 .await
                 .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
 
-            self.send(Msg::WalletBalanceChanged(initial_balance));
+            self.send(Msg::WalletBalanceChanged(initial_balance.into()));
 
             let initial_transactions = self
                 .transactions()
@@ -414,7 +499,7 @@ impl WalletActor {
 
     async fn handle_full_scan_complete(
         &mut self,
-        full_scan_result: Result<FullScanResult<KeychainKind>, crate::node::client::Error>,
+        full_scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
     ) -> ActorResult<()> {
         debug!("applying full scan result");
 
@@ -436,7 +521,7 @@ impl WalletActor {
 
     async fn handle_incremental_scan_complete(
         &mut self,
-        sync_result: Result<SyncResult, crate::node::client::Error>,
+        sync_result: Result<SyncResponse, crate::node::client::Error>,
     ) -> ActorResult<()> {
         let sync_result = sync_result?;
         self.wallet.apply_update(sync_result)?;
@@ -464,7 +549,7 @@ impl WalletActor {
             .await
             .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
 
-        self.send(Msg::WalletBalanceChanged(balance));
+        self.send(Msg::WalletBalanceChanged(balance.into()));
 
         // get and send transactions
         let transactions: Vec<Transaction> = self
