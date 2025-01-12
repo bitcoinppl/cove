@@ -7,7 +7,7 @@
 import Foundation
 import SwiftUI
 
-public struct SendRouteContainer: View {
+public struct SendFlowContainer: View {
     @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
 
@@ -92,29 +92,24 @@ public struct SendRouteContainer: View {
     }
 
     private var alertTitle: String {
-        guard let alert = manager?.sendFlowErrorAlert else { return "Error" }
+        guard let alert = manager?.sendFlowErrorAlert else { return "Error!" }
         return MyAlert(alert).title
     }
 
     private func MyAlert(_ alert: TaggedItem<SendFlowErrorAlert>) -> AnyAlertBuilder {
-        switch alert.item {
-        case let .confirmDetails(error):
-            AlertBuilder(
-                title: "Unable to Confirm Transaction",
-                message: error.capitalized,
-                actions: {
-                    Button("OK", action: { manager?.sendFlowErrorAlert = .none })
-                }
-            ).eraseToAny()
+        let error =
+            switch alert.item {
+            case let .confirmDetails(error): error
+            case let .signAndBroadcast(error): error
+            }
 
-        case let .signAndBroadcast(error):
+        return
             AlertBuilder(
-                title: "Unable to Sign and Broadcast Transaction",
-                message: error.capitalized,
+                title: "Error!",
+                message: error,
                 actions: {
                     Button("OK", action: { manager?.sendFlowErrorAlert = .none })
                 }
             ).eraseToAny()
-        }
     }
 }

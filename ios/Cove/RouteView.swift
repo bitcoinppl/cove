@@ -55,7 +55,7 @@ func routeToView(app: AppManager, route: Route) -> some View {
         case let .transactionDetails(id: id, details: details):
             TransactionsDetailScreen(id: id, transactionDetails: details)
         case let .send(sendRoute):
-            SendRouteContainer(sendRoute: sendRoute)
+            SendFlowContainer(sendRoute: sendRoute)
         }
     }
     .environment(app)
