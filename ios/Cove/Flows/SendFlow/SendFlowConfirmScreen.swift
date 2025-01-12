@@ -20,6 +20,15 @@ struct SendFlowConfirmScreen: View {
     // private
     @State private var isShowingAlert = false
     @State private var sendState: SendState = .idle
+    @State private var btcOrFiat = FiatOrBtc.btc
+
+    // popover to change btc and sats
+    @State private var showingMenu: Bool = false
+
+    func toggleFiatOrBtc() {
+        let opposite = btcOrFiat == .btc ? FiatOrBtc.fiat : FiatOrBtc.btc
+        btcOrFiat = opposite
+    }
 
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
@@ -67,47 +76,59 @@ struct SendFlowConfirmScreen: View {
                     }
                     .padding(.top, 10)
 
-                    // Balance Section
+                    // the amount in sats or btc
                     VStack(spacing: 8) {
                         HStack(alignment: .bottom) {
+                            Spacer()
+
                             Text(manager.amountFmt(details.sendingAmount()))
                                 .font(.system(size: 48, weight: .bold))
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
+                                .multilineTextAlignment(.trailing)
+                                .padding(.trailing, metadata.selectedUnit == .sat ? 10 : 2)
 
-                            Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 16)
-                                .contentShape(
-                                    .contextMenuPreview,
-                                    RoundedRectangle(cornerRadius: 8)
-                                )
-                                .contextMenu {
-                                    Button {
-                                        manager.dispatch(
-                                            action: .updateUnit(.sat))
-                                    } label: {
-                                        Text("sats")
-                                    }
+                            Button(action: { showingMenu.toggle() }) {
+                                HStack(spacing: 0) {
+                                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
 
-                                    Button {
-                                        manager.dispatch(
-                                            action: .updateUnit(.btc))
-                                    } label: {
-                                        Text("btc")
-                                    }
-                                } preview: {
-                                    Text(
-                                        metadata.selectedUnit == .sat
-                                            ? "sats" : "btc"
-                                    )
-                                    .padding(.vertical, 10)
-                                    .padding(.horizontal)
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .padding(.top, 2)
+                                        .padding(.leading, 4)
                                 }
-                                .offset(y: -5)
-                                .offset(x: -16)
+                                .frame(alignment: .trailing)
+                            }
+                            .foregroundStyle(.primary)
+                            .padding(.vertical, 10)
+                            .padding(.leading, 16)
+                            .popover(isPresented: $showingMenu) {
+                                VStack(alignment: .center, spacing: 0) {
+                                    Button("sats") {
+                                        manager.dispatch(action: .updateUnit(.sat))
+                                        showingMenu = false
+                                    }
+                                    .padding(12)
+                                    .buttonStyle(.plain)
+
+                                    Divider()
+
+                                    Button("btc") {
+                                        manager.dispatch(action: .updateUnit(.btc))
+                                        showingMenu = false
+                                    }
+                                    .padding(12)
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .frame(minWidth: 120, maxWidth: 200)
+                                .presentationCompactAdaptation(.popover)
+                                .foregroundStyle(.primary.opacity(0.8))
+                            }
                         }
-                        .offset(x: 32)
+                        .frame(alignment: .trailing)
 
                         Text(fiatAmount)
                             .font(.title3)
