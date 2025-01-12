@@ -35,7 +35,7 @@ public struct SendFlowContainer: View {
     }
 
     @ViewBuilder
-    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager, presenter: SendFlowSetAmountPresenter) -> some View {
+    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager) -> some View {
         switch sendRoute {
         case let .setAmount(id: id, address: address, amount: amount):
             SendFlowSetAmountScreen(
@@ -55,7 +55,7 @@ public struct SendFlowContainer: View {
     public var body: some View {
         if let manager, let presenter {
             Group {
-                sendRouteToScreen(sendRoute: sendRoute, manager: manager, presenter: presenter)
+                sendRouteToScreen(sendRoute: sendRoute, manager: manager)
             }
             .environment(manager)
             .environment(presenter)
