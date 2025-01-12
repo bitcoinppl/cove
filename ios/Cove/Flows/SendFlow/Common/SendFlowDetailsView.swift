@@ -61,6 +61,18 @@ struct SendFlowDetailsView: View {
                 .padding(.vertical, 10)
             }
 
+            // They receive section
+            HStack {
+                Text("They'll receive")
+                Spacer()
+                HStack {
+                    Text(manager.amountFmt(details.sendingAmount()))
+                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
+                }
+            }
+            .font(.footnote)
+            .fontWeight(.semibold)
+
             // Total Amount Section
             HStack {
                 Text("You'll pay")
@@ -73,17 +85,6 @@ struct SendFlowDetailsView: View {
             .font(.footnote)
             .fontWeight(.semibold)
 
-            // They receive section
-            HStack {
-                Text("They'll receive")
-                Spacer()
-                HStack {
-                    Text(manager.amountFmt(details.sendingAmount()))
-                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                }
-            }
-            .font(.footnote)
-            .fontWeight(.semibold)
         }
     }
 }
