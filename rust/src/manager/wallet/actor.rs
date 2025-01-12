@@ -1,6 +1,6 @@
 use crate::{
     database::Database,
-    manager::wallet::Error,
+    manager::wallet::{Error, WalletManagerError},
     mnemonic,
     node::client::NodeClient,
     transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
@@ -134,32 +134,46 @@ impl WalletActor {
         psbt: Psbt,
         fee_rate: BdkFeeRate,
     ) -> ActorResult<ConfirmDetails> {
-        let output = psbt
+        #[inline(always)]
+        fn error(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            WalletManagerError::GetConfirmDetailsError(s.to_string()).into()
+        }
+
+        let external_outputs = psbt
             .unsigned_tx
             .output
             .iter()
             .filter(|output| !self.wallet.is_mine(output.script_pubkey.clone()))
             .collect::<Vec<&bitcoin::TxOut>>();
 
-        if output.is_empty() {
-            return Err(eyre::eyre!("no addess to send to found").into());
+        if external_outputs.len() > 1 {
+            return Err(error(
+                "multiple address to send to found, not currently supported",
+            ));
         }
 
-        if output.len() > 1 {
-            return Err(
-                eyre::eyre!("multiple address to send to found, not currently supported").into(),
-            );
-        }
+        // TODO: remove after testing
+        if external_outputs.is_empty() {
+            return Err(error("no external outputs found"));
+        };
+
+        // if there is an external output, use that
+        // otherwise this is a consolidation txn, sending to the same wallet so use the first output
+        let output = external_outputs
+            .first()
+            .cloned()
+            .or_else(|| psbt.unsigned_tx.output.first())
+            .ok_or_else(|| error("no addess to send to found"))?;
 
         let params = Params::from(self.wallet.network());
-        let sending_to = bitcoin::Address::from_script(&output[0].script_pubkey, params)
+        let sending_to = bitcoin::Address::from_script(&output.script_pubkey, params)
             .context("unable to get address from script")?;
 
-        let sending_amount = output[0].value;
+        let sending_amount = output.value;
         let fee = psbt.fee()?;
         let spending_amount = sending_amount
             .checked_add(fee)
-            .ok_or_else(|| eyre::eyre!("fee overflow, cannot calculate spending amount"))?;
+            .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
 
         let details = ConfirmDetails {
             spending_amount: spending_amount.into(),
