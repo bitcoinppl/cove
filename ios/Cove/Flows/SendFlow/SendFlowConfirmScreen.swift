@@ -18,6 +18,7 @@ struct SendFlowConfirmScreen: View {
     let prices: PriceResponse? = nil
 
     // private
+    @State private var isShowingAlert = false
     @State private var sendState: SendState = .idle
 
     var fiatAmount: String {
@@ -133,6 +134,7 @@ struct SendFlowConfirmScreen: View {
                     do {
                         _ = try await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
                         sendState = .sent
+                        isShowingAlert = true
                     } catch {
                         sendState = .error
                     }
@@ -146,6 +148,18 @@ struct SendFlowConfirmScreen: View {
                 // accessing seed words for signing, lock so we can re-auth
                 if metadata.walletType == .hot { auth.lock() }
             }
+            .alert(
+                "Sent!",
+                isPresented: $isShowingAlert,
+                actions: {
+                    Button("OK") {
+                        app.resetRoute(to: Route.selectedWallet(id))
+                    }
+                },
+                message: {
+                    Text("Transaction was successfully sent!")
+                }
+            )
         }
     }
 }
@@ -159,6 +173,7 @@ struct SendFlowConfirmScreen: View {
                 details: ConfirmDetails.previewNew()
             )
             .environment(AppManager())
+            .environment(AuthManager())
         }
     }
 }

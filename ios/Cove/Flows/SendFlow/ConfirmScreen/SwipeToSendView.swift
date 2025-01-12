@@ -123,14 +123,19 @@ struct SwipeToSendView: View {
                         ThreeDotsAnimation()
                     }
                 case .sent: HStack(spacing: 12) {
-                        Text("SENT")
+                        Text("sent")
                         Image(systemName: "checkmark")
                             .foregroundColor(.green)
                     }
                 case .error: HStack(spacing: 10) {
-                        Text("ERROR")
+                        Text("error")
                         Image(systemName: "xmark")
                             .foregroundColor(.red)
+                            .onAppear {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                    sendState = .idle
+                                }
+                            }
                     }
                 }
             }.foregroundStyle(.white)
