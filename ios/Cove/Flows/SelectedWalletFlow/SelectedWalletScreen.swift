@@ -131,7 +131,7 @@ struct SelectedWalletScreen: View {
     var MainContent: some View {
         VStack(spacing: 0) {
             WalletBalanceHeaderView(
-                balance: manager.balance.confirmed,
+                balance: manager.balance.total(),
                 metadata: manager.walletMetadata,
                 updater: updater,
                 showReceiveSheet: showReceiveSheet

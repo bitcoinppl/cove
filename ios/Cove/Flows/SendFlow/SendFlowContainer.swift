@@ -54,7 +54,7 @@ public struct SendFlowContainer: View {
                 presenter.disappearing = false
 
                 // if zero balance, show alert and send back
-                if manager.balance.confirmed.asSats() == 0 {
+                if manager.balance.total().asSats() == 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         withAnimation(.easeInOut(duration: 0.4)) {
                             presenter.focusField = .none

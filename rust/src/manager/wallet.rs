@@ -48,7 +48,7 @@ pub enum WalletManagerReconcileMessage {
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
-    WalletBalanceChanged(Balance),
+    WalletBalanceChanged(Arc<Balance>),
 
     WalletError(WalletManagerError),
     UnknownError(String),
@@ -319,9 +319,9 @@ impl RustWalletManager {
         send!(self.actor.sign_and_broadcast_transaction(psbt.into()));
 
         // TODO:
-        // 1. make new error for broadcast and sign error types
-        // 2. listen to these messages on confirm screen and show error alert
-        // 3. make "transaction broadcasted" message and handle that in case of success
+        // 5. click to change fees to USD
+        // 8. show error if trying to send on mainnet
+        // 9. make sure sending works with hardware wallets
 
         Ok(())
     }
@@ -335,7 +335,7 @@ impl RustWalletManager {
             .await
             .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
-        let confirmed: BdkAmount = Arc::unwrap_or_clone(balance.confirmed).into();
+        let confirmed: BdkAmount = balance.trusted_spendable();
         let fee: BdkAmount = fee.total_fee.into();
 
         let available: Amount = confirmed
@@ -353,7 +353,7 @@ impl RustWalletManager {
             .await
             .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
-        self.amount_in_fiat(balance.confirmed, currency).await
+        self.amount_in_fiat(balance.total().into(), currency).await
     }
 
     #[uniffi::method]

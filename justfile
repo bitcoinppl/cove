@@ -68,7 +68,12 @@ run-android: build-android
     bash scripts/run-android.sh
 
 build-ios profile="debug" device="false" sign="false":
-    bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}
+    #!/usr/bin/env bash
+    if bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}; then
+        say "done"
+    else
+        say "error"
+    fi
 
 build-ios-release:
     just build-ios release-smaller --device

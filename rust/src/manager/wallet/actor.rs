@@ -282,7 +282,7 @@ impl WalletActor {
                 .await
                 .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
 
-            self.send(Msg::WalletBalanceChanged(initial_balance));
+            self.send(Msg::WalletBalanceChanged(initial_balance.into()));
 
             let initial_transactions = self
                 .transactions()
@@ -534,7 +534,7 @@ impl WalletActor {
             .await
             .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
 
-        self.send(Msg::WalletBalanceChanged(balance));
+        self.send(Msg::WalletBalanceChanged(balance.into()));
 
         // get and send transactions
         let transactions: Vec<Transaction> = self

@@ -1578,6 +1578,143 @@ public func FfiConverterTypeAutoComplete_lower(_ value: AutoComplete) -> UnsafeM
 
 
 
+public protocol BalanceProtocol : AnyObject {
+    
+    func spendable()  -> Amount
+    
+    func total()  -> Amount
+    
+}
+
+open class Balance:
+    BalanceProtocol
+    {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_balance(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_balance(pointer, $0) }
+    }
+
+    
+public static func zero() -> Balance  {
+    return try!  FfiConverterTypeBalance_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_balance_zero($0
+    )
+})
+}
+    
+
+    
+open func spendable() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_balance_spendable(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func total() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_balance_total(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBalance: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Balance
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Balance {
+        return Balance(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Balance) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Balance {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Balance, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalance_lift(_ pointer: UnsafeMutableRawPointer) throws -> Balance {
+    return try FfiConverterTypeBalance.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalance_lower(_ value: Balance) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBalance.lower(value)
+}
+
+
+
+
+
+
 public protocol BbqrJoinResultProtocol : AnyObject {
     
     func finalResult() throws  -> String
@@ -8207,9 +8344,9 @@ open func balance()async  -> Balance  {
                     
                 )
             },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeBalance_lift,
             errorHandler: nil
             
@@ -11149,62 +11286,6 @@ public func FfiConverterTypeAuthManagerState_lift(_ buf: RustBuffer) throws -> A
 #endif
 public func FfiConverterTypeAuthManagerState_lower(_ value: AuthManagerState) -> RustBuffer {
     return FfiConverterTypeAuthManagerState.lower(value)
-}
-
-
-public struct Balance {
-    public var immature: Amount
-    public var trustedPending: Amount
-    public var untrustedPending: Amount
-    public var confirmed: Amount
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(immature: Amount, trustedPending: Amount, untrustedPending: Amount, confirmed: Amount) {
-        self.immature = immature
-        self.trustedPending = trustedPending
-        self.untrustedPending = untrustedPending
-        self.confirmed = confirmed
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeBalance: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Balance {
-        return
-            try Balance(
-                immature: FfiConverterTypeAmount.read(from: &buf), 
-                trustedPending: FfiConverterTypeAmount.read(from: &buf), 
-                untrustedPending: FfiConverterTypeAmount.read(from: &buf), 
-                confirmed: FfiConverterTypeAmount.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Balance, into buf: inout [UInt8]) {
-        FfiConverterTypeAmount.write(value.immature, into: &buf)
-        FfiConverterTypeAmount.write(value.trustedPending, into: &buf)
-        FfiConverterTypeAmount.write(value.untrustedPending, into: &buf)
-        FfiConverterTypeAmount.write(value.confirmed, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBalance_lift(_ buf: RustBuffer) throws -> Balance {
-    return try FfiConverterTypeBalance.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeBalance_lower(_ value: Balance) -> RustBuffer {
-    return FfiConverterTypeBalance.lower(value)
 }
 
 
@@ -22974,12 +23055,6 @@ public func authManagerErrorToString(error: AuthManagerError) -> String  {
     )
 })
 }
-public func balanceZero() -> Balance  {
-    return try!  FfiConverterTypeBalance_lift(try! rustCall() {
-    uniffi_cove_fn_func_balance_zero($0
-    )
-})
-}
 public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelection) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_color_scheme_selection_capitalized_string(
@@ -23210,9 +23285,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_auth_manager_error_to_string() != 12061) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_balance_zero() != 63807) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_func_color_scheme_selection_capitalized_string() != 42247) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23343,6 +23415,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_autocomplete_is_valid_word() != 18021) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_balance_spendable() != 36312) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_balance_total() != 19274) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_bbqrjoinresult_final_result() != 44157) {
@@ -23858,7 +23936,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 65443) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_balance() != 39936) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_balance() != 59906) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_balance_in_fiat() != 47457) {
@@ -24138,6 +24216,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_authpin_new() != 39860) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_balance_zero() != 55253) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_bip39autocomplete_new() != 41839) {

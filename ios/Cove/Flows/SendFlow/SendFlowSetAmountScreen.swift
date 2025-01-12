@@ -207,7 +207,7 @@ struct SendFlowSetAmountScreen: View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
 
             // MARK: CONTENT
 
@@ -399,7 +399,7 @@ struct SendFlowSetAmountScreen: View {
             return false
         }
 
-        let balance = Double(manager.balance.confirmed.asSats())
+        let balance = Double(manager.balance.spendable().asSats())
         let amountSats = amountSats(amount)
 
         if amountSats < 10000 {

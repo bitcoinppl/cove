@@ -40,7 +40,7 @@ struct SendFlowConfirmScreen: View {
         VStack(spacing: 0) {
             // MARK: HEADER
 
-            SendFlowHeaderView(manager: manager, amount: manager.balance.confirmed)
+            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
 
             // MARK: CONTENT
 

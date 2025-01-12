@@ -9,7 +9,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     var rust: RustWalletManager
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
-    var balance: Balance = .init()
+    var balance: Balance = .zero()
     var fiatBalance: Double?
     var foundAddresses: [FoundAddress] = []
     var unsignedTransactions: [UnsignedTransaction] = []
