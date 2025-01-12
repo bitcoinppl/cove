@@ -8,11 +8,43 @@
 import SwiftUI
 
 struct SendFlowDetailsView: View {
+    @Environment(AppManager.self) private var app
+
+    // args
     let manager: WalletManager
     let details: ConfirmDetails
+    @State var prices: PriceResponse?
+
+    // private
+    @State private var btcOrFiat = FiatOrBtc.btc
 
     var metadata: WalletMetadata {
         manager.walletMetadata
+    }
+
+    func fiatAmount(_ amount: Amount) -> String {
+        guard let prices = prices ?? app.prices else {
+            app.dispatch(action: .updateFiatPrices)
+            return "---"
+        }
+
+        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+    }
+
+    func displayFiatOrBtcAmount(_ amount: Amount) -> String {
+        switch btcOrFiat {
+        case .fiat:
+            return "≈ \(fiatAmount(amount))"
+        case .btc:
+            let units = metadata.selectedUnit == .sat ? "sats" : "btc"
+            return "\(manager.amountFmt(amount)) \(units)"
+        }
+    }
+
+    func toggleFiatOrBtc() {
+        if prices == nil, app.prices == nil { return }
+        let opposite = btcOrFiat == .btc ? FiatOrBtc.fiat : FiatOrBtc.btc
+        btcOrFiat = opposite
     }
 
     var body: some View {
@@ -51,24 +83,18 @@ struct SendFlowDetailsView: View {
 
                 Spacer()
 
-                HStack {
-                    Text(manager.amountFmt(details.feeTotal()))
-                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                }
-                .font(.footnote)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 10)
+                Text(displayFiatOrBtcAmount(details.feeTotal()))
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 10)
             }
 
             // They receive section
             HStack {
                 Text("They'll receive")
                 Spacer()
-                HStack {
-                    Text(manager.amountFmt(details.sendingAmount()))
-                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                }
+                Text(displayFiatOrBtcAmount(details.sendingAmount()))
             }
             .font(.footnote)
             .fontWeight(.semibold)
@@ -77,14 +103,17 @@ struct SendFlowDetailsView: View {
             HStack {
                 Text("You'll pay")
                 Spacer()
-                HStack {
-                    Text(manager.amountFmt(details.spendingAmount()))
-                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-                }
+                Text(displayFiatOrBtcAmount(details.spendingAmount()))
             }
+
+            .onTapGesture { toggleFiatOrBtc() }
             .font(.footnote)
             .fontWeight(.semibold)
-
+        }
+        .onTapGesture { toggleFiatOrBtc() }
+        .onChange(of: app.prices, initial: true) { _, newPrices in
+            guard let prices = newPrices else { return }
+            self.prices = prices
         }
     }
 }
@@ -93,8 +122,10 @@ struct SendFlowDetailsView: View {
     AsyncPreview {
         SendFlowDetailsView(
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew()
+            details: ConfirmDetails.previewNew(),
+            prices: nil
         )
         .padding()
+        .environment(AppManager())
     }
 }

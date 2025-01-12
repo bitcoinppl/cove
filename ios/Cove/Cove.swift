@@ -8152,6 +8152,8 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> Psbt
     
+    func convertAndDisplayFiat(amount: Amount, prices: PriceResponse)  -> String
+    
     func currentBlockHeight() async throws  -> UInt32
     
     func deleteUnsignedTransaction(txId: TxId) throws 
@@ -8402,6 +8404,15 @@ open func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate:
             liftFunc: FfiConverterTypePsbt_lift,
             errorHandler: FfiConverterTypeWalletManagerError.lift
         )
+}
+    
+open func convertAndDisplayFiat(amount: Amount, prices: PriceResponse) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(self.uniffiClonePointer(),
+        FfiConverterTypeAmount_lower(amount),
+        FfiConverterTypePriceResponse_lower(prices),$0
+    )
+})
 }
     
 open func currentBlockHeight()async throws  -> UInt32  {
@@ -23946,6 +23957,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_build_transaction_with_fee_rate() != 2979) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 35110) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_current_block_height() != 4472) {

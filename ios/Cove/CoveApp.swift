@@ -247,7 +247,7 @@ struct CoveApp: App {
             return
         }
 
-        if network != currentNetwork {
+        if network != currentNetwork, network == .bitcoin || currentNetwork == .bitcoin {
             app.alertState = TaggedItem(
                 AppAlertState.addressWrongNetwork(
                     address: address, network: network, currentNetwork: currentNetwork

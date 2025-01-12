@@ -20,15 +20,9 @@ struct SendFlowConfirmScreen: View {
     // private
     @State private var isShowingAlert = false
     @State private var sendState: SendState = .idle
-    @State private var btcOrFiat = FiatOrBtc.btc
 
     // popover to change btc and sats
     @State private var showingMenu: Bool = false
-
-    func toggleFiatOrBtc() {
-        let opposite = btcOrFiat == .btc ? FiatOrBtc.fiat : FiatOrBtc.btc
-        btcOrFiat = opposite
-    }
 
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
@@ -141,7 +135,7 @@ struct SendFlowConfirmScreen: View {
 
                     Divider()
 
-                    SendFlowDetailsView(manager: manager, details: details)
+                    SendFlowDetailsView(manager: manager, details: details, prices: prices)
                 }
             }
             .scrollIndicators(.hidden)

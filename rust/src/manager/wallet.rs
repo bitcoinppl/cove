@@ -15,7 +15,10 @@ use tracing::{debug, error, warn};
 use crate::{
     app::FfiApp,
     database::{error::DatabaseError, Database},
-    fiat::{client::FIAT_CLIENT, FiatCurrency},
+    fiat::{
+        client::{PriceResponse, FIAT_CLIENT},
+        FiatCurrency,
+    },
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     psbt::Psbt,
@@ -319,8 +322,6 @@ impl RustWalletManager {
         send!(self.actor.sign_and_broadcast_transaction(psbt.into()));
 
         // TODO:
-        // 5. click to change fees to USD
-        // 8. show error if trying to send on mainnet
         // 9. make sure sending works with hardware wallets
 
         Ok(())
@@ -410,6 +411,15 @@ impl RustWalletManager {
 
         let fiat = amount.thousands_fiat();
         format!("${fiat} {}", self.metadata.read().selected_fiat_currency)
+    }
+
+    #[uniffi::method]
+    pub fn convert_and_display_fiat(&self, amount: Arc<Amount>, prices: PriceResponse) -> String {
+        let currency = self.metadata.read().selected_fiat_currency;
+        let price = prices.get_for_currency(currency) as f64;
+        let fiat = amount.as_btc() * price;
+
+        self.display_fiat_amount(fiat)
     }
 
     #[uniffi::method]

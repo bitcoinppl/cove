@@ -5,6 +5,7 @@ use crate::transaction::Amount;
     Clone,
     PartialEq,
     Eq,
+    Default,
     uniffi::Object,
     derive_more::From,
     derive_more::Into,
@@ -12,12 +13,6 @@ use crate::transaction::Amount;
     derive_more::AsRef,
 )]
 pub struct Balance(pub bdk_wallet::Balance);
-
-impl Default for Balance {
-    fn default() -> Self {
-        Self(bdk_wallet::Balance::default())
-    }
-}
 
 #[uniffi::export]
 impl Balance {

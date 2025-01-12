@@ -24,7 +24,7 @@ struct SendFlowDetailsSheetView: View {
 
             Divider()
 
-            SendFlowDetailsView(manager: manager, details: details)
+            SendFlowDetailsView(manager: manager, details: details, prices: nil)
 
             Spacer()
 

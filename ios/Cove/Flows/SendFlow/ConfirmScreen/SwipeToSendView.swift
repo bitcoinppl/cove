@@ -45,7 +45,7 @@ struct SwipeToSendView: View {
         return 1.0 - percentDragged - 0.07
     }
 
-    func onChangeSendState(_ _old: SendState, _ state: SendState) {
+    func onChangeSendState(_: SendState, _ state: SendState) {
         // set to full
         if state != .idle { offset = maxOffset }
     }
