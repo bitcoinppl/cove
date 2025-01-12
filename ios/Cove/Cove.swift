@@ -665,7 +665,7 @@ open class Address:
 
     
 public static func fromString(address: String)throws  -> Address  {
-    return try  FfiConverterTypeAddress_lift(try rustCallWithError(FfiConverterTypeAddressError.lift) {
+    return try  FfiConverterTypeAddress_lift(try rustCallWithError(FfiConverterTypeAddressError_lift) {
     uniffi_cove_fn_constructor_address_from_string(
         FfiConverterString.lower(address),$0
     )
@@ -733,8 +733,6 @@ public struct FfiConverterTypeAddress: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -748,6 +746,8 @@ public func FfiConverterTypeAddress_lift(_ pointer: UnsafeMutableRawPointer) thr
 public func FfiConverterTypeAddress_lower(_ value: Address) -> UnsafeMutableRawPointer {
     return FfiConverterTypeAddress.lower(value)
 }
+
+
 
 
 
@@ -872,8 +872,6 @@ public struct FfiConverterTypeAddressInfo: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -887,6 +885,8 @@ public func FfiConverterTypeAddressInfo_lift(_ pointer: UnsafeMutableRawPointer)
 public func FfiConverterTypeAddressInfo_lower(_ value: AddressInfo) -> UnsafeMutableRawPointer {
     return FfiConverterTypeAddressInfo.lower(value)
 }
+
+
 
 
 
@@ -941,7 +941,7 @@ open class AddressWithNetwork:
     }
 public convenience init(address: String)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeAddressError.lift) {
+        try rustCallWithError(FfiConverterTypeAddressError_lift) {
     uniffi_cove_fn_constructor_addresswithnetwork_new(
         FfiConverterString.lower(address),$0
     )
@@ -1019,8 +1019,6 @@ public struct FfiConverterTypeAddressWithNetwork: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1034,6 +1032,8 @@ public func FfiConverterTypeAddressWithNetwork_lift(_ pointer: UnsafeMutableRawP
 public func FfiConverterTypeAddressWithNetwork_lower(_ value: AddressWithNetwork) -> UnsafeMutableRawPointer {
     return FfiConverterTypeAddressWithNetwork.lower(value)
 }
+
+
 
 
 
@@ -1217,8 +1217,6 @@ public struct FfiConverterTypeAmount: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1232,6 +1230,8 @@ public func FfiConverterTypeAmount_lift(_ pointer: UnsafeMutableRawPointer) thro
 public func FfiConverterTypeAmount_lower(_ value: Amount) -> UnsafeMutableRawPointer {
     return FfiConverterTypeAmount.lower(value)
 }
+
+
 
 
 
@@ -1346,8 +1346,6 @@ public struct FfiConverterTypeAuthPin: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1361,6 +1359,8 @@ public func FfiConverterTypeAuthPin_lift(_ pointer: UnsafeMutableRawPointer) thr
 public func FfiConverterTypeAuthPin_lower(_ value: AuthPin) -> UnsafeMutableRawPointer {
     return FfiConverterTypeAuthPin.lower(value)
 }
+
+
 
 
 
@@ -1559,8 +1559,6 @@ public struct FfiConverterTypeAutoComplete: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1574,6 +1572,8 @@ public func FfiConverterTypeAutoComplete_lift(_ pointer: UnsafeMutableRawPointer
 public func FfiConverterTypeAutoComplete_lower(_ value: AutoComplete) -> UnsafeMutableRawPointer {
     return FfiConverterTypeAutoComplete.lower(value)
 }
+
+
 
 
 
@@ -1640,7 +1640,7 @@ open class BbqrJoinResult:
 
     
 open func finalResult()throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_method_bbqrjoinresult_final_result(self.uniffiClonePointer(),$0
     )
 })
@@ -1698,8 +1698,6 @@ public struct FfiConverterTypeBbqrJoinResult: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1713,6 +1711,8 @@ public func FfiConverterTypeBbqrJoinResult_lift(_ pointer: UnsafeMutableRawPoint
 public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBbqrJoinResult.lower(value)
 }
+
+
 
 
 
@@ -1777,7 +1777,7 @@ open class BbqrJoined:
 
     
 open func getGroupedWords(chunks: UInt8)throws  -> [[String]]  {
-    return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_method_bbqrjoined_get_grouped_words(self.uniffiClonePointer(),
         FfiConverterUInt8.lower(chunks),$0
     )
@@ -1785,7 +1785,7 @@ open func getGroupedWords(chunks: UInt8)throws  -> [[String]]  {
 }
     
 open func getSeedWords()throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_method_bbqrjoined_get_seed_words(self.uniffiClonePointer(),$0
     )
 })
@@ -1829,8 +1829,6 @@ public struct FfiConverterTypeBbqrJoined: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1844,6 +1842,8 @@ public func FfiConverterTypeBbqrJoined_lift(_ pointer: UnsafeMutableRawPointer) 
 public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBbqrJoined.lower(value)
 }
+
+
 
 
 
@@ -1987,8 +1987,6 @@ public struct FfiConverterTypeBip39AutoComplete: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2002,6 +2000,8 @@ public func FfiConverterTypeBip39AutoComplete_lift(_ pointer: UnsafeMutableRawPo
 public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBip39AutoComplete.lower(value)
 }
+
+
 
 
 
@@ -2151,8 +2151,6 @@ public struct FfiConverterTypeBip39WordSpecificAutocomplete: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2166,6 +2164,8 @@ public func FfiConverterTypeBip39WordSpecificAutocomplete_lift(_ pointer: Unsafe
 public func FfiConverterTypeBip39WordSpecificAutocomplete_lower(_ value: Bip39WordSpecificAutocomplete) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBip39WordSpecificAutocomplete.lower(value)
 }
+
+
 
 
 
@@ -2220,7 +2220,7 @@ open class BitcoinTransaction:
     }
 public convenience init(txHex: String)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeBitcoinTransactionError.lift) {
+        try rustCallWithError(FfiConverterTypeBitcoinTransactionError_lift) {
     uniffi_cove_fn_constructor_bitcointransaction_new(
         FfiConverterString.lower(txHex),$0
     )
@@ -2238,7 +2238,7 @@ public convenience init(txHex: String)throws  {
 
     
 public static func tryFromData(data: Data)throws  -> BitcoinTransaction  {
-    return try  FfiConverterTypeBitcoinTransaction_lift(try rustCallWithError(FfiConverterTypeBitcoinTransactionError.lift) {
+    return try  FfiConverterTypeBitcoinTransaction_lift(try rustCallWithError(FfiConverterTypeBitcoinTransactionError_lift) {
     uniffi_cove_fn_constructor_bitcointransaction_tryfromdata(
         FfiConverterData.lower(data),$0
     )
@@ -2306,8 +2306,6 @@ public struct FfiConverterTypeBitcoinTransaction: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2321,6 +2319,8 @@ public func FfiConverterTypeBitcoinTransaction_lift(_ pointer: UnsafeMutableRawP
 public func FfiConverterTypeBitcoinTransaction_lower(_ value: BitcoinTransaction) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBitcoinTransaction.lower(value)
 }
+
+
 
 
 
@@ -2435,8 +2435,6 @@ public struct FfiConverterTypeBoxedRoute: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2450,6 +2448,8 @@ public func FfiConverterTypeBoxedRoute_lift(_ pointer: UnsafeMutableRawPointer) 
 public func FfiConverterTypeBoxedRoute_lower(_ value: BoxedRoute) -> UnsafeMutableRawPointer {
     return FfiConverterTypeBoxedRoute.lower(value)
 }
+
+
 
 
 
@@ -2547,8 +2547,6 @@ public struct FfiConverterTypeChainPosition: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2562,6 +2560,8 @@ public func FfiConverterTypeChainPosition_lift(_ pointer: UnsafeMutableRawPointe
 public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> UnsafeMutableRawPointer {
     return FfiConverterTypeChainPosition.lower(value)
 }
+
+
 
 
 
@@ -2712,7 +2712,7 @@ open func psbtBytes() -> Data  {
 }
     
 open func psbtToBbqr()throws  -> [String]  {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError.lift) {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeConfirmDetailsError_lift) {
     uniffi_cove_fn_method_confirmdetails_psbt_to_bbqr(self.uniffiClonePointer(),$0
     )
 })
@@ -2784,8 +2784,6 @@ public struct FfiConverterTypeConfirmDetails: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2799,6 +2797,8 @@ public func FfiConverterTypeConfirmDetails_lift(_ pointer: UnsafeMutableRawPoint
 public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> UnsafeMutableRawPointer {
     return FfiConverterTypeConfirmDetails.lower(value)
 }
+
+
 
 
 
@@ -2977,8 +2977,6 @@ public struct FfiConverterTypeConfirmedTransaction: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2992,6 +2990,8 @@ public func FfiConverterTypeConfirmedTransaction_lift(_ pointer: UnsafeMutableRa
 public func FfiConverterTypeConfirmedTransaction_lower(_ value: ConfirmedTransaction) -> UnsafeMutableRawPointer {
     return FfiConverterTypeConfirmedTransaction.lower(value)
 }
+
+
 
 
 
@@ -3131,8 +3131,6 @@ public struct FfiConverterTypeDatabase: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3146,6 +3144,8 @@ public func FfiConverterTypeDatabase_lift(_ pointer: UnsafeMutableRawPointer) th
 public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRawPointer {
     return FfiConverterTypeDatabase.lower(value)
 }
+
+
 
 
 
@@ -3251,8 +3251,6 @@ public struct FfiConverterTypeDevice: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3266,6 +3264,8 @@ public func FfiConverterTypeDevice_lift(_ pointer: UnsafeMutableRawPointer) thro
 public func FfiConverterTypeDevice_lower(_ value: Device) -> UnsafeMutableRawPointer {
     return FfiConverterTypeDevice.lower(value)
 }
+
+
 
 
 
@@ -3380,8 +3380,6 @@ public struct FfiConverterTypeFeeRate: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3395,6 +3393,8 @@ public func FfiConverterTypeFeeRate_lift(_ pointer: UnsafeMutableRawPointer) thr
 public func FfiConverterTypeFeeRate_lower(_ value: FeeRate) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFeeRate.lower(value)
 }
+
+
 
 
 
@@ -3547,8 +3547,6 @@ public struct FfiConverterTypeFeeRateOption: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3562,6 +3560,8 @@ public func FfiConverterTypeFeeRateOption_lift(_ pointer: UnsafeMutableRawPointe
 public func FfiConverterTypeFeeRateOption_lower(_ value: FeeRateOption) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFeeRateOption.lower(value)
 }
+
+
 
 
 
@@ -3723,8 +3723,6 @@ public struct FfiConverterTypeFeeRateOptionWithTotalFee: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3738,6 +3736,8 @@ public func FfiConverterTypeFeeRateOptionWithTotalFee_lift(_ pointer: UnsafeMuta
 public func FfiConverterTypeFeeRateOptionWithTotalFee_lower(_ value: FeeRateOptionWithTotalFee) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFeeRateOptionWithTotalFee.lower(value)
 }
+
+
 
 
 
@@ -3869,8 +3869,6 @@ public struct FfiConverterTypeFeeRateOptions: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3884,6 +3882,8 @@ public func FfiConverterTypeFeeRateOptions_lift(_ pointer: UnsafeMutableRawPoint
 public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFeeRateOptions.lower(value)
 }
+
+
 
 
 
@@ -4024,8 +4024,6 @@ public struct FfiConverterTypeFeeRateOptionsWithTotalFee: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4039,6 +4037,8 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lift(_ pointer: UnsafeMut
 public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOptionsWithTotalFee) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFeeRateOptionsWithTotalFee.lower(value)
 }
+
+
 
 
 
@@ -4364,7 +4364,7 @@ open func resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: [Route])  {try!
     /**
      * Select a wallet
      */
-open func selectWallet(id: WalletId, nextRoute: Route? = nil)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func selectWallet(id: WalletId, nextRoute: Route? = nil)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_ffiapp_select_wallet(self.uniffiClonePointer(),
         FfiConverterTypeWalletId_lower(id),
         FfiConverterOptionTypeRoute.lower(nextRoute),$0
@@ -4427,8 +4427,6 @@ public struct FfiConverterTypeFfiApp: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4442,6 +4440,8 @@ public func FfiConverterTypeFfiApp_lift(_ pointer: UnsafeMutableRawPointer) thro
 public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFfiApp.lower(value)
 }
+
+
 
 
 
@@ -4528,7 +4528,7 @@ open func dataFromRecords(records: [NdefRecord]) -> Data  {
 })
 }
     
-open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTypeResumeError.lift) {
+open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTypeResumeError_lift) {
     uniffi_cove_fn_method_ffinfcreader_is_resumeable(self.uniffiClonePointer(),
         FfiConverterData.lower(data),$0
     )
@@ -4550,7 +4550,7 @@ open func messageInfo() -> MessageInfo?  {
 }
     
 open func parse(data: Data)throws  -> ParseResult  {
-    return try  FfiConverterTypeParseResult_lift(try rustCallWithError(FfiConverterTypeNfcReaderError.lift) {
+    return try  FfiConverterTypeParseResult_lift(try rustCallWithError(FfiConverterTypeNfcReaderError_lift) {
     uniffi_cove_fn_method_ffinfcreader_parse(self.uniffiClonePointer(),
         FfiConverterData.lower(data),$0
     )
@@ -4603,8 +4603,6 @@ public struct FfiConverterTypeFfiNfcReader: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4618,6 +4616,8 @@ public func FfiConverterTypeFfiNfcReader_lift(_ pointer: UnsafeMutableRawPointer
 public func FfiConverterTypeFfiNfcReader_lower(_ value: FfiNfcReader) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFfiNfcReader.lower(value)
 }
+
+
 
 
 
@@ -4715,8 +4715,6 @@ public struct FfiConverterTypeFiatClient: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4730,6 +4728,8 @@ public func FfiConverterTypeFiatClient_lift(_ pointer: UnsafeMutableRawPointer) 
 public func FfiConverterTypeFiatClient_lower(_ value: FiatClient) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFiatClient.lower(value)
 }
+
+
 
 
 
@@ -4800,7 +4800,7 @@ public convenience init(filePath: String) {
 
     
 open func read()throws  -> MultiFormat  {
-    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeFileHandlerError.lift) {
+    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeFileHandlerError_lift) {
     uniffi_cove_fn_method_filehandler_read(self.uniffiClonePointer(),$0
     )
 })
@@ -4844,8 +4844,6 @@ public struct FfiConverterTypeFileHandler: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4859,6 +4857,8 @@ public func FfiConverterTypeFileHandler_lift(_ pointer: UnsafeMutableRawPointer)
 public func FfiConverterTypeFileHandler_lower(_ value: FileHandler) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFileHandler.lower(value)
 }
+
+
 
 
 
@@ -4911,7 +4911,7 @@ open class Fingerprint:
     }
 public convenience init(id: WalletId)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeFingerprintError.lift) {
+        try rustCallWithError(FfiConverterTypeFingerprintError_lift) {
     uniffi_cove_fn_constructor_fingerprint_new(
         FfiConverterTypeWalletId_lower(id),$0
     )
@@ -4982,8 +4982,6 @@ public struct FfiConverterTypeFingerprint: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4997,6 +4995,8 @@ public func FfiConverterTypeFingerprint_lift(_ pointer: UnsafeMutableRawPointer)
 public func FfiConverterTypeFingerprint_lower(_ value: Fingerprint) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFingerprint.lower(value)
 }
+
+
 
 
 
@@ -5094,8 +5094,6 @@ public struct FfiConverterTypeFoundJson: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5109,6 +5107,8 @@ public func FfiConverterTypeFoundJson_lift(_ pointer: UnsafeMutableRawPointer) t
 public func FfiConverterTypeFoundJson_lower(_ value: FoundJson) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFoundJson.lower(value)
 }
+
+
 
 
 
@@ -5207,7 +5207,7 @@ open func authType() -> AuthType  {
 })
 }
     
-open func clearSelectedWallet()throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func clearSelectedWallet()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_clear_selected_wallet(self.uniffiClonePointer(),$0
     )
 }
@@ -5220,21 +5220,21 @@ open func colorScheme() -> ColorSchemeSelection  {
 })
 }
     
-open func delete(key: GlobalConfigKey)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func delete(key: GlobalConfigKey)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_delete(self.uniffiClonePointer(),
         FfiConverterTypeGlobalConfigKey_lower(key),$0
     )
 }
 }
     
-open func deleteHashedPinCode()throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func deleteHashedPinCode()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_delete_hashed_pin_code(self.uniffiClonePointer(),$0
     )
 }
 }
     
 open func get(key: GlobalConfigKey)throws  -> String?  {
-    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_get(self.uniffiClonePointer(),
         FfiConverterTypeGlobalConfigKey_lower(key),$0
     )
@@ -5242,13 +5242,13 @@ open func get(key: GlobalConfigKey)throws  -> String?  {
 }
     
 open func hashedPinCode()throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_hashed_pin_code(self.uniffiClonePointer(),$0
     )
 })
 }
     
-open func selectWallet(id: WalletId)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func selectWallet(id: WalletId)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_select_wallet(self.uniffiClonePointer(),
         FfiConverterTypeWalletId_lower(id),$0
     )
@@ -5276,7 +5276,7 @@ open func selectedWallet() -> WalletId?  {
 })
 }
     
-open func set(key: GlobalConfigKey, value: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func set(key: GlobalConfigKey, value: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_set(self.uniffiClonePointer(),
         FfiConverterTypeGlobalConfigKey_lower(key),
         FfiConverterString.lower(value),$0
@@ -5284,28 +5284,28 @@ open func set(key: GlobalConfigKey, value: String)throws   {try rustCallWithErro
 }
 }
     
-open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_setcolorscheme(self.uniffiClonePointer(),
         FfiConverterTypeColorSchemeSelection_lower(colorScheme),$0
     )
 }
 }
     
-open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(self.uniffiClonePointer(),
         FfiConverterString.lower(hashedPinCode),$0
     )
 }
 }
     
-open func setSelectedNetwork(network: Network)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func setSelectedNetwork(network: Network)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_set_selected_network(self.uniffiClonePointer(),
         FfiConverterTypeNetwork_lower(network),$0
     )
 }
 }
     
-open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_set_selected_node(self.uniffiClonePointer(),
         FfiConverterTypeNode_lower(node),$0
     )
@@ -5350,8 +5350,6 @@ public struct FfiConverterTypeGlobalConfigTable: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5365,6 +5363,8 @@ public func FfiConverterTypeGlobalConfigTable_lift(_ pointer: UnsafeMutableRawPo
 public func FfiConverterTypeGlobalConfigTable_lower(_ value: GlobalConfigTable) -> UnsafeMutableRawPointer {
     return FfiConverterTypeGlobalConfigTable.lower(value)
 }
+
+
 
 
 
@@ -5433,7 +5433,7 @@ open class GlobalFlagTable:
 
     
 open func get(key: GlobalFlagKey)throws  -> Bool  {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalflagtable_get(self.uniffiClonePointer(),
         FfiConverterTypeGlobalFlagKey_lower(key),$0
     )
@@ -5448,7 +5448,7 @@ open func getBoolConfig(key: GlobalFlagKey) -> Bool  {
 })
 }
     
-open func set(key: GlobalFlagKey, value: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func set(key: GlobalFlagKey, value: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalflagtable_set(self.uniffiClonePointer(),
         FfiConverterTypeGlobalFlagKey_lower(key),
         FfiConverterBool.lower(value),$0
@@ -5456,7 +5456,7 @@ open func set(key: GlobalFlagKey, value: Bool)throws   {try rustCallWithError(Ff
 }
 }
     
-open func toggleBoolConfig(key: GlobalFlagKey)throws   {try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+open func toggleBoolConfig(key: GlobalFlagKey)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalflagtable_toggle_bool_config(self.uniffiClonePointer(),
         FfiConverterTypeGlobalFlagKey_lower(key),$0
     )
@@ -5501,8 +5501,6 @@ public struct FfiConverterTypeGlobalFlagTable: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5516,6 +5514,8 @@ public func FfiConverterTypeGlobalFlagTable_lift(_ pointer: UnsafeMutableRawPoin
 public func FfiConverterTypeGlobalFlagTable_lower(_ value: GlobalFlagTable) -> UnsafeMutableRawPointer {
     return FfiConverterTypeGlobalFlagTable.lower(value)
 }
+
+
 
 
 
@@ -5613,8 +5613,6 @@ public struct FfiConverterTypeHardwareExport: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5628,6 +5626,8 @@ public func FfiConverterTypeHardwareExport_lift(_ pointer: UnsafeMutableRawPoint
 public func FfiConverterTypeHardwareExport_lower(_ value: HardwareExport) -> UnsafeMutableRawPointer {
     return FfiConverterTypeHardwareExport.lower(value)
 }
+
+
 
 
 
@@ -5772,8 +5772,6 @@ public struct FfiConverterTypeHeaderIconPresenter: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5787,6 +5785,8 @@ public func FfiConverterTypeHeaderIconPresenter_lift(_ pointer: UnsafeMutableRaw
 public func FfiConverterTypeHeaderIconPresenter_lower(_ value: HeaderIconPresenter) -> UnsafeMutableRawPointer {
     return FfiConverterTypeHeaderIconPresenter.lower(value)
 }
+
+
 
 
 
@@ -5892,8 +5892,6 @@ public struct FfiConverterTypeKeychain: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5907,6 +5905,8 @@ public func FfiConverterTypeKeychain_lift(_ pointer: UnsafeMutableRawPointer) th
 public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRawPointer {
     return FfiConverterTypeKeychain.lower(value)
 }
+
+
 
 
 
@@ -5959,7 +5959,7 @@ open class Mnemonic:
     }
 public convenience init(id: WalletId)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeMnemonicError.lift) {
+        try rustCallWithError(FfiConverterTypeMnemonicError_lift) {
     uniffi_cove_fn_constructor_mnemonic_new(
         FfiConverterTypeWalletId_lower(id),$0
     )
@@ -6038,8 +6038,6 @@ public struct FfiConverterTypeMnemonic: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6053,6 +6051,8 @@ public func FfiConverterTypeMnemonic_lift(_ pointer: UnsafeMutableRawPointer) th
 public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UnsafeMutableRawPointer {
     return FfiConverterTypeMnemonic.lower(value)
 }
+
+
 
 
 
@@ -6131,7 +6131,7 @@ public static func newFromString(qr: String) -> MultiQr  {
 }
     
 public static func tryNew(qr: StringOrData)throws  -> MultiQr  {
-    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_constructor_multiqr_try_new(
         FfiConverterTypeStringOrData_lower(qr),$0
     )
@@ -6139,7 +6139,7 @@ public static func tryNew(qr: StringOrData)throws  -> MultiQr  {
 }
     
 public static func tryNewFromData(data: Data)throws  -> MultiQr  {
-    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterTypeMultiQr_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_constructor_multiqr_try_new_from_data(
         FfiConverterData.lower(data),$0
     )
@@ -6149,7 +6149,7 @@ public static func tryNewFromData(data: Data)throws  -> MultiQr  {
 
     
 open func addPart(qr: String)throws  -> BbqrJoinResult  {
-    return try  FfiConverterTypeBbqrJoinResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterTypeBbqrJoinResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_method_multiqr_add_part(self.uniffiClonePointer(),
         FfiConverterString.lower(qr),$0
     )
@@ -6157,7 +6157,7 @@ open func addPart(qr: String)throws  -> BbqrJoinResult  {
 }
     
 open func getGroupedWords(qr: StringOrData, groupsOf: UInt8)throws  -> [[String]]?  {
-    return try  FfiConverterOptionSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterOptionSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_method_multiqr_get_grouped_words(self.uniffiClonePointer(),
         FfiConverterTypeStringOrData_lower(qr),
         FfiConverterUInt8.lower(groupsOf),$0
@@ -6166,7 +6166,7 @@ open func getGroupedWords(qr: StringOrData, groupsOf: UInt8)throws  -> [[String]
 }
     
 open func handleScanResult(qr: StringOrData)throws  -> MultiQrScanResult  {
-    return try  FfiConverterTypeMultiQrScanResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError.lift) {
+    return try  FfiConverterTypeMultiQrScanResult_lift(try rustCallWithError(FfiConverterTypeMultiQrError_lift) {
     uniffi_cove_fn_method_multiqr_handle_scan_result(self.uniffiClonePointer(),
         FfiConverterTypeStringOrData_lower(qr),$0
     )
@@ -6232,8 +6232,6 @@ public struct FfiConverterTypeMultiQr: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6247,6 +6245,8 @@ public func FfiConverterTypeMultiQr_lift(_ pointer: UnsafeMutableRawPointer) thr
 public func FfiConverterTypeMultiQr_lower(_ value: MultiQr) -> UnsafeMutableRawPointer {
     return FfiConverterTypeMultiQr.lower(value)
 }
+
+
 
 
 
@@ -6370,8 +6370,6 @@ public struct FfiConverterTypeNdefRecordReader: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6385,6 +6383,8 @@ public func FfiConverterTypeNdefRecordReader_lift(_ pointer: UnsafeMutableRawPoi
 public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) -> UnsafeMutableRawPointer {
     return FfiConverterTypeNdefRecordReader.lower(value)
 }
+
+
 
 
 
@@ -6516,8 +6516,6 @@ public struct FfiConverterTypeNfcConst: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6531,6 +6529,8 @@ public func FfiConverterTypeNfcConst_lift(_ pointer: UnsafeMutableRawPointer) th
 public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
     return FfiConverterTypeNfcConst.lower(value)
 }
+
+
 
 
 
@@ -6663,7 +6663,7 @@ open func nodeList() -> [NodeSelection]  {
      * Use the url and name of the custom node to set it as the selected node
      */
 open func parseCustomNode(url: String, name: String, enteredName: String)throws  -> Node  {
-    return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError.lift) {
+    return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError_lift) {
     uniffi_cove_fn_method_nodeselector_parse_custom_node(self.uniffiClonePointer(),
         FfiConverterString.lower(url),
         FfiConverterString.lower(name),
@@ -6673,7 +6673,7 @@ open func parseCustomNode(url: String, name: String, enteredName: String)throws 
 }
     
 open func selectPresetNode(name: String)throws  -> Node  {
-    return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError.lift) {
+    return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError_lift) {
     uniffi_cove_fn_method_nodeselector_select_preset_node(self.uniffiClonePointer(),
         FfiConverterString.lower(name),$0
     )
@@ -6725,8 +6725,6 @@ public struct FfiConverterTypeNodeSelector: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6740,6 +6738,8 @@ public func FfiConverterTypeNodeSelector_lift(_ pointer: UnsafeMutableRawPointer
 public func FfiConverterTypeNodeSelector_lower(_ value: NodeSelector) -> UnsafeMutableRawPointer {
     return FfiConverterTypeNodeSelector.lower(value)
 }
+
+
 
 
 
@@ -6837,8 +6837,6 @@ public struct FfiConverterTypeOutPoint: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6852,6 +6850,8 @@ public func FfiConverterTypeOutPoint_lift(_ pointer: UnsafeMutableRawPointer) th
 public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UnsafeMutableRawPointer {
     return FfiConverterTypeOutPoint.lower(value)
 }
+
+
 
 
 
@@ -6949,8 +6949,6 @@ public struct FfiConverterTypePendingWallet: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6964,6 +6962,8 @@ public func FfiConverterTypePendingWallet_lift(_ pointer: UnsafeMutableRawPointe
 public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> UnsafeMutableRawPointer {
     return FfiConverterTypePendingWallet.lower(value)
 }
+
+
 
 
 
@@ -7027,7 +7027,7 @@ open class Psbt:
     }
 public convenience init(data: Data)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypePsbtError.lift) {
+        try rustCallWithError(FfiConverterTypePsbtError_lift) {
     uniffi_cove_fn_constructor_psbt_new(
         FfiConverterData.lower(data),$0
     )
@@ -7050,7 +7050,7 @@ public convenience init(data: Data)throws  {
      * Total fee in sats.
      */
 open func fee()throws  -> Amount  {
-    return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError.lift) {
+    return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
     uniffi_cove_fn_method_psbt_fee(self.uniffiClonePointer(),$0
     )
 })
@@ -7114,8 +7114,6 @@ public struct FfiConverterTypePsbt: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7129,6 +7127,8 @@ public func FfiConverterTypePsbt_lift(_ pointer: UnsafeMutableRawPointer) throws
 public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UnsafeMutableRawPointer {
     return FfiConverterTypePsbt.lower(value)
 }
+
+
 
 
 
@@ -7386,8 +7386,6 @@ public struct FfiConverterTypeRouteFactory: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7401,6 +7399,8 @@ public func FfiConverterTypeRouteFactory_lift(_ pointer: UnsafeMutableRawPointer
 public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRouteFactory.lower(value)
 }
+
+
 
 
 
@@ -7577,7 +7577,7 @@ open func setAuthType(authType: AuthType)  {try! rustCall() {
     /**
      * Set the wipe data pin
      */
-open func setWipeDataPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError.lift) {
+open func setWipeDataPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
     uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(self.uniffiClonePointer(),
         FfiConverterString.lower(pin),$0
     )
@@ -7622,8 +7622,6 @@ public struct FfiConverterTypeRustAuthManager: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7637,6 +7635,8 @@ public func FfiConverterTypeRustAuthManager_lift(_ pointer: UnsafeMutableRawPoin
 public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRustAuthManager.lower(value)
 }
+
+
 
 
 
@@ -7729,7 +7729,7 @@ open func dispatch(action: ImportWalletManagerAction)  {try! rustCall() {
      * Import wallet view from entered words
      */
 open func importWallet(enteredWords: [[String]])throws  -> WalletMetadata  {
-    return try  FfiConverterTypeWalletMetadata_lift(try rustCallWithError(FfiConverterTypeImportWalletError.lift) {
+    return try  FfiConverterTypeWalletMetadata_lift(try rustCallWithError(FfiConverterTypeImportWalletError_lift) {
     uniffi_cove_fn_method_rustimportwalletmanager_import_wallet(self.uniffiClonePointer(),
         FfiConverterSequenceSequenceString.lower(enteredWords),$0
     )
@@ -7781,8 +7781,6 @@ public struct FfiConverterTypeRustImportWalletManager: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7796,6 +7794,8 @@ public func FfiConverterTypeRustImportWalletManager_lift(_ pointer: UnsafeMutabl
 public func FfiConverterTypeRustImportWalletManager_lower(_ value: RustImportWalletManager) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRustImportWalletManager.lower(value)
 }
+
+
 
 
 
@@ -7935,7 +7935,7 @@ open func numberOfWordsCount() -> UInt8  {
 }
     
 open func saveWallet()throws  -> WalletMetadata  {
-    return try  FfiConverterTypeWalletMetadata_lift(try rustCallWithError(FfiConverterTypePendingWalletManagerError.lift) {
+    return try  FfiConverterTypeWalletMetadata_lift(try rustCallWithError(FfiConverterTypePendingWalletManagerError_lift) {
     uniffi_cove_fn_method_rustpendingwalletmanager_save_wallet(self.uniffiClonePointer(),$0
     )
 })
@@ -7979,8 +7979,6 @@ public struct FfiConverterTypeRustPendingWalletManager: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7994,6 +7992,8 @@ public func FfiConverterTypeRustPendingWalletManager_lift(_ pointer: UnsafeMutab
 public func FfiConverterTypeRustPendingWalletManager_lower(_ value: RustPendingWalletManager) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRustPendingWalletManager.lower(value)
 }
+
+
 
 
 
@@ -8127,7 +8127,7 @@ open class RustWalletManager:
     }
 public convenience init(id: WalletId)throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+        try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_constructor_rustwalletmanager_new(
         FfiConverterTypeWalletId_lower(id),$0
     )
@@ -8152,7 +8152,7 @@ public static func previewNewWallet() -> RustWalletManager  {
 }
     
 public static func tryNewFromXpub(xpub: String)throws  -> RustWalletManager  {
-    return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+    return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(
         FfiConverterString.lower(xpub),$0
     )
@@ -8284,14 +8284,14 @@ open func currentBlockHeight()async throws  -> UInt32  {
         )
 }
     
-open func deleteUnsignedTransaction(txId: TxId)throws   {try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+open func deleteUnsignedTransaction(txId: TxId)throws   {try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction(self.uniffiClonePointer(),
         FfiConverterTypeTxId_lower(txId),$0
     )
 }
 }
     
-open func deleteWallet()throws   {try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+open func deleteWallet()throws   {try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_delete_wallet(self.uniffiClonePointer(),$0
     )
 }
@@ -8465,7 +8465,7 @@ open func getMaxSendAmount(fee: FeeRateOptionWithTotalFee)async throws  -> Amoun
 }
     
 open func getUnsignedTransactions()throws  -> [UnsignedTransaction]  {
-    return try  FfiConverterSequenceTypeUnsignedTransaction.lift(try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+    return try  FfiConverterSequenceTypeUnsignedTransaction.lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(self.uniffiClonePointer(),$0
     )
 })
@@ -8478,7 +8478,7 @@ open func listenForUpdates(reconciler: WalletManagerReconciler)  {try! rustCall(
 }
 }
     
-open func markWalletAsVerified()throws   {try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+open func markWalletAsVerified()throws   {try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(self.uniffiClonePointer(),$0
     )
 }
@@ -8538,7 +8538,7 @@ open func numberOfConfirmationsFmt(blockHeight: UInt32)async throws  -> String  
         )
 }
     
-open func saveUnsignedTransaction(details: ConfirmDetails)throws   {try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+open func saveUnsignedTransaction(details: ConfirmDetails)throws   {try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(self.uniffiClonePointer(),
         FfiConverterTypeConfirmDetails_lower(details),$0
     )
@@ -8651,7 +8651,7 @@ open func walletMetadata() -> WalletMetadata  {
 }
     
 open func wordValidator()throws  -> WordValidator  {
-    return try  FfiConverterTypeWordValidator_lift(try rustCallWithError(FfiConverterTypeWalletManagerError.lift) {
+    return try  FfiConverterTypeWordValidator_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_word_validator(self.uniffiClonePointer(),$0
     )
 })
@@ -8695,8 +8695,6 @@ public struct FfiConverterTypeRustWalletManager: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -8710,6 +8708,8 @@ public func FfiConverterTypeRustWalletManager_lift(_ pointer: UnsafeMutableRawPo
 public func FfiConverterTypeRustWalletManager_lower(_ value: RustWalletManager) -> UnsafeMutableRawPointer {
     return FfiConverterTypeRustWalletManager.lower(value)
 }
+
+
 
 
 
@@ -8772,7 +8772,7 @@ open class SeedQr:
 
     
 public static func newFromData(data: Data)throws  -> SeedQr  {
-    return try  FfiConverterTypeSeedQr_lift(try rustCallWithError(FfiConverterTypeSeedQrError.lift) {
+    return try  FfiConverterTypeSeedQr_lift(try rustCallWithError(FfiConverterTypeSeedQrError_lift) {
     uniffi_cove_fn_constructor_seedqr_new_from_data(
         FfiConverterData.lower(data),$0
     )
@@ -8780,7 +8780,7 @@ public static func newFromData(data: Data)throws  -> SeedQr  {
 }
     
 public static func newFromStr(qr: String)throws  -> SeedQr  {
-    return try  FfiConverterTypeSeedQr_lift(try rustCallWithError(FfiConverterTypeSeedQrError.lift) {
+    return try  FfiConverterTypeSeedQr_lift(try rustCallWithError(FfiConverterTypeSeedQrError_lift) {
     uniffi_cove_fn_constructor_seedqr_new_from_str(
         FfiConverterString.lower(qr),$0
     )
@@ -8841,8 +8841,6 @@ public struct FfiConverterTypeSeedQr: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -8860,6 +8858,8 @@ public func FfiConverterTypeSeedQr_lower(_ value: SeedQr) -> UnsafeMutableRawPoi
 
 
 
+
+
 public protocol SentAndReceivedProtocol : AnyObject {
     
     func amount()  -> Amount
@@ -8867,6 +8867,8 @@ public protocol SentAndReceivedProtocol : AnyObject {
     func amountFmt(unit: Unit)  -> String
     
     func direction()  -> TransactionDirection
+    
+    func externalSent()  -> Amount
     
     func label()  -> String
     
@@ -8949,6 +8951,13 @@ open func direction() -> TransactionDirection  {
 })
 }
     
+open func externalSent() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_sentandreceived_external_sent(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func label() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_sentandreceived_label(self.uniffiClonePointer(),$0
@@ -9008,8 +9017,6 @@ public struct FfiConverterTypeSentAndReceived: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9023,6 +9030,8 @@ public func FfiConverterTypeSentAndReceived_lift(_ pointer: UnsafeMutableRawPoin
 public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> UnsafeMutableRawPointer {
     return FfiConverterTypeSentAndReceived.lower(value)
 }
+
+
 
 
 
@@ -9351,8 +9360,6 @@ public struct FfiConverterTypeTransactionDetails: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9366,6 +9373,8 @@ public func FfiConverterTypeTransactionDetails_lift(_ pointer: UnsafeMutableRawP
 public func FfiConverterTypeTransactionDetails_lower(_ value: TransactionDetails) -> UnsafeMutableRawPointer {
     return FfiConverterTypeTransactionDetails.lower(value)
 }
+
+
 
 
 
@@ -9482,8 +9491,6 @@ public struct FfiConverterTypeTxId: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9497,6 +9504,8 @@ public func FfiConverterTypeTxId_lift(_ pointer: UnsafeMutableRawPointer) throws
 public func FfiConverterTypeTxId_lower(_ value: TxId) -> UnsafeMutableRawPointer {
     return FfiConverterTypeTxId.lower(value)
 }
+
+
 
 
 
@@ -9594,8 +9603,6 @@ public struct FfiConverterTypeTxIn: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9609,6 +9616,8 @@ public func FfiConverterTypeTxIn_lift(_ pointer: UnsafeMutableRawPointer) throws
 public func FfiConverterTypeTxIn_lower(_ value: TxIn) -> UnsafeMutableRawPointer {
     return FfiConverterTypeTxIn.lower(value)
 }
+
+
 
 
 
@@ -9706,8 +9715,6 @@ public struct FfiConverterTypeTxOut: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9721,6 +9728,8 @@ public func FfiConverterTypeTxOut_lift(_ pointer: UnsafeMutableRawPointer) throw
 public func FfiConverterTypeTxOut_lower(_ value: TxOut) -> UnsafeMutableRawPointer {
     return FfiConverterTypeTxOut.lower(value)
 }
+
+
 
 
 
@@ -9863,8 +9872,6 @@ public struct FfiConverterTypeUnconfirmedTransaction: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9878,6 +9885,8 @@ public func FfiConverterTypeUnconfirmedTransaction_lift(_ pointer: UnsafeMutable
 public func FfiConverterTypeUnconfirmedTransaction_lower(_ value: UnconfirmedTransaction) -> UnsafeMutableRawPointer {
     return FfiConverterTypeUnconfirmedTransaction.lower(value)
 }
+
+
 
 
 
@@ -10027,8 +10036,6 @@ public struct FfiConverterTypeUnsignedTransaction: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10042,6 +10049,8 @@ public func FfiConverterTypeUnsignedTransaction_lift(_ pointer: UnsafeMutableRaw
 public func FfiConverterTypeUnsignedTransaction_lower(_ value: UnsignedTransaction) -> UnsafeMutableRawPointer {
     return FfiConverterTypeUnsignedTransaction.lower(value)
 }
+
+
 
 
 
@@ -10175,8 +10184,6 @@ public struct FfiConverterTypeUnsignedTransactionRecord: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10190,6 +10197,8 @@ public func FfiConverterTypeUnsignedTransactionRecord_lift(_ pointer: UnsafeMuta
 public func FfiConverterTypeUnsignedTransactionRecord_lower(_ value: UnsignedTransactionRecord) -> UnsafeMutableRawPointer {
     return FfiConverterTypeUnsignedTransactionRecord.lower(value)
 }
+
+
 
 
 
@@ -10262,7 +10271,7 @@ open func getTx(txId: TxId) -> UnsignedTransactionRecord?  {
 }
     
 open func getTxThrow(txId: TxId)throws  -> UnsignedTransactionRecord  {
-    return try  FfiConverterTypeUnsignedTransactionRecord_lift(try rustCallWithError(FfiConverterTypeUnsignedTransactionsTableError.lift) {
+    return try  FfiConverterTypeUnsignedTransactionRecord_lift(try rustCallWithError(FfiConverterTypeUnsignedTransactionsTableError_lift) {
     uniffi_cove_fn_method_unsignedtransactionstable_gettxthrow(self.uniffiClonePointer(),
         FfiConverterTypeTxId_lower(txId),$0
     )
@@ -10307,8 +10316,6 @@ public struct FfiConverterTypeUnsignedTransactionsTable: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10322,6 +10329,8 @@ public func FfiConverterTypeUnsignedTransactionsTable_lift(_ pointer: UnsafeMuta
 public func FfiConverterTypeUnsignedTransactionsTable_lower(_ value: UnsignedTransactionsTable) -> UnsafeMutableRawPointer {
     return FfiConverterTypeUnsignedTransactionsTable.lower(value)
 }
+
+
 
 
 
@@ -10382,7 +10391,7 @@ open class Wallet:
 
     
 public static func newFromExport(export: HardwareExport)throws  -> Wallet  {
-    return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeWalletError.lift) {
+    return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeWalletError_lift) {
     uniffi_cove_fn_constructor_wallet_new_from_export(
         FfiConverterTypeHardwareExport_lower(export),$0
     )
@@ -10390,7 +10399,7 @@ public static func newFromExport(export: HardwareExport)throws  -> Wallet  {
 }
     
 public static func newFromXpub(xpub: String)throws  -> Wallet  {
-    return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeWalletError.lift) {
+    return try  FfiConverterTypeWallet_lift(try rustCallWithError(FfiConverterTypeWalletError_lift) {
     uniffi_cove_fn_constructor_wallet_new_from_xpub(
         FfiConverterString.lower(xpub),$0
     )
@@ -10451,8 +10460,6 @@ public struct FfiConverterTypeWallet: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10466,6 +10473,8 @@ public func FfiConverterTypeWallet_lift(_ pointer: UnsafeMutableRawPointer) thro
 public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPointer {
     return FfiConverterTypeWallet.lower(value)
 }
+
+
 
 
 
@@ -10563,8 +10572,6 @@ public struct FfiConverterTypeWalletDataDb: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10578,6 +10585,8 @@ public func FfiConverterTypeWalletDataDb_lift(_ pointer: UnsafeMutableRawPointer
 public func FfiConverterTypeWalletDataDb_lower(_ value: WalletDataDb) -> UnsafeMutableRawPointer {
     return FfiConverterTypeWalletDataDb.lower(value)
 }
+
+
 
 
 
@@ -10675,8 +10684,6 @@ public struct FfiConverterTypeWalletKey: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10690,6 +10697,8 @@ public func FfiConverterTypeWalletKey_lift(_ pointer: UnsafeMutableRawPointer) t
 public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UnsafeMutableRawPointer {
     return FfiConverterTypeWalletKey.lower(value)
 }
+
+
 
 
 
@@ -10756,21 +10765,21 @@ open class WalletsTable:
 
     
 open func all()throws  -> [WalletMetadata]  {
-    return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_all(self.uniffiClonePointer(),$0
     )
 })
 }
     
 open func isEmpty()throws  -> Bool  {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_is_empty(self.uniffiClonePointer(),$0
     )
 })
 }
     
 open func len(network: Network)throws  -> UInt16  {
-    return try  FfiConverterUInt16.lift(try rustCallWithError(FfiConverterTypeDatabaseError.lift) {
+    return try  FfiConverterUInt16.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_len(self.uniffiClonePointer(),
         FfiConverterTypeNetwork_lower(network),$0
     )
@@ -10815,8 +10824,6 @@ public struct FfiConverterTypeWalletsTable: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10830,6 +10837,8 @@ public func FfiConverterTypeWalletsTable_lift(_ pointer: UnsafeMutableRawPointer
 public func FfiConverterTypeWalletsTable_lower(_ value: WalletsTable) -> UnsafeMutableRawPointer {
     return FfiConverterTypeWalletsTable.lower(value)
 }
+
+
 
 
 
@@ -10967,8 +10976,6 @@ public struct FfiConverterTypeWordValidator: FfiConverter {
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10982,6 +10989,8 @@ public func FfiConverterTypeWordValidator_lift(_ pointer: UnsafeMutableRawPointe
 public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> UnsafeMutableRawPointer {
     return FfiConverterTypeWordValidator.lower(value)
 }
+
+
 
 
 public struct AddressIndex {
@@ -22920,13 +22929,13 @@ public func addressIsEqual(lhs: Address, rhs: Address) -> Bool  {
     )
 })
 }
-public func addressIsValid(address: String)throws   {try rustCallWithError(FfiConverterTypeAddressError.lift) {
+public func addressIsValid(address: String)throws   {try rustCallWithError(FfiConverterTypeAddressError_lift) {
     uniffi_cove_fn_func_address_is_valid(
         FfiConverterString.lower(address),$0
     )
 }
 }
-public func addressIsValidForNetwork(address: String, network: Network)throws   {try rustCallWithError(FfiConverterTypeAddressError.lift) {
+public func addressIsValidForNetwork(address: String, network: Network)throws   {try rustCallWithError(FfiConverterTypeAddressError_lift) {
     uniffi_cove_fn_func_address_is_valid_for_network(
         FfiConverterString.lower(address),
         FfiConverterTypeNetwork_lower(network),$0
@@ -23020,7 +23029,7 @@ public func fiatAmountPreviewNew() -> FiatAmount  {
 })
 }
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[String]]  {
-    return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError.lift) {
+    return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError_lift) {
     uniffi_cove_fn_func_grouped_plain_words_of(
         FfiConverterString.lower(mnemonic),
         FfiConverterUInt8.lower(groups),$0
@@ -23084,7 +23093,7 @@ public func previewNewWrappedFoundAddress() -> FoundAddress  {
 })
 }
 public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  -> MultiFormat  {
-    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError.lift) {
+    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
     uniffi_cove_fn_func_string_or_data_try_into_multi_format(
         FfiConverterTypeStringOrData_lower(stringOrData),$0
     )
@@ -23970,6 +23979,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_sentandreceived_direction() != 63307) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_sentandreceived_external_sent() != 36818) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_sentandreceived_label() != 28947) {
