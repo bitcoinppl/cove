@@ -17,7 +17,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     // general wallet errors
     var errorAlert: WalletErrorAlert? = nil
 
-    // errors in SendFlow, could extract out to its own presenter later
+    // errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
     public init(id: WalletId) throws {

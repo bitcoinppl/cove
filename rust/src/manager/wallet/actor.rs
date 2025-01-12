@@ -72,15 +72,15 @@ impl Actor for WalletActor {
                 ));
             }
 
-            Error::SignAndBroadcastError(error_string) => {
+            Error::SignAndBroadcastError(_) => {
                 self.send(WalletManagerReconcileMessage::SendFlowError(
-                    SendFlowErrorAlert::SignAndBroadcast(error_string),
+                    SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
                 ));
             }
 
-            Error::GetConfirmDetailsError(error_string) => {
+            Error::GetConfirmDetailsError(_) => {
                 self.send(WalletManagerReconcileMessage::SendFlowError(
-                    SendFlowErrorAlert::ConfirmDetails(error_string),
+                    SendFlowErrorAlert::ConfirmDetails(error.to_string()),
                 ));
             }
 
@@ -165,11 +165,6 @@ impl WalletActor {
             ));
         }
 
-        // TODO: remove after testing
-        if external_outputs.is_empty() {
-            return Err(error("no external outputs found"));
-        };
-
         // if there is an external output, use that
         // otherwise this is a consolidation txn, sending to the same wallet so use the first output
         let output = external_outputs
@@ -227,7 +222,7 @@ impl WalletActor {
             .map_err(|_| err("unable to sign"))?;
 
         if !finalized {
-            return Err(err("transaction not finalized, unable to sign").into());
+            return Err(err("transaction not finalized, unable to sign"));
         }
 
         let transaction = psbt

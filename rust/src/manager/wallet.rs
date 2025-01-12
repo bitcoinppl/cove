@@ -172,10 +172,10 @@ pub enum WalletManagerError {
     #[error("insufficient funds: {0}")]
     InsufficientFunds(String),
 
-    #[error("unable to get confirm details: {0}")]
+    #[error("Unable to get confirm details, {0}")]
     GetConfirmDetailsError(String),
 
-    #[error("{0}")]
+    #[error("Unable to sign and broadcast transaction, {0}")]
     SignAndBroadcastError(String),
 }
 

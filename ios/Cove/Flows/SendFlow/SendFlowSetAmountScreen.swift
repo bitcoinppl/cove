@@ -186,8 +186,8 @@ struct SendFlowSetAmountScreen: View {
 
                 app.pushRoute(route)
             } catch {
+                // error alert is displayed at the top level container, but we can log it here
                 Log.error("unable to get confirm details: \(error)")
-                setAlertState(.unableToBuildTxn(error.localizedDescription))
             }
         }
     }
