@@ -200,6 +200,11 @@ impl WalletActor {
             Error::SignAndBroadcastError(s.to_string()).into()
         }
 
+        // TODO: temporary, remove to allow sending on mainnet
+        if self.wallet.network == crate::network::Network::Bitcoin {
+            return Err(err("sending on mainnet not supported yet"));
+        }
+
         let network = self.wallet.network;
         let mnemonic = Mnemonic::try_from_id(&self.wallet.metadata.id)
             .tap_err(|error| error!("failed to get mnemonic for wallet: {error}"))
