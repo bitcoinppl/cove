@@ -72,7 +72,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-log = "0.2"
 
 # dirs
-dirs = "5.0.1"
+dirs = "6.0"
 
 # database
 redb = "2.1"
@@ -83,6 +83,8 @@ nid = "3.0"
 # derive stuff
 derive_more = { version = "1.0", features = [
     "display",
+    "add",
+    "mul",
     "from",
     "into",
     "as_ref",
@@ -94,7 +96,7 @@ strum = { version = "0.26", features = ["derive"] }
 
 # helpers / utils / exts
 tap = "1.0.1"
-itertools = "0.13"
+itertools = "0.14"
 
 # time 
 jiff = { version = "0.1", features = [] }
