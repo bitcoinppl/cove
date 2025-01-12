@@ -167,14 +167,8 @@ pub enum WalletManagerError {
     #[error("unable to get confirm details: {0}")]
     GetConfirmDetailsError(String),
 
-    #[error("failed to get mnemonic for wallet: {0}")]
-    GetMnemonicError(String),
-
-    #[error("failed to sign transaction")]
-    SignTransactionError(String),
-
-    #[error("failed to broadcast transaction")]
-    BroadcastTransactionError(String),
+    #[error("{0}")]
+    SignAndBroadcastError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -315,6 +309,11 @@ impl RustWalletManager {
     pub async fn sign_and_broadcast_transaction(&self, psbt: Arc<Psbt>) -> Result<(), Error> {
         let psbt = Arc::unwrap_or_clone(psbt);
         send!(self.actor.sign_and_broadcast_transaction(psbt.into()));
+
+        // TODO:
+        // 1. make new error for broadcast and sign error types
+        // 2. listen to these messages on confirm screen and show error alert
+        // 3. make "transaction broadcasted" message and handle that in case of success
 
         Ok(())
     }
@@ -770,7 +769,9 @@ impl RustWalletManager {
         let fee_rate: FeeRate = Arc::unwrap_or_clone(fee_rate);
         let details = call!(self.actor.get_confirm_details(psbt.into(), fee_rate.into()))
             .await
-            .map_err(|error| Error::GetConfirmDetailsError(error.to_string()))?;
+            .map_err(|_| {
+                Error::GetConfirmDetailsError("failed to get confirm details".to_string())
+            })?;
 
         Ok(details)
     }

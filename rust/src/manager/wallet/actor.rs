@@ -20,6 +20,7 @@ use bitcoin_units::Amount;
 use crossbeam::channel::Sender;
 use eyre::{Context as _, OptionExt};
 use std::time::{Duration, UNIX_EPOCH};
+use tap::TapFallible as _;
 use tracing::{debug, error, info};
 
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
@@ -188,9 +189,14 @@ impl WalletActor {
     }
 
     pub async fn sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> ActorResult<()> {
+        fn err(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            Error::SignAndBroadcastError(s.to_string()).into()
+        }
+
         let network = self.wallet.network;
         let mnemonic = Mnemonic::try_from_id(&self.wallet.metadata.id)
-            .map_err(|error| Error::GetMnemonicError(error.to_string()))?;
+            .tap_err(|error| error!("failed to get mnemonic for wallet: {error}"))
+            .map_err(|_| err("failed to get mnemonic for wallet"))?;
 
         let descriptors =
             mnemonic.into_descriptors(None, network, self.wallet.metadata.address_type);
@@ -200,28 +206,29 @@ impl WalletActor {
         // create a new temp wallet with the descriptors
         let wallet = create_params
             .create_wallet_no_persist()
-            .map_err(|error| Error::SignTransactionError(error.to_string()))?;
+            .tap_err(|error| error!("failed to create wallet: {error}"))
+            .map_err(|_| err("unable to sign"))?;
 
         let finalized = wallet
             .sign(&mut psbt, Default::default())
-            .map_err(|error| Error::SignTransactionError(error.to_string()))?;
+            .tap_err(|error| error!("failed to sign: {error}"))
+            .map_err(|_| err("unable to sign"))?;
 
         if !finalized {
-            return Err(
-                Error::SignTransactionError("transaction not finalized!".to_string()).into(),
-            );
+            return Err(err("transaction not finalized, unable to sign").into());
         }
 
         let transaction = psbt
             .extract_tx()
-            .wrap_err("failed to extract transaction")?;
+            .tap_err(|error| error!("failed to extract transaction: {error}"))
+            .map_err(|_| err("failed to extract transaction"))?;
 
         self.node_client
             .as_ref()
             .ok_or_eyre("node client not set")?
             .broadcast_transaction(transaction)
             .await
-            .map_err(|error| Error::BroadcastTransactionError(error.to_string()))?;
+            .map_err(|_error| err("failed to broadcast transaction, try again"))?;
 
         Produces::ok(())
     }
