@@ -7,27 +7,35 @@
 import Foundation
 import SwiftUI
 
+enum SendState: Hashable, Equatable {
+    case idle
+    case sending
+    case sent
+    case error
+}
+
 struct SwipeToSendView: View {
     @Environment(\.colorScheme) var colorScheme
 
     // args
+    @Binding var sendState: SendState
     let onConfirm: () -> Void
 
     // private
-    @State private var offset: CGFloat = 0
-    @State private var isDragging = false
-    @State private var containerWidth = screenWidth
+    @State var offset: CGFloat = 0
+    @State var isDragging = false
+    @State var containerWidth = screenWidth
 
     var maxOffset: CGFloat {
         containerWidth - 70
     }
 
-    private var height: CGFloat = 70
-    private var circleSize: CGFloat {
+    var height: CGFloat = 70
+    var circleSize: CGFloat {
         height
     }
 
-    private var fontOpacity: Double {
+    var fontOpacity: Double {
         let percentDragged = offset / maxOffset
 
         if percentDragged == 0 {
@@ -37,8 +45,9 @@ struct SwipeToSendView: View {
         return 1.0 - percentDragged - 0.07
     }
 
-    init(onConfirm: @escaping () -> Void) {
-        self.onConfirm = onConfirm
+    func onChangeSendState(_ _old: SendState, _ state: SendState) {
+        // set to full
+        if state != .idle { offset = maxOffset }
     }
 
     var body: some View {
@@ -73,9 +82,13 @@ struct SwipeToSendView: View {
                 .fill(Color.midnightBtn)
                 .frame(width: circleSize, height: circleSize)
                 .overlay(
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 20))
-                        .foregroundColor(.white)
+                    Group {
+                        if sendState == .idle {
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                        }
+                    }
                 )
                 .offset(x: -containerWidth / 2 + 35 + offset)
                 .gesture(
@@ -100,8 +113,30 @@ struct SwipeToSendView: View {
                             }
                         }
                 )
+
+            // Text overlay when sending/sent/error
+            Group {
+                switch sendState {
+                case .idle: EmptyView()
+                case .sending: HStack(spacing: 16) {
+                        Text("sending")
+                        ThreeDotsAnimation()
+                    }
+                case .sent: HStack(spacing: 12) {
+                        Text("SENT")
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.green)
+                    }
+                case .error: HStack(spacing: 10) {
+                        Text("ERROR")
+                        Image(systemName: "xmark")
+                            .foregroundColor(.red)
+                    }
+                }
+            }.foregroundStyle(.white)
         }
         .frame(height: height)
+        .onChange(of: sendState, initial: true, onChangeSendState)
         .onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .global)
         } action: { frame in
@@ -110,9 +145,38 @@ struct SwipeToSendView: View {
     }
 }
 
-#Preview {
-    VStack {
-        SwipeToSendView(onConfirm: { print("CONFIRMED") })
+#Preview("idle") {
+    SwipeToSendView(
+        sendState: Binding.constant(.idle),
+        onConfirm: { print("CONFIRMED") }
+    )
+}
+
+#Preview("sending") {
+    SwipeToSendView(
+        sendState: Binding.constant(.sending),
+        onConfirm: { print("CONFIRMED") }
+    )
+}
+
+#Preview("sent") {
+    SwipeToSendView(
+        sendState: Binding.constant(.sent),
+        onConfirm: { print("CONFIRMED") }
+    )
+}
+
+#Preview("error") {
+    struct Container: View {
+        @State var sendState: SendState = .error
+
+        var body: some View {
+            SwipeToSendView(
+                sendState: $sendState,
+                onConfirm: { print("CONFIRMED") }
+            )
+        }
     }
-    .padding(12)
+
+    return Container()
 }

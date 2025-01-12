@@ -17,6 +17,9 @@ struct SendFlowConfirmScreen: View {
     let details: ConfirmDetails
     let prices: PriceResponse? = nil
 
+    // private
+    @State private var sendState: SendState = .idle
+
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
             app.dispatch(action: .updateFiatPrices)
@@ -124,11 +127,17 @@ struct SendFlowConfirmScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
 
-            SwipeToSendView(onConfirm: {
+            SwipeToSendView(sendState: $sendState) {
+                sendState = .sending
                 Task {
-                    try? await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
+                    do {
+                        _ = try await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
+                        sendState = .sent
+                    } catch {
+                        sendState = .error
+                    }
                 }
-            })
+            }
             .padding(.horizontal)
             .padding(.bottom, 6)
             .padding(.top, 20)
