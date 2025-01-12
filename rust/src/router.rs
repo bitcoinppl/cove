@@ -4,7 +4,7 @@ use crate::{
     app::FfiApp,
     database::Database,
     mnemonic::NumberOfBip39Words,
-    transaction::{Amount, TransactionDetails},
+    transaction::{ffi::BitcoinTransaction, Amount, TransactionDetails},
     wallet::{confirm::ConfirmDetails, metadata::WalletId, Address},
 };
 
@@ -74,6 +74,7 @@ pub enum SendRoute {
     Confirm {
         id: WalletId,
         details: Arc<ConfirmDetails>,
+        signed_transaction: Option<Arc<BitcoinTransaction>>,
     },
 }
 
@@ -265,8 +266,19 @@ impl RouteFactory {
         Route::Send(send)
     }
 
-    pub fn send_confirm(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
-        let send = SendRoute::Confirm { id, details };
+    #[uniffi::method(default(signed_transaction = None))]
+    pub fn send_confirm(
+        &self,
+        id: WalletId,
+        details: Arc<ConfirmDetails>,
+        signed_transaction: Option<Arc<BitcoinTransaction>>,
+    ) -> Route {
+        let send = SendRoute::Confirm {
+            id,
+            details,
+            signed_transaction,
+        };
+
         Route::Send(send)
     }
 

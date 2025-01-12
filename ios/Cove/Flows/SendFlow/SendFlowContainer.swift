@@ -34,19 +34,28 @@ public struct SendFlowContainer: View {
         }
     }
 
+    @ViewBuilder
+    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager, presenter: SendFlowSetAmountPresenter) -> some View {
+        switch sendRoute {
+        case let .setAmount(id: id, address: address, amount: amount):
+            SendFlowSetAmountScreen(
+                id: id, manager: manager, address: address?.string() ?? "", amount: amount
+            )
+        case let .confirm(id: id, details: details, signedTransaction: signedTransaction):
+            SendFlowConfirmScreen(
+                id: id, manager: manager,
+                details: details,
+                signedTransaction: signedTransaction
+            )
+        case let .hardwareExport(id: id, details: details):
+            SendFlowHardwareScreen(id: id, manager: manager, details: details)
+        }
+    }
+
     public var body: some View {
         if let manager, let presenter {
             Group {
-                switch sendRoute {
-                case let .setAmount(id: id, address: address, amount: amount):
-                    SendFlowSetAmountScreen(
-                        id: id, manager: manager, address: address?.string() ?? "", amount: amount
-                    )
-                case let .confirm(id: id, details: details):
-                    SendFlowConfirmScreen(id: id, manager: manager, details: details)
-                case let .hardwareExport(id: id, details: details):
-                    SendFlowHardwareScreen(id: id, manager: manager, details: details)
-                }
+                sendRouteToScreen(sendRoute: sendRoute, manager: manager, presenter: presenter)
             }
             .environment(manager)
             .environment(presenter)

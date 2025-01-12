@@ -7296,7 +7296,7 @@ public protocol RouteFactoryProtocol : AnyObject {
     
     func send(send: SendRoute)  -> Route
     
-    func sendConfirm(id: WalletId, details: ConfirmDetails)  -> Route
+    func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?)  -> Route
     
     func sendHardwareExport(id: WalletId, details: ConfirmDetails)  -> Route
     
@@ -7457,11 +7457,12 @@ open func send(send: SendRoute) -> Route  {
 })
 }
     
-open func sendConfirm(id: WalletId, details: ConfirmDetails) -> Route  {
+open func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction? = nil) -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
     uniffi_cove_fn_method_routefactory_send_confirm(self.uniffiClonePointer(),
         FfiConverterTypeWalletId_lower(id),
-        FfiConverterTypeConfirmDetails_lower(details),$0
+        FfiConverterTypeConfirmDetails_lower(details),
+        FfiConverterOptionTypeBitcoinTransaction.lower(signedTransaction),$0
     )
 })
 }
@@ -8148,6 +8149,8 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func balanceInFiat() async throws  -> Double
     
+    func broadcastTransaction(signedTransaction: BitcoinTransaction) async throws 
+    
     func buildTransaction(amount: Amount, address: Address) async throws  -> Psbt
     
     func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> Psbt
@@ -8368,6 +8371,23 @@ open func balanceInFiat()async throws  -> Double  {
             completeFunc: ffi_cove_rust_future_complete_f64,
             freeFunc: ffi_cove_rust_future_free_f64,
             liftFunc: FfiConverterDouble.lift,
+            errorHandler: FfiConverterTypeWalletManagerError.lift
+        )
+}
+    
+open func broadcastTransaction(signedTransaction: BitcoinTransaction)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeBitcoinTransaction_lower(signedTransaction)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeWalletManagerError.lift
         )
 }
@@ -18638,7 +18658,7 @@ public enum SendRoute {
     )
     case hardwareExport(id: WalletId, details: ConfirmDetails
     )
-    case confirm(id: WalletId, details: ConfirmDetails
+    case confirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?
     )
 }
 
@@ -18659,7 +18679,7 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
         case 2: return .hardwareExport(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf)
         )
         
-        case 3: return .confirm(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf)
+        case 3: return .confirm(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf), signedTransaction: try FfiConverterOptionTypeBitcoinTransaction.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -18683,10 +18703,11 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
             FfiConverterTypeConfirmDetails.write(details, into: &buf)
             
         
-        case let .confirm(id,details):
+        case let .confirm(id,details,signedTransaction):
             writeInt(&buf, Int32(3))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeConfirmDetails.write(details, into: &buf)
+            FfiConverterOptionTypeBitcoinTransaction.write(signedTransaction, into: &buf)
             
         }
     }
@@ -22195,6 +22216,30 @@ fileprivate struct FfiConverterOptionTypeAmount: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBitcoinTransaction: FfiConverterRustBuffer {
+    typealias SwiftType = BitcoinTransaction?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBitcoinTransaction.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBitcoinTransaction.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFeeRateOptions: FfiConverterRustBuffer {
     typealias SwiftType = FeeRateOptions?
 
@@ -23872,7 +23917,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_send() != 62083) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_routefactory_send_confirm() != 14299) {
+    if (uniffi_cove_checksum_method_routefactory_send_confirm() != 58275) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_hardware_export() != 34735) {
@@ -23951,6 +23996,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_balance_in_fiat() != 47457) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 32181) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_build_transaction() != 34456) {

@@ -15,10 +15,10 @@ use bdk_chain::{
     spk_client::{FullScanResponse, SyncResponse},
 };
 use bdk_wallet::KeychainKind;
-use bitcoin::params::Params;
+use bitcoin::{params::Params, Transaction as BdkTransaction};
 use bitcoin_units::Amount;
 use crossbeam::channel::Sender;
-use eyre::{Context as _, OptionExt};
+use eyre::Context as _;
 use std::time::{Duration, UNIX_EPOCH};
 use tap::TapFallible as _;
 use tracing::{debug, error, info};
@@ -235,9 +235,19 @@ impl WalletActor {
             .tap_err(|error| error!("failed to extract transaction: {error}"))
             .map_err(|_| err("failed to extract transaction"))?;
 
+        self.broadcast_transaction(transaction).await?;
+
+        Produces::ok(())
+    }
+
+    pub async fn broadcast_transaction(&mut self, transaction: BdkTransaction) -> ActorResult<()> {
+        fn err(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            Error::SignAndBroadcastError(s.to_string()).into()
+        }
+
         self.node_client
             .as_ref()
-            .ok_or_eyre("node client not set")?
+            .ok_or_else(|| err("node client not set"))?
             .broadcast_transaction(transaction)
             .await
             .map_err(|_error| err("failed to broadcast transaction, try again"))?;

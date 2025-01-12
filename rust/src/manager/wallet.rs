@@ -29,6 +29,7 @@ use crate::{
             client::{FeeResponse, FEES, FEE_CLIENT},
             FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
         },
+        ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
         Amount, BdkAmount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
     },
@@ -301,6 +302,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn delete_unsigned_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
+        debug!("deleting unsigned transaction: {tx_id:?}");
         let db = Database::global();
         db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
 
@@ -319,10 +321,32 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn sign_and_broadcast_transaction(&self, psbt: Arc<Psbt>) -> Result<(), Error> {
         let psbt = Arc::unwrap_or_clone(psbt);
-        send!(self.actor.sign_and_broadcast_transaction(psbt.into()));
+        call!(self.actor.sign_and_broadcast_transaction(psbt.into()))
+            .await
+            .map_err(|_error| {
+                Error::SignAndBroadcastError("sign and broadcast failed".to_string())
+            })?;
 
-        // TODO:
-        // 9. make sure sending works with hardware wallets
+        Ok(())
+    }
+
+    #[uniffi::method]
+    pub async fn broadcast_transaction(
+        &self,
+        signed_transaction: Arc<BitcoinTransaction>,
+    ) -> Result<(), Error> {
+        let txn = Arc::unwrap_or_clone(signed_transaction);
+        let tx_id = txn.tx_id();
+
+        call!(self.actor.broadcast_transaction(txn.into()))
+            .await
+            .map_err(|_error| {
+                Error::SignAndBroadcastError("broadcast transaction failed".to_string())
+            })?;
+
+        if let Err(error) = self.delete_unsigned_transaction(tx_id.into()) {
+            error!("unable to delete unsigned transaction record: {error}");
+        }
 
         Ok(())
     }

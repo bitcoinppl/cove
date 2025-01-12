@@ -15,6 +15,8 @@ struct SendFlowConfirmScreen: View {
     let id: WalletId
     @State var manager: WalletManager
     let details: ConfirmDetails
+    let signedTransaction: BitcoinTransaction?
+
     let prices: PriceResponse? = nil
 
     // private
@@ -147,7 +149,11 @@ struct SendFlowConfirmScreen: View {
                 sendState = .sending
                 Task {
                     do {
-                        _ = try await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
+                        if let txn = signedTransaction {
+                            _ = try await manager.rust.broadcastTransaction(signedTransaction: txn)
+                        } else {
+                            _ = try await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
+                        }
                         sendState = .sent
                         isShowingAlert = true
                     } catch {
@@ -185,7 +191,8 @@ struct SendFlowConfirmScreen: View {
             SendFlowConfirmScreen(
                 id: WalletId(),
                 manager: WalletManager(preview: "preview_only"),
-                details: ConfirmDetails.previewNew()
+                details: ConfirmDetails.previewNew(),
+                signedTransaction: nil
             )
             .environment(AppManager())
             .environment(AuthManager())
