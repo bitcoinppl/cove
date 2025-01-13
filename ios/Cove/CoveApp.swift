@@ -268,12 +268,12 @@ struct CoveApp: App {
         let txnRecord = db.getTx(txId: transaction.txId())
 
         guard let txnRecord else {
-            app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
-            return
+            Log.error("No unsigned transaction found for \(transaction.txId())")
+            return app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
         }
 
         let route = RouteFactory().sendConfirm(
-            id: txnRecord.walletId(), details: txnRecord.confirmDetails()
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails(), signedTransaction: transaction
         )
 
         app.pushRoute(route)
@@ -333,7 +333,7 @@ struct CoveApp: App {
         } catch {
             switch error {
             case let FileHandlerError.NotRecognizedFormat(multiFormatError):
-                Log.error("Unrecognized format mulit format error: \(multiFormatError)")
+                Log.error("Unrecognized format multi-format error: \(multiFormatError)")
                 app.alertState = TaggedItem(
                     .invalidFileFormat(multiFormatError.localizedDescription))
 

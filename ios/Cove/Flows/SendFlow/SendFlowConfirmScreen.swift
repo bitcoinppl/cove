@@ -186,6 +186,7 @@ struct SendFlowConfirmScreen: View {
     }
 }
 
+#if DEBUG
 #Preview {
     struct Container: View {
         @State private var metadata: WalletMetadata
@@ -225,6 +226,7 @@ struct SendFlowConfirmScreen: View {
 
     return Container()
 }
+#endif
 
 #Preview("large") {
     AsyncPreview {

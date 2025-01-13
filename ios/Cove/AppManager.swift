@@ -99,6 +99,7 @@ import SwiftUI
     }
 
     func pushRoute(_ route: Route) {
+        isSidebarVisible = false
         router.routes.append(route)
     }
 
