@@ -2790,9 +2790,10 @@ open class ConfirmDetails:
     }
 
     
-public static func previewNew() -> ConfirmDetails  {
+public static func previewNew(amount: UInt64 = UInt64(16338)) -> ConfirmDetails  {
     return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
-    uniffi_cove_fn_constructor_confirmdetails_preview_new($0
+    uniffi_cove_fn_constructor_confirmdetails_preview_new(
+        FfiConverterUInt64.lower(amount),$0
     )
 })
 }
@@ -8409,6 +8410,14 @@ public convenience init(id: WalletId)throws  {
 public static func previewNewWallet() -> RustWalletManager  {
     return try!  FfiConverterTypeRustWalletManager_lift(try! rustCall() {
     uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet($0
+    )
+})
+}
+    
+public static func previewNewWalletWithMetadata(metadata: WalletMetadata) -> RustWalletManager  {
+    return try!  FfiConverterTypeRustWalletManager_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
+        FfiConverterTypeWalletMetadata_lower(metadata),$0
     )
 })
 }
@@ -24422,7 +24431,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_boxedroute_new() != 62486) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_confirmdetails_preview_new() != 31485) {
+    if (uniffi_cove_checksum_constructor_confirmdetails_preview_new() != 10014) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_database_new() != 41458) {
@@ -24504,6 +24513,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet() != 14132) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 31333) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 28304) {

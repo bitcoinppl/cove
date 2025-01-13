@@ -117,11 +117,11 @@ mod ffi_preview {
 
     #[uniffi::export]
     impl ConfirmDetails {
-        #[uniffi::constructor]
-        pub fn preview_new() -> Self {
+        #[uniffi::constructor(default(amount = 16338))]
+        pub fn preview_new(amount: u64) -> Self {
             Self {
-                spending_amount: Amount::from_sat(1_000_000),
-                sending_amount: Amount::from_sat(1_000_000 - 658),
+                spending_amount: Amount::from_sat(amount),
+                sending_amount: Amount::from_sat(amount - 658),
                 fee_total: Amount::from_sat(658),
                 fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(658).into(),
                 sending_to: Address::preview_new(),

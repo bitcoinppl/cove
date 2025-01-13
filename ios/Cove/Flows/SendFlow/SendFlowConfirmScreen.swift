@@ -78,12 +78,11 @@ struct SendFlowConfirmScreen: View {
                             Spacer()
 
                             Text(manager.amountFmt(details.sendingAmount()))
+                                .frame(maxWidth: screenWidth / 2)
                                 .font(.system(size: 48, weight: .bold))
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
-                                .multilineTextAlignment(.trailing)
-                                .padding(.trailing, 2)
-                                .frame(x: metadata.selectedUnit == .sat ? -10 : 0)
+                                .multilineTextAlignment(.center)
 
                             Button(action: { showingMenu.toggle() }) {
                                 HStack(spacing: 0) {
@@ -125,7 +124,7 @@ struct SendFlowConfirmScreen: View {
                                 .foregroundStyle(.primary.opacity(0.8))
                             }
                         }
-                        .frame(alignment: .trailing)
+                        .frame(alignment: .center)
 
                         Text(fiatAmount)
                             .font(.title3)
@@ -187,16 +186,41 @@ struct SendFlowConfirmScreen: View {
 }
 
 #Preview {
-    NavigationStack {
-        AsyncPreview {
-            SendFlowConfirmScreen(
-                id: WalletId(),
-                manager: WalletManager(preview: "preview_only"),
-                details: ConfirmDetails.previewNew(),
-                signedTransaction: nil
-            )
-            .environment(AppManager())
-            .environment(AuthManager())
+    struct Container: View {
+        @State private var metadata: WalletMetadata
+        @State private var manager: WalletManager?
+
+        init() {
+            var metadata = WalletMetadata(preview: true)
+            metadata.selectedUnit = .sat
+
+            self.metadata = metadata
+            self.manager = nil
+        }
+
+        var body: some View {
+            NavigationStack {
+                AsyncPreview {
+                    Group {
+                        if let manager {
+                            SendFlowConfirmScreen(
+                                id: WalletId(),
+                                manager: manager,
+                                details: ConfirmDetails.previewNew(amount: 30_333_333),
+                                signedTransaction: nil
+                            )
+                            .environment(AppManager())
+                            .environment(AuthManager())
+                        }
+                    }
+                }
+                .task {
+                    manager = WalletManager(preview: "preview_only", metadata)
+                    manager?.dispatch(action: .updateUnit(.sat))
+                }
+            }
         }
     }
+
+    return Container()
 }

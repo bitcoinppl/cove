@@ -169,14 +169,19 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     // PREVIEW only
-    public init(preview: String) {
+    public init(preview: String, _ walletMetadata: WalletMetadata? = nil) {
         assert(preview == "preview_only")
 
         id = WalletId()
-        let rust = RustWalletManager.previewNewWallet()
+        let rust =
+            if let walletMetadata {
+                RustWalletManager.previewNewWalletWithMetadata(metadata: walletMetadata)
+            } else {
+                RustWalletManager.previewNewWallet()
+            }
 
         self.rust = rust
-        walletMetadata = rust.walletMetadata()
+        self.walletMetadata = rust.walletMetadata()
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }

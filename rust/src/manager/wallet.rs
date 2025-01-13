@@ -1012,10 +1012,15 @@ impl RustWalletManager {
 impl RustWalletManager {
     #[uniffi::constructor]
     pub fn preview_new_wallet() -> Self {
+        let metadata = WalletMetadata::preview_new();
+        Self::preview_new_wallet_with_metadata(metadata)
+    }
+
+    #[uniffi::constructor]
+    pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         let wallet = Wallet::preview_new_wallet();
-        let metadata = WalletMetadata::preview_new();
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Self {
