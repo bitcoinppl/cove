@@ -28,6 +28,7 @@ pub(crate) mod node;
 pub(crate) mod node_connect;
 pub(crate) mod pending_wallet;
 pub(crate) mod psbt;
+pub(crate) mod push_tx;
 pub(crate) mod qr;
 pub(crate) mod redb;
 pub(crate) mod seed_qr;

@@ -6,6 +6,8 @@ use jiff::ToSpan as _;
 use numfmt::Formatter;
 use rand::Rng as _;
 
+use crate::{multi_format::StringOrData, push_tx::PushTx};
+
 use super::*;
 
 #[derive(
@@ -55,26 +57,49 @@ impl BitcoinTransaction {
 
         Ok(transaction.into())
     }
+
+    pub fn try_from_str(tx_hex: &str) -> Result<Self> {
+        let tx_hex = tx_hex.trim();
+
+        let tx_bytes = hex::decode(tx_hex.trim())
+            .map_err(|e| BitcoinTransactionError::HexDecodeError(e.to_string()));
+
+        // hex encoded txn
+        if let Ok(tx_bytes) = tx_bytes {
+            let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&tx_bytes)
+                .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
+
+            return Ok(transaction.into());
+        }
+
+        // push tx
+        let push_tx = PushTx::try_from_str(tx_hex).map_err(|e| {
+            let error = format!("unable to parse pushtx: {e}");
+            BitcoinTransactionError::ParseTransactionError(error)
+        })?;
+
+        Ok(push_tx.txn)
+    }
 }
 
 #[uniffi::export]
 impl BitcoinTransaction {
     #[uniffi::constructor(name = "new")]
-    pub fn try_from(tx_hex: String) -> Result<Self> {
-        let tx_hex = tx_hex.trim();
-
-        let tx_bytes = hex::decode(tx_hex.trim())
-            .map_err(|e| BitcoinTransactionError::HexDecodeError(e.to_string()))?;
-
-        let transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&tx_bytes)
-            .map_err(|e| BitcoinTransactionError::ParseTransactionError(e.to_string()))?;
-
-        Ok(transaction.into())
+    pub fn ffi_try_from(tx_hex: String) -> Result<Self> {
+        Self::try_from_str(&tx_hex)
     }
 
     #[uniffi::constructor(name = "tryFromData")]
     pub fn _try_from_data(data: Vec<u8>) -> Result<Self> {
         Self::try_from_data(&data)
+    }
+
+    #[uniffi::constructor(name = "tryFromStringOrData")]
+    pub fn try_from_string_or_data(string_or_data: StringOrData) -> Result<Self> {
+        match string_or_data {
+            StringOrData::String(tx_hex) => Self::try_from_str(&tx_hex),
+            StringOrData::Data(tx_bytes) => Self::try_from_data(&tx_bytes),
+        }
     }
 
     #[uniffi::method]
