@@ -1,6 +1,7 @@
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine as _;
 use chacha20poly1305::{aead::Aead as _, AeadCore as _, ChaCha20Poly1305, KeyInit as _};
 use chacha20poly1305::{Key, Nonce};
-use data_encoding::BASE64;
 use rand::rngs::OsRng;
 
 use macros::impl_default_for;
@@ -19,10 +20,10 @@ pub enum Error {
     KeyAndNonceNotFound,
 
     #[error("key not in base64 format")]
-    KeyInvalidFormat(data_encoding::DecodeError),
+    KeyInvalidFormat(base64::DecodeError),
 
     #[error("nonce not in base64 format")]
-    NonceInvalidFormat(data_encoding::DecodeError),
+    NonceInvalidFormat(base64::DecodeError),
 
     #[error("unable to encrypt: {0}")]
     UnableToEncrypt(chacha20poly1305::Error),
@@ -31,7 +32,7 @@ pub enum Error {
     UnableToDecrypt(chacha20poly1305::Error),
 
     #[error("base64 decode error: {0}")]
-    Base64Decode(data_encoding::DecodeError),
+    Base64Decode(base64::DecodeError),
 
     #[error("invalid utf8 string")]
     InvalidUtf8(std::string::FromUtf8Error),
@@ -51,13 +52,13 @@ impl Cryptor {
             .split_once(SPLITTER)
             .ok_or(Error::KeyAndNonceNotFound)?;
 
-        let key_bytes = BASE64
+        let key_bytes = BASE64_STANDARD
             .decode(key_string.as_bytes())
             .map_err(Error::KeyInvalidFormat)?;
 
         let key = Key::from_slice(&key_bytes);
 
-        let nonce_bytes = BASE64
+        let nonce_bytes = BASE64_STANDARD
             .decode(nonce_string.as_bytes())
             .map_err(Error::NonceInvalidFormat)?;
 
@@ -75,10 +76,10 @@ impl Cryptor {
 
     pub fn serialize_to_string(self) -> String {
         let key_bytes = self.key.as_slice();
-        let key_string = BASE64.encode(key_bytes);
+        let key_string = BASE64_STANDARD.encode(key_bytes);
 
         let nonce_bytes = self.nonce.as_slice();
-        let nonce_string = BASE64.encode(nonce_bytes);
+        let nonce_string = BASE64_STANDARD.encode(nonce_bytes);
 
         format!("{key_string}{SPLITTER}{nonce_string}")
     }
@@ -95,13 +96,13 @@ impl Cryptor {
     pub fn encrypt_to_string(&self, plaintext: String) -> Result<String, Error> {
         let plaintext = plaintext.as_bytes();
         let encrypted = self.encrypt(plaintext)?;
-        let encrypted_string = BASE64.encode(&encrypted);
+        let encrypted_string = BASE64_STANDARD.encode(&encrypted);
 
         Ok(encrypted_string)
     }
 
     pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<String, Error> {
-        let ciphertext_bytes = BASE64
+        let ciphertext_bytes = BASE64_STANDARD
             .decode(ciphertext.as_bytes())
             .map_err(Error::Base64Decode)?;
 

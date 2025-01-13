@@ -117,7 +117,6 @@ url = "2.5"
 
 # encryption
 chacha20poly1305 = "0.10.1"
-data-encoding = "2.6.0"
 
 # fast hashmap
 ahash = "0.8.11"
@@ -133,8 +132,9 @@ reqwest = { version = "0.12", features = ["json"] }
 libz-sys = { version = "1.1", features = ["static"] }
 bbqr = { version = "0.3", default-features = false }
 
-# hex
+# hex / base64
 hex = "0.4.3"
+base64 = "0.22.0"
 
 # parsing
 winnow = "0.6.0"
