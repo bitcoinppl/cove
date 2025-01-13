@@ -8,7 +8,7 @@ use crate::transaction::ffi::BitcoinTransaction;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct PushTx {
-    txn: BitcoinTransaction,
+    pub txn: BitcoinTransaction,
 }
 
 #[derive(Debug, Copy, Clone, thiserror::Error, derive_more::Display)]

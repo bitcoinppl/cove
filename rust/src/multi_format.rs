@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tracing::warn;
+
 use crate::{
     hardware_export::HardwareExport,
     mnemonic::ParseMnemonic as _,
@@ -81,10 +83,11 @@ impl MultiFormat {
         }
 
         // try to parse a transaction
-        if let Ok(txn) = BitcoinTransaction::try_from(string) {
+        if let Ok(txn) = BitcoinTransaction::try_from_str(&string) {
             return Ok(Self::Transaction(Arc::new(txn)));
         }
 
+        warn!("could not parse string as MultiFormat: {string}");
         Err(MultiFormatError::UnrecognizedFormat)
     }
 }
