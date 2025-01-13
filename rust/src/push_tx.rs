@@ -35,8 +35,7 @@ impl PushTx {
             .map_err(|_| PushTxError::InvalidBase64)?;
 
         let txn = BitcoinTransaction::try_from_data(&txn_bytes)
-            .map_err(|_| PushTxError::InvalidTransaction)?
-            .into();
+            .map_err(|_| PushTxError::InvalidTransaction)?;
 
         Ok(Self { txn })
     }

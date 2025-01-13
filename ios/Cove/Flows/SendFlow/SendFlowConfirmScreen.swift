@@ -82,7 +82,8 @@ struct SendFlowConfirmScreen: View {
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
                                 .multilineTextAlignment(.trailing)
-                                .padding(.trailing, metadata.selectedUnit == .sat ? 10 : 2)
+                                .padding(.trailing, 2)
+                                .frame(x: metadata.selectedUnit == .sat ? -10 : 0)
 
                             Button(action: { showingMenu.toggle() }) {
                                 HStack(spacing: 0) {

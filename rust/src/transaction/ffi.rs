@@ -80,13 +80,6 @@ impl BitcoinTransaction {
 
         Ok(push_tx.txn)
     }
-
-    pub fn try_from_string_or_data(tx: StringOrData) -> Result<Self> {
-        match tx {
-            StringOrData::String(tx_hex) => Self::try_from_str(&tx_hex),
-            StringOrData::Data(tx_bytes) => Self::try_from_data(&tx_bytes),
-        }
-    }
 }
 
 #[uniffi::export]
@@ -99,6 +92,14 @@ impl BitcoinTransaction {
     #[uniffi::constructor(name = "tryFromData")]
     pub fn _try_from_data(data: Vec<u8>) -> Result<Self> {
         Self::try_from_data(&data)
+    }
+
+    #[uniffi::constructor(name = "tryFromStringOrData")]
+    pub fn try_from_string_or_data(string_or_data: StringOrData) -> Result<Self> {
+        match string_or_data {
+            StringOrData::String(tx_hex) => Self::try_from_str(&tx_hex),
+            StringOrData::Data(tx_bytes) => Self::try_from_data(&tx_bytes),
+        }
     }
 
     #[uniffi::method]

@@ -202,6 +202,9 @@ struct SendFlowHardwareScreen: View {
             .onChange(of: nfcReader.scannedMessageData) { _, txn in
                 handleScannedData(txn)
             }
+            .onChange(of: nfcReader.scannedMessage) { _, txn in
+                handleScannedString(txn)
+            }
             .fileImporter(
                 isPresented: $isPresentingFilePicker,
                 allowedContentTypes: [.plainText, .psbt, .txn],
@@ -230,19 +233,21 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
+    func handleScannedString(_ txn: String?) {
+        guard let txn else { return alertState = .init(.nfcError("No transaction found")) }
+        if txn.isEmpty { return alertState = .init(.nfcError("No transaction found, empty string")) }
+        handleScanned(.string(txn))
+    }
+
     func handleScannedData(_ txn: Data?) {
-        guard let txn else {
-            alertState = .init(.nfcError("No transaction found"))
-            return
-        }
+        guard let txn else { return alertState = .init(.nfcError("No transaction found")) }
+        if txn.isEmpty { return alertState = .init(.nfcError("No transaction found, empty string")) }
+        handleScanned(.data(txn))
+    }
 
-        if txn.isEmpty {
-            alertState = .init(.nfcError("No transaction found, empty string"))
-            return
-        }
-
+    func handleScanned(_ txn: StringOrData) {
         do {
-            let bitcoinTransaction = try BitcoinTransaction.tryFromData(data: txn)
+            let bitcoinTransaction = try BitcoinTransaction.tryFromStringOrData(stringOrData: txn)
             let db = Database().unsignedTransactions()
             let txnRecord = try db.getTxThrow(txId: bitcoinTransaction.txId())
 

@@ -94,7 +94,7 @@ ctest test="":
     cd rust && cargo test {{test}}
 
 btest test="":
-    cd rust && bacon nextest {{test}}
+    cd rust && bacon nextest -- {{test}}
 
 watch-test test="":
     watchexec --exts rs just test {{test}}
