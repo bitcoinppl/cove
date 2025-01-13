@@ -187,45 +187,45 @@ struct SendFlowConfirmScreen: View {
 }
 
 #if DEBUG
-#Preview {
-    struct Container: View {
-        @State private var metadata: WalletMetadata
-        @State private var manager: WalletManager?
+    #Preview {
+        struct Container: View {
+            @State private var metadata: WalletMetadata
+            @State private var manager: WalletManager?
 
-        init() {
-            var metadata = WalletMetadata(preview: true)
-            metadata.selectedUnit = .sat
+            init() {
+                var metadata = WalletMetadata(preview: true)
+                metadata.selectedUnit = .sat
 
-            self.metadata = metadata
-            self.manager = nil
-        }
+                self.metadata = metadata
+                self.manager = nil
+            }
 
-        var body: some View {
-            NavigationStack {
-                AsyncPreview {
-                    Group {
-                        if let manager {
-                            SendFlowConfirmScreen(
-                                id: WalletId(),
-                                manager: manager,
-                                details: ConfirmDetails.previewNew(amount: 30333),
-                                signedTransaction: nil
-                            )
-                            .environment(AppManager())
-                            .environment(AuthManager())
+            var body: some View {
+                NavigationStack {
+                    AsyncPreview {
+                        Group {
+                            if let manager {
+                                SendFlowConfirmScreen(
+                                    id: WalletId(),
+                                    manager: manager,
+                                    details: ConfirmDetails.previewNew(amount: 30333),
+                                    signedTransaction: nil
+                                )
+                                .environment(AppManager())
+                                .environment(AuthManager())
+                            }
                         }
                     }
-                }
-                .task {
-                    manager = WalletManager(preview: "preview_only", metadata)
-                    manager?.dispatch(action: .updateUnit(.sat))
+                    .task {
+                        manager = WalletManager(preview: "preview_only", metadata)
+                        manager?.dispatch(action: .updateUnit(.sat))
+                    }
                 }
             }
         }
-    }
 
-    return Container()
-}
+        return Container()
+    }
 #endif
 
 #Preview("large") {
