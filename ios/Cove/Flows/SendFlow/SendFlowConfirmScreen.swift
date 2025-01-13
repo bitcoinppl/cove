@@ -78,7 +78,7 @@ struct SendFlowConfirmScreen: View {
                             Spacer()
 
                             Text(manager.amountFmt(details.sendingAmount()))
-                                .frame(maxWidth: screenWidth / 2)
+                                .frame(minWidth: screenWidth / 2)
                                 .font(.system(size: 48, weight: .bold))
                                 .minimumScaleFactor(0.01)
                                 .lineLimit(1)
@@ -206,7 +206,7 @@ struct SendFlowConfirmScreen: View {
                             SendFlowConfirmScreen(
                                 id: WalletId(),
                                 manager: manager,
-                                details: ConfirmDetails.previewNew(amount: 30_333_333),
+                                details: ConfirmDetails.previewNew(amount: 30_333),
                                 signedTransaction: nil
                             )
                             .environment(AppManager())
@@ -223,4 +223,17 @@ struct SendFlowConfirmScreen: View {
     }
 
     return Container()
+}
+
+#Preview("large") {
+    AsyncPreview {
+        SendFlowConfirmScreen(
+            id: WalletId(),
+            manager: WalletManager(preview: "preview_only"),
+            details: ConfirmDetails.previewNew(amount: 30_333_312),
+            signedTransaction: nil
+        )
+        .environment(AppManager())
+        .environment(AuthManager())
+    }
 }
