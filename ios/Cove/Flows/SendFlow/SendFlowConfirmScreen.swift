@@ -206,7 +206,7 @@ struct SendFlowConfirmScreen: View {
                             SendFlowConfirmScreen(
                                 id: WalletId(),
                                 manager: manager,
-                                details: ConfirmDetails.previewNew(amount: 30_333),
+                                details: ConfirmDetails.previewNew(amount: 30333),
                                 signedTransaction: nil
                             )
                             .environment(AppManager())
