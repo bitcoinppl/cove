@@ -26,7 +26,7 @@ impl NumberOfBip39Words {
         self.to_entropy_bits() / 8
     }
 
-    pub fn to_mnemonic(self) -> Mnemonic {
+    pub fn generate_mnemonic(self) -> Mnemonic {
         match self {
             NumberOfBip39Words::Twelve => {
                 // 128 / 8  = 16
@@ -56,21 +56,28 @@ mod tests {
         assert_eq!(NumberOfBip39Words::Twelve.to_entropy_bits(), 128);
         assert_eq!(NumberOfBip39Words::TwentyFour.to_entropy_bits(), 256);
 
-        assert_eq!(NumberOfBip39Words::Twelve.to_mnemonic().word_count(), 12);
+        assert_eq!(
+            NumberOfBip39Words::Twelve.generate_mnemonic().word_count(),
+            12
+        );
 
         assert_eq!(
-            NumberOfBip39Words::TwentyFour.to_mnemonic().word_count(),
+            NumberOfBip39Words::TwentyFour
+                .generate_mnemonic()
+                .word_count(),
             24
         );
 
         assert_eq!(
             NumberOfBip39Words::Twelve.to_word_count(),
-            NumberOfBip39Words::Twelve.to_mnemonic().word_count()
+            NumberOfBip39Words::Twelve.generate_mnemonic().word_count()
         );
 
         assert_eq!(
             NumberOfBip39Words::TwentyFour.to_word_count(),
-            NumberOfBip39Words::TwentyFour.to_mnemonic().word_count()
+            NumberOfBip39Words::TwentyFour
+                .generate_mnemonic()
+                .word_count()
         );
     }
 }

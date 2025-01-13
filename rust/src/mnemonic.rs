@@ -41,6 +41,10 @@ impl Mnemonic {
 
         Ok(Self(mnemonic))
     }
+
+    pub fn generate_random(number_of_bip39_words: NumberOfBip39Words) -> Self {
+        number_of_bip39_words.generate_mnemonic().into()
+    }
 }
 
 // traits

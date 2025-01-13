@@ -15,7 +15,7 @@ pub fn number_of_words_to_word_count(me: NumberOfBip39Words) -> u8 {
 impl Mnemonic {
     #[uniffi::constructor(name = "preview")]
     pub fn _ffi_preview_new(number_of_bip39_words: NumberOfBip39Words) -> Self {
-        Self(number_of_bip39_words.to_mnemonic())
+        Self(number_of_bip39_words.generate_mnemonic())
     }
 
     #[uniffi::constructor(name = "new")]

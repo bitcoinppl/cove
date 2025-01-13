@@ -14,7 +14,7 @@ impl PendingWallet {
     pub fn new(number_of_words: NumberOfBip39Words, passphrase: Option<String>) -> Self {
         let network = Database::global().global_config.selected_network();
 
-        let mnemonic = number_of_words.to_mnemonic().clone();
+        let mnemonic = number_of_words.generate_mnemonic().clone();
 
         Self {
             mnemonic,

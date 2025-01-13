@@ -34,7 +34,7 @@ impl WordValidator {
         let mut words_clone = self.words.clone();
         words_clone.shuffle(&mut rng);
 
-        let new_words = NumberOfBip39Words::Twelve.to_mnemonic();
+        let new_words = NumberOfBip39Words::Twelve.generate_mnemonic();
 
         let five_existing_words = words_clone.iter().take(5).cloned();
 
@@ -60,7 +60,7 @@ impl WordValidator {
         // make sure we have 12 words
         while combined.len() < 12 {
             let needed = 12 - combined.len();
-            let new_words = NumberOfBip39Words::Twelve.to_mnemonic();
+            let new_words = NumberOfBip39Words::Twelve.generate_mnemonic();
 
             new_words.words().take(needed).for_each(|word| {
                 combined.push(word.to_string());
@@ -98,7 +98,7 @@ impl WordValidator {
         assert!(preview);
 
         let number_of_words = number_of_words.unwrap_or(NumberOfBip39Words::Twelve);
-        let mnemonic = number_of_words.to_mnemonic().clone();
+        let mnemonic = number_of_words.generate_mnemonic().clone();
 
         Self::new(mnemonic)
     }
