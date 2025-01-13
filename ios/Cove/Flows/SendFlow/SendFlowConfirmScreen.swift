@@ -141,9 +141,9 @@ struct SendFlowConfirmScreen: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .background(Color.coveBg)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.coveBg)
 
             SwipeToSendView(sendState: $sendState) {
                 sendState = .sending
@@ -161,6 +161,7 @@ struct SendFlowConfirmScreen: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
             .padding(.horizontal)
             .padding(.bottom, 6)
             .padding(.top, 20)
