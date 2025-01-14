@@ -106,7 +106,7 @@ struct SendFlowSetAmountScreen: View {
         guard let prices = app.prices else { return "---" }
 
         let fiat = totalSpentInBtc * Double(prices.get())
-        return manager.fiatAmountToString(fiat)
+        return manager.rust.displayFiatAmount(amount: fiat)
     }
 
     private var totalSending: String {
@@ -502,7 +502,7 @@ struct SendFlowSetAmountScreen: View {
             Task { await getFeeRateOptions() }
         }
 
-        sendAmountFiat = manager.fiatAmountToString(fiatAmount)
+        sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount)
 
         if oldValue.contains(","), metadata.selectedUnit == .sat {
             setFormattedAmount(String(amountSats))

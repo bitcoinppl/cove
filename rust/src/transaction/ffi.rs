@@ -155,7 +155,7 @@ impl ConfirmedTransaction {
             .unwrap()
             .precision(numfmt::Precision::Decimals(0));
 
-        fmt.fmt2(self.block_height).to_string()
+        fmt.fmt(self.block_height).to_string()
     }
 
     #[uniffi::method]

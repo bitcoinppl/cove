@@ -12,7 +12,7 @@ impl<T: Numeric> NumberFormatter for T {
             .unwrap()
             .precision(numfmt::Precision::Decimals(0));
 
-        f.fmt2(self).to_string()
+        f.fmt(self).to_string()
     }
 
     fn thousands_fiat(self) -> String {
@@ -21,6 +21,6 @@ impl<T: Numeric> NumberFormatter for T {
             .unwrap()
             .precision(numfmt::Precision::Decimals(2));
 
-        f.fmt2(self).to_string()
+        f.fmt(self).to_string()
     }
 }

@@ -273,7 +273,7 @@ impl TransactionDetails {
             .unwrap()
             .precision(Precision::Decimals(0));
 
-        Some(f.fmt2(block_number).to_string())
+        Some(f.fmt(block_number).to_string())
     }
     #[uniffi::method]
     pub fn address_spaced_out(&self) -> String {
