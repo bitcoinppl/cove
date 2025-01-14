@@ -16,4 +16,8 @@ extension FiatCurrency {
     func emoji() -> String {
         fiatCurrencyEmoji(fiatCurrency: self)
     }
+
+    func suffix() -> String {
+        fiatCurrencySuffix(fiatCurrency: self)
+    }
 }

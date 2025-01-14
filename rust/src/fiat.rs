@@ -35,14 +35,14 @@ pub enum FiatCurrency {
 
 impl FiatCurrency {
     pub fn symbol(&self) -> &'static str {
+        use FiatCurrency as F;
+
         match self {
-            FiatCurrency::Usd => "$",
-            FiatCurrency::Cad => "$",
-            FiatCurrency::Aud => "$",
-            FiatCurrency::Eur => "€",
-            FiatCurrency::Gbp => "£",
-            FiatCurrency::Chf => "Fr",
-            FiatCurrency::Jpy => "¥",
+            F::Usd | F::Cad | F::Aud => "$",
+            F::Eur => "€",
+            F::Gbp => "£",
+            F::Jpy => "¥",
+            F::Chf => "",
         }
     }
 
@@ -55,6 +55,18 @@ impl FiatCurrency {
             FiatCurrency::Gbp => "🇬🇧",
             FiatCurrency::Chf => "🇨🇭",
             FiatCurrency::Jpy => "🇯🇵",
+        }
+    }
+
+    pub fn suffix(&self) -> &'static str {
+        match self {
+            FiatCurrency::Usd => "",
+            FiatCurrency::Cad => "CAD",
+            FiatCurrency::Aud => "AUD",
+            FiatCurrency::Eur => "",
+            FiatCurrency::Gbp => "",
+            FiatCurrency::Chf => "CHF",
+            FiatCurrency::Jpy => "",
         }
     }
 }
@@ -130,4 +142,9 @@ fn fiat_currency_symbol(fiat_currency: FiatCurrency) -> String {
 #[uniffi::export]
 fn fiat_currency_emoji(fiat_currency: FiatCurrency) -> String {
     fiat_currency.emoji().to_string()
+}
+
+#[uniffi::export]
+fn fiat_currency_suffix(fiat_currency: FiatCurrency) -> String {
+    fiat_currency.suffix().to_string()
 }

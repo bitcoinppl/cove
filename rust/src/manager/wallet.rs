@@ -442,10 +442,12 @@ impl RustWalletManager {
         }
 
         let fiat = amount.thousands_fiat();
+
         let currency = self.selected_fiat_currency();
         let symbol = currency.symbol();
+        let suffix = currency.suffix();
 
-        format!("{symbol}{fiat} {currency}")
+        format!("{symbol}{fiat} {suffix}")
     }
 
     #[uniffi::method]

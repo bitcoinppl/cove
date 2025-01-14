@@ -347,6 +347,7 @@ fn fiat_amount_fmt(amount: f64) -> String {
 
     let currency = currency();
     let symbol = currency.symbol();
+    let suffix = currency.suffix();
 
-    format!("≈ {symbol}{amount_fmt} {currency}")
+    format!("≈ {symbol}{amount_fmt} {suffix}")
 }

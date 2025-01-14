@@ -7,6 +7,10 @@ pub trait NumberFormatter: Numeric {
 
 impl<T: Numeric> NumberFormatter for T {
     fn thousands_int(self) -> String {
+        if self.is_zero() {
+            return "0".to_string();
+        }
+
         let mut f = numfmt::Formatter::new()
             .separator(',')
             .unwrap()
@@ -16,6 +20,10 @@ impl<T: Numeric> NumberFormatter for T {
     }
 
     fn thousands_fiat(self) -> String {
+        if self.is_zero() {
+            return "0.00".to_string();
+        }
+
         let mut f = numfmt::Formatter::new()
             .separator(',')
             .unwrap()

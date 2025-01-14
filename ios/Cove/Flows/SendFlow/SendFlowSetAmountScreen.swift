@@ -42,7 +42,7 @@ struct SendFlowSetAmountScreen: View {
 
     // text inputs
     @State private var sendAmount: String = "0"
-    @State private var sendAmountFiat: String = "0"
+    @State private var sendAmountFiat: String = "0.00"
 
     // max
     @State private var maxSelected: Amount? = nil
@@ -318,7 +318,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
-            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
 
             // amount
             if let amount {
@@ -448,7 +448,7 @@ struct SendFlowSetAmountScreen: View {
 
         // allow clearing completely
         if newValue == "" {
-            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
             return
         }
 

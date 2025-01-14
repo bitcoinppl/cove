@@ -23375,6 +23375,13 @@ public func fiatCurrencyEmoji(fiatCurrency: FiatCurrency) -> String  {
     )
 })
 }
+public func fiatCurrencySuffix(fiatCurrency: FiatCurrency) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_fiat_currency_suffix(
+        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
+    )
+})
+}
 public func fiatCurrencySymbol(fiatCurrency: FiatCurrency) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_fiat_currency_symbol(
@@ -23604,6 +23611,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fiat_currency_emoji() != 7081) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_fiat_currency_suffix() != 50079) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fiat_currency_symbol() != 58040) {
