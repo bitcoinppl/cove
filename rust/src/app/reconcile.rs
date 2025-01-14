@@ -4,7 +4,10 @@ use crossbeam::channel::Sender;
 use once_cell::sync::OnceCell;
 
 use crate::{
-    color_scheme::ColorSchemeSelection, fiat::client::PriceResponse, node::Node, router::Route,
+    color_scheme::ColorSchemeSelection,
+    fiat::{client::PriceResponse, FiatCurrency},
+    node::Node,
+    router::Route,
     transaction::fees::client::FeeResponse,
 };
 
@@ -18,6 +21,7 @@ pub enum AppStateReconcileMessage {
     SelectedNodeChanged(Node),
     FiatPricesChanged(PriceResponse),
     FeesChanged(FeeResponse),
+    FiatCurrencyChanged(FiatCurrency),
 }
 
 // alias for easier imports on the rust side

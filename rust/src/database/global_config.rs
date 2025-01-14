@@ -6,6 +6,7 @@ use crate::{
     app::reconcile::{Update, Updater},
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
+    fiat::FiatCurrency,
     network::Network,
     node::Node,
     wallet::metadata::WalletId,
@@ -22,6 +23,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum GlobalConfigKey {
     SelectedWalletId,
     SelectedNetwork,
+    SelectedFiatCurrency,
     SelectedNode(Network),
     ColorScheme,
     AuthType,
@@ -34,6 +36,7 @@ impl From<GlobalConfigKey> for &'static str {
         match key {
             GlobalConfigKey::SelectedWalletId => "selected_wallet_id",
             GlobalConfigKey::SelectedNetwork => "selected_network",
+            GlobalConfigKey::SelectedFiatCurrency => "selected_fiat_currency",
             GlobalConfigKey::SelectedNode(Network::Bitcoin) => "selected_node_bitcoin",
             GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
             GlobalConfigKey::SelectedNode(Network::Signet) => "selected_node_signet",
@@ -83,6 +86,13 @@ impl GlobalConfigTable {
         GlobalConfigKey::ColorScheme,
         ColorSchemeSelection,
         Update::ColorSchemeChanged
+    );
+
+    string_config_accessor!(
+        pub fiat_currency,
+        GlobalConfigKey::SelectedFiatCurrency,
+        FiatCurrency,
+        Update::FiatCurrencyChanged
     );
 
     string_config_accessor!(pub wipe_data_pin, GlobalConfigKey::WipeDataPin, String);

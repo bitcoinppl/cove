@@ -20,7 +20,7 @@ use bdk_wallet::bitcoin::{
 };
 use rand::Rng as _;
 
-use crate::{fiat::FiatAmount, wallet::Wallet};
+use crate::{database::Database, fiat::FiatAmount, wallet::Wallet};
 
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
@@ -128,7 +128,10 @@ impl Transaction {
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
     ) -> Self {
         let txid = tx.tx_node.txid.into();
-        let fiat_currency = wallet.metadata.selected_fiat_currency;
+        let fiat_currency = Database::global()
+            .global_config
+            .fiat_currency()
+            .unwrap_or_default();
 
         let sent_and_received = wallet.sent_and_received(&tx.tx_node.tx).into();
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();

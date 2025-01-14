@@ -47,8 +47,6 @@ pub struct WalletMetadata {
     pub master_fingerprint: Option<Arc<Fingerprint>>,
     #[serde(default)]
     pub selected_unit: Unit,
-    #[serde(default = "default_fiat_currency")]
-    pub selected_fiat_currency: FiatCurrency,
     #[serde(default = "default_true")]
     pub sensitive_visible: bool,
     #[serde(default = "default_false")]
@@ -139,7 +137,6 @@ pub enum WalletType {
 pub enum FiatOrBtc {
     #[default]
     Btc,
-
     Fiat,
 }
 
@@ -157,7 +154,6 @@ impl WalletMetadata {
             performed_full_scan: false,
             fiat_or_btc: FiatOrBtc::Btc,
             selected_unit: Unit::default(),
-            selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
             details_expanded: false,
             address_type: WalletAddressType::default(),
@@ -214,7 +210,6 @@ impl WalletMetadata {
             fiat_or_btc: FiatOrBtc::Btc,
             address_type: WalletAddressType::default(),
             selected_unit: Unit::default(),
-            selected_fiat_currency: default_fiat_currency(),
             sensitive_visible: true,
             details_expanded: false,
             wallet_type: WalletType::Hot,
