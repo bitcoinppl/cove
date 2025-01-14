@@ -124,7 +124,7 @@ struct SettingsScreen: View {
     }
 
     @ViewBuilder
-    var CurrencyAndUnitsSection: some View {
+    var FiatCurrencySection: some View {
         Section("Currency & Units") {
             Picker(
                 "Fiat Currency",
@@ -189,7 +189,7 @@ struct SettingsScreen: View {
 
             NodeSelectionView()
 
-            CurrencyAndUnitsSection
+            FiatCurrencySection
 
             SecuritySection
         }

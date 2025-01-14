@@ -162,6 +162,14 @@ import SwiftUI
 
                 case let .fiatCurrencyChanged(fiatCurrency):
                     self.selectedFiatCurrency = fiatCurrency
+
+                    // refresh fiat values in the wallet manager
+                    if let walletManager {
+                        Task {
+                            await walletManager.forceWalletScan()
+                            await walletManager.getFiatBalance()
+                        }
+                    }
                 }
             }
         }

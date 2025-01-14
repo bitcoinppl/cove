@@ -86,7 +86,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     func fiatAmountToString(_ amount: some Numeric & LosslessStringConvertible) -> String {
-        "≈ \(FiatFormatter(amount).fmt()) USD"
+        "≈\(FiatFormatter(amount).fmt()) USD"
     }
 
     func getFiatBalance() async {
@@ -97,6 +97,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
             Log.error("error getting fiat balance: \(error)")
             fiatBalance = 0.00
         }
+    }
+
+    func forceWalletScan() async {
+        await rust.forceWalletScan()
     }
 
     func reconcile(message: WalletManagerReconcileMessage) {
