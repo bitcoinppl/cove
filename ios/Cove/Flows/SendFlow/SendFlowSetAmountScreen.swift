@@ -42,7 +42,7 @@ struct SendFlowSetAmountScreen: View {
 
     // text inputs
     @State private var sendAmount: String = "0"
-    @State private var sendAmountFiat: String = "≈ $0.00 USD"
+    @State private var sendAmountFiat: String = "0"
 
     // max
     @State private var maxSelected: Amount? = nil
@@ -103,9 +103,9 @@ struct SendFlowSetAmountScreen: View {
 
     private var totalSpentInFiat: String {
         guard let totalSpentInBtc else { return "---" }
-        guard let usd = app.prices?.usd else { return "---" }
+        guard let prices = app.prices else { return "---" }
 
-        let fiat = totalSpentInBtc * Double(usd)
+        let fiat = totalSpentInBtc * Double(prices.get())
         return manager.fiatAmountToString(fiat)
     }
 
@@ -318,6 +318,8 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
+
             // amount
             if let amount {
                 switch metadata.selectedUnit {
@@ -446,7 +448,7 @@ struct SendFlowSetAmountScreen: View {
 
         // allow clearing completely
         if newValue == "" {
-            sendAmountFiat = "≈ $0.00 USD"
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
             return
         }
 
@@ -494,7 +496,7 @@ struct SendFlowSetAmountScreen: View {
         }
 
         let amountSats = amountSats(amount)
-        let fiatAmount = (amountSats / 100_000_000) * Double(prices.usd)
+        let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
 
         if feeRateOptions == nil {
             Task { await getFeeRateOptions() }

@@ -75,7 +75,7 @@ struct TransactionDetailsView: View {
             .padding(.top, 12)
 
         AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
-            Text("≈ $\(amount) USD").foregroundStyle(.primary.opacity(0.8))
+            Text(amount).foregroundStyle(.primary.opacity(0.8))
         }
 
         Group {
@@ -147,7 +147,7 @@ struct TransactionDetailsView: View {
             .padding(.top, 12)
 
         AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
-            Text("≈ $\(amount) USD").foregroundStyle(.primary.opacity(0.8))
+            Text(amount).foregroundStyle(.primary.opacity(0.8))
         }
 
         Group {

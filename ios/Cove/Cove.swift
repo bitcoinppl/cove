@@ -4478,9 +4478,9 @@ open func prices()async throws  -> PriceResponse  {
                     
                 )
             },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypePriceResponse_lift,
             errorHandler: FfiConverterTypeAppError.lift
         )
@@ -7123,6 +7123,137 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
 
 
 
+public protocol PriceResponseProtocol : AnyObject {
+    
+    func get()  -> UInt64
+    
+    func getForCurrency(currency: FiatCurrency)  -> UInt64
+    
+}
+
+open class PriceResponse:
+    PriceResponseProtocol
+    {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_priceresponse(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_priceresponse(pointer, $0) }
+    }
+
+    
+
+    
+open func get() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_priceresponse_get(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getForCurrency(currency: FiatCurrency) -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_priceresponse_get_for_currency(self.uniffiClonePointer(),
+        FfiConverterTypeFiatCurrency_lower(currency),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePriceResponse: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PriceResponse
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PriceResponse {
+        return PriceResponse(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PriceResponse) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PriceResponse {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PriceResponse, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriceResponse_lift(_ pointer: UnsafeMutableRawPointer) throws -> PriceResponse {
+    return try FfiConverterTypePriceResponse.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriceResponse_lower(_ value: PriceResponse) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePriceResponse.lower(value)
+}
+
+
+
+
+
+
 public protocol PsbtProtocol : AnyObject {
     
     /**
@@ -8273,7 +8404,7 @@ public protocol RustWalletManagerProtocol : AnyObject {
      */
     func addressAt(index: UInt32) async throws  -> AddressInfo
     
-    func amountInFiat(amount: Amount, currency: FiatCurrency) async throws  -> Double
+    func amountInFiat(amount: Amount) async throws  -> Double
     
     func balance() async  -> Balance
     
@@ -8463,13 +8594,13 @@ open func addressAt(index: UInt32)async throws  -> AddressInfo  {
         )
 }
     
-open func amountInFiat(amount: Amount, currency: FiatCurrency)async throws  -> Double  {
+open func amountInFiat(amount: Amount)async throws  -> Double  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeAmount_lower(amount),FfiConverterTypeFiatCurrency_lower(currency)
+                    FfiConverterTypeAmount_lower(amount)
                 )
             },
             pollFunc: ffi_cove_rust_future_poll_f64,
@@ -12620,120 +12751,6 @@ public func FfiConverterTypePendingWalletManagerState_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypePendingWalletManagerState_lower(_ value: PendingWalletManagerState) -> RustBuffer {
     return FfiConverterTypePendingWalletManagerState.lower(value)
-}
-
-
-public struct PriceResponse {
-    public var time: UInt64
-    public var usd: UInt64
-    public var eur: UInt64
-    public var gbp: UInt64
-    public var cad: UInt64
-    public var chf: UInt64
-    public var aud: UInt64
-    public var jpy: UInt64
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(time: UInt64, usd: UInt64, eur: UInt64, gbp: UInt64, cad: UInt64, chf: UInt64, aud: UInt64, jpy: UInt64) {
-        self.time = time
-        self.usd = usd
-        self.eur = eur
-        self.gbp = gbp
-        self.cad = cad
-        self.chf = chf
-        self.aud = aud
-        self.jpy = jpy
-    }
-}
-
-
-
-extension PriceResponse: Equatable, Hashable {
-    public static func ==(lhs: PriceResponse, rhs: PriceResponse) -> Bool {
-        if lhs.time != rhs.time {
-            return false
-        }
-        if lhs.usd != rhs.usd {
-            return false
-        }
-        if lhs.eur != rhs.eur {
-            return false
-        }
-        if lhs.gbp != rhs.gbp {
-            return false
-        }
-        if lhs.cad != rhs.cad {
-            return false
-        }
-        if lhs.chf != rhs.chf {
-            return false
-        }
-        if lhs.aud != rhs.aud {
-            return false
-        }
-        if lhs.jpy != rhs.jpy {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(time)
-        hasher.combine(usd)
-        hasher.combine(eur)
-        hasher.combine(gbp)
-        hasher.combine(cad)
-        hasher.combine(chf)
-        hasher.combine(aud)
-        hasher.combine(jpy)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePriceResponse: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PriceResponse {
-        return
-            try PriceResponse(
-                time: FfiConverterUInt64.read(from: &buf), 
-                usd: FfiConverterUInt64.read(from: &buf), 
-                eur: FfiConverterUInt64.read(from: &buf), 
-                gbp: FfiConverterUInt64.read(from: &buf), 
-                cad: FfiConverterUInt64.read(from: &buf), 
-                chf: FfiConverterUInt64.read(from: &buf), 
-                aud: FfiConverterUInt64.read(from: &buf), 
-                jpy: FfiConverterUInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PriceResponse, into buf: inout [UInt8]) {
-        FfiConverterUInt64.write(value.time, into: &buf)
-        FfiConverterUInt64.write(value.usd, into: &buf)
-        FfiConverterUInt64.write(value.eur, into: &buf)
-        FfiConverterUInt64.write(value.gbp, into: &buf)
-        FfiConverterUInt64.write(value.cad, into: &buf)
-        FfiConverterUInt64.write(value.chf, into: &buf)
-        FfiConverterUInt64.write(value.aud, into: &buf)
-        FfiConverterUInt64.write(value.jpy, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePriceResponse_lift(_ buf: RustBuffer) throws -> PriceResponse {
-    return try FfiConverterTypePriceResponse.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePriceResponse_lower(_ value: PriceResponse) -> RustBuffer {
-    return FfiConverterTypePriceResponse.lower(value)
 }
 
 
@@ -23436,6 +23453,14 @@ public func previewNewWrappedFoundAddress() -> FoundAddress  {
     )
 })
 }
+public func pricesAreEqual(lhs: PriceResponse, rhs: PriceResponse) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_prices_are_equal(
+        FfiConverterTypePriceResponse_lower(lhs),
+        FfiConverterTypePriceResponse_lower(rhs),$0
+    )
+})
+}
 public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  -> MultiFormat  {
     return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
     uniffi_cove_fn_func_string_or_data_try_into_multi_format(
@@ -23612,6 +23637,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 57500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_prices_are_equal() != 41102) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953) {
@@ -23926,7 +23954,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_num_wallets() != 28903) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_prices() != 58350) {
+    if (uniffi_cove_checksum_method_ffiapp_prices() != 12896) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 40613) {
@@ -24100,6 +24128,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_nodeselector_selected_node() != 29849) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_priceresponse_get() != 7353) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_priceresponse_get_for_currency() != 7349) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_psbt_fee() != 37973) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24217,7 +24251,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 57955) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 65443) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 55507) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_balance() != 59906) {
@@ -24235,7 +24269,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_build_transaction_with_fee_rate() != 2979) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 35110) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 24095) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_current_block_height() != 4472) {

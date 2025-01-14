@@ -32,9 +32,8 @@ struct SendFlowConfirmScreen: View {
             return "---"
         }
 
-        let amount = details.sendingAmount().asBtc() * Double(prices.usd)
-
-        return manager.fiatAmountToString(amount)
+        let amount = details.sendingAmount()
+        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
     }
 
     var metadata: WalletMetadata {

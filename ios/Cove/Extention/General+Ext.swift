@@ -80,6 +80,12 @@ extension Amount: Equatable {
     }
 }
 
+extension PriceResponse: Equatable {
+    public static func == (lhs: PriceResponse, rhs: PriceResponse) -> Bool {
+        pricesAreEqual(lhs: lhs, rhs: rhs)
+    }
+}
+
 public extension SendRoute {
     func id() -> WalletId {
         switch self {

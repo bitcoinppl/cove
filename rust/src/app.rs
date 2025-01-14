@@ -167,7 +167,9 @@ impl App {
 
                 crate::task::spawn(async move {
                     match FIAT_CLIENT.get_prices().await {
-                        Ok(prices) => Updater::send_update(AppMessage::FiatPricesChanged(prices)),
+                        Ok(prices) => {
+                            Updater::send_update(AppMessage::FiatPricesChanged(prices.into()))
+                        }
                         Err(error) => {
                             error!("unable to update prices: {error:?}");
                         }
@@ -423,7 +425,7 @@ impl FfiApp {
             if crate::fiat::client::init_prices().await.is_ok() {
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    Updater::send_update(AppMessage::FiatPricesChanged(prices));
+                    Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
 
                 return;
@@ -448,7 +450,7 @@ impl FfiApp {
 
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    Updater::send_update(AppMessage::FiatPricesChanged(prices));
+                    Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
             }
         });

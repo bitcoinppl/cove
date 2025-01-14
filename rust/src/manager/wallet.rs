@@ -384,24 +384,17 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn balance_in_fiat(&self) -> Result<f64, Error> {
-        let currency = Database::global()
-            .global_config
-            .fiat_currency()
-            .unwrap_or_default();
-
         let balance = call!(self.actor.balance())
             .await
             .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
-        self.amount_in_fiat(balance.total().into(), currency).await
+        self.amount_in_fiat(balance.total().into()).await
     }
 
     #[uniffi::method]
-    pub async fn amount_in_fiat(
-        &self,
-        amount: Arc<Amount>,
-        currency: FiatCurrency,
-    ) -> Result<f64, Error> {
+    pub async fn amount_in_fiat(&self, amount: Arc<Amount>) -> Result<f64, Error> {
+        let currency = self.selected_fiat_currency();
+
         FIAT_CLIENT
             .value_in_currency(*amount, currency)
             .await
@@ -456,7 +449,11 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn convert_and_display_fiat(&self, amount: Arc<Amount>, prices: PriceResponse) -> String {
+    pub fn convert_and_display_fiat(
+        &self,
+        amount: Arc<Amount>,
+        prices: Arc<PriceResponse>,
+    ) -> String {
         let currency = self.selected_fiat_currency();
         let price = prices.get_for_currency(currency) as f64;
         let fiat = amount.as_btc() * price;

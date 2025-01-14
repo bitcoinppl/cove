@@ -1,5 +1,7 @@
 //! Send updates from rust to the frontend
 
+use std::sync::Arc;
+
 use crossbeam::channel::Sender;
 use once_cell::sync::OnceCell;
 
@@ -19,7 +21,7 @@ pub enum AppStateReconcileMessage {
     DatabaseUpdated,
     ColorSchemeChanged(ColorSchemeSelection),
     SelectedNodeChanged(Node),
-    FiatPricesChanged(PriceResponse),
+    FiatPricesChanged(Arc<PriceResponse>),
     FeesChanged(FeeResponse),
     FiatCurrencyChanged(FiatCurrency),
 }

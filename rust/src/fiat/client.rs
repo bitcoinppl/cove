@@ -29,7 +29,9 @@ pub struct FiatClient {
     wait_before_new_prices: u64,
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(
+    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, uniffi::Object,
+)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PriceResponse {
     #[serde(rename = "time")]
@@ -43,7 +45,17 @@ pub struct PriceResponse {
     pub jpy: u64,
 }
 
+#[uniffi::export]
 impl PriceResponse {
+    pub fn get(&self) -> u64 {
+        let currency = Database::global()
+            .global_config
+            .fiat_currency()
+            .unwrap_or_default();
+
+        self.get_for_currency(currency)
+    }
+
     pub fn get_for_currency(&self, currency: FiatCurrency) -> u64 {
         match currency {
             FiatCurrency::Usd => self.usd,
@@ -75,10 +87,6 @@ impl FiatClient {
             client: reqwest::Client::new(),
             wait_before_new_prices: ONE_MIN,
         }
-    }
-
-    pub async fn value_in_usd(&self, amount: Amount) -> Result<f64, reqwest::Error> {
-        self.value_in_currency(amount, FiatCurrency::Usd).await
     }
 
     pub async fn value_in_currency(
@@ -237,7 +245,10 @@ mod tests {
         crate::database::delete_database();
         let fiat_client = &FIAT_CLIENT;
         let fiat = fiat_client.get_prices().await.unwrap();
-        let value_in_usd = fiat_client.value_in_usd(Amount::one_btc()).await.unwrap();
+        let value_in_usd = fiat_client
+            .value_in_currency(Amount::one_btc(), FiatCurrency::Usd)
+            .await
+            .unwrap();
 
         let value_in_usd = value_in_usd as f64;
         assert_eq!(value_in_usd, fiat.usd as f64);
@@ -249,9 +260,17 @@ mod tests {
         let fiat = fiat_client.get_prices().await.unwrap();
 
         let half_a_btc = Amount::from_sat(50_000_000);
-        let value_in_usd = fiat_client.value_in_usd(half_a_btc).await.unwrap();
+        let value_in_usd = fiat_client
+            .value_in_currency(half_a_btc, FiatCurrency::Usd)
+            .await
+            .unwrap();
 
         let value_in_usd = value_in_usd as f64;
         assert_eq!(value_in_usd, (fiat.usd as f64) / 2.0);
     }
+}
+
+#[uniffi::export]
+fn prices_are_equal(lhs: Arc<PriceResponse>, rhs: Arc<PriceResponse>) -> bool {
+    lhs == rhs
 }

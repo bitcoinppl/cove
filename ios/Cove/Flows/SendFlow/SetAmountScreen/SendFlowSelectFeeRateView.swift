@@ -78,8 +78,8 @@ private struct FeeOptionView: View {
             return "---"
         }
 
-        let amount = feeOption.totalFee().asBtc() * Double(prices.usd)
-        return manager.fiatAmountToString(amount)
+        let amount = feeOption.totalFee()
+        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
     }
 
     var body: some View {

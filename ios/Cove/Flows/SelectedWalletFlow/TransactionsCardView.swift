@@ -319,10 +319,7 @@ struct UnsignedTransactionView: View {
         }
         .task {
             fiatAmount =
-                try? await manager.rust.amountInFiat(
-                    amount: txn.spendingAmount(),
-                    currency: .usd
-                )
+                try? await manager.rust.amountInFiat(amount: txn.spendingAmount())
         }
         .onTapGesture {
             let hardwareExportRoute =
