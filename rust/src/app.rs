@@ -8,7 +8,10 @@ use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
-    fiat::client::{PriceResponse, FIAT_CLIENT},
+    fiat::{
+        client::{PriceResponse, FIAT_CLIENT},
+        FiatCurrency,
+    },
     keychain::Keychain,
     network::Network,
     node::Node,
@@ -51,6 +54,7 @@ pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
+    ChangeFiatCurrency(FiatCurrency),
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
@@ -184,6 +188,15 @@ impl App {
                         }
                     }
                 });
+            }
+
+            AppAction::ChangeFiatCurrency(fiat_currency) => {
+                if let Err(error) = Database::global()
+                    .global_config
+                    .set_fiat_currency(fiat_currency)
+                {
+                    error!("unable to set fiat currency: {error}");
+                }
             }
         }
     }

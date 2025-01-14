@@ -15,6 +15,7 @@ import SwiftUI
 
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
+    var selectedFiatCurrency = Database().globalConfig().selectedFiatCurrency()
 
     var nfcReader = NFCReader()
 
@@ -158,6 +159,9 @@ import SwiftUI
 
                 case let .feesChanged(fees):
                     self.fees = fees
+
+                case let .fiatCurrencyChanged(fiatCurrency):
+                    self.selectedFiatCurrency = fiatCurrency
                 }
             }
         }

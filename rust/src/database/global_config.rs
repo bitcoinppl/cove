@@ -173,6 +173,11 @@ impl GlobalConfigTable {
         Ok(())
     }
 
+    #[uniffi::method(name = "selectedFiatCurrency")]
+    fn _selected_fiat_currency(&self) -> FiatCurrency {
+        self.fiat_currency().unwrap_or_default()
+    }
+
     #[uniffi::method(name = "authType")]
     pub fn _auth_type(&self) -> AuthType {
         self.auth_type().unwrap_or_default()

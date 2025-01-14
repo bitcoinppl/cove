@@ -4,11 +4,22 @@ pub mod client;
 use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator as _;
 
 pub type FiatAmount = amount::FiatAmount;
 
 #[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum, Serialize, Deserialize,
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    uniffi::Enum,
+    Serialize,
+    Deserialize,
+    strum::EnumIter,
 )]
 #[serde(rename_all = "UPPERCASE")]
 pub enum FiatCurrency {
@@ -32,6 +43,18 @@ impl FiatCurrency {
             FiatCurrency::Gbp => "£",
             FiatCurrency::Chf => "Fr",
             FiatCurrency::Jpy => "¥",
+        }
+    }
+
+    pub fn emoji(&self) -> &'static str {
+        match self {
+            FiatCurrency::Usd => "🇺🇸",
+            FiatCurrency::Cad => "🇨🇦",
+            FiatCurrency::Aud => "🇦🇺",
+            FiatCurrency::Eur => "🇪🇺",
+            FiatCurrency::Gbp => "🇬🇧",
+            FiatCurrency::Chf => "🇨🇭",
+            FiatCurrency::Jpy => "🇯🇵",
         }
     }
 }
@@ -87,4 +110,24 @@ impl From<&FiatCurrency> for &'static str {
         let me: FiatCurrency = *val;
         me.into()
     }
+}
+
+#[uniffi::export]
+fn all_fiat_currencies() -> Vec<FiatCurrency> {
+    FiatCurrency::iter().collect()
+}
+
+#[uniffi::export]
+fn fiat_currency_to_string(fiat_currency: FiatCurrency) -> String {
+    fiat_currency.to_string()
+}
+
+#[uniffi::export]
+fn fiat_currency_symbol(fiat_currency: FiatCurrency) -> String {
+    fiat_currency.symbol().to_string()
+}
+
+#[uniffi::export]
+fn fiat_currency_emoji(fiat_currency: FiatCurrency) -> String {
+    fiat_currency.emoji().to_string()
 }

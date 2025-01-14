@@ -1,6 +1,6 @@
 use std::{hash::Hash, sync::Arc, time::Duration};
 
-use crate::{fiat::FiatCurrency, transaction::Unit};
+use crate::transaction::Unit;
 use macros::{impl_default_for, new_type};
 use nid::Nanoid;
 use rand::Rng as _;
@@ -277,10 +277,6 @@ impl WalletColor {
         let random_index = rand::thread_rng().gen_range(0..options.len());
         options[random_index]
     }
-}
-
-fn default_fiat_currency() -> FiatCurrency {
-    FiatCurrency::Usd
 }
 
 fn default_true() -> bool {
