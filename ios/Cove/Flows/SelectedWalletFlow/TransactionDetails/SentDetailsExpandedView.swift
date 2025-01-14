@@ -71,7 +71,7 @@ struct SentDetailsExpandedView: View {
                 VStack(alignment: .trailing) {
                     Text(transactionDetails.feeFmt(unit: metadata.selectedUnit) ?? "")
                     AsyncView(operation: transactionDetails.feeFiatFmt) { amount in
-                        Text("≈ $\(amount) USD").foregroundStyle(.secondary)
+                        Text(amount).foregroundStyle(.secondary)
                             .font(.caption)
                             .padding(.top, 2)
                     }
@@ -87,7 +87,7 @@ struct SentDetailsExpandedView: View {
                 VStack(alignment: .trailing) {
                     Text(transactionDetails.sentSansFeeFmt(unit: metadata.selectedUnit) ?? "")
                     AsyncView(operation: transactionDetails.sentSansFeeFiatFmt) { amount in
-                        Text("≈ $\(amount) USD").foregroundStyle(.secondary)
+                        Text(amount).foregroundStyle(.secondary)
                             .font(.caption)
                             .padding(.top, 2)
                     }
@@ -106,7 +106,7 @@ struct SentDetailsExpandedView: View {
                 VStack(alignment: .trailing) {
                     Text(transactionDetails.amountFmt(unit: metadata.selectedUnit))
                     AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
-                        Text("≈ $\(amount) USD").foregroundStyle(.secondary)
+                        Text(amount).foregroundStyle(.secondary)
                             .font(.caption)
                             .padding(.top, 2)
                     }

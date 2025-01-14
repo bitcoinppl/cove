@@ -4478,9 +4478,9 @@ open func prices()async throws  -> PriceResponse  {
                     
                 )
             },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypePriceResponse_lift,
             errorHandler: FfiConverterTypeAppError.lift
         )
@@ -5277,6 +5277,8 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     
     func selectWallet(id: WalletId) throws 
     
+    func selectedFiatCurrency()  -> FiatCurrency
+    
     func selectedNetwork()  -> Network
     
     func selectedNode()  -> Node
@@ -5399,6 +5401,13 @@ open func selectWallet(id: WalletId)throws   {try rustCallWithError(FfiConverter
         FfiConverterTypeWalletId_lower(id),$0
     )
 }
+}
+    
+open func selectedFiatCurrency() -> FiatCurrency  {
+    return try!  FfiConverterTypeFiatCurrency_lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func selectedNetwork() -> Network  {
@@ -7114,6 +7123,137 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
 
 
 
+public protocol PriceResponseProtocol : AnyObject {
+    
+    func get()  -> UInt64
+    
+    func getForCurrency(currency: FiatCurrency)  -> UInt64
+    
+}
+
+open class PriceResponse:
+    PriceResponseProtocol
+    {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_priceresponse(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_priceresponse(pointer, $0) }
+    }
+
+    
+
+    
+open func get() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_priceresponse_get(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func getForCurrency(currency: FiatCurrency) -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_priceresponse_get_for_currency(self.uniffiClonePointer(),
+        FfiConverterTypeFiatCurrency_lower(currency),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePriceResponse: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PriceResponse
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PriceResponse {
+        return PriceResponse(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PriceResponse) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PriceResponse {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PriceResponse, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriceResponse_lift(_ pointer: UnsafeMutableRawPointer) throws -> PriceResponse {
+    return try FfiConverterTypePriceResponse.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePriceResponse_lower(_ value: PriceResponse) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePriceResponse.lower(value)
+}
+
+
+
+
+
+
 public protocol PsbtProtocol : AnyObject {
     
     /**
@@ -8264,7 +8404,7 @@ public protocol RustWalletManagerProtocol : AnyObject {
      */
     func addressAt(index: UInt32) async throws  -> AddressInfo
     
-    func amountInFiat(amount: Amount, currency: FiatCurrency) async throws  -> Double
+    func amountInFiat(amount: Amount) async throws  -> Double
     
     func balance() async  -> Balance
     
@@ -8329,6 +8469,8 @@ public protocol RustWalletManagerProtocol : AnyObject {
     func numberOfConfirmationsFmt(blockHeight: UInt32) async throws  -> String
     
     func saveUnsignedTransaction(details: ConfirmDetails) throws 
+    
+    func selectedFiatCurrency()  -> FiatCurrency
     
     func sentAndReceivedFiat(sentAndReceived: SentAndReceived) async throws  -> Double
     
@@ -8452,13 +8594,13 @@ open func addressAt(index: UInt32)async throws  -> AddressInfo  {
         )
 }
     
-open func amountInFiat(amount: Amount, currency: FiatCurrency)async throws  -> Double  {
+open func amountInFiat(amount: Amount)async throws  -> Double  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_fn_method_rustwalletmanager_amount_in_fiat(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeAmount_lower(amount),FfiConverterTypeFiatCurrency_lower(currency)
+                    FfiConverterTypeAmount_lower(amount)
                 )
             },
             pollFunc: ffi_cove_rust_future_poll_f64,
@@ -8841,6 +8983,13 @@ open func saveUnsignedTransaction(details: ConfirmDetails)throws   {try rustCall
         FfiConverterTypeConfirmDetails_lower(details),$0
     )
 }
+}
+    
+open func selectedFiatCurrency() -> FiatCurrency  {
+    return try!  FfiConverterTypeFiatCurrency_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_selected_fiat_currency(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func sentAndReceivedFiat(sentAndReceived: SentAndReceived)async throws  -> Double  {
@@ -12605,120 +12754,6 @@ public func FfiConverterTypePendingWalletManagerState_lower(_ value: PendingWall
 }
 
 
-public struct PriceResponse {
-    public var time: UInt64
-    public var usd: UInt64
-    public var eur: UInt64
-    public var gbp: UInt64
-    public var cad: UInt64
-    public var chf: UInt64
-    public var aud: UInt64
-    public var jpy: UInt64
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(time: UInt64, usd: UInt64, eur: UInt64, gbp: UInt64, cad: UInt64, chf: UInt64, aud: UInt64, jpy: UInt64) {
-        self.time = time
-        self.usd = usd
-        self.eur = eur
-        self.gbp = gbp
-        self.cad = cad
-        self.chf = chf
-        self.aud = aud
-        self.jpy = jpy
-    }
-}
-
-
-
-extension PriceResponse: Equatable, Hashable {
-    public static func ==(lhs: PriceResponse, rhs: PriceResponse) -> Bool {
-        if lhs.time != rhs.time {
-            return false
-        }
-        if lhs.usd != rhs.usd {
-            return false
-        }
-        if lhs.eur != rhs.eur {
-            return false
-        }
-        if lhs.gbp != rhs.gbp {
-            return false
-        }
-        if lhs.cad != rhs.cad {
-            return false
-        }
-        if lhs.chf != rhs.chf {
-            return false
-        }
-        if lhs.aud != rhs.aud {
-            return false
-        }
-        if lhs.jpy != rhs.jpy {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(time)
-        hasher.combine(usd)
-        hasher.combine(eur)
-        hasher.combine(gbp)
-        hasher.combine(cad)
-        hasher.combine(chf)
-        hasher.combine(aud)
-        hasher.combine(jpy)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePriceResponse: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PriceResponse {
-        return
-            try PriceResponse(
-                time: FfiConverterUInt64.read(from: &buf), 
-                usd: FfiConverterUInt64.read(from: &buf), 
-                eur: FfiConverterUInt64.read(from: &buf), 
-                gbp: FfiConverterUInt64.read(from: &buf), 
-                cad: FfiConverterUInt64.read(from: &buf), 
-                chf: FfiConverterUInt64.read(from: &buf), 
-                aud: FfiConverterUInt64.read(from: &buf), 
-                jpy: FfiConverterUInt64.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PriceResponse, into buf: inout [UInt8]) {
-        FfiConverterUInt64.write(value.time, into: &buf)
-        FfiConverterUInt64.write(value.usd, into: &buf)
-        FfiConverterUInt64.write(value.eur, into: &buf)
-        FfiConverterUInt64.write(value.gbp, into: &buf)
-        FfiConverterUInt64.write(value.cad, into: &buf)
-        FfiConverterUInt64.write(value.chf, into: &buf)
-        FfiConverterUInt64.write(value.aud, into: &buf)
-        FfiConverterUInt64.write(value.jpy, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePriceResponse_lift(_ buf: RustBuffer) throws -> PriceResponse {
-    return try FfiConverterTypePriceResponse.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePriceResponse_lower(_ value: PriceResponse) -> RustBuffer {
-    return FfiConverterTypePriceResponse.lower(value)
-}
-
-
 public struct Rgb {
     public var r: UInt8
     public var g: UInt8
@@ -12994,7 +13029,6 @@ public struct WalletMetadata {
     public var performedFullScan: Bool
     public var masterFingerprint: Fingerprint?
     public var selectedUnit: Unit
-    public var selectedFiatCurrency: FiatCurrency
     public var sensitiveVisible: Bool
     public var detailsExpanded: Bool
     public var walletType: WalletType
@@ -13005,7 +13039,7 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, selectedFiatCurrency: FiatCurrency, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, `internal`: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, `internal`: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -13014,7 +13048,6 @@ public struct WalletMetadata {
         self.performedFullScan = performedFullScan
         self.masterFingerprint = masterFingerprint
         self.selectedUnit = selectedUnit
-        self.selectedFiatCurrency = selectedFiatCurrency
         self.sensitiveVisible = sensitiveVisible
         self.detailsExpanded = detailsExpanded
         self.walletType = walletType
@@ -13042,7 +13075,6 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 performedFullScan: FfiConverterBool.read(from: &buf), 
                 masterFingerprint: FfiConverterOptionTypeFingerprint.read(from: &buf), 
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf), 
-                selectedFiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf), 
                 sensitiveVisible: FfiConverterBool.read(from: &buf), 
                 detailsExpanded: FfiConverterBool.read(from: &buf), 
                 walletType: FfiConverterTypeWalletType.read(from: &buf), 
@@ -13062,7 +13094,6 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.performedFullScan, into: &buf)
         FfiConverterOptionTypeFingerprint.write(value.masterFingerprint, into: &buf)
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
-        FfiConverterTypeFiatCurrency.write(value.selectedFiatCurrency, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
         FfiConverterBool.write(value.detailsExpanded, into: &buf)
         FfiConverterTypeWalletType.write(value.walletType, into: &buf)
@@ -13277,6 +13308,8 @@ public enum AppAction {
     )
     case changeColorScheme(ColorSchemeSelection
     )
+    case changeFiatCurrency(FiatCurrency
+    )
     case setSelectedNode(Node
     )
     case updateFiatPrices
@@ -13303,12 +13336,15 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 3: return .changeColorScheme(try FfiConverterTypeColorSchemeSelection.read(from: &buf)
         )
         
-        case 4: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        case 4: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
         )
         
-        case 5: return .updateFiatPrices
+        case 5: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        )
         
-        case 6: return .updateFees
+        case 6: return .updateFiatPrices
+        
+        case 7: return .updateFees
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -13333,17 +13369,22 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
             
         
-        case let .setSelectedNode(v1):
+        case let .changeFiatCurrency(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterTypeFiatCurrency.write(v1, into: &buf)
+            
+        
+        case let .setSelectedNode(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterTypeNode.write(v1, into: &buf)
             
         
         case .updateFiatPrices:
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
         
         
         case .updateFees:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
         
         }
     }
@@ -13468,6 +13509,8 @@ public enum AppStateReconcileMessage {
     )
     case feesChanged(FeeResponse
     )
+    case fiatCurrencyChanged(FiatCurrency
+    )
 }
 
 
@@ -13499,6 +13542,9 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         )
         
         case 7: return .feesChanged(try FfiConverterTypeFeeResponse.read(from: &buf)
+        )
+        
+        case 8: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -13542,6 +13588,11 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case let .feesChanged(v1):
             writeInt(&buf, Int32(7))
             FfiConverterTypeFeeResponse.write(v1, into: &buf)
+            
+        
+        case let .fiatCurrencyChanged(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeFiatCurrency.write(v1, into: &buf)
             
         }
     }
@@ -15223,11 +15274,11 @@ extension FiatAmountError: Foundation.LocalizedError {
 public enum FiatCurrency {
     
     case usd
+    case cad
+    case aud
     case eur
     case gbp
-    case cad
     case chf
-    case aud
     case jpy
 }
 
@@ -15244,15 +15295,15 @@ public struct FfiConverterTypeFiatCurrency: FfiConverterRustBuffer {
         
         case 1: return .usd
         
-        case 2: return .eur
+        case 2: return .cad
         
-        case 3: return .gbp
+        case 3: return .aud
         
-        case 4: return .cad
+        case 4: return .eur
         
-        case 5: return .chf
+        case 5: return .gbp
         
-        case 6: return .aud
+        case 6: return .chf
         
         case 7: return .jpy
         
@@ -15268,23 +15319,23 @@ public struct FfiConverterTypeFiatCurrency: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case .eur:
+        case .cad:
             writeInt(&buf, Int32(2))
         
         
-        case .gbp:
+        case .aud:
             writeInt(&buf, Int32(3))
         
         
-        case .cad:
+        case .eur:
             writeInt(&buf, Int32(4))
         
         
-        case .chf:
+        case .gbp:
             writeInt(&buf, Int32(5))
         
         
-        case .aud:
+        case .chf:
             writeInt(&buf, Int32(6))
         
         
@@ -15650,6 +15701,7 @@ public enum GlobalConfigKey {
     
     case selectedWalletId
     case selectedNetwork
+    case selectedFiatCurrency
     case selectedNode(Network
     )
     case colorScheme
@@ -15673,16 +15725,18 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case 2: return .selectedNetwork
         
-        case 3: return .selectedNode(try FfiConverterTypeNetwork.read(from: &buf)
+        case 3: return .selectedFiatCurrency
+        
+        case 4: return .selectedNode(try FfiConverterTypeNetwork.read(from: &buf)
         )
         
-        case 4: return .colorScheme
+        case 5: return .colorScheme
         
-        case 5: return .authType
+        case 6: return .authType
         
-        case 6: return .hashedPinCode
+        case 7: return .hashedPinCode
         
-        case 7: return .wipeDataPin
+        case 8: return .wipeDataPin
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -15700,25 +15754,29 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case let .selectedNode(v1):
+        case .selectedFiatCurrency:
             writeInt(&buf, Int32(3))
+        
+        
+        case let .selectedNode(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterTypeNetwork.write(v1, into: &buf)
             
         
         case .colorScheme:
-            writeInt(&buf, Int32(4))
-        
-        
-        case .authType:
             writeInt(&buf, Int32(5))
         
         
-        case .hashedPinCode:
+        case .authType:
             writeInt(&buf, Int32(6))
         
         
-        case .wipeDataPin:
+        case .hashedPinCode:
             writeInt(&buf, Int32(7))
+        
+        
+        case .wipeDataPin:
+            writeInt(&buf, Int32(8))
         
         }
     }
@@ -20304,8 +20362,6 @@ public enum WalletManagerAction {
     )
     case updateUnit(Unit
     )
-    case updateFiatCurrency(FiatCurrency
-    )
     case updateFiatOrBtc(FiatOrBtc
     )
     case toggleSensitiveVisibility
@@ -20337,23 +20393,20 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
         case 3: return .updateUnit(try FfiConverterTypeUnit.read(from: &buf)
         )
         
-        case 4: return .updateFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        case 4: return .updateFiatOrBtc(try FfiConverterTypeFiatOrBtc.read(from: &buf)
         )
         
-        case 5: return .updateFiatOrBtc(try FfiConverterTypeFiatOrBtc.read(from: &buf)
-        )
+        case 5: return .toggleSensitiveVisibility
         
-        case 6: return .toggleSensitiveVisibility
+        case 6: return .toggleDetailsExpanded
         
-        case 7: return .toggleDetailsExpanded
+        case 7: return .toggleFiatOrBtc
         
-        case 8: return .toggleFiatOrBtc
+        case 8: return .toggleFiatBtcPrimarySecondary
         
-        case 9: return .toggleFiatBtcPrimarySecondary
+        case 9: return .selectCurrentWalletAddressType
         
-        case 10: return .selectCurrentWalletAddressType
-        
-        case 11: return .selectDifferentWalletAddressType(try FfiConverterTypeWalletAddressType.read(from: &buf)
+        case 10: return .selectDifferentWalletAddressType(try FfiConverterTypeWalletAddressType.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -20379,38 +20432,33 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
             FfiConverterTypeUnit.write(v1, into: &buf)
             
         
-        case let .updateFiatCurrency(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterTypeFiatCurrency.write(v1, into: &buf)
-            
-        
         case let .updateFiatOrBtc(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeFiatOrBtc.write(v1, into: &buf)
             
         
         case .toggleSensitiveVisibility:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
         
         
         case .toggleDetailsExpanded:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
         
         
         case .toggleFiatOrBtc:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
         
         
         case .toggleFiatBtcPrimarySecondary:
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
         
         
         case .selectCurrentWalletAddressType:
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(9))
         
         
         case let .selectDifferentWalletAddressType(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
             
         }
@@ -22858,6 +22906,31 @@ fileprivate struct FfiConverterSequenceTypeColorSchemeSelection: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFiatCurrency: FfiConverterRustBuffer {
+    typealias SwiftType = [FiatCurrency]
+
+    public static func write(_ value: [FiatCurrency], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFiatCurrency.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FiatCurrency] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FiatCurrency]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFiatCurrency.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer {
     typealias SwiftType = [Network]
 
@@ -23222,6 +23295,12 @@ public func allColorSchemes() -> [ColorSchemeSelection]  {
     )
 })
 }
+public func allFiatCurrencies() -> [FiatCurrency]  {
+    return try!  FfiConverterSequenceTypeFiatCurrency.lift(try! rustCall() {
+    uniffi_cove_fn_func_all_fiat_currencies($0
+    )
+})
+}
 public func allNetworks() -> [Network]  {
     return try!  FfiConverterSequenceTypeNetwork.lift(try! rustCall() {
     uniffi_cove_fn_func_all_networks($0
@@ -23289,6 +23368,34 @@ public func fiatAmountPreviewNew() -> FiatAmount  {
     )
 })
 }
+public func fiatCurrencyEmoji(fiatCurrency: FiatCurrency) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_fiat_currency_emoji(
+        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
+    )
+})
+}
+public func fiatCurrencySuffix(fiatCurrency: FiatCurrency) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_fiat_currency_suffix(
+        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
+    )
+})
+}
+public func fiatCurrencySymbol(fiatCurrency: FiatCurrency) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_fiat_currency_symbol(
+        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
+    )
+})
+}
+public func fiatCurrencyToString(fiatCurrency: FiatCurrency) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_fiat_currency_to_string(
+        FfiConverterTypeFiatCurrency_lower(fiatCurrency),$0
+    )
+})
+}
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[String]]  {
     return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError_lift) {
     uniffi_cove_fn_func_grouped_plain_words_of(
@@ -23350,6 +23457,14 @@ public func previewNewLegacyFoundAddress() -> FoundAddress  {
 public func previewNewWrappedFoundAddress() -> FoundAddress  {
     return try!  FfiConverterTypeFoundAddress_lift(try! rustCall() {
     uniffi_cove_fn_func_preview_new_wrapped_found_address($0
+    )
+})
+}
+public func pricesAreEqual(lhs: PriceResponse, rhs: PriceResponse) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_prices_are_equal(
+        FfiConverterTypePriceResponse_lower(lhs),
+        FfiConverterTypePriceResponse_lower(rhs),$0
     )
 })
 }
@@ -23462,6 +23577,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_all_color_schemes() != 24835) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_all_fiat_currencies() != 51329) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_all_networks() != 30650) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23492,6 +23610,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_fiat_amount_preview_new() != 6422) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_fiat_currency_emoji() != 7081) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_fiat_currency_suffix() != 50079) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_fiat_currency_symbol() != 58040) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_fiat_currency_to_string() != 50490) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 45802) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23517,6 +23647,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_preview_new_wrapped_found_address() != 57500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_prices_are_equal() != 41102) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953) {
@@ -23831,7 +23964,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_num_wallets() != 28903) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_prices() != 58350) {
+    if (uniffi_cove_checksum_method_ffiapp_prices() != 12896) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 40613) {
@@ -23898,6 +24031,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 52001) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency() != 8392) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_selected_network() != 7657) {
@@ -24000,6 +24136,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_selected_node() != 29849) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_priceresponse_get() != 7353) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_priceresponse_get_for_currency() != 7349) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_psbt_fee() != 37973) {
@@ -24119,7 +24261,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 57955) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 65443) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_amount_in_fiat() != 55507) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_balance() != 59906) {
@@ -24137,7 +24279,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_build_transaction_with_fee_rate() != 2979) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 35110) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 24095) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_current_block_height() != 4472) {
@@ -24207,6 +24349,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 14349) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_selected_fiat_currency() != 3087) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_sent_and_received_fiat() != 6901) {

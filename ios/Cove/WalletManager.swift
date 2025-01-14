@@ -65,6 +65,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         rust.validateMetadata()
     }
 
+    func forceWalletScan() async {
+        await rust.forceWalletScan()
+    }
+
     func firstAddress() async throws -> AddressInfo {
         try await rust.addressAt(index: 0)
     }
@@ -83,10 +87,6 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case .btc: amount.btcStringWithUnit()
         case .sat: amount.satsStringWithUnit()
         }
-    }
-
-    func fiatAmountToString(_ amount: some Numeric & LosslessStringConvertible) -> String {
-        "≈ \(FiatFormatter(amount).fmt()) USD"
     }
 
     func getFiatBalance() async {

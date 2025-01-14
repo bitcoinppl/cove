@@ -69,7 +69,6 @@ pub enum WalletManagerAction {
     UpdateName(String),
     UpdateColor(WalletColor),
     UpdateUnit(Unit),
-    UpdateFiatCurrency(FiatCurrency),
     UpdateFiatOrBtc(FiatOrBtc),
     ToggleSensitiveVisibility,
     ToggleDetailsExpanded,
@@ -241,6 +240,14 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn selected_fiat_currency(&self) -> FiatCurrency {
+        Database::global()
+            .global_config
+            .fiat_currency()
+            .unwrap_or_default()
+    }
+
+    #[uniffi::method]
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client
@@ -377,20 +384,17 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn balance_in_fiat(&self) -> Result<f64, Error> {
-        let currency = self.metadata.read().selected_fiat_currency;
         let balance = call!(self.actor.balance())
             .await
             .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
-        self.amount_in_fiat(balance.total().into(), currency).await
+        self.amount_in_fiat(balance.total().into()).await
     }
 
     #[uniffi::method]
-    pub async fn amount_in_fiat(
-        &self,
-        amount: Arc<Amount>,
-        currency: FiatCurrency,
-    ) -> Result<f64, Error> {
+    pub async fn amount_in_fiat(&self, amount: Arc<Amount>) -> Result<f64, Error> {
+        let currency = self.selected_fiat_currency();
+
         FIAT_CLIENT
             .value_in_currency(*amount, currency)
             .await
@@ -438,12 +442,21 @@ impl RustWalletManager {
         }
 
         let fiat = amount.thousands_fiat();
-        format!("${fiat} {}", self.metadata.read().selected_fiat_currency)
+
+        let currency = self.selected_fiat_currency();
+        let symbol = currency.symbol();
+        let suffix = currency.suffix();
+
+        format!("{symbol}{fiat} {suffix}")
     }
 
     #[uniffi::method]
-    pub fn convert_and_display_fiat(&self, amount: Arc<Amount>, prices: PriceResponse) -> String {
-        let currency = self.metadata.read().selected_fiat_currency;
+    pub fn convert_and_display_fiat(
+        &self,
+        amount: Arc<Amount>,
+        prices: Arc<PriceResponse>,
+    ) -> String {
+        let currency = self.selected_fiat_currency();
         let price = prices.get_for_currency(currency) as f64;
         let fiat = amount.as_btc() * price;
 
@@ -456,7 +469,7 @@ impl RustWalletManager {
         sent_and_received: Arc<SentAndReceived>,
     ) -> Result<f64, Error> {
         let amount = sent_and_received.amount();
-        let currency = self.metadata.read().selected_fiat_currency;
+        let currency = self.selected_fiat_currency();
 
         let fiat = FIAT_CLIENT
             .value_in_currency(amount, currency)
@@ -912,11 +925,6 @@ impl RustWalletManager {
             WalletManagerAction::UpdateUnit(unit) => {
                 let mut metadata = self.metadata.write();
                 metadata.selected_unit = unit;
-            }
-
-            WalletManagerAction::UpdateFiatCurrency(fiat_currency) => {
-                let mut metadata = self.metadata.write();
-                metadata.selected_fiat_currency = fiat_currency;
             }
 
             WalletManagerAction::ToggleSensitiveVisibility => {

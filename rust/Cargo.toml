@@ -122,7 +122,7 @@ chacha20poly1305 = "0.10.1"
 ahash = "0.8.11"
 
 # fmt currency
-numfmt = "1.1.1"
+numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
 
 # http client
 reqwest = { version = "0.12", features = ["json"] }

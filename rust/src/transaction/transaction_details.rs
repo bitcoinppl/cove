@@ -7,7 +7,8 @@ use jiff::Timestamp;
 use numfmt::{Formatter, Precision};
 
 use crate::{
-    fiat::client::FIAT_CLIENT,
+    database::Database,
+    fiat::{client::FIAT_CLIENT, FiatCurrency},
     format::NumberFormatter as _,
     task,
     transaction::{TransactionDirection, Unit},
@@ -141,9 +142,10 @@ impl TransactionDetails {
     #[uniffi::method]
     pub async fn amount_fiat(&self) -> Result<f64, Error> {
         let amount = self.amount();
+
         task::spawn(async move {
             FIAT_CLIENT
-                .value_in_usd(amount)
+                .value_in_currency(amount, currency())
                 .await
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
@@ -154,9 +156,7 @@ impl TransactionDetails {
     #[uniffi::method]
     pub async fn amount_fiat_fmt(&self) -> Result<String, Error> {
         let amount = self.amount_fiat().await?;
-        let fmt = amount.thousands_fiat();
-
-        Ok(fmt.to_string())
+        Ok(fiat_amount_fmt(amount))
     }
 
     #[uniffi::method]
@@ -170,14 +170,14 @@ impl TransactionDetails {
         let fee = self.fee.ok_or(Error::Fee("No fee".to_string()))?;
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .value_in_usd(fee)
+                .value_in_currency(fee, currency())
                 .await
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
         .unwrap()?;
 
-        Ok(fiat.thousands_fiat())
+        Ok(fiat_amount_fmt(fiat))
     }
 
     #[uniffi::method]
@@ -209,14 +209,14 @@ impl TransactionDetails {
 
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .value_in_usd(amount)
+                .value_in_currency(amount, currency())
                 .await
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
         .await
         .unwrap()?;
 
-        Ok(fiat.thousands_fiat())
+        Ok(fiat_amount_fmt(fiat))
     }
 
     #[uniffi::method]
@@ -273,7 +273,7 @@ impl TransactionDetails {
             .unwrap()
             .precision(Precision::Decimals(0));
 
-        Some(f.fmt2(block_number).to_string())
+        Some(f.fmt(block_number).to_string())
     }
     #[uniffi::method]
     pub fn address_spaced_out(&self) -> String {
@@ -332,4 +332,22 @@ impl TransactionDetails {
 
         me
     }
+}
+
+/// MARK: local helpers
+fn currency() -> FiatCurrency {
+    Database::global()
+        .global_config
+        .fiat_currency()
+        .unwrap_or_default()
+}
+
+fn fiat_amount_fmt(amount: f64) -> String {
+    let amount_fmt = amount.thousands_fiat();
+
+    let currency = currency();
+    let symbol = currency.symbol();
+    let suffix = currency.suffix();
+
+    format!("≈ {symbol}{amount_fmt} {suffix}")
 }

@@ -8,7 +8,10 @@ use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
     database::{error::DatabaseError, Database},
-    fiat::client::{PriceResponse, FIAT_CLIENT},
+    fiat::{
+        client::{PriceResponse, FIAT_CLIENT},
+        FiatCurrency,
+    },
     keychain::Keychain,
     network::Network,
     node::Node,
@@ -51,6 +54,7 @@ pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
+    ChangeFiatCurrency(FiatCurrency),
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
@@ -163,7 +167,9 @@ impl App {
 
                 crate::task::spawn(async move {
                     match FIAT_CLIENT.get_prices().await {
-                        Ok(prices) => Updater::send_update(AppMessage::FiatPricesChanged(prices)),
+                        Ok(prices) => {
+                            Updater::send_update(AppMessage::FiatPricesChanged(prices.into()))
+                        }
                         Err(error) => {
                             error!("unable to update prices: {error:?}");
                         }
@@ -184,6 +190,15 @@ impl App {
                         }
                     }
                 });
+            }
+
+            AppAction::ChangeFiatCurrency(fiat_currency) => {
+                if let Err(error) = Database::global()
+                    .global_config
+                    .set_fiat_currency(fiat_currency)
+                {
+                    error!("unable to set fiat currency: {error}");
+                }
             }
         }
     }
@@ -410,7 +425,7 @@ impl FfiApp {
             if crate::fiat::client::init_prices().await.is_ok() {
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    Updater::send_update(AppMessage::FiatPricesChanged(prices));
+                    Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
 
                 return;
@@ -435,7 +450,7 @@ impl FfiApp {
 
                 let prices = FIAT_CLIENT.get_prices().await;
                 if let Ok(prices) = prices {
-                    Updater::send_update(AppMessage::FiatPricesChanged(prices));
+                    Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
             }
         });

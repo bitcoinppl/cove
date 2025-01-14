@@ -100,18 +100,10 @@ struct SettingsScreen: View {
         )
     }
 
-    var body: some View {
-        Form {
-            Section(header: Text("About")) {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text("0.0.0")
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            Section(header: Text("Network")) {
+    @ViewBuilder
+    var GeneralSection: some View {
+        Section(header: Text("General")) {
+            HStack {
                 Picker(
                     "Network",
                     selection: Binding(
@@ -128,8 +120,57 @@ struct SettingsScreen: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
             }
+        }
+    }
 
-            Section(header: Text("Appearance")) {
+    @ViewBuilder
+    var FiatCurrencySection: some View {
+        Section("Currency & Units") {
+            Picker(
+                "Fiat Currency",
+                selection: Binding(
+                    get: { app.selectedFiatCurrency },
+                    set: {
+                        app.dispatch(action: .changeFiatCurrency($0))
+                    }
+                )
+            ) {
+                ForEach(allFiatCurrencies(), id: \.self) { currency in
+                    Text("\(currency.emoji()) \(currency.toString())")
+                }
+            }
+        }
+    }
+
+    var SecuritySection: some View {
+        Section("Security") {
+            if canUseBiometrics() {
+                Toggle(isOn: toggleBiometric) {
+                    Label("Enable Face ID", systemImage: "faceid")
+                }
+            }
+
+            Toggle(isOn: togglePin) {
+                Label("Enable PIN", systemImage: "lock")
+            }
+
+            if togglePin.wrappedValue {
+                Button(action: { sheetState = .init(.changePin) }) {
+                    Label("Change PIN", systemImage: "lock.open.rotation")
+                }
+
+                Toggle(isOn: toggleWipeMePin) {
+                    Label("Enable Wipe Data PIN", systemImage: "trash.slash")
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        Form {
+            GeneralSection
+
+            Section("Appreance") {
                 Picker(
                     "Theme",
                     selection: Binding(
@@ -148,27 +189,9 @@ struct SettingsScreen: View {
 
             NodeSelectionView()
 
-            Section("Security") {
-                if canUseBiometrics() {
-                    Toggle(isOn: toggleBiometric) {
-                        Label("Enable Face ID", systemImage: "faceid")
-                    }
-                }
+            FiatCurrencySection
 
-                Toggle(isOn: togglePin) {
-                    Label("Enable PIN", systemImage: "lock")
-                }
-
-                if togglePin.wrappedValue {
-                    Button(action: { sheetState = .init(.changePin) }) {
-                        Label("Change PIN", systemImage: "lock.open.rotation")
-                    }
-
-                    Toggle(isOn: toggleWipeMePin) {
-                        Label("Enable Wipe Data PIN", systemImage: "trash.slash")
-                    }
-                }
-            }
+            SecuritySection
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -469,4 +492,5 @@ struct SettingsScreen: View {
 #Preview {
     SettingsScreen()
         .environment(AppManager())
+        .environment(AuthManager())
 }

@@ -77,7 +77,7 @@ impl Amount {
             .unwrap()
             .precision(Precision::Decimals(0));
 
-        f.fmt2(self.as_sats() as f64).to_string()
+        f.fmt(self.as_sats() as f64).to_string()
     }
 
     pub fn sats_string_with_unit(&self) -> String {
