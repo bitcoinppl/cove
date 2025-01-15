@@ -69,7 +69,7 @@ struct ReceiveView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(.midnightBtn)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                 }
 
                 Button(action: {
@@ -85,7 +85,7 @@ struct ReceiveView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.white)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(.midnightBtn, lineWidth: 1)

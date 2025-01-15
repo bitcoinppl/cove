@@ -228,7 +228,7 @@ struct TransactionDetailsView: View {
                         .padding()
                         .background(Color.midnightBtn)
                         .foregroundColor(.white)
-                        .cornerRadius(8)
+                        .cornerRadius(10)
                         .padding(.horizontal, detailsExpandedPadding)
                 }
 

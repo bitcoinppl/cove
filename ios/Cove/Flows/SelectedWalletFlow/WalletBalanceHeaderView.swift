@@ -134,7 +134,7 @@ struct WalletBalanceHeaderView: View {
                     .padding()
                     .padding(.vertical, 4)
                     .background(Color.btnPrimary)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                 }
 
                 Button(action: showReceiveSheet) {
@@ -147,7 +147,7 @@ struct WalletBalanceHeaderView: View {
                     .padding()
                     .padding(.vertical, 4)
                     .background(Color.btnPrimary)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                 }
             }
         }

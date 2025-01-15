@@ -36,7 +36,7 @@ struct SendFlowDetailsSheetView: View {
             .font(.caption)
             .background(.midnightBtn)
             .foregroundStyle(.white)
-            .cornerRadius(8)
+            .cornerRadius(10)
         }
     }
 }
