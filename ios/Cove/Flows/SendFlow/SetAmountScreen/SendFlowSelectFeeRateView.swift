@@ -37,6 +37,16 @@ struct SendFlowSelectFeeRateView: View {
                 feeOption: feeOptions.slow(),
                 selectedOption: $selectedOption
             )
+
+            Button(action: {}) {
+                Text("Customize Fee")
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.midnightBtn)
+            .foregroundColor(.white)
+            .cornerRadius(10)
+            .padding(.horizontal, detailsExpandedPadding)
         }
         .padding(.horizontal)
         .padding(.top, 22)
@@ -147,7 +157,7 @@ private struct DurationCapsule: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Color.gray.opacity(0.2))
-        .cornerRadius(8)
+        .cornerRadius(10)
     }
 }
 
