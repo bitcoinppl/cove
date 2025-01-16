@@ -35,7 +35,6 @@ struct SendFlowSetAmountScreen: View {
     @State private var scannedCode: TaggedString? = .none
 
     // fees
-    @State private var txnSize: Int? = nil
     @State private var selectedFeeRate: FeeRateOptionWithTotalFee? = .none
     @State private var feeRateOptions: FeeRateOptionsWithTotalFee? = .none
     @State private var feeRateOptionsBase: FeeRateOptions? = .none
@@ -925,7 +924,7 @@ struct SendFlowSetAmountScreen: View {
                     }
                 )
             )
-            .presentationDetents([.height(400)])
+            .presentationDetents([.height(440), .height(550), .large])
         }
     }
 }

@@ -86,7 +86,7 @@ impl From<FeeResponse> for FeeRateOptions {
             let rate = rate.min(fees.hour_fee);
 
             // slow rate should never be less than or the same as the minimum fee
-            let rate = rate.max(fees.minimum_fee + 1.75);
+            let rate = rate.max(fees.minimum_fee + 1.1);
 
             (
                 rate,
@@ -98,7 +98,7 @@ impl From<FeeResponse> for FeeRateOptions {
         };
 
         let (medium_rate, medium) = {
-            let rate = fees.half_hour_fee.max(slow_rate + 1.75);
+            let rate = fees.half_hour_fee.max(slow_rate + 2.15);
 
             (
                 rate,
