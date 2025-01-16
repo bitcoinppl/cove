@@ -14,7 +14,7 @@ use bdk_chain::{
     bitcoin::Psbt,
     spk_client::{FullScanResponse, SyncResponse},
 };
-use bdk_wallet::KeychainKind;
+use bdk_wallet::{KeychainKind, TxOrdering};
 use bitcoin::{params::Params, Transaction as BdkTransaction};
 use bitcoin_units::Amount;
 use crossbeam::channel::Sender;
@@ -120,6 +120,7 @@ impl WalletActor {
         let script_pubkey = address.script_pubkey();
 
         let mut tx_builder = self.wallet.build_tx();
+        tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
 
