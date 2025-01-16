@@ -38,18 +38,19 @@ impl FeeRate {
 #[uniffi::export]
 impl FeeRate {
     #[uniffi::constructor()]
-    pub fn from_sat_per_vb(sat_per_vb: u64) -> Self {
-        let fee_rate = BdkFeeRate::from_sat_per_vb(sat_per_vb).expect("fee rate");
+    pub fn from_sat_per_vb(sat_per_vb: f32) -> Self {
+        let sat_per_kwu = sat_per_vb * (1000 / 4) as f32;
+        let fee_rate = BdkFeeRate::from_sat_per_kwu(sat_per_kwu.ceil() as u64);
+
         Self(fee_rate)
     }
 
-    pub fn sat_per_vb(&self) -> f64 {
-        (self.0.to_sat_per_kwu() as f64) / 250.0
+    pub fn sat_per_vb(&self) -> f32 {
+        self.0.to_sat_per_kwu() as f32 / (1000 / 4) as f32
     }
 }
 
 // MARK: FeeRateOptions
-//
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object)]
 pub struct FeeRateOptions {
@@ -85,9 +86,9 @@ mod preview_ffi {
         #[uniffi::constructor]
         pub fn preview_new() -> Self {
             Self {
-                fast: FeeRateOption::new(FeeSpeed::Fast, 10),
-                medium: FeeRateOption::new(FeeSpeed::Medium, 7),
-                slow: FeeRateOption::new(FeeSpeed::Slow, 2),
+                fast: FeeRateOption::new(FeeSpeed::Fast, 9.87),
+                medium: FeeRateOption::new(FeeSpeed::Medium, 7.22),
+                slow: FeeRateOption::new(FeeSpeed::Slow, 2.11),
             }
         }
     }
@@ -104,14 +105,14 @@ pub struct FeeRateOption {
 #[uniffi::export]
 impl FeeRateOption {
     #[uniffi::constructor]
-    pub fn new(fee_speed: FeeSpeed, fee_rate: u64) -> Self {
+    pub fn new(fee_speed: FeeSpeed, fee_rate: f32) -> Self {
         Self {
             fee_speed,
             fee_rate: FeeRate::from_sat_per_vb(fee_rate),
         }
     }
 
-    pub fn sat_per_vb(&self) -> f64 {
+    pub fn sat_per_vb(&self) -> f32 {
         self.fee_rate.sat_per_vb()
     }
 
@@ -221,7 +222,7 @@ mod fee_rate_option_with_total_fee_ffi {
             self.total_fee
         }
 
-        pub fn sat_per_vb(&self) -> f64 {
+        pub fn sat_per_vb(&self) -> f32 {
             self.fee_rate.sat_per_vb()
         }
 
