@@ -4060,6 +4060,8 @@ public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
     
     func slow()  -> FeeRateOptionWithTotalFee
     
+    func txSize()  -> UInt64
+    
 }
 
 open class FeeRateOptionsWithTotalFee:
@@ -4111,6 +4113,15 @@ open class FeeRateOptionsWithTotalFee:
     }
 
     
+public static func addCustomFee(options: FeeRateOptionsWithTotalFee, feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptionsWithTotalFee  {
+    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_feerateoptionswithtotalfee_add_custom_fee(
+        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(options),
+        FfiConverterTypeFeeRateOptionWithTotalFee_lower(feeRate),$0
+    )
+})
+}
+    
 public static func previewNew() -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
     uniffi_cove_fn_constructor_feerateoptionswithtotalfee_preview_new($0
@@ -4144,6 +4155,13 @@ open func medium() -> FeeRateOptionWithTotalFee  {
 open func slow() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoptionswithtotalfee_slow(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txSize() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_tx_size(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -8451,6 +8469,8 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived)  -> String
     
+    func feeRateOptionWithTotalFee(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> FeeRateOptionWithTotalFee
+    
     func feeRateOptions() async throws  -> FeeRateOptions
     
     func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Amount, address: Address) async throws  -> FeeRateOptionsWithTotalFee
@@ -8784,6 +8804,23 @@ open func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> Stri
         FfiConverterTypeSentAndReceived_lower(sentAndReceived),$0
     )
 })
+}
+    
+open func feeRateOptionWithTotalFee(amount: Amount, address: Address, feeRate: FeeRate)async throws  -> FeeRateOptionWithTotalFee  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_fee_rate_option_with_total_fee(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeAmount_lower(amount),FfiConverterTypeAddress_lower(address),FfiConverterTypeFeeRate_lower(feeRate)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeFeeRateOptionWithTotalFee_lift,
+            errorHandler: FfiConverterTypeWalletManagerError.lift
+        )
 }
     
 open func feeRateOptions()async throws  -> FeeRateOptions  {
@@ -14910,6 +14947,8 @@ public enum FeeSpeed {
     case fast
     case medium
     case slow
+    case custom(durationMins: UInt32
+    )
 }
 
 
@@ -14928,6 +14967,9 @@ public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
         case 2: return .medium
         
         case 3: return .slow
+        
+        case 4: return .custom(durationMins: try FfiConverterUInt32.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14948,6 +14990,11 @@ public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
         case .slow:
             writeInt(&buf, Int32(3))
         
+        
+        case let .custom(durationMins):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(durationMins, into: &buf)
+            
         }
     }
 }
@@ -23944,6 +23991,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_slow() != 1762) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_tx_size() != 4474) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_auth_type() != 34438) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24319,6 +24369,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 30476) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_option_with_total_fee() != 20878) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 58900) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24608,6 +24661,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_feerateoptions_preview_new() != 9368) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_feerateoptionswithtotalfee_add_custom_fee() != 8164) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 15548) {

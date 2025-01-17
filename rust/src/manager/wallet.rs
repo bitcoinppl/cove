@@ -27,7 +27,7 @@ use crate::{
     transaction::{
         fees::{
             client::{FeeResponse, FEES, FEE_CLIENT},
-            FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
+            FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed,
         },
         ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
@@ -775,9 +775,40 @@ impl RustWalletManager {
                     .fee()
                     .map_err(|e| Error::FeesError(e.to_string()))?,
             ),
+            custom: None,
         };
 
         Ok(options)
+    }
+
+    pub async fn fee_rate_option_with_total_fee(
+        &self,
+        amount: Arc<Amount>,
+        address: Arc<Address>,
+        fee_rate: Arc<FeeRate>,
+    ) -> Result<FeeRateOptionWithTotalFee, Error> {
+        let address = Arc::unwrap_or_clone(address);
+        let amount = Arc::unwrap_or_clone(amount);
+        let fee_rate = Arc::unwrap_or_clone(fee_rate);
+
+        let psbt = call!(self
+            .actor
+            .build_tx(amount.into(), address.into(), fee_rate.into()))
+        .await
+        .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
+        let total_fee = psbt
+            .fee()
+            .map_err(|e| Error::FeesError(e.to_string()))?
+            .into();
+
+        let fee_rate_options = FeeRateOptionWithTotalFee {
+            fee_speed: FeeSpeed::Custom { duration_mins: 200 },
+            fee_rate,
+            total_fee,
+        };
+
+        Ok(fee_rate_options)
     }
 
     pub async fn build_transaction(

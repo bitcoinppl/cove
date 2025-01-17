@@ -140,6 +140,7 @@ pub enum FeeSpeed {
     Fast,
     Medium,
     Slow,
+    Custom { duration_mins: u32 },
 }
 
 impl FeeSpeed {
@@ -148,6 +149,7 @@ impl FeeSpeed {
             FeeSpeed::Fast => FfiColor::Green(Default::default()),
             FeeSpeed::Medium => FfiColor::Yellow(Default::default()),
             FeeSpeed::Slow => FfiColor::Orange(Default::default()),
+            FeeSpeed::Custom { .. } => FfiColor::Blue(Default::default()),
         }
     }
 
@@ -156,6 +158,22 @@ impl FeeSpeed {
             FeeSpeed::Fast => "15 minutes".to_string(),
             FeeSpeed::Medium => "30 minutes".to_string(),
             FeeSpeed::Slow => "1+ hours".to_string(),
+            FeeSpeed::Custom { duration_mins } => {
+                let duration_mins = *duration_mins;
+                if duration_mins < 60_u32 {
+                    return format!("{} minutes", duration_mins);
+                }
+
+                let hours = duration_mins / 60;
+                let minutes = duration_mins % 60;
+
+                match (hours, minutes) {
+                    (1, 0) => "1 hour".to_string(),
+                    (1, _) => "1+ hours".to_string(),
+                    (h, 0) => format!("{h} hours"),
+                    (h, _) => format!("{h}+ hours"),
+                }
+            }
         }
     }
 }
@@ -186,6 +204,7 @@ pub struct FeeRateOptionsWithTotalFee {
     pub fast: FeeRateOptionWithTotalFee,
     pub medium: FeeRateOptionWithTotalFee,
     pub slow: FeeRateOptionWithTotalFee,
+    pub custom: Option<FeeRateOptionWithTotalFee>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object)]
@@ -201,6 +220,21 @@ impl FeeRateOptionWithTotalFee {
             fee_speed: option.fee_speed,
             fee_rate: option.fee_rate,
             total_fee: total_fee.into(),
+        }
+    }
+}
+
+#[uniffi::export]
+impl FeeRateOptionsWithTotalFee {
+    #[uniffi::constructor]
+    pub fn add_custom_fee(options: Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) -> Self {
+        let fee_rate = Arc::unwrap_or_clone(fee_rate);
+
+        Self {
+            fast: options.fast,
+            medium: options.medium,
+            slow: options.slow,
+            custom: Some(fee_rate),
         }
     }
 }
@@ -267,6 +301,7 @@ mod fee_rate_option_with_total_fee_ffi {
                 fast: FeeRateOptionWithTotalFee::new(options.fast, Amount::from_sat(3050)),
                 medium: FeeRateOptionWithTotalFee::new(options.medium, Amount::from_sat(2344)),
                 slow: FeeRateOptionWithTotalFee::new(options.slow, Amount::from_sat(1375)),
+                custom: None,
             }
         }
     }
