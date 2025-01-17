@@ -237,6 +237,20 @@ impl FeeRateOptionsWithTotalFee {
             custom: Some(fee_rate),
         }
     }
+
+    #[uniffi::method]
+    pub fn tx_size(&self) -> u64 {
+        let fast_total_fee_in_kwu = self.fast.total_fee.as_sats() * 250;
+        let fast_size = fast_total_fee_in_kwu / self.fast.fee_rate.to_sat_per_kwu();
+
+        let medium_total_fee_in_kwu = self.medium.total_fee.as_sats() * 250;
+        let medium_size = medium_total_fee_in_kwu / self.medium.fee_rate.to_sat_per_kwu();
+
+        let slow_total_fee_in_kwu = self.slow.total_fee.as_sats() * 250;
+        let slow_size = slow_total_fee_in_kwu / self.slow.fee_rate.to_sat_per_kwu();
+
+        (fast_size + medium_size + slow_size) / 3
+    }
 }
 
 mod fee_rate_option_with_total_fee_ffi {
