@@ -4060,7 +4060,7 @@ public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
     
     func slow()  -> FeeRateOptionWithTotalFee
     
-    func txSize()  -> UInt64
+    func transactionSize()  -> UInt64
     
 }
 
@@ -4159,9 +4159,9 @@ open func slow() -> FeeRateOptionWithTotalFee  {
 })
 }
     
-open func txSize() -> UInt64  {
+open func transactionSize() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
-    uniffi_cove_fn_method_feerateoptionswithtotalfee_tx_size(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_transaction_size(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -23991,7 +23991,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_slow() != 1762) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_tx_size() != 4474) {
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_transaction_size() != 58503) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_auth_type() != 34438) {

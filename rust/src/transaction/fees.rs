@@ -239,7 +239,7 @@ impl FeeRateOptionsWithTotalFee {
     }
 
     #[uniffi::method]
-    pub fn tx_size(&self) -> u64 {
+    pub fn transaction_size(&self) -> u64 {
         let fast_total_fee_in_kwu = self.fast.total_fee.as_sats() * 250;
         let fast_size = fast_total_fee_in_kwu / self.fast.fee_rate.to_sat_per_kwu();
 
@@ -250,6 +250,30 @@ impl FeeRateOptionsWithTotalFee {
         let slow_size = slow_total_fee_in_kwu / self.slow.fee_rate.to_sat_per_kwu();
 
         (fast_size + medium_size + slow_size) / 3
+    }
+
+    #[uniffi::method]
+    pub fn calculate_custom_fee_speed(&self, fee_rate: f32) -> FeeSpeed {
+        let fee_rate_kwu = ((fee_rate * 1000.0) / 4.0) as u64;
+
+        let fast_fee_rate = self.fast.fee_rate.to_sat_per_kwu();
+        let medium_fee_rate = self.medium.fee_rate.to_sat_per_kwu();
+        let slow_fee_rate = self.slow.fee_rate.to_sat_per_kwu();
+
+        let mins = match fee_rate_kwu {
+            rate if rate <= slow_fee_rate => 200,
+            rate if rate == slow_fee_rate => 90,
+            rate if rate > slow_fee_rate && rate < medium_fee_rate => 45,
+            rate if rate == medium_fee_rate => 30,
+            rate if rate > medium_fee_rate && rate < fast_fee_rate => 20,
+            rate if rate == fast_fee_rate => 15,
+            rate if rate > fast_fee_rate => 10,
+            _ => unreachable!(),
+        };
+
+        FeeSpeed::Custom {
+            duration_mins: mins,
+        }
     }
 }
 
