@@ -35,6 +35,7 @@ struct SendFlowSetAmountScreen: View {
     @State private var scannedCode: TaggedString? = .none
 
     // fees
+    @State private var selectedPresentationDetent: PresentationDetent = .height(300)
     @State private var selectedFeeRate: FeeRateOptionWithTotalFee? = .none
     @State private var feeRateOptions: FeeRateOptionsWithTotalFee? = .none
     @State private var feeRateOptionsBase: FeeRateOptions? = .none
@@ -803,6 +804,7 @@ struct SendFlowSetAmountScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
+                    selectedPresentationDetent = if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
                     presenter.sheetState = TaggedItem(.fee)
                 }
                 .font(.caption2)
@@ -911,7 +913,7 @@ struct SendFlowSetAmountScreen: View {
         case .fee:
             SendFlowSelectFeeRateView(
                 manager: manager,
-                feeOptions: feeRateOptions!,
+                feeOptions: Binding(get: { feeRateOptions! }, set: { feeRateOptions = $0 }),
                 selectedOption: Binding(
                     get: { selectedFeeRate! },
                     set: { newValue in
@@ -922,9 +924,10 @@ struct SendFlowSetAmountScreen: View {
 
                         selectedFeeRate = newValue
                     }
-                )
+                ),
+                selectedPresentationDetent: $selectedPresentationDetent
             )
-            .presentationDetents([.height(440), .height(550), .large])
+            .presentationDetents([.height(300), .height(440), .height(550), .large], selection: $selectedPresentationDetent)
         }
     }
 }

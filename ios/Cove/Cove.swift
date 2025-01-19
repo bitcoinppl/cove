@@ -2737,8 +2737,6 @@ public protocol ConfirmDetailsProtocol : AnyObject {
     
     func idHash()  -> String
     
-    func isEqual(rhs: ConfirmDetails)  -> Bool
-    
     func normalizedId()  -> String
     
     func psbt()  -> Psbt
@@ -2840,14 +2838,6 @@ open func id() -> TxId  {
 open func idHash() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_confirmdetails_id_hash(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func isEqual(rhs: ConfirmDetails) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_confirmdetails_is_equal(self.uniffiClonePointer(),
-        FfiConverterTypeConfirmDetails_lower(rhs),$0
     )
 })
 }
@@ -4052,6 +4042,12 @@ public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> Uns
 
 public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
     
+    func addCustomFee(feeRate: Float)  -> FeeRateOptionsWithTotalFee
+    
+    func calculateCustomFeeSpeed(feeRate: Float)  -> FeeSpeed
+    
+    func custom()  -> FeeRateOptionWithTotalFee?
+    
     func fast()  -> FeeRateOptionWithTotalFee
     
     func feeRateOptions()  -> FeeRateOptions
@@ -4113,15 +4109,6 @@ open class FeeRateOptionsWithTotalFee:
     }
 
     
-public static func addCustomFee(options: FeeRateOptionsWithTotalFee, feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptionsWithTotalFee  {
-    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
-    uniffi_cove_fn_constructor_feerateoptionswithtotalfee_add_custom_fee(
-        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(options),
-        FfiConverterTypeFeeRateOptionWithTotalFee_lower(feeRate),$0
-    )
-})
-}
-    
 public static func previewNew() -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
     uniffi_cove_fn_constructor_feerateoptionswithtotalfee_preview_new($0
@@ -4130,6 +4117,29 @@ public static func previewNew() -> FeeRateOptionsWithTotalFee  {
 }
     
 
+    
+open func addCustomFee(feeRate: Float) -> FeeRateOptionsWithTotalFee  {
+    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_add_custom_fee(self.uniffiClonePointer(),
+        FfiConverterFloat.lower(feeRate),$0
+    )
+})
+}
+    
+open func calculateCustomFeeSpeed(feeRate: Float) -> FeeSpeed  {
+    return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(self.uniffiClonePointer(),
+        FfiConverterFloat.lower(feeRate),$0
+    )
+})
+}
+    
+open func custom() -> FeeRateOptionWithTotalFee?  {
+    return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_custom(self.uniffiClonePointer(),$0
+    )
+})
+}
     
 open func fast() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
@@ -8469,8 +8479,6 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived)  -> String
     
-    func feeRateOptionWithTotalFee(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> FeeRateOptionWithTotalFee
-    
     func feeRateOptions() async throws  -> FeeRateOptions
     
     func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Amount, address: Address) async throws  -> FeeRateOptionsWithTotalFee
@@ -8804,23 +8812,6 @@ open func displaySentAndReceivedAmount(sentAndReceived: SentAndReceived) -> Stri
         FfiConverterTypeSentAndReceived_lower(sentAndReceived),$0
     )
 })
-}
-    
-open func feeRateOptionWithTotalFee(amount: Amount, address: Address, feeRate: FeeRate)async throws  -> FeeRateOptionWithTotalFee  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_fee_rate_option_with_total_fee(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeAmount_lower(amount),FfiConverterTypeAddress_lower(address),FfiConverterTypeFeeRate_lower(feeRate)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_pointer,
-            completeFunc: ffi_cove_rust_future_complete_pointer,
-            freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeFeeRateOptionWithTotalFee_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
-        )
 }
     
 open func feeRateOptions()async throws  -> FeeRateOptions  {
@@ -22481,6 +22472,30 @@ fileprivate struct FfiConverterOptionTypeBitcoinTransaction: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFeeRateOptionWithTotalFee: FfiConverterRustBuffer {
+    typealias SwiftType = FeeRateOptionWithTotalFee?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFeeRateOptionWithTotalFee.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFeeRateOptions: FfiConverterRustBuffer {
     typealias SwiftType = FeeRateOptions?
 
@@ -23404,6 +23419,14 @@ public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> B
     )
 })
 }
+public func feeRateOptionsWithTotalFeeIsEqual(lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_fee_rate_options_with_total_fee_is_equal(
+        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(lhs),
+        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(rhs),$0
+    )
+})
+}
 public func feeSpeedDuration(feeSpeed: FeeSpeed) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_fee_speed_duration(
@@ -23661,6 +23684,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_fee_rate_options_with_total_fee_is_equal() != 21429) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_fee_speed_duration() != 28599) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23865,9 +23891,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_confirmdetails_id_hash() != 11280) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_confirmdetails_is_equal() != 16719) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_confirmdetails_normalized_id() != 32961) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23977,6 +24000,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptions_slow() != 58269) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_add_custom_fee() != 28805) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 60104) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_custom() != 52529) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_fast() != 15779) {
@@ -24369,9 +24401,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_display_sent_and_received_amount() != 30476) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_option_with_total_fee() != 20878) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 58900) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24661,9 +24690,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_feerateoptions_preview_new() != 9368) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_feerateoptionswithtotalfee_add_custom_fee() != 8164) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 15548) {

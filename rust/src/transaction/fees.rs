@@ -140,7 +140,10 @@ pub enum FeeSpeed {
     Fast,
     Medium,
     Slow,
-    Custom { duration_mins: u32 },
+    #[display("Custom")]
+    Custom {
+        duration_mins: u32,
+    },
 }
 
 impl FeeSpeed {
@@ -226,15 +229,27 @@ impl FeeRateOptionWithTotalFee {
 
 #[uniffi::export]
 impl FeeRateOptionsWithTotalFee {
-    #[uniffi::constructor]
-    pub fn add_custom_fee(options: Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) -> Self {
-        let fee_rate = Arc::unwrap_or_clone(fee_rate);
+    #[uniffi::method]
+    pub fn custom(&self) -> Option<Arc<FeeRateOptionWithTotalFee>> {
+        self.custom.map(Arc::new)
+    }
+
+    #[uniffi::method]
+    pub fn add_custom_fee(self: Arc<Self>, fee_rate: f32) -> Self {
+        let tx_size = self.transaction_size();
+        let total_fee = tx_size as f32 * fee_rate;
+
+        let custom = FeeRateOptionWithTotalFee {
+            fee_speed: self.calculate_custom_fee_speed(fee_rate),
+            fee_rate: FeeRate::from_sat_per_vb(fee_rate),
+            total_fee: Amount::from_sat(total_fee.ceil() as u64),
+        };
 
         Self {
-            fast: options.fast,
-            medium: options.medium,
-            slow: options.slow,
-            custom: Some(fee_rate),
+            fast: self.fast,
+            medium: self.medium,
+            slow: self.slow,
+            custom: Some(custom),
         }
     }
 
@@ -260,8 +275,21 @@ impl FeeRateOptionsWithTotalFee {
         let medium_fee_rate = self.medium.fee_rate.to_sat_per_kwu();
         let slow_fee_rate = self.slow.fee_rate.to_sat_per_kwu();
 
+        let fee_rate_u64 = fee_rate_kwu as u64;
+        if fee_rate_u64 == self.fast.sat_per_vb() as u64 {
+            return FeeSpeed::Custom { duration_mins: 15 };
+        }
+
+        if fee_rate_u64 == self.medium.sat_per_vb() as u64 {
+            return FeeSpeed::Custom { duration_mins: 30 };
+        }
+
+        if fee_rate_u64 == self.slow.sat_per_vb() as u64 {
+            return FeeSpeed::Custom { duration_mins: 90 };
+        }
+
         let mins = match fee_rate_kwu {
-            rate if rate <= slow_fee_rate => 200,
+            rate if rate <= slow_fee_rate => 150,
             rate if rate == slow_fee_rate => 90,
             rate if rate > slow_fee_rate && rate < medium_fee_rate => 45,
             rate if rate == medium_fee_rate => 30,
@@ -362,4 +390,12 @@ impl From<FeeRateOptionsWithTotalFee> for FeeRateOptions {
             slow: fee_rates.slow.into(),
         }
     }
+}
+
+#[uniffi::export]
+fn fee_rate_options_with_total_fee_is_equal(
+    lhs: Arc<FeeRateOptionsWithTotalFee>,
+    rhs: Arc<FeeRateOptionsWithTotalFee>,
+) -> bool {
+    lhs == rhs
 }
