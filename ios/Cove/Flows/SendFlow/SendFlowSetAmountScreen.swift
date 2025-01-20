@@ -281,6 +281,7 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: sendAmount, initial: true, sendAmountChanged)
         .onChange(of: address, initial: true, addressChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+        .onChange(of: selectedFeeRate, initial: true, selectedFeeRateChanged)
         .task {
             guard let feeRateOptions = try? await manager.rust.getFeeOptions()
             else { return }
@@ -318,7 +319,9 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
-            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+            if sendAmountFiat == "" {
+                sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+            }
 
             // amount
             if let amount {
@@ -333,6 +336,10 @@ struct SendFlowSetAmountScreen: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         setFormattedAmount(sendAmount)
                     }
+                }
+
+                if let prices = app.prices {
+                    sendAmountFiat = manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
                 }
             }
 
@@ -612,6 +619,31 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             await getFeeRateOptions(address: address, amount: amount)
+        }
+    }
+
+    private func selectedFeeRateChanged(_: FeeRateOptionWithTotalFee?, _ newFee: FeeRateOptionWithTotalFee?) {
+        guard let newFee else { return }
+        guard case .custom = newFee.feeSpeed() else { return }
+        guard let address = try? Address.fromString(address: address) else { return }
+        guard let sendAmountSats else { return }
+        let amount = Amount.fromSat(sats: UInt64(sendAmountSats))
+
+        Task {
+            do {
+                let psbt = try await manager.rust.buildTransactionWithFeeRate(amount: amount, address: address, feeRate: newFee.feeRate())
+                let totalFee = try psbt.fee()
+                let feeRate = FeeRateOptionWithTotalFee(feeSpeed: newFee.feeSpeed(), feeRate: newFee.feeRate(), totalFee: totalFee)
+                guard let feeRateOptions = feeRateOptions?.addCustomFeeRate(feeRate: feeRate) else { return }
+
+                await MainActor.run {
+                    selectedFeeRate = feeRate
+                    print("feeRateOptions: \(feeRateOptions)")
+                    self.feeRateOptions = feeRateOptions
+                }
+            } catch {
+                Log.warn("Error building transaction with custom fee rate: \(error)")
+            }
         }
     }
 

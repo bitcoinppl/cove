@@ -242,7 +242,7 @@ impl FeeRateOptionsWithTotalFee {
         let custom = FeeRateOptionWithTotalFee {
             fee_speed: self.calculate_custom_fee_speed(fee_rate),
             fee_rate: FeeRate::from_sat_per_vb(fee_rate),
-            total_fee: Amount::from_sat(total_fee.ceil() as u64),
+            total_fee: Amount::from_sat(total_fee as u64),
         };
 
         Self {
@@ -250,6 +250,18 @@ impl FeeRateOptionsWithTotalFee {
             medium: self.medium,
             slow: self.slow,
             custom: Some(custom),
+        }
+    }
+
+    #[uniffi::method]
+    pub fn add_custom_fee_rate(&self, fee_rate: Arc<FeeRateOptionWithTotalFee>) -> Self {
+        let fee_rate = Arc::unwrap_or_clone(fee_rate);
+
+        Self {
+            fast: self.fast,
+            medium: self.medium,
+            slow: self.slow,
+            custom: Some(fee_rate),
         }
     }
 
@@ -269,7 +281,7 @@ impl FeeRateOptionsWithTotalFee {
 
     #[uniffi::method]
     pub fn calculate_custom_fee_speed(&self, fee_rate: f32) -> FeeSpeed {
-        let fee_rate_kwu = ((fee_rate * 1000.0) / 4.0) as u64;
+        let fee_rate_kwu = ((fee_rate * 1000.0) / 4.0).ceil() as u64;
 
         let fast_fee_rate = self.fast.fee_rate.to_sat_per_kwu();
         let medium_fee_rate = self.medium.fee_rate.to_sat_per_kwu();
@@ -310,6 +322,18 @@ mod fee_rate_option_with_total_fee_ffi {
 
     #[uniffi::export]
     impl FeeRateOptionWithTotalFee {
+        #[uniffi::constructor(name = "new")]
+        pub fn _new(fee_speed: FeeSpeed, fee_rate: Arc<FeeRate>, total_fee: Arc<Amount>) -> Self {
+            let fee_rate = Arc::unwrap_or_clone(fee_rate);
+            let total_fee = Arc::unwrap_or_clone(total_fee);
+
+            Self {
+                fee_speed,
+                fee_rate,
+                total_fee,
+            }
+        }
+
         pub fn fee_speed(&self) -> FeeSpeed {
             self.fee_speed
         }

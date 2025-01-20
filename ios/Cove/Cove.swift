@@ -3774,7 +3774,17 @@ open class FeeRateOptionWithTotalFee:
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_cove_fn_clone_feerateoptionwithtotalfee(self.pointer, $0) }
     }
-    // No primary constructor declared for this class.
+public convenience init(feeSpeed: FeeSpeed, feeRate: FeeRate, totalFee: Amount) {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_feerateoptionwithtotalfee_new(
+        FfiConverterTypeFeeSpeed_lower(feeSpeed),
+        FfiConverterTypeFeeRate_lower(feeRate),
+        FfiConverterTypeAmount_lower(totalFee),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
 
     deinit {
         guard let pointer = pointer else {
@@ -4044,6 +4054,8 @@ public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
     
     func addCustomFee(feeRate: Float)  -> FeeRateOptionsWithTotalFee
     
+    func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee)  -> FeeRateOptionsWithTotalFee
+    
     func calculateCustomFeeSpeed(feeRate: Float)  -> FeeSpeed
     
     func custom()  -> FeeRateOptionWithTotalFee?
@@ -4122,6 +4134,14 @@ open func addCustomFee(feeRate: Float) -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoptionswithtotalfee_add_custom_fee(self.uniffiClonePointer(),
         FfiConverterFloat.lower(feeRate),$0
+    )
+})
+}
+    
+open func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptionsWithTotalFee  {
+    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(self.uniffiClonePointer(),
+        FfiConverterTypeFeeRateOptionWithTotalFee_lower(feeRate),$0
     )
 })
 }
@@ -24005,6 +24025,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_add_custom_fee() != 28805) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 47193) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 60104) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24687,6 +24710,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_feerateoption_new() != 20675) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_feerateoptionwithtotalfee_new() != 10035) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_feerateoptions_preview_new() != 9368) {

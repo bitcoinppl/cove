@@ -95,3 +95,9 @@ extension FeeRateOptionsWithTotalFee: Equatable {
         feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
 }
+
+extension FeeRateOptionWithTotalFee: Equatable {
+    public static func == (lhs: FeeRateOptionWithTotalFee, rhs: FeeRateOptionWithTotalFee) -> Bool {
+        lhs.isEqual(rhs: rhs)
+    }
+}
