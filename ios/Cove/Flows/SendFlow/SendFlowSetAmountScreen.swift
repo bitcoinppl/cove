@@ -344,7 +344,9 @@ struct SendFlowSetAmountScreen: View {
                 }
 
                 if let prices = app.prices {
-                    sendAmountFiat = manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+                    sendAmountFiat = manager.rust.convertAndDisplayFiat(
+                        amount: amount, prices: prices
+                    )
                 }
             }
 
@@ -638,7 +640,9 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func selectedFeeRateChanged(_: FeeRateOptionWithTotalFee?, _ newFee: FeeRateOptionWithTotalFee?) {
+    private func selectedFeeRateChanged(
+        _: FeeRateOptionWithTotalFee?, _ newFee: FeeRateOptionWithTotalFee?
+    ) {
         guard let newFee else { return }
         guard case .custom = newFee.feeSpeed() else { return }
         guard let address = try? Address.fromString(address: address) else { return }
@@ -647,14 +651,19 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             do {
-                let psbt = try await manager.rust.buildTransactionWithFeeRate(amount: amount, address: address, feeRate: newFee.feeRate())
+                let psbt = try await manager.rust.buildTransactionWithFeeRate(
+                    amount: amount, address: address, feeRate: newFee.feeRate()
+                )
                 let totalFee = try psbt.fee()
-                let feeRate = FeeRateOptionWithTotalFee(feeSpeed: newFee.feeSpeed(), feeRate: newFee.feeRate(), totalFee: totalFee)
-                guard let feeRateOptions = feeRateOptions?.addCustomFeeRate(feeRate: feeRate) else { return }
+                let feeRate = FeeRateOptionWithTotalFee(
+                    feeSpeed: newFee.feeSpeed(), feeRate: newFee.feeRate(), totalFee: totalFee
+                )
+                guard let feeRateOptions = feeRateOptions?.addCustomFeeRate(feeRate: feeRate) else {
+                    return
+                }
 
                 await MainActor.run {
                     selectedFeeRate = feeRate
-                    print("feeRateOptions: \(feeRateOptions)")
                     self.feeRateOptions = feeRateOptions
                 }
             } catch {
@@ -857,7 +866,8 @@ struct SendFlowSetAmountScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
-                    selectedPresentationDetent = if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
+                    selectedPresentationDetent =
+                        if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
                     presenter.sheetState = TaggedItem(.fee)
                 }
                 .font(.caption2)
@@ -980,7 +990,10 @@ struct SendFlowSetAmountScreen: View {
                 ),
                 selectedPresentationDetent: $selectedPresentationDetent
             )
-            .presentationDetents([.height(300), .height(440), .height(550), .large], selection: $selectedPresentationDetent)
+            .presentationDetents(
+                [.height(300), .height(440), .height(550), .large],
+                selection: $selectedPresentationDetent
+            )
         }
     }
 }

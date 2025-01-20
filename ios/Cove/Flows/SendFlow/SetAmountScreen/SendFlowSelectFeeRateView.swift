@@ -60,8 +60,8 @@ struct SendFlowSelectFeeRateView: View {
                 Text("Customize Fee")
                     .font(.subheadline)
                     .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
             .padding()
             .background(Color.midnightBtn)
             .foregroundColor(.white)
@@ -80,7 +80,8 @@ struct SendFlowSelectFeeRateView: View {
                     for: Screen.self,
                     destination: { route in
                         switch route {
-                        case .custom: SendFlowCustomFeeRateView(
+                        case .custom:
+                            SendFlowCustomFeeRateView(
                                 feeOptions: $feeOptions,
                                 selectedOption: $selectedOption,
                                 selectedPresentationDetent: $selectedPresentationDetent
@@ -207,7 +208,8 @@ private struct FeeOptionView: View {
         VStack {
             SendFlowSelectFeeRateView(
                 manager: WalletManager(preview: "preview_only"),
-                feeOptions: Binding.constant(FeeRateOptionsWithTotalFee.previewNew().addCustomFee(feeRate: 13.77)),
+                feeOptions: Binding.constant(
+                    FeeRateOptionsWithTotalFee.previewNew().addCustomFee(feeRate: 13.77)),
                 selectedOption: Binding.constant(
                     FeeRateOptionsWithTotalFee.previewNew().medium()
                 ),
