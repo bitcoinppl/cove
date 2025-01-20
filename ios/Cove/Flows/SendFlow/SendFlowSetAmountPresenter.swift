@@ -14,6 +14,9 @@ import SwiftUI
     @ObservationIgnored
     let manager: WalletManager
 
+    var amount: Amount?
+    var address: Address?
+
     var disappearing: Bool = false
     var focusField: FocusField?
     var sheetState: TaggedItem<SheetState>? = .none

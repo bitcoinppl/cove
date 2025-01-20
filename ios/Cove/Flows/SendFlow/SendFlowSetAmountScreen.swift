@@ -284,8 +284,10 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .onChange(of: selectedFeeRate, initial: true, selectedFeeRateChanged)
         .task {
-            guard let feeRateOptions = try? await manager.rust.getFeeOptions()
-            else { return }
+            guard let feeRateOptions = try? await manager.rust.getFeeOptions() else {
+                return
+            }
+
             await MainActor.run {
                 feeRateOptionsBase = feeRateOptions
             }
@@ -326,6 +328,8 @@ struct SendFlowSetAmountScreen: View {
 
             // amount
             if let amount {
+                presenter.amount = amount
+
                 switch metadata.selectedUnit {
                 case .btc: sendAmount = String(amount.btcString())
                 case .sat: sendAmount = String(amount.asSats())
@@ -346,6 +350,10 @@ struct SendFlowSetAmountScreen: View {
 
             // address
             if address != "" {
+                if let address = try? Address.fromString(address: address) {
+                    presenter.address = address
+                }
+
                 if !validateAddress(displayAlert: true) {
                     presenter.focusField = .address
                 }
@@ -491,6 +499,7 @@ struct SendFlowSetAmountScreen: View {
                 if amount < Double(maxSelected.asSats()) {
                     self.maxSelected = nil
                 }
+
             case .btc:
                 if amount < Double(maxSelected.asBtc()) {
                     self.maxSelected = nil
@@ -506,6 +515,9 @@ struct SendFlowSetAmountScreen: View {
         }
 
         let amountSats = amountSats(amount)
+        presenter.amount = Amount.fromSat(sats: UInt64(amountSats))
+
+        // fiat
         let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
 
         if feeRateOptions == nil {
@@ -606,9 +618,10 @@ struct SendFlowSetAmountScreen: View {
 
         let addressString = address.trimmingCharacters(
             in: .whitespacesAndNewlines)
-        guard let address = try? Address.fromString(address: addressString)
-        else { return }
+        guard let address = try? Address.fromString(address: addressString) else { return }
         guard validateAddress(addressString) else { return }
+
+        presenter.address = address
 
         let amountSats = max(sendAmountSats ?? 0, 10000)
         let amount = Amount.fromSat(sats: UInt64(amountSats))
