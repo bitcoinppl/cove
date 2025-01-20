@@ -160,7 +160,10 @@ struct ScannerView: View {
 }
 
 #Preview {
-    ScannerView()
+    VStack {
+        ScannerView()
+    }
+    .background(.black)
 }
 
 #Preview("small") {
