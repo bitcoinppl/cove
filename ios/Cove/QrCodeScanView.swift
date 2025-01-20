@@ -51,6 +51,7 @@ struct QrCodeScanView: View {
                             codeTypes: [.qr],
                             scanMode: .oncePerCode,
                             scanInterval: 0.1,
+                            focusIndicatorColor: .white,
                             showAlert: false,
                             completion: handleScan
                         )
@@ -96,12 +97,12 @@ struct QrCodeScanView: View {
         do {
             let multiQr: MultiQr =
                 try multiQr
-                    ?? {
-                        let newMultiQr = try MultiQr.tryNew(qr: qr)
-                        self.multiQr = newMultiQr
-                        totalParts = Int(newMultiQr.totalParts())
-                        return newMultiQr
-                    }()
+                ?? {
+                    let newMultiQr = try MultiQr.tryNew(qr: qr)
+                    self.multiQr = newMultiQr
+                    totalParts = Int(newMultiQr.totalParts())
+                    return newMultiQr
+                }()
 
             // single QR
             if !multiQr.isBbqr() {

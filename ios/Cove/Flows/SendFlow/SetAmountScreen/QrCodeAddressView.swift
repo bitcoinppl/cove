@@ -37,41 +37,83 @@ struct QrCodeAddressView: View {
     var body: some View {
         VStack {
             if !scanComplete {
-                VStack {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.primary, lineWidth: 3)
-                            .frame(height: qrCodeHeight)
+                ZStack {
+                    ScannerView(
+                        codeTypes: [.qr],
+                        scanMode: .oncePerCode,
+                        scanInterval: 0.1,
+                        focusIndicatorColor: .white,
+                        showAlert: false,
+                        completion: handleScan
+                    )
+                    .ignoresSafeArea(.all)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                        ScannerView(
-                            codeTypes: [.qr],
-                            scanMode: .oncePerCode,
-                            scanInterval: 0.1,
-                            showAlert: false,
-                            completion: handleScan
-                        )
-                        .frame(height: qrCodeHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                    VStack {
+                        HStack {
+                            Button {
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "chevron.left")
+                                    Text("Back")
+                                }
+                                .fontWeight(.medium)
+                                .foregroundStyle(.white)
+                            }
+
+                            Spacer()
+                        }
+
+                        Spacer()
+
+                        VStack(spacing: 12) {
+                            Text("Scan Wallet Address")
+                                .font(.title2)
+                                .foregroundStyle(.white)
+                                .fontWeight(.bold)
+
+                            Text("Effortlessly send Bitcoin—scan the recipient’s QR code to get their address")
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 8)
+                                .fontWeight(.semibold)
+                        }
+
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+
+                        if let totalParts, let partsLeft {
+                            Text("Scanned \(partsScanned) of \(totalParts)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .padding(.top, 8)
+
+                            Text("\(partsLeft) parts left")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fontWeight(.bold)
+                        }
+
+                        Spacer()
                     }
-                    .padding(.horizontal)
-
-                    if let totalParts, let partsLeft {
-                        Text("Scanned \(partsScanned) of \(totalParts)")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .padding(.top, 8)
-
-                        Text("\(partsLeft) parts left")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fontWeight(.bold)
-                    }
+                    .safeAreaPadding(.all)
                 }
-                .padding(.top, 18)
-                .padding(.bottom, 36)
             }
         }
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.black.opacity(0.20))
+        .gesture(
+            DragGesture()
+                .onEnded { value in
+                    if value.location.y - value.startLocation.y > 150 {
+                        dismiss()
+                    }
+                }
+        )
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
@@ -119,6 +161,10 @@ struct QrCodeAddressView: View {
 }
 
 #Preview {
-    QrCodeAddressView(scannedCode: Binding.constant(nil))
-        .environment(AppManager())
+    VStack {
+        QrCodeAddressView(scannedCode: Binding.constant(nil))
+            .environment(AppManager())
+    }
+    .ignoresSafeArea(.all)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
 }

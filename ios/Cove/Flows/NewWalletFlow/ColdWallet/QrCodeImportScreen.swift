@@ -80,55 +80,35 @@ struct QrCodeImportScreen: View {
     var body: some View {
         VStack {
             if !scanComplete {
-                VStack {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.primary, lineWidth: 3)
-                            .frame(height: qrCodeHeight)
+                ZStack {
+                    ScannerView(
+                        codeTypes: [.qr],
+                        scanMode: .oncePerCode,
+                        scanInterval: 0.1,
+                        showAlert: false,
+                        completion: handleScan
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(.all)
 
-                        ScannerView(
-                            codeTypes: [.qr],
-                            scanMode: .oncePerCode,
-                            scanInterval: 0.1,
-                            showAlert: false,
-                            completion: handleScan
-                        )
-                        .frame(height: qrCodeHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                    }
-                    .padding(.horizontal)
+                    VStack {
+                        if let totalParts, let partsLeft {
+                            Text("Scanned \(partsScanned) of \(totalParts)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .padding(.top, 8)
 
-                    if let totalParts, let partsLeft {
-                        Text("Scanned \(partsScanned) of \(totalParts)")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .padding(.top, 8)
+                            Text("\(partsLeft) parts left")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fontWeight(.bold)
+                        }
 
-                        Text("\(partsLeft) parts left")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fontWeight(.bold)
+                        Spacer()
                     }
                 }
-                .padding(.top, 18)
-                .padding(.bottom, 36)
             }
-
-            Button(action: {
-                showingHelp = true
-            }) {
-                Label("Help", systemImage: "questionmark.circle.fill")
-                    .padding()
-                    .frame(minWidth: 120)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.blue)
-            .sheet(isPresented: $showingHelp) {
-                HelpView()
-            }
-            .padding()
         }
-        .padding()
         .alert(item: $alert) { alert in
             alert.type.alert
         }
@@ -149,7 +129,22 @@ struct QrCodeImportScreen: View {
                 alert = AlertItem(type: .error(error.localizedDescription))
             }
         }
-        .navigationTitle("Scan QR")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("? Help") {
+                    showingHelp = true
+                }
+                .buttonStyle(.plain)
+                .sheet(isPresented: $showingHelp) {
+                    HelpView()
+                }
+                .foregroundStyle(.white)
+                .fontWeight(.medium)
+                .padding()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.all)
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
@@ -219,62 +214,69 @@ struct QrCodeImportScreen: View {
 
 struct HelpView: View {
     var body: some View {
-        Text("How do get my wallet export QR code?")
-            .font(.title)
-            .fontWeight(.bold)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 12)
-            .frame(alignment: .center)
-            .padding(.vertical, 18)
+        VStack(spacing: 24) {
+            Text("How do get my wallet export QR code?")
+                .font(.title)
+                .fontWeight(.bold)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
+                .frame(alignment: .center)
+                .padding(.top, 12)
+                .foregroundStyle(.primary)
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("ColdCard Q1")
-                        .font(.title2)
-                        .fontWeight(.bold)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("ColdCard Q1")
+                            .font(.title2)
+                            .fontWeight(.bold)
 
-                    Text("1. Go to 'Advanced / Tools'")
-                    Text("2. Export Wallet > Generic JSON")
-                    Text("3. Press the 'Enter' button, then the 'QR' button")
-                    Text("4. Scan the Generated QR code")
-                }
+                        Text("1. Go to 'Advanced / Tools'")
+                        Text("2. Export Wallet > Generic JSON")
+                        Text("3. Press the 'Enter' button, then the 'QR' button")
+                        Text("4. Scan the Generated QR code")
+                    }
 
-                Divider()
+                    Divider()
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("ColdCard MK3/MK4")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("ColdCard MK3/MK4")
+                            .font(.title2)
+                            .fontWeight(.bold)
 
-                    Text("1. Go to 'Advanced / Tools'")
-                    Text("2. Export Wallet > Descriptor")
-                    Text("3. Press the Enter (✓) and select your wallet type")
-                    Text("4. Scan the Generated QR code")
-                }
+                        Text("1. Go to 'Advanced / Tools'")
+                        Text("2. Export Wallet > Descriptor")
+                        Text("3. Press the Enter (✓) and select your wallet type")
+                        Text("4. Scan the Generated QR code")
+                    }
 
-                Divider()
+                    Divider()
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Other Hardware Wallets")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Other Hardware Wallets")
+                            .font(.title2)
+                            .fontWeight(.bold)
 
-                    Text("1. In your hardware wallet, go to settings")
-                    Text("2. Look for 'Export'")
-                    Text(
-                        "3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work"
-                    )
-                    Text("4. Generate QR code")
-                    Text("5. Scan the Generated QR code")
+                        Text("1. In your hardware wallet, go to settings")
+                        Text("2. Look for 'Export'")
+                        Text(
+                            "3. Select 'Generic JSON', 'Sparrow', 'Electrum', and many other formats should also work"
+                        )
+                        Text("4. Generate QR code")
+                        Text("5. Scan the Generated QR code")
+                    }
                 }
             }
         }
-        .padding(22)
+        .scrollIndicators(.hidden)
+        .foregroundColor(.primary)
+        .fontWeight(.regular)
+        .padding()
     }
 }
 
 #Preview {
     QrCodeImportScreen()
         .environment(AppManager())
+        .background(.red)
 }
