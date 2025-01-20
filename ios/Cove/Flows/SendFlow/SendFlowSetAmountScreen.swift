@@ -106,7 +106,7 @@ struct SendFlowSetAmountScreen: View {
         guard let prices = app.prices else { return "---" }
 
         let fiat = totalSpentInBtc * Double(prices.get())
-        return manager.rust.displayFiatAmount(amount: fiat)
+        return "≈ \(manager.rust.displayFiatAmount(amount: fiat))"
     }
 
     private var totalSending: String {
