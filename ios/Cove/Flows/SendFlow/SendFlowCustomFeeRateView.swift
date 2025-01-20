@@ -19,12 +19,11 @@ struct SendFlowCustomFeeRateView: View {
 
     // private
     @State private var feeRate: String = "4.46"
-    @State private var txnSize: Int? = nil
     @State private var loaded = false
 
     // total sats
-    @State private var accurateTotalSats: Int? = nil
-    @State private var accurateTotalSatsTask: Task<Void, Never>?
+    @State private var totalSats: Int? = nil
+    @State private var totalSatsTask: Task<Void, Never>?
 
     var sliderBinding: Binding<Float> {
         Binding(
@@ -37,19 +36,12 @@ struct SendFlowCustomFeeRateView: View {
         )
     }
 
-    var totalSats: Int {
-        let txnSize = txnSize ?? Int(feeOptions.transactionSize())
-        guard let feeRate = Double(feeRate) else { return 0 }
-
-        return Int(Double(txnSize) * feeRate)
-    }
-
     var totalSatsString: String {
-        if let accurateTotalSats {
-            return "\(accurateTotalSats) sats"
+        if let totalSats {
+            return "\(totalSats) sats"
         }
 
-        return "\(totalSats) sats"
+        return ""
     }
 
     var feeInFiat: String {
@@ -58,7 +50,8 @@ struct SendFlowCustomFeeRateView: View {
             return ""
         }
 
-        return "≈ \(manager.rust.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats)), prices: prices))"
+        return
+            "≈ \(manager.rust.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats ?? 0)), prices: prices))"
     }
 
     var feeSpeed: FeeSpeed {
@@ -71,21 +64,18 @@ struct SendFlowCustomFeeRateView: View {
         guard let amount = presenter.amount else { return }
         let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
 
-        if let accurateTotalSatsTask {
-            accurateTotalSatsTask.cancel()
-        }
-
-        accurateTotalSatsTask = Task {
+        if let totalSatsTask { totalSatsTask.cancel() }
+        totalSatsTask = Task {
             try? await Task.sleep(for: .milliseconds(50))
 
             do {
-                let psbt = try await manager.rust.buildTransactionWithFeeRate(amount: amount, address: address, feeRate: feeRate)
+                let psbt = try await manager.rust.buildTransactionWithFeeRate(
+                    amount: amount, address: address, feeRate: feeRate
+                )
                 let totalFee = try psbt.fee()
                 let totalFeeSats = totalFee.asSats()
-                txnSize = Int(psbt.weight())
-                accurateTotalSats = Int(totalFeeSats)
-            }
-            catch {
+                totalSats = Int(totalFeeSats)
+            } catch {
                 Log.error("Unable to get accurate total sats \(error)")
             }
         }
@@ -149,13 +139,19 @@ struct SendFlowCustomFeeRateView: View {
                 }
 
                 HStack {
-                    Text(totalSatsString)
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                    if totalSats == nil {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .tint(.primary)
+                    } else {
+                        Text(totalSatsString)
+                            .font(.caption)
+                            .fontWeight(.semibold)
 
-                    Text(feeInFiat)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        Text(feeInFiat)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
 
                     Spacer()
                 }
@@ -182,7 +178,6 @@ struct SendFlowCustomFeeRateView: View {
         .onChange(of: feeRate, initial: true, feeRateChanged)
         .onAppear {
             feeRate = String(selectedOption.feeRate().satPerVb())
-            txnSize = Int(feeOptions.transactionSize())
             withAnimation { loaded = true }
         }
         .navigationBarBackButtonHidden()
@@ -202,7 +197,11 @@ struct SendFlowCustomFeeRateView: View {
             )
             .environment(WalletManager(preview: "preview_only"))
             .environment(AppManager())
-            .environment(SendFlowSetAmountPresenter(app: AppManager(), manager: WalletManager(preview: "preview_only")))
+            .environment(
+                SendFlowSetAmountPresenter(
+                    app: AppManager(), manager: WalletManager(preview: "preview_only")
+                )
+            )
             .frame(height: 300)
             .background(.coveBg)
         }
