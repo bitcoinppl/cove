@@ -85,6 +85,7 @@ struct QrCodeImportScreen: View {
                         codeTypes: [.qr],
                         scanMode: .oncePerCode,
                         scanInterval: 0.1,
+                        focusIndicatorColor: .white,
                         showAlert: false,
                         completion: handleScan
                     )
@@ -92,16 +93,32 @@ struct QrCodeImportScreen: View {
                     .ignoresSafeArea(.all)
 
                     VStack {
-                        if let totalParts, let partsLeft {
-                            Text("Scanned \(partsScanned) of \(totalParts)")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .padding(.top, 8)
+                        Spacer()
 
-                            Text("\(partsLeft) parts left")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fontWeight(.bold)
+                        Text("Scan Wallet Export QR Code")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .fontWeight(.semibold)
+
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+
+                        if let totalParts, let partsLeft {
+                            Group {
+                                Text("Scanned \(partsScanned) of \(totalParts)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .padding(.top, 8)
+
+                                Text("\(partsLeft) parts left")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fontWeight(.bold)
+                            }
+                            .foregroundStyle(.white)
                         }
 
                         Spacer()
