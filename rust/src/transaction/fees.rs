@@ -287,7 +287,7 @@ impl FeeRateOptionsWithTotalFee {
         let medium_fee_rate = self.medium.fee_rate.to_sat_per_kwu();
         let slow_fee_rate = self.slow.fee_rate.to_sat_per_kwu();
 
-        let fee_rate_u64 = fee_rate_kwu as u64;
+        let fee_rate_u64 = fee_rate as u64;
         if fee_rate_u64 == self.fast.sat_per_vb() as u64 {
             return FeeSpeed::Custom { duration_mins: 15 };
         }
