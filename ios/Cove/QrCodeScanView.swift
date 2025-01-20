@@ -41,42 +41,46 @@ struct QrCodeScanView: View {
     var body: some View {
         VStack {
             if !scanComplete {
-                VStack {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.primary, lineWidth: 3)
-                            .frame(height: qrCodeHeight)
+                ZStack {
+                    ScannerView(
+                        codeTypes: [.qr],
+                        scanMode: .oncePerCode,
+                        scanInterval: 0.1,
+                        focusIndicatorColor: .white,
+                        showAlert: false,
+                        completion: handleScan
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(.all)
 
-                        ScannerView(
-                            codeTypes: [.qr],
-                            scanMode: .oncePerCode,
-                            scanInterval: 0.1,
-                            focusIndicatorColor: .white,
-                            showAlert: false,
-                            completion: handleScan
-                        )
-                        .frame(height: qrCodeHeight)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
-                    }
-                    .padding(.horizontal)
+                    VStack {
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
+                        Spacer()
 
-                    if let totalParts, let partsLeft {
-                        Text("Scanned \(partsScanned) of \(totalParts)")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .padding(.top, 8)
+                        if let totalParts, let partsLeft {
+                            Group {
+                                Text("Scanned \(partsScanned) of \(totalParts)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .padding(.top, 8)
 
-                        Text("\(partsLeft) parts left")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fontWeight(.bold)
+                                Text("\(partsLeft) parts left")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fontWeight(.bold)
+                            }
+                            .foregroundStyle(.white)
+                        }
+
+                        Spacer()
                     }
                 }
-                .padding(.top, 18)
-                .padding(.bottom, 36)
             }
         }
-        .padding()
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
@@ -97,12 +101,12 @@ struct QrCodeScanView: View {
         do {
             let multiQr: MultiQr =
                 try multiQr
-                ?? {
-                    let newMultiQr = try MultiQr.tryNew(qr: qr)
-                    self.multiQr = newMultiQr
-                    totalParts = Int(newMultiQr.totalParts())
-                    return newMultiQr
-                }()
+                    ?? {
+                        let newMultiQr = try MultiQr.tryNew(qr: qr)
+                        self.multiQr = newMultiQr
+                        totalParts = Int(newMultiQr.totalParts())
+                        return newMultiQr
+                    }()
 
             // single QR
             if !multiQr.isBbqr() {
