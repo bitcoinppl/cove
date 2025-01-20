@@ -270,6 +270,18 @@ struct HelpView: View {
                     Divider()
 
                     VStack(alignment: .leading, spacing: 12) {
+                        Text("Sparrow Desktop")
+                            .font(.title2)
+                            .fontWeight(.bold)
+
+                        Text("1. Click on Settings, in the left side bar")
+                        Text("2. Click on 'Export...' button at the bottom")
+                        Text("3. Under 'Output Descriptor' click the 'Show...' button")
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("Other Hardware Wallets")
                             .font(.title2)
                             .fontWeight(.bold)
@@ -296,4 +308,8 @@ struct HelpView: View {
     QrCodeImportScreen()
         .environment(AppManager())
         .background(.red)
+}
+
+#Preview("HelpView") {
+    HelpView()
 }
