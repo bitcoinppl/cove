@@ -50,21 +50,6 @@ struct QrCodeAddressView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     VStack {
-                        HStack {
-                            Button {
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "chevron.left")
-                                    Text("Back")
-                                }
-                                .fontWeight(.medium)
-                                .foregroundStyle(.white)
-                            }
-
-                            Spacer()
-                        }
-
                         Spacer()
 
                         VStack(spacing: 12) {
@@ -106,14 +91,6 @@ struct QrCodeAddressView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.black.opacity(0.20))
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.location.y - value.startLocation.y > 150 {
-                        dismiss()
-                    }
-                }
-        )
     }
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
