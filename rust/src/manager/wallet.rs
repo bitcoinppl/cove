@@ -775,6 +775,7 @@ impl RustWalletManager {
                     .fee()
                     .map_err(|e| Error::FeesError(e.to_string()))?,
             ),
+            custom: None,
         };
 
         Ok(options)
@@ -788,7 +789,7 @@ impl RustWalletManager {
         let medium_fee = self
             .fees()
             .map(|fees| FeeRateOptions::from(fees).medium.fee_rate)
-            .unwrap_or_else(|| FeeRate::from_sat_per_vb(10));
+            .unwrap_or_else(|| FeeRate::from_sat_per_vb(10.0));
 
         self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee))
             .await

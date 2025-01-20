@@ -29,6 +29,34 @@ impl<T: Numeric> NumberFormatter for T {
             .unwrap()
             .precision(numfmt::Precision::Decimals(2));
 
-        f.fmt(self).to_string()
+        let fmt = f.fmt(self);
+
+        // HACK: actually make sure we always have 2 decimals
+        let last_index = fmt.len() - 1;
+        match memchr::memchr(b'.', fmt.as_bytes()) {
+            Some(decimal_index) => {
+                let decimals = last_index - decimal_index;
+                match decimals {
+                    0 => format!("{}00", fmt),
+                    1 => format!("{}0", fmt),
+                    2 => fmt.to_string(),
+                    _ => fmt[0..decimal_index + 2].to_string(),
+                }
+            }
+
+            None => format!("{}.00", fmt),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_number_formatter() {
+        let number = 20_000;
+        let formatted = number.thousands_fiat();
+        assert_eq!(formatted, "20,000.00");
     }
 }

@@ -62,11 +62,11 @@ impl FeeClient {
 #[derive(Debug, Clone, Copy, serde::Deserialize, uniffi::Record)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeResponse {
-    pub fastest_fee: u64,
-    pub half_hour_fee: u64,
-    pub hour_fee: u64,
-    pub economy_fee: u64,
-    pub minimum_fee: u64,
+    pub fastest_fee: f32,
+    pub half_hour_fee: f32,
+    pub hour_fee: f32,
+    pub economy_fee: f32,
+    pub minimum_fee: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -80,13 +80,13 @@ impl From<FeeResponse> for FeeRateOptions {
     fn from(fees: FeeResponse) -> Self {
         let (slow_rate, slow) = {
             // slow rate is the between economy and hour fees
-            let rate = (fees.economy_fee + fees.hour_fee) / 2;
+            let rate = (fees.economy_fee + fees.hour_fee) / 2.0;
 
             // rate should never be more than the hour fee
             let rate = rate.min(fees.hour_fee);
 
             // slow rate should never be less than or the same as the minimum fee
-            let rate = rate.max(fees.minimum_fee + 1);
+            let rate = rate.max(fees.minimum_fee + 1.1);
 
             (
                 rate,
@@ -98,7 +98,7 @@ impl From<FeeResponse> for FeeRateOptions {
         };
 
         let (medium_rate, medium) = {
-            let rate = fees.half_hour_fee.max(slow_rate + 1);
+            let rate = fees.half_hour_fee.max(slow_rate + 1.1);
 
             (
                 rate,
@@ -110,7 +110,7 @@ impl From<FeeResponse> for FeeRateOptions {
         };
 
         let fast = {
-            let rate = fees.fastest_fee.max(medium_rate + 1);
+            let rate = fees.fastest_fee.max(medium_rate + 1.1);
 
             FeeRateOption {
                 fee_speed: FeeSpeed::Fast,

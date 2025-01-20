@@ -87,6 +87,8 @@ struct CoveApp: App {
                 "Error: \(error)"
             case let .noUnsignedTransactionFound(txId):
                 "No unsigned transaction found for transaction \(txId.asHashString())"
+            case let .unableToGetAddress(error: error):
+                "Error: \(error)"
             }
 
         Text(text)
@@ -150,9 +152,9 @@ struct CoveApp: App {
                 UIApplication.shared.open(url)
             }
         case .failedToScanQr, .noUnsignedTransactionFound:
-            Button("OK") {
-                app.alertState = .none
-            }
+            Button("OK") { app.alertState = .none }
+        default:
+            Button("OK") { app.alertState = .none }
         }
     }
 

@@ -41,24 +41,6 @@ extension FeeSpeed {
     }
 }
 
-extension FeeRateOption: Equatable {
-    public static func == (lhs: FeeRateOption, rhs: FeeRateOption) -> Bool {
-        lhs.isEqual(rhs: rhs)
-    }
-}
-
-extension FeeRateOptionWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionWithTotalFee, rhs: FeeRateOptionWithTotalFee) -> Bool {
-        lhs.isEqual(rhs: rhs)
-    }
-}
-
-extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
-        lhs.fast() == rhs.fast() && lhs.medium() == rhs.medium() && lhs.slow() == rhs.slow()
-    }
-}
-
 extension Double {
     func btcFmt(maxDecimals: Int = 10) -> String {
         let formatter = NumberFormatter()
@@ -104,19 +86,18 @@ extension UnsignedTransaction: Identifiable {
 
 extension [BoxedRoute] {
     var routes: [Route] {
-        self.map { $0.route() }
+        map { $0.route() }
     }
 }
 
-#if canImport(UIKit)
-    extension View {
-        func hideKeyboard() {
-            UIApplication.shared.sendAction(
-                #selector(UIResponder.resignFirstResponder),
-                to: nil,
-                from: nil,
-                for: nil
-            )
-        }
+extension FeeRateOptionsWithTotalFee: Equatable {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
+        feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
-#endif
+}
+
+extension FeeRateOptionWithTotalFee: Equatable {
+    public static func == (lhs: FeeRateOptionWithTotalFee, rhs: FeeRateOptionWithTotalFee) -> Bool {
+        lhs.isEqual(rhs: rhs)
+    }
+}

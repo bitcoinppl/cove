@@ -35,14 +35,14 @@ struct SendFlowSetAmountScreen: View {
     @State private var scannedCode: TaggedString? = .none
 
     // fees
-    @State private var txnSize: Int? = nil
+    @State private var selectedPresentationDetent: PresentationDetent = .height(300)
     @State private var selectedFeeRate: FeeRateOptionWithTotalFee? = .none
     @State private var feeRateOptions: FeeRateOptionsWithTotalFee? = .none
     @State private var feeRateOptionsBase: FeeRateOptions? = .none
 
     // text inputs
     @State private var sendAmount: String = "0"
-    @State private var sendAmountFiat: String = "0.00"
+    @State private var sendAmountFiat: String = ""
 
     // max
     @State private var maxSelected: Amount? = nil
@@ -184,6 +184,7 @@ struct SendFlowSetAmountScreen: View {
                     case .cold: RouteFactory().sendHardwareExport(id: id, details: confirmDetails)
                     }
 
+                presenter.focusField = .none
                 app.pushRoute(route)
             } catch {
                 // error alert is displayed at the top level container, but we can log it here
@@ -281,9 +282,12 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: sendAmount, initial: true, sendAmountChanged)
         .onChange(of: address, initial: true, addressChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
+        .onChange(of: selectedFeeRate, initial: true, selectedFeeRateChanged)
         .task {
-            guard let feeRateOptions = try? await manager.rust.getFeeOptions()
-            else { return }
+            guard let feeRateOptions = try? await manager.rust.getFeeOptions() else {
+                return
+            }
+
             await MainActor.run {
                 feeRateOptionsBase = feeRateOptions
             }
@@ -318,10 +322,14 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
-            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+            if sendAmountFiat == "" {
+                sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+            }
 
             // amount
             if let amount {
+                presenter.amount = amount
+
                 switch metadata.selectedUnit {
                 case .btc: sendAmount = String(amount.btcString())
                 case .sat: sendAmount = String(amount.asSats())
@@ -334,10 +342,20 @@ struct SendFlowSetAmountScreen: View {
                         setFormattedAmount(sendAmount)
                     }
                 }
+
+                if let prices = app.prices {
+                    sendAmountFiat = manager.rust.convertAndDisplayFiat(
+                        amount: amount, prices: prices
+                    )
+                }
             }
 
             // address
             if address != "" {
+                if let address = try? Address.fromString(address: address) {
+                    presenter.address = address
+                }
+
                 if !validateAddress(displayAlert: true) {
                     presenter.focusField = .address
                 }
@@ -345,7 +363,9 @@ struct SendFlowSetAmountScreen: View {
 
             // all valid, scroll to bottom
             if validate() {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                presenter.focusField = .none
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     withAnimation(.easeInOut(duration: 0.4)) {
                         presenter.focusField = .none
                         scrollPosition.scrollTo(edge: .bottom)
@@ -481,6 +501,7 @@ struct SendFlowSetAmountScreen: View {
                 if amount < Double(maxSelected.asSats()) {
                     self.maxSelected = nil
                 }
+
             case .btc:
                 if amount < Double(maxSelected.asBtc()) {
                     self.maxSelected = nil
@@ -496,6 +517,9 @@ struct SendFlowSetAmountScreen: View {
         }
 
         let amountSats = amountSats(amount)
+        presenter.amount = Amount.fromSat(sats: UInt64(amountSats))
+
+        // fiat
         let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
 
         if feeRateOptions == nil {
@@ -596,9 +620,10 @@ struct SendFlowSetAmountScreen: View {
 
         let addressString = address.trimmingCharacters(
             in: .whitespacesAndNewlines)
-        guard let address = try? Address.fromString(address: addressString)
-        else { return }
+        guard let address = try? Address.fromString(address: addressString) else { return }
         guard validateAddress(addressString) else { return }
+
+        presenter.address = address
 
         let amountSats = max(sendAmountSats ?? 0, 10000)
         let amount = Amount.fromSat(sats: UInt64(amountSats))
@@ -612,6 +637,38 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             await getFeeRateOptions(address: address, amount: amount)
+        }
+    }
+
+    private func selectedFeeRateChanged(
+        _: FeeRateOptionWithTotalFee?, _ newFee: FeeRateOptionWithTotalFee?
+    ) {
+        guard let newFee else { return }
+        guard case .custom = newFee.feeSpeed() else { return }
+        guard let address = try? Address.fromString(address: address) else { return }
+        guard let sendAmountSats else { return }
+        let amount = Amount.fromSat(sats: UInt64(sendAmountSats))
+
+        Task {
+            do {
+                let psbt = try await manager.rust.buildTransactionWithFeeRate(
+                    amount: amount, address: address, feeRate: newFee.feeRate()
+                )
+                let totalFee = try psbt.fee()
+                let feeRate = FeeRateOptionWithTotalFee(
+                    feeSpeed: newFee.feeSpeed(), feeRate: newFee.feeRate(), totalFee: totalFee
+                )
+                guard let feeRateOptions = feeRateOptions?.addCustomFeeRate(feeRate: feeRate) else {
+                    return
+                }
+
+                await MainActor.run {
+                    selectedFeeRate = feeRate
+                    self.feeRateOptions = feeRateOptions
+                }
+            } catch {
+                Log.warn("Error building transaction with custom fee rate: \(error)")
+            }
         }
     }
 
@@ -652,6 +709,11 @@ struct SendFlowSetAmountScreen: View {
             self.feeRateOptions = feeRateOptions
             if selectedFeeRate == nil {
                 selectedFeeRate = feeRateOptions.medium()
+            }
+
+            if feeRateOptions.custom() == nil, case .custom = selectedFeeRate?.feeSpeed() {
+                let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
+                self.feeRateOptions = feeRateOptions
             }
         }
     }
@@ -804,6 +866,8 @@ struct SendFlowSetAmountScreen: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Button("Change speed") {
+                    selectedPresentationDetent =
+                        if feeRateOptions?.custom() == nil { .height(440) } else { .height(550) }
                     presenter.sheetState = TaggedItem(.fee)
                 }
                 .font(.caption2)
@@ -912,7 +976,7 @@ struct SendFlowSetAmountScreen: View {
         case .fee:
             SendFlowSelectFeeRateView(
                 manager: manager,
-                feeOptions: feeRateOptions!,
+                feeOptions: Binding(get: { feeRateOptions! }, set: { feeRateOptions = $0 }),
                 selectedOption: Binding(
                     get: { selectedFeeRate! },
                     set: { newValue in
@@ -923,9 +987,13 @@ struct SendFlowSetAmountScreen: View {
 
                         selectedFeeRate = newValue
                     }
-                )
+                ),
+                selectedPresentationDetent: $selectedPresentationDetent
             )
-            .presentationDetents([.height(400)])
+            .presentationDetents(
+                [.height(300), .height(440), .height(550), .large],
+                selection: $selectedPresentationDetent
+            )
         }
     }
 }

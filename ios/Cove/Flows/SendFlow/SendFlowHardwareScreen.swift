@@ -320,7 +320,7 @@ struct SendFlowHardwareScreen: View {
                         .padding(.vertical)
                         .foregroundColor(.midnightBlue)
                         .background(.btnPrimary)
-                        .cornerRadius(8)
+                        .cornerRadius(10)
                         .font(.caption)
                         .fontWeight(.medium)
                 }
@@ -335,7 +335,7 @@ struct SendFlowHardwareScreen: View {
                         .padding(.vertical)
                         .foregroundColor(.midnightBlue)
                         .background(.btnPrimary)
-                        .cornerRadius(8)
+                        .cornerRadius(10)
                         .font(.caption)
                         .fontWeight(.medium)
                 }

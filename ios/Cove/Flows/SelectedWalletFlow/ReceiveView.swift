@@ -9,6 +9,7 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 struct ReceiveView: View {
+    @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
 
     let manager: WalletManager
@@ -40,7 +41,8 @@ struct ReceiveView: View {
             }
         } catch {
             Log.error("Unable to get next address: \(error)")
-            // TODO: error getting address handle?
+            dismiss()
+            app.alertState = .init(.unableToGetAddress(error: error.localizedDescription))
         }
     }
 
@@ -69,7 +71,7 @@ struct ReceiveView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(.midnightBtn)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                 }
 
                 Button(action: {
@@ -85,7 +87,7 @@ struct ReceiveView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.white)
-                    .cornerRadius(8)
+                    .cornerRadius(10)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(.midnightBtn, lineWidth: 1)

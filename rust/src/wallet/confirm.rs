@@ -62,14 +62,6 @@ impl ConfirmDetails {
         self.sending_to.clone()
     }
 
-    pub fn is_equal(&self, rhs: &Self) -> bool {
-        self.spending_amount == rhs.spending_amount
-            && self.sending_amount == rhs.sending_amount
-            && self.fee_total == rhs.fee_total
-            && self.fee_rate == rhs.fee_rate
-            && self.sending_to == rhs.sending_to
-    }
-
     pub fn psbt(&self) -> Psbt {
         self.psbt.clone()
     }

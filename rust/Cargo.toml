@@ -137,7 +137,8 @@ hex = "0.4.3"
 base64 = "0.22.0"
 
 # parsing
-winnow = "0.6.0"
+winnow = { version = "0.6.0", features = ["simd"] }
+memchr = "2.7"
 
 # sync
 arc-swap = "1.7"

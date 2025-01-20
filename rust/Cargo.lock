@@ -655,6 +655,7 @@ dependencies = [
  "jiff",
  "libz-sys",
  "macros",
+ "memchr",
  "nid",
  "num-bigint",
  "numfmt",

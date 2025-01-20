@@ -43,7 +43,7 @@ impl PushTx {
 
 fn extract_tx<'s>(input: &mut &'s str) -> PResult<&'s str> {
     // skip until we find "pushtx#t="
-    let _ = take_until(0.., "pushtx#t=").parse_next(input)?;
+    let _ = take_until(1.., "pushtx#t=").parse_next(input)?;
 
     // skip "pushtx#t="
     let _ = "pushtx#t=".parse_next(input)?;

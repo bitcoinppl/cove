@@ -480,6 +480,22 @@ fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterFloat: FfiConverterPrimitive {
+    typealias FfiType = Float
+    typealias SwiftType = Float
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Float {
+        return try lift(readFloat(&buf))
+    }
+
+    public static func write(_ value: Float, into buf: inout [UInt8]) {
+        writeFloat(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
     typealias FfiType = Double
     typealias SwiftType = Double
@@ -2721,8 +2737,6 @@ public protocol ConfirmDetailsProtocol : AnyObject {
     
     func idHash()  -> String
     
-    func isEqual(rhs: ConfirmDetails)  -> Bool
-    
     func normalizedId()  -> String
     
     func psbt()  -> Psbt
@@ -2824,14 +2838,6 @@ open func id() -> TxId  {
 open func idHash() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_confirmdetails_id_hash(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func isEqual(rhs: ConfirmDetails) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_confirmdetails_is_equal(self.uniffiClonePointer(),
-        FfiConverterTypeConfirmDetails_lower(rhs),$0
     )
 })
 }
@@ -3418,7 +3424,7 @@ public func FfiConverterTypeDevice_lower(_ value: Device) -> UnsafeMutableRawPoi
 
 public protocol FeeRateProtocol : AnyObject {
     
-    func satPerVb()  -> Double
+    func satPerVb()  -> Float
     
 }
 
@@ -3471,18 +3477,18 @@ open class FeeRate:
     }
 
     
-public static func fromSatPerVb(satPerVb: UInt64) -> FeeRate  {
+public static func fromSatPerVb(satPerVb: Float) -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
     uniffi_cove_fn_constructor_feerate_from_sat_per_vb(
-        FfiConverterUInt64.lower(satPerVb),$0
+        FfiConverterFloat.lower(satPerVb),$0
     )
 })
 }
     
 
     
-open func satPerVb() -> Double  {
-    return try!  FfiConverterDouble.lift(try! rustCall() {
+open func satPerVb() -> Float  {
+    return try!  FfiConverterFloat.lift(try! rustCall() {
     uniffi_cove_fn_method_feerate_sat_per_vb(self.uniffiClonePointer(),$0
     )
 })
@@ -3555,7 +3561,7 @@ public protocol FeeRateOptionProtocol : AnyObject {
     
     func isEqual(rhs: FeeRateOption)  -> Bool
     
-    func satPerVb()  -> Double
+    func satPerVb()  -> Float
     
 }
 
@@ -3597,12 +3603,12 @@ open class FeeRateOption:
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_cove_fn_clone_feerateoption(self.pointer, $0) }
     }
-public convenience init(feeSpeed: FeeSpeed, feeRate: UInt64) {
+public convenience init(feeSpeed: FeeSpeed, feeRate: Float) {
     let pointer =
         try! rustCall() {
     uniffi_cove_fn_constructor_feerateoption_new(
         FfiConverterTypeFeeSpeed_lower(feeSpeed),
-        FfiConverterUInt64.lower(feeRate),$0
+        FfiConverterFloat.lower(feeRate),$0
     )
 }
     self.init(unsafeFromRawPointer: pointer)
@@ -3648,8 +3654,8 @@ open func isEqual(rhs: FeeRateOption) -> Bool  {
 })
 }
     
-open func satPerVb() -> Double  {
-    return try!  FfiConverterDouble.lift(try! rustCall() {
+open func satPerVb() -> Float  {
+    return try!  FfiConverterFloat.lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoption_sat_per_vb(self.uniffiClonePointer(),$0
     )
 })
@@ -3724,7 +3730,7 @@ public protocol FeeRateOptionWithTotalFeeProtocol : AnyObject {
     
     func isEqual(rhs: FeeRateOptionWithTotalFee)  -> Bool
     
-    func satPerVb()  -> Double
+    func satPerVb()  -> Float
     
     func totalFee()  -> Amount
     
@@ -3768,7 +3774,17 @@ open class FeeRateOptionWithTotalFee:
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_cove_fn_clone_feerateoptionwithtotalfee(self.pointer, $0) }
     }
-    // No primary constructor declared for this class.
+public convenience init(feeSpeed: FeeSpeed, feeRate: FeeRate, totalFee: Amount) {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_feerateoptionwithtotalfee_new(
+        FfiConverterTypeFeeSpeed_lower(feeSpeed),
+        FfiConverterTypeFeeRate_lower(feeRate),
+        FfiConverterTypeAmount_lower(totalFee),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
 
     deinit {
         guard let pointer = pointer else {
@@ -3817,8 +3833,8 @@ open func isEqual(rhs: FeeRateOptionWithTotalFee) -> Bool  {
 })
 }
     
-open func satPerVb() -> Double  {
-    return try!  FfiConverterDouble.lift(try! rustCall() {
+open func satPerVb() -> Float  {
+    return try!  FfiConverterFloat.lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoptionwithtotalfee_sat_per_vb(self.uniffiClonePointer(),$0
     )
 })
@@ -4036,6 +4052,14 @@ public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> Uns
 
 public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
     
+    func addCustomFee(feeRate: Float)  -> FeeRateOptionsWithTotalFee
+    
+    func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee)  -> FeeRateOptionsWithTotalFee
+    
+    func calculateCustomFeeSpeed(feeRate: Float)  -> FeeSpeed
+    
+    func custom()  -> FeeRateOptionWithTotalFee?
+    
     func fast()  -> FeeRateOptionWithTotalFee
     
     func feeRateOptions()  -> FeeRateOptions
@@ -4043,6 +4067,8 @@ public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
     func medium()  -> FeeRateOptionWithTotalFee
     
     func slow()  -> FeeRateOptionWithTotalFee
+    
+    func transactionSize()  -> UInt64
     
 }
 
@@ -4104,6 +4130,37 @@ public static func previewNew() -> FeeRateOptionsWithTotalFee  {
     
 
     
+open func addCustomFee(feeRate: Float) -> FeeRateOptionsWithTotalFee  {
+    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_add_custom_fee(self.uniffiClonePointer(),
+        FfiConverterFloat.lower(feeRate),$0
+    )
+})
+}
+    
+open func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptionsWithTotalFee  {
+    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_add_custom_fee_rate(self.uniffiClonePointer(),
+        FfiConverterTypeFeeRateOptionWithTotalFee_lower(feeRate),$0
+    )
+})
+}
+    
+open func calculateCustomFeeSpeed(feeRate: Float) -> FeeSpeed  {
+    return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_calculate_custom_fee_speed(self.uniffiClonePointer(),
+        FfiConverterFloat.lower(feeRate),$0
+    )
+})
+}
+    
+open func custom() -> FeeRateOptionWithTotalFee?  {
+    return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_custom(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func fast() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoptionswithtotalfee_fast(self.uniffiClonePointer(),$0
@@ -4128,6 +4185,13 @@ open func medium() -> FeeRateOptionWithTotalFee  {
 open func slow() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoptionswithtotalfee_slow(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func transactionSize() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_transaction_size(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -11732,15 +11796,15 @@ public func FfiConverterTypeConfirmedDetails_lower(_ value: ConfirmedDetails) ->
 
 
 public struct FeeResponse {
-    public var fastestFee: UInt64
-    public var halfHourFee: UInt64
-    public var hourFee: UInt64
-    public var economyFee: UInt64
-    public var minimumFee: UInt64
+    public var fastestFee: Float
+    public var halfHourFee: Float
+    public var hourFee: Float
+    public var economyFee: Float
+    public var minimumFee: Float
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(fastestFee: UInt64, halfHourFee: UInt64, hourFee: UInt64, economyFee: UInt64, minimumFee: UInt64) {
+    public init(fastestFee: Float, halfHourFee: Float, hourFee: Float, economyFee: Float, minimumFee: Float) {
         self.fastestFee = fastestFee
         self.halfHourFee = halfHourFee
         self.hourFee = hourFee
@@ -11788,20 +11852,20 @@ public struct FfiConverterTypeFeeResponse: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeeResponse {
         return
             try FeeResponse(
-                fastestFee: FfiConverterUInt64.read(from: &buf), 
-                halfHourFee: FfiConverterUInt64.read(from: &buf), 
-                hourFee: FfiConverterUInt64.read(from: &buf), 
-                economyFee: FfiConverterUInt64.read(from: &buf), 
-                minimumFee: FfiConverterUInt64.read(from: &buf)
+                fastestFee: FfiConverterFloat.read(from: &buf), 
+                halfHourFee: FfiConverterFloat.read(from: &buf), 
+                hourFee: FfiConverterFloat.read(from: &buf), 
+                economyFee: FfiConverterFloat.read(from: &buf), 
+                minimumFee: FfiConverterFloat.read(from: &buf)
         )
     }
 
     public static func write(_ value: FeeResponse, into buf: inout [UInt8]) {
-        FfiConverterUInt64.write(value.fastestFee, into: &buf)
-        FfiConverterUInt64.write(value.halfHourFee, into: &buf)
-        FfiConverterUInt64.write(value.hourFee, into: &buf)
-        FfiConverterUInt64.write(value.economyFee, into: &buf)
-        FfiConverterUInt64.write(value.minimumFee, into: &buf)
+        FfiConverterFloat.write(value.fastestFee, into: &buf)
+        FfiConverterFloat.write(value.halfHourFee, into: &buf)
+        FfiConverterFloat.write(value.hourFee, into: &buf)
+        FfiConverterFloat.write(value.economyFee, into: &buf)
+        FfiConverterFloat.write(value.minimumFee, into: &buf)
     }
 }
 
@@ -14894,6 +14958,8 @@ public enum FeeSpeed {
     case fast
     case medium
     case slow
+    case custom(durationMins: UInt32
+    )
 }
 
 
@@ -14912,6 +14978,9 @@ public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
         case 2: return .medium
         
         case 3: return .slow
+        
+        case 4: return .custom(durationMins: try FfiConverterUInt32.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14932,6 +15001,11 @@ public struct FfiConverterTypeFeeSpeed: FfiConverterRustBuffer {
         case .slow:
             writeInt(&buf, Int32(3))
         
+        
+        case let .custom(durationMins):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(durationMins, into: &buf)
+            
         }
     }
 }
@@ -22418,6 +22492,30 @@ fileprivate struct FfiConverterOptionTypeBitcoinTransaction: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFeeRateOptionWithTotalFee: FfiConverterRustBuffer {
+    typealias SwiftType = FeeRateOptionWithTotalFee?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFeeRateOptionWithTotalFee.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFeeRateOptions: FfiConverterRustBuffer {
     typealias SwiftType = FeeRateOptions?
 
@@ -23341,6 +23439,14 @@ public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> B
     )
 })
 }
+public func feeRateOptionsWithTotalFeeIsEqual(lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_fee_rate_options_with_total_fee_is_equal(
+        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(lhs),
+        FfiConverterTypeFeeRateOptionsWithTotalFee_lower(rhs),$0
+    )
+})
+}
 public func feeSpeedDuration(feeSpeed: FeeSpeed) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_fee_speed_duration(
@@ -23598,6 +23704,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_fee_rate_options_with_total_fee_is_equal() != 21429) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_fee_speed_duration() != 28599) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23802,9 +23911,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_confirmdetails_id_hash() != 11280) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_confirmdetails_is_equal() != 16719) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_confirmdetails_normalized_id() != 32961) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23868,7 +23974,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_database_wallets() != 38115) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_feerate_sat_per_vb() != 31119) {
+    if (uniffi_cove_checksum_method_feerate_sat_per_vb() != 6118) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoption_duration() != 58541) {
@@ -23883,7 +23989,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoption_is_equal() != 48538) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_feerateoption_sat_per_vb() != 60748) {
+    if (uniffi_cove_checksum_method_feerateoption_sat_per_vb() != 25253) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_duration() != 26593) {
@@ -23901,7 +24007,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_is_equal() != 47764) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 40506) {
+    if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_sat_per_vb() != 6906) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_total_fee() != 40202) {
@@ -23916,6 +24022,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoptions_slow() != 58269) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_add_custom_fee() != 28805) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 47193) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_calculate_custom_fee_speed() != 60104) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_custom() != 52529) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_fast() != 15779) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -23926,6 +24044,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_slow() != 1762) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_transaction_size() != 58503) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_auth_type() != 34438) {
@@ -24585,10 +24706,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_device_new() != 52650) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_feerate_from_sat_per_vb() != 58499) {
+    if (uniffi_cove_checksum_constructor_feerate_from_sat_per_vb() != 64519) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_feerateoption_new() != 49009) {
+    if (uniffi_cove_checksum_constructor_feerateoption_new() != 20675) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_feerateoptionwithtotalfee_new() != 10035) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_feerateoptions_preview_new() != 9368) {

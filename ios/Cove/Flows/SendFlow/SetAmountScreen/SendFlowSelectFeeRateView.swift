@@ -9,16 +9,24 @@ import Foundation
 import SwiftUI
 
 struct SendFlowSelectFeeRateView: View {
-    let manager: WalletManager
-    let feeOptions: FeeRateOptionsWithTotalFee
-    @Binding var selectedOption: FeeRateOptionWithTotalFee
+    enum Screen { case select, custom }
 
-    var body: some View {
+    let manager: WalletManager
+
+    @Binding var feeOptions: FeeRateOptionsWithTotalFee
+    @Binding var selectedOption: FeeRateOptionWithTotalFee
+    @Binding var selectedPresentationDetent: PresentationDetent
+
+    // private
+    @State private var route: [Screen] = []
+
+    @ViewBuilder
+    var SelectView: some View {
         VStack(spacing: 20) {
             Text("Network Fee")
                 .font(.title3)
                 .fontWeight(.bold)
-                .padding(.bottom, 8)
+                .padding(.vertical, 8)
 
             FeeOptionView(
                 manager: manager,
@@ -37,9 +45,52 @@ struct SendFlowSelectFeeRateView: View {
                 feeOption: feeOptions.slow(),
                 selectedOption: $selectedOption
             )
+
+            if let custom = feeOptions.custom() {
+                FeeOptionView(
+                    manager: manager,
+                    feeOption: custom,
+                    selectedOption: $selectedOption
+                )
+            }
+
+            Button(action: {
+                route = [.custom]
+            }) {
+                Text("Customize Fee")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding()
+            .background(Color.midnightBtn)
+            .foregroundColor(.white)
+            .cornerRadius(10)
+            .padding(.horizontal, detailsExpandedPadding)
+            .padding(.vertical, 12)
         }
         .padding(.horizontal)
         .padding(.top, 22)
+    }
+
+    var body: some View {
+        NavigationStack(path: $route) {
+            SelectView
+                .navigationDestination(
+                    for: Screen.self,
+                    destination: { route in
+                        switch route {
+                        case .custom:
+                            SendFlowCustomFeeRateView(
+                                feeOptions: $feeOptions,
+                                selectedOption: $selectedOption,
+                                selectedPresentationDetent: $selectedPresentationDetent
+                            )
+                        case .select: SelectView
+                        }
+                    }
+                )
+        }
     }
 }
 
@@ -69,7 +120,7 @@ private struct FeeOptionView: View {
     }
 
     var satsPerVbyte: Double {
-        feeOption.satPerVb()
+        Double(feeOption.satPerVb())
     }
 
     private var fiatAmount: String {
@@ -79,7 +130,7 @@ private struct FeeOptionView: View {
         }
 
         let amount = feeOption.totalFee()
-        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+        return "≈ \(manager.rust.convertAndDisplayFiat(amount: amount, prices: prices))"
     }
 
     var body: some View {
@@ -90,9 +141,10 @@ private struct FeeOptionView: View {
                         .font(.headline)
                         .foregroundColor(fontColor)
 
-                    DurationCapsule(
+                    SendFlowDurationCapsule(
                         speed: feeOption.feeSpeed(), fontColor: fontColor
                     )
+                    .font(.caption2)
                 }
 
                 HStack {
@@ -131,34 +183,43 @@ private struct FeeOptionView: View {
     }
 }
 
-private struct DurationCapsule: View {
-    let speed: FeeSpeed
-    let fontColor: Color
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(speed.circleColor)
-                .frame(width: 8, height: 8)
-            Text(speed.duration)
+#Preview("Select Fee Rate") {
+    AsyncPreview {
+        VStack {
+            SendFlowSelectFeeRateView(
+                manager: WalletManager(preview: "preview_only"),
+                feeOptions: Binding.constant(FeeRateOptionsWithTotalFee.previewNew()),
+                selectedOption: Binding.constant(
+                    FeeRateOptionsWithTotalFee.previewNew().medium()
+                ),
+                selectedPresentationDetent: Binding.constant(PresentationDetent.large)
+            )
+            .environment(WalletManager(preview: "preview_only"))
+            .environment(AppManager())
+            .frame(height: 440)
         }
-        .font(.subheadline)
-        .foregroundColor(fontColor)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color.gray.opacity(0.2))
-        .cornerRadius(8)
+        .frame(maxHeight: .infinity)
+        .background(.coveBg)
     }
 }
 
-#Preview {
+#Preview("Select Fee Rate with Custom") {
     AsyncPreview {
-        SendFlowSelectFeeRateView(
-            manager: WalletManager(preview: "preview_only"),
-            feeOptions: FeeRateOptionsWithTotalFee.previewNew(),
-            selectedOption: Binding.constant(
-                FeeRateOptionsWithTotalFee.previewNew().medium())
-        )
-        .environment(AppManager())
+        VStack {
+            SendFlowSelectFeeRateView(
+                manager: WalletManager(preview: "preview_only"),
+                feeOptions: Binding.constant(
+                    FeeRateOptionsWithTotalFee.previewNew().addCustomFee(feeRate: 13.77)),
+                selectedOption: Binding.constant(
+                    FeeRateOptionsWithTotalFee.previewNew().medium()
+                ),
+                selectedPresentationDetent: Binding.constant(PresentationDetent.large)
+            )
+            .environment(WalletManager(preview: "preview_only"))
+            .environment(AppManager())
+            .frame(height: 550)
+        }
+        .frame(maxHeight: .infinity)
+        .background(.coveBg)
     }
 }
