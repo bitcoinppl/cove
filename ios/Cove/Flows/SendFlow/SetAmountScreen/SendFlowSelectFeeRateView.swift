@@ -326,9 +326,9 @@ private struct CustomRateFee: View {
                 Text("Done")
                     .font(.footnote)
                     .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding()
             }
-            .frame(maxWidth: .infinity)
-            .padding()
             .background(Color.midnightBtn)
             .foregroundColor(.white)
             .cornerRadius(10)

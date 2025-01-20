@@ -42,7 +42,7 @@ struct SendFlowSetAmountScreen: View {
 
     // text inputs
     @State private var sendAmount: String = "0"
-    @State private var sendAmountFiat: String = "0.00"
+    @State private var sendAmountFiat: String = ""
 
     // max
     @State private var maxSelected: Amount? = nil
@@ -184,6 +184,7 @@ struct SendFlowSetAmountScreen: View {
                     case .cold: RouteFactory().sendHardwareExport(id: id, details: confirmDetails)
                     }
 
+                presenter.focusField = .none
                 app.pushRoute(route)
             } catch {
                 // error alert is displayed at the top level container, but we can log it here
@@ -352,7 +353,9 @@ struct SendFlowSetAmountScreen: View {
 
             // all valid, scroll to bottom
             if validate() {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                presenter.focusField = .none
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     withAnimation(.easeInOut(duration: 0.4)) {
                         presenter.focusField = .none
                         scrollPosition.scrollTo(edge: .bottom)
@@ -684,6 +687,11 @@ struct SendFlowSetAmountScreen: View {
             self.feeRateOptions = feeRateOptions
             if selectedFeeRate == nil {
                 selectedFeeRate = feeRateOptions.medium()
+            }
+
+            if feeRateOptions.custom() == nil, case .custom = selectedFeeRate?.feeSpeed() {
+                let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
+                self.feeRateOptions = feeRateOptions
             }
         }
     }
