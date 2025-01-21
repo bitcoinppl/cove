@@ -1,4 +1,3 @@
-use derive_more::derive::Display;
 use message_info::MessageInfo;
 use parser::{parse_message_info, stream::StreamExt};
 use record::NdefRecord;
@@ -22,15 +21,15 @@ pub const NUMBER_OF_BLOCKS_PER_CHUNK: u16 = 32;
 /// Number of bytes per block read from the NFC chip
 pub const BYTES_PER_BLOCK: u16 = 4;
 
-#[derive(Debug, PartialEq, Eq, thiserror::Error, Display, uniffi::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum NfcReaderError {
-    /// Error parsing the NDEF message
+    #[error("Error parsing the NDEF message")]
     ParsingError(String),
 
-    /// Not enough data to parse, need atleast enough to parse the message info
+    #[error("Not enough data to parse, need atleast enough to parse the message info")]
     NotEnoughData,
 
-    /// Trying to parse a message that has already been parsed
+    #[error("Trying to parse a message that has already been parsed")]
     AlreadyParsed,
 }
 

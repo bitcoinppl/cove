@@ -60,11 +60,11 @@ pub enum AppAction {
     UpdateFees,
 }
 
-#[derive(
-    Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error, derive_more::Display,
-)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum AppError {
+    #[error("prices error: {0}")]
     PricesError(String),
+    #[error("fees error: {0}")]
     FeesError(String),
 }
 

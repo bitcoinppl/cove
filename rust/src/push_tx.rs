@@ -11,13 +11,15 @@ pub struct PushTx {
     pub txn: BitcoinTransaction,
 }
 
-#[derive(Debug, Copy, Clone, thiserror::Error, derive_more::Display)]
+#[derive(Debug, Copy, Clone, thiserror::Error)]
 pub enum PushTxError {
-    /// The string is not a valid pushtx
+    #[error("The string is not a valid pushtx")]
     InvalidPushTx,
-    /// The transaction is not a valid base64 string
+
+    #[error("The transaction is not a valid base64 string")]
     InvalidBase64,
-    /// The transaction is not a valid transaction
+
+    #[error("The transaction is not a valid transaction")]
     InvalidTransaction,
 }
 
