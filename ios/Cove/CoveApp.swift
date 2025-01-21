@@ -74,6 +74,8 @@ struct CoveApp: App {
                 "Error: \(error)"
             case .invalidFileFormat:
                 "The file or scanned code did not match any formats that Cove supports."
+            case let .invalidFormat(error):
+                error
             case let .addressWrongNetwork(
                 address: address, network: network, currentNetwork: currentNetwork
             ):
@@ -107,7 +109,8 @@ struct CoveApp: App {
              .importedSuccessfully,
              .unableToSelectWallet,
              .errorImportingHardwareWallet,
-             .invalidFileFormat:
+             .invalidFileFormat,
+             .invalidFormat:
             Button("OK") {
                 app.alertState = .none
             }
@@ -271,11 +274,13 @@ struct CoveApp: App {
 
         guard let txnRecord else {
             Log.error("No unsigned transaction found for \(transaction.txId())")
-            return app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            return
         }
 
         let route = RouteFactory().sendConfirm(
-            id: txnRecord.walletId(), details: txnRecord.confirmDetails(), signedTransaction: transaction
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
+            signedTransaction: transaction
         )
 
         app.pushRoute(route)
@@ -334,10 +339,11 @@ struct CoveApp: App {
             }
         } catch {
             switch error {
-            case let FileHandlerError.NotRecognizedFormat(multiFormatError):
-                Log.error("Unrecognized format multi-format error: \(multiFormatError)")
-                app.alertState = TaggedItem(
-                    .invalidFileFormat(multiFormatError.localizedDescription))
+            case let multiFormatError as MultiFormatError:
+                Log.error(
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.describe)"
+                )
+                app.alertState = TaggedItem(.invalidFormat(multiFormatError.describe))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")

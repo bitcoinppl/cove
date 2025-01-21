@@ -10,3 +10,15 @@ extension AuthManagerError {
         authManagerErrorToString(error: self)
     }
 }
+
+extension MultiFormatError {
+    var describe: String {
+        displayMultiFormatError(error: self)
+    }
+}
+
+extension WalletError {
+    var describe: String {
+        displayWalletError(error: self)
+    }
+}

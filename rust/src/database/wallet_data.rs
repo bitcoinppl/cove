@@ -60,18 +60,18 @@ pub struct WalletDataDb {
     pub db: Arc<redb::Database>,
 }
 
-#[derive(Debug, thiserror::Error, uniffi::Error, derive_more::Display)]
+#[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum WalletDataError {
-    #[display("Unable to access database for wallet {id}, error: {error}")]
+    #[error("Unable to access database for wallet {id}, error: {error}")]
     DatabaseAccess { id: WalletId, error: String },
 
-    #[display("Unable to access table for wallet {id}, error: {error}")]
+    #[error("Unable to access table for wallet {id}, error: {error}")]
     TableAccess { id: WalletId, error: String },
 
-    /// Unable to read: {0}
+    #[error("Unable to read: {0}")]
     Read(String),
 
-    /// Unable to save: {0}
+    #[error("Unable to save: {0}")]
     Save(String),
 }
 

@@ -42,7 +42,6 @@ struct QrCodeAddressView: View {
                         codeTypes: [.qr],
                         scanMode: .oncePerCode,
                         scanInterval: 0.1,
-                        focusIndicatorColor: .white,
                         showAlert: false,
                         completion: handleScan
                     )
@@ -58,11 +57,13 @@ struct QrCodeAddressView: View {
                                 .foregroundStyle(.white)
                                 .fontWeight(.bold)
 
-                            Text("Effortlessly send Bitcoin—scan the recipient’s QR code to get their address")
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 8)
-                                .fontWeight(.semibold)
+                            Text(
+                                "Effortlessly send Bitcoin—scan the recipient’s QR code to get their address"
+                            )
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                            .fontWeight(.semibold)
                         }
 
                         Spacer()

@@ -1,5 +1,4 @@
 use bip39::{Language, Mnemonic};
-use derive_more::Display;
 
 use crate::mnemonic::WordAccess as _;
 
@@ -9,7 +8,7 @@ pub enum SeedQr {
     Compact(Mnemonic),
 }
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum SeedQrError {
     #[error("Not a standard seed QR, contains non numeric chars")]
     ContainsNonNumericChars,
@@ -24,21 +23,24 @@ pub enum SeedQrError {
     InvalidMnemonic(#[from] Bip39Error),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Display, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, thiserror::Error, uniffi::Error)]
 pub enum Bip39Error {
-    /// Mnemonic has a word count that is not a multiple of 6, found {0}.
+    #[error("Mnemonic has a word count that is not a multiple of 6, found {0}.")]
     BadWordCount(u32),
-    /// Mnemonic contains an unknown word at index {0}.
+
     // Error contains the index of the word.
     // Use `mnemonic.split_whitespace().get(i)` to get the word.
+    #[error("Mnemonic contains an unknown word at index {0}.")]
     UnknownWord(u32),
-    /// Entropy was not a multiple of 32 bits or between 128-256n bits in length.
+
+    #[error("Entropy was not a multiple of 32 bits or between 128-256n bits in length.")]
     BadEntropyBitCount(u32),
-    /// The mnemonic has an invalid checksum.
+
+    #[error("The mnemonic has an invalid checksum.")]
     InvalidChecksum,
-    /// The mnemonic can be interpreted as multiple languages.
-    /// Use the helper methods of the inner struct to inspect
-    /// which languages are possible.
+
+    // Use the helper methods of the inner struct to which languages are possible."
+    #[error("The mnemonic can be interpreted as multiple languages")]
     AmbiguousLanguages,
 }
 

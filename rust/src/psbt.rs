@@ -19,20 +19,18 @@ pub type BdkPsbt = bdk_wallet::bitcoin::Psbt;
 )]
 pub struct Psbt(pub BdkPsbt);
 
-#[derive(
-    Debug, Clone, PartialEq, Eq, Hash, uniffi::Error, thiserror::Error, derive_more::Display,
-)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Error, thiserror::Error)]
 pub enum PsbtError {
-    /// Missing UTXO
+    #[error("Missing UTXO")]
     MissingUtxo,
 
-    /// Negative fee.
+    #[error("Negative fee.")]
     NegativeFee,
 
-    /// Fee overflow.
+    #[error("Fee overflow.")]
     FeeOverflow,
 
-    /// Other PSBT error {0}
+    #[error("Other PSBT error {0}")]
     Other(String),
 }
 

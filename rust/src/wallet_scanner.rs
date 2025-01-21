@@ -66,15 +66,15 @@ pub enum WorkerState {
     NoneFound,
 }
 
-#[derive(Debug, Clone, uniffi::Error, thiserror::Error, derive_more::Display)]
+#[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 pub enum WalletScannerError {
-    /// No address types to scan
+    #[error("No address types to scan")]
     NoAddressTypes,
 
-    /// Unable to create wallet
+    #[error("Unable to create wallet")]
     WalletCreationError(#[from] crate::wallet::WalletError),
 
-    /// No mnemonic available for id {0}
+    #[error("No mnemonic available for id {0}")]
     NoMnemonicAvailable(WalletId),
 }
 

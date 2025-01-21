@@ -46,7 +46,6 @@ struct QrCodeScanView: View {
                         codeTypes: [.qr],
                         scanMode: .oncePerCode,
                         scanInterval: 0.1,
-                        focusIndicatorColor: .white,
                         showAlert: false,
                         completion: handleScan
                     )

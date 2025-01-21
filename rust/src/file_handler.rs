@@ -7,18 +7,18 @@ pub struct FileHandler {
     file_path: PathBuf,
 }
 
-#[derive(Debug, uniffi::Error, thiserror::Error, derive_more::Display)]
+#[derive(Debug, uniffi::Error, thiserror::Error)]
 pub enum FileHandlerError {
-    /// File not found
+    #[error("File not found")]
     FileNotFound,
 
-    /// Unable to open file {0}
+    #[error("Unable to open file {0}")]
     OpenFile(String),
 
-    /// Unable to to read file {0}
+    #[error("Unable to to read file {0}")]
     ReadFile(String),
 
-    /// File is not a recognized format: {0:?}
+    #[error("File is not a recognized format: {0:?}")]
     NotRecognizedFormat(#[from] MultiFormatError),
 }
 

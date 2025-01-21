@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::{
     hardware_export::HardwareExport,
@@ -23,22 +23,27 @@ pub enum MultiFormat {
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
 }
 
-#[derive(Debug, uniffi::Error, thiserror::Error, derive_more::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum MultiFormatError {
     #[error(transparent)]
     InvalidSeedQr(#[from] crate::seed_qr::SeedQrError),
 
-    /// Address is not supported for any network
+    #[error("Address is not supported for any network")]
     UnsupportedNetworkAddress,
 
-    /// Not a valid format, we only support addresses, SeedQr, mnemonic and xpubs
+    #[error("Not a valid format, we only support addresses, SeedQr, mnemonic and XPUBs")]
     UnrecognizedFormat,
+
+    #[error("UR format not supported, please use a plain QR or a BBQr")]
+    UrFormatNotSupported,
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
 
 impl MultiFormat {
     pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
+        debug!("MultiFormat::try_from_data");
+
         // try parsing a signed transaction
         if let Ok(txn) = BitcoinTransaction::try_from_data(&data) {
             return Ok(Self::Transaction(Arc::new(txn)));
@@ -54,8 +59,12 @@ impl MultiFormat {
     }
 
     pub fn try_from_string(string: String) -> Result<Self> {
+        debug!("MultiFormat::try_from_string");
+
+        let string = string.trim();
+
         // try to parse address
-        match AddressWithNetwork::try_new(&string) {
+        match AddressWithNetwork::try_new(string) {
             Ok(address) => return Ok(Self::Address(address.into())),
 
             Err(AddressError::UnsupportedNetwork) => {
@@ -66,25 +75,29 @@ impl MultiFormat {
         }
 
         // try to parse hardware export (xpub, json, descriptors...)
-        if let Ok(format) = pubport::Format::try_new_from_str(&string) {
+        if let Ok(format) = pubport::Format::try_new_from_str(string) {
             let hardware_export = HardwareExport::new(format);
             return Ok(Self::HardwareExport(hardware_export.into()));
         }
 
         // try to parse seed qr
-        if let Ok(seed_qr) = crate::seed_qr::SeedQr::try_from_str(&string) {
+        if let Ok(seed_qr) = crate::seed_qr::SeedQr::try_from_str(string) {
             let mnemonic = seed_qr.into_mnemonic();
             return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
         }
 
         // try to parse a mnemonic
-        if let Ok(mnemonic) = string.as_str().parse_mnemonic() {
+        if let Ok(mnemonic) = string.parse_mnemonic() {
             return Ok(Self::Mnemonic(Arc::new(mnemonic.into())));
         }
 
         // try to parse a transaction
-        if let Ok(txn) = BitcoinTransaction::try_from_str(&string) {
+        if let Ok(txn) = BitcoinTransaction::try_from_str(string) {
             return Ok(Self::Transaction(Arc::new(txn)));
+        }
+
+        if string.starts_with("UR:") || string.starts_with("ur:") {
+            return Err(MultiFormatError::UrFormatNotSupported);
         }
 
         warn!("could not parse string as MultiFormat: {string}");
@@ -118,4 +131,9 @@ fn string_or_data_try_into_multi_format(
     string_or_data: StringOrData,
 ) -> Result<MultiFormat, MultiFormatError> {
     string_or_data.try_into()
+}
+
+#[uniffi::export]
+fn display_multi_format_error(error: MultiFormatError) -> String {
+    error.to_string()
 }
