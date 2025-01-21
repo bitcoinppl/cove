@@ -18,6 +18,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     keys::Descriptors,
     mnemonic::MnemonicExt as _,
+    multi_format::MultiFormatError,
     network::Network,
     xpub::{self, XpubError},
 };
@@ -68,6 +69,9 @@ pub enum WalletError {
 
     #[error("tryin to import a wallet that already exists")]
     WalletAlreadyExists(WalletId),
+
+    #[error(transparent)]
+    MultiFormatError(#[from] MultiFormatError),
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -195,11 +199,22 @@ impl Wallet {
 
     /// Create a new watch-only wallet from the given xpub
     pub fn try_new_persisted_from_xpub(xpub: String) -> Result<Self, WalletError> {
-        let hardware_export = pubport::Format::try_new_from_str(&xpub)
+        let xpub = xpub.trim();
+        let hardware_export = pubport::Format::try_new_from_str(xpub)
             .map_err(Into::into)
-            .map_err(WalletError::ParseXpubError)?;
+            .map_err(WalletError::ParseXpubError);
 
-        Self::try_new_persisted_from_pubport(hardware_export)
+        if let Ok(hardware_export) = hardware_export {
+            return Self::try_new_persisted_from_pubport(hardware_export);
+        }
+
+        let xpub = xpub.trim();
+        if xpub.starts_with("UR:") || xpub.starts_with("UR:") {
+            return Err(MultiFormatError::UrFormatNotSupported.into());
+        }
+
+        // already returned if its a valid xpub
+        return Err(hardware_export.unwrap_err());
     }
 
     /// Import from a hardware export
@@ -593,4 +608,9 @@ mod tests {
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }
+}
+
+#[uniffi::export]
+fn display_wallet_error(error: WalletError) -> String {
+    error.to_string()
 }

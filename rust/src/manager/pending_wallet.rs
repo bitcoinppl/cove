@@ -8,6 +8,7 @@ use crate::{
     database::{self, Database},
     keychain::KeychainError,
     mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
+    multi_format::MultiFormatError,
     pending_wallet::PendingWallet,
     wallet::{fingerprint::Fingerprint, metadata::WalletMetadata, Wallet},
 };
@@ -53,7 +54,7 @@ pub enum PendingWalletManagerAction {
     UpdateWords(NumberOfBip39Words),
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum WalletCreationError {
     #[error("failed to create wallet: {0}")]
     Bdk(String),
@@ -69,6 +70,9 @@ pub enum WalletCreationError {
 
     #[error("failed to import hardware wallet: {0}")]
     Import(String),
+
+    #[error(transparent)]
+    MultiFormatError(#[from] MultiFormatError),
 }
 
 #[uniffi::export]
@@ -194,6 +198,7 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             WalletError::DatabaseError(error) => Self::Database(error),
             WalletError::BdkError(error) => Self::Bdk(error),
             WalletError::PersistError(error) => Self::Persist(error),
+            WalletError::MultiFormatError(error) => Self::MultiFormatError(error),
             WalletError::ParseXpubError(error) => Self::Import(error.to_string()),
             WalletError::WalletAlreadyExists(id) => {
                 Self::Import(format!("wallet already exists: {id}"))

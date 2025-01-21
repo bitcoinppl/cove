@@ -8,7 +8,7 @@ pub enum SeedQr {
     Compact(Mnemonic),
 }
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum SeedQrError {
     #[error("Not a standard seed QR, contains non numeric chars")]
     ContainsNonNumericChars,

@@ -23,7 +23,7 @@ pub enum MultiFormat {
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
 }
 
-#[derive(Debug, uniffi::Error, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 pub enum MultiFormatError {
     #[error(transparent)]
     InvalidSeedQr(#[from] crate::seed_qr::SeedQrError),
