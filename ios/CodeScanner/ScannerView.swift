@@ -18,7 +18,7 @@ struct ScannerView: View {
     var showTorchButton: Bool = true
     var showFocusIndicator: Bool = true
     var focusIndicatorSize: CGFloat = 175
-    var focusIndicatorColor: Color = .yellow
+    var focusIndicatorColor: Color = .white
     @State var codeSize = 40.0
     var showAlert = true
     var completion: (Result<ScanResult, ScanError>) -> Void = { _ in () }

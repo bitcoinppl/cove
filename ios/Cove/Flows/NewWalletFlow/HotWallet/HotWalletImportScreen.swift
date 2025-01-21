@@ -108,8 +108,10 @@ struct HotWalletImportScreen: View {
         nfcReader = NFCReader()
 
         switch importType {
-        case .manual: ()
-        case .qr: sheetState = .init(.qrCode)
+        case .manual:
+            focusField = .one
+        case .qr:
+            sheetState = .init(.qrCode)
         case .nfc:
             let task = Task {
                 try await Task.sleep(for: .milliseconds(200))
@@ -121,8 +123,6 @@ struct HotWalletImportScreen: View {
             tasks.append(task)
         }
 
-        focusField = .one
-        importType = .manual
         enteredWords = numberOfWords.inGroups(of: groupsOf)
     }
 
@@ -353,10 +353,23 @@ struct HotWalletImportScreen: View {
             actions: { MyAlert($0).actions }
         )
         .onAppear(perform: initOnAppear)
-        .onChange(of: focusField, onChangeFocusField)
-        .onChange(of: nfcReader.scannedMessage, onChangeScannedMessage)
-        .onChange(of: nfcReader.scannedMessageData, onChangeScannedMessageData)
-        .onChange(of: focusField) { old, new in
+        .onChange(of: sheetState, initial: true) { oldState, newState in
+            if oldState != nil, newState == nil {
+                if enteredWords[0][0] == "" { return focusField = ImportFieldNumber(0) }
+
+                let focusField =
+                    autocomplete.nextFieldNumber(
+                        currentFieldNumber: UInt8(1),
+                        enteredWords: enteredWords.flatMap(\.self)
+                    )
+
+                self.focusField = ImportFieldNumber(focusField)
+            }
+        }
+        .onChange(of: focusField, initial: false, onChangeFocusField)
+        .onChange(of: nfcReader.scannedMessage, initial: false, onChangeScannedMessage)
+        .onChange(of: nfcReader.scannedMessageData, initial: false, onChangeScannedMessageData)
+        .onChange(of: focusField, initial: false) { old, new in
             if new == nil { focusField = old }
         }
         .onDisappear {
@@ -441,6 +454,7 @@ struct HotWalletImportScreen: View {
             ) { response in
                 handleScan(result: response)
             }
+            .ignoresSafeArea(.all)
         }
     }
 
