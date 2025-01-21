@@ -13,6 +13,7 @@ public enum AppAlertState: Equatable {
     case unableToSelectWallet
     case errorImportingHardwareWallet(String)
     case invalidFileFormat(String)
+    case invalidFormat(String)
     case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network)
     case noWalletSelected(Address)
     case foundAddress(Address, Amount?)
@@ -37,10 +38,12 @@ public enum AppAlertState: Equatable {
             "Error Importing Hardware Wallet"
         case .invalidFileFormat:
             "Invalid File Format"
+        case .invalidFormat:
+            "Invalid Format"
         case .addressWrongNetwork:
             "Wrong Network"
         case .noWalletSelected,
-             .foundAddress:
+            .foundAddress:
             "Found Address"
         case .noCameraPermission:
             "Camera Access is Required"

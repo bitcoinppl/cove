@@ -10,6 +10,10 @@ import SwiftUI
 private struct AlertItem: Identifiable {
     let id = UUID()
     let type: AlertType
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 private struct CustomAlert: Equatable, Identifiable {
@@ -25,9 +29,9 @@ private struct CustomAlert: Equatable, Identifiable {
     }
 }
 
-private enum AlertType: Equatable {
-    case success(String)
-    case error(String)
+private enum AlertType {
+    case success(String, String = "Success", () -> Void = {})
+    case error(String, String = "Error", () -> Void = {})
     case custom(CustomAlert)
 
     init(_ alert: Alert) {
@@ -36,13 +40,17 @@ private enum AlertType: Equatable {
 
     var alert: Alert {
         switch self {
-        case let .success(message):
+        case let .success(message, title, action):
             .init(
-                title: Text("Success"), message: Text(message), dismissButton: .default(Text("OK"))
+                title: Text(title),
+                message: Text(message),
+                dismissButton: .cancel(Text("OK"), action: action)
             )
-        case let .error(message):
+        case let .error(message, title, action):
             .init(
-                title: Text("Error"), message: Text(message), dismissButton: .default(Text("OK"))
+                title: Text(title),
+                message: Text(message),
+                dismissButton: .cancel(Text("OK"), action: action)
             )
         case let .custom(alert):
             alert.alert
@@ -137,12 +145,17 @@ struct QrCodeImportScreen: View {
                 Log.debug("Imported Wallet: \(id)")
                 alert = AlertItem(type: .success("Imported Wallet Successfully"))
                 try app.rust.selectWallet(id: id)
+            } catch let WalletError.MultiFormatError(error) {
+                app.popRoute()
+                self.alert = AlertItem(type: .error(error.describe, "Invalid Format"))
             } catch let WalletError.WalletAlreadyExists(id) {
                 self.alert = AlertItem(type: .success("Wallet already exists: \(id)"))
                 if (try? app.rust.selectWallet(id: id)) == nil {
+                    app.popRoute()
                     self.alert = AlertItem(type: .error("Unable to select wallet"))
                 }
             } catch {
+                Log.warn("Error importing hardware wallet: \(error)")
                 alert = AlertItem(type: .error(error.localizedDescription))
             }
         }
@@ -277,6 +290,7 @@ struct HelpView: View {
                         Text("1. Click on Settings, in the left side bar")
                         Text("2. Click on 'Export...' button at the bottom")
                         Text("3. Under 'Output Descriptor' click the 'Show...' button")
+                        Text("4. Make sure 'Show BBQr' is selected")
                     }
 
                     Divider()

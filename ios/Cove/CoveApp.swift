@@ -35,8 +35,8 @@ struct SafeAreaInsetsKey: EnvironmentKey {
     }
 }
 
-public extension EnvironmentValues {
-    var safeAreaInsets: EdgeInsets {
+extension EnvironmentValues {
+    public var safeAreaInsets: EdgeInsets {
         self[SafeAreaInsetsKey.self]
     }
 }
@@ -74,12 +74,14 @@ struct CoveApp: App {
                 "Error: \(error)"
             case .invalidFileFormat:
                 "The file or scanned code did not match any formats that Cove supports."
+            case .invalidFormat(let error):
+                error
             case let .addressWrongNetwork(
                 address: address, network: network, currentNetwork: currentNetwork
             ):
                 "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
-                 let .foundAddress(address, _):
+                let .foundAddress(address, _):
                 String(address)
             case .noCameraPermission:
                 "Please allow camera access in Settings to use this feature."
@@ -103,11 +105,12 @@ struct CoveApp: App {
                 try? app.rust.selectWallet(id: walletId)
             }
         case .invalidWordGroup,
-             .errorImportingHotWallet,
-             .importedSuccessfully,
-             .unableToSelectWallet,
-             .errorImportingHardwareWallet,
-             .invalidFileFormat:
+            .errorImportingHotWallet,
+            .importedSuccessfully,
+            .unableToSelectWallet,
+            .errorImportingHardwareWallet,
+            .invalidFileFormat,
+            .invalidFormat:
             Button("OK") {
                 app.alertState = .none
             }
@@ -271,11 +274,13 @@ struct CoveApp: App {
 
         guard let txnRecord else {
             Log.error("No unsigned transaction found for \(transaction.txId())")
-            return app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            app.alertState = .init(.noUnsignedTransactionFound(transaction.txId()))
+            return
         }
 
         let route = RouteFactory().sendConfirm(
-            id: txnRecord.walletId(), details: txnRecord.confirmDetails(), signedTransaction: transaction
+            id: txnRecord.walletId(), details: txnRecord.confirmDetails(),
+            signedTransaction: transaction
         )
 
         app.pushRoute(route)
@@ -334,10 +339,11 @@ struct CoveApp: App {
             }
         } catch {
             switch error {
-            case let FileHandlerError.NotRecognizedFormat(multiFormatError):
-                Log.error("Unrecognized format multi-format error: \(multiFormatError)")
-                app.alertState = TaggedItem(
-                    .invalidFileFormat(multiFormatError.localizedDescription))
+            case let multiFormatError as MultiFormatError:
+                Log.error(
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.describe)"
+                )
+                app.alertState = TaggedItem(.invalidFormat(multiFormatError.describe))
 
             default:
                 Log.error("Unable to handle scanned code, error: \(error)")
@@ -446,7 +452,7 @@ struct CoveApp: App {
         if newPhase == .active { showCover = false }
 
         if auth.isAuthEnabled, !auth.isUsingBiometrics, oldPhase == .active,
-           newPhase == .inactive
+            newPhase == .inactive
         {
             coverClearTask?.cancel()
             showCover = true
@@ -513,20 +519,20 @@ struct CoveApp: App {
                 .gesture(
                     app.router.routes.isEmpty
                         ? DragGesture()
-                        .onChanged { gesture in
-                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
+                            .onChanged { gesture in
+                                if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                    withAnimation(.spring()) {
+                                        app.isSidebarVisible = true
+                                    }
                                 }
                             }
-                        }
-                        .onEnded { gesture in
-                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
+                            .onEnded { gesture in
+                                if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                    withAnimation(.spring()) {
+                                        app.isSidebarVisible = true
+                                    }
                                 }
-                            }
-                        } : nil
+                            } : nil
                 )
                 .task {
                     await app.rust.initOnStart()

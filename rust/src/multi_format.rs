@@ -34,7 +34,7 @@ pub enum MultiFormatError {
     #[error("Not a valid format, we only support addresses, SeedQr, mnemonic and XPUBs")]
     UnrecognizedFormat,
 
-    #[error("UR format not supported, please use a plain QR or a BBQr code")]
+    #[error("UR format not supported, please use a plain QR or a BBQr")]
     UrFormatNotSupported,
 }
 

@@ -13685,29 +13685,14 @@ public enum AuthError {
 
     
     
-    /**
-     * Unable to save pin to database {0:?}
-     */
     case DatabaseSaveError(DatabaseError
     )
-    /**
-     * Unable to get pin from database {0:?}
-     */
     case DatabaseGetError(DatabaseError
     )
-    /**
-     * Unable to hash pin {0}
-     */
     case HashError(String
     )
-    /**
-     * Unable to parse hashed pin {0}
-     */
     case ParseHashedPinError(String
     )
-    /**
-     * Verification failed {0}
-     */
     case VerificationFailed(String
     )
 }
@@ -14139,30 +14124,13 @@ public enum Bip39Error {
 
     
     
-    /**
-     * Mnemonic has a word count that is not a multiple of 6, found {0}.
-     */
     case BadWordCount(UInt32
     )
-    /**
-     * Mnemonic contains an unknown word at index {0}.
-     */
     case UnknownWord(UInt32
     )
-    /**
-     * Entropy was not a multiple of 32 bits or between 128-256n bits in length.
-     */
     case BadEntropyBitCount(UInt32
     )
-    /**
-     * The mnemonic has an invalid checksum.
-     */
     case InvalidChecksum
-    /**
-     * The mnemonic can be interpreted as multiple languages.
-     * Use the helper methods of the inner struct to inspect
-     * which languages are possible.
-     */
     case AmbiguousLanguages
 }
 
@@ -15510,23 +15478,11 @@ public enum FileHandlerError {
 
     
     
-    /**
-     * File not found
-     */
     case FileNotFound
-    /**
-     * Unable to open file {0}
-     */
     case OpenFile(String
     )
-    /**
-     * Unable to to read file {0}
-     */
     case ReadFile(String
     )
-    /**
-     * File is not a recognized format: {0:?}
-     */
     case NotRecognizedFormat(MultiFormatError
     )
 }
@@ -16859,14 +16815,9 @@ public enum MultiFormatError {
     
     case InvalidSeedQr(SeedQrError
     )
-    /**
-     * Address is not supported for any network
-     */
     case UnsupportedNetworkAddress
-    /**
-     * Not a valid format, we only support addresses, SeedQr, mnemonic and xpubs
-     */
     case UnrecognizedFormat
+    case UrFormatNotSupported
 }
 
 
@@ -16888,6 +16839,7 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
             )
         case 2: return .UnsupportedNetworkAddress
         case 3: return .UnrecognizedFormat
+        case 4: return .UrFormatNotSupported
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16911,6 +16863,10 @@ public struct FfiConverterTypeMultiFormatError: FfiConverterRustBuffer {
         
         case .UnrecognizedFormat:
             writeInt(&buf, Int32(3))
+        
+        
+        case .UrFormatNotSupported:
+            writeInt(&buf, Int32(4))
         
         }
     }
@@ -17492,18 +17448,9 @@ public enum NfcReaderError {
 
     
     
-    /**
-     * Error parsing the NDEF message
-     */
     case ParsingError(String
     )
-    /**
-     * Not enough data to parse, need atleast enough to parse the message info
-     */
     case NotEnoughData
-    /**
-     * Trying to parse a message that has already been parsed
-     */
     case AlreadyParsed
 }
 
@@ -18247,21 +18194,9 @@ public enum PsbtError {
 
     
     
-    /**
-     * Missing UTXO
-     */
     case MissingUtxo
-    /**
-     * Negative fee.
-     */
     case NegativeFee
-    /**
-     * Fee overflow.
-     */
     case FeeOverflow
-    /**
-     * Other PSBT error {0}
-     */
     case Other(String
     )
 }
@@ -18351,18 +18286,10 @@ public enum ResumeError {
     
     
     /**
-     * Blocks do not match
-     *
      * The starting block of the new message is not the same as the one in the old message
      */
     case BlocksDoNotMatch
-    /**
-     * The reader had already parsed the message
-     */
     case AlreadyParsed
-    /**
-     * Parsing error, error getting message info: {0}
-     */
     case ParsingError(String
     )
     /**
@@ -18373,9 +18300,6 @@ public enum ResumeError {
      */
     case BlockSizeMismatch(expected: UInt16, actual: UInt16
     )
-    /**
-     * Unable to get first block hash
-     */
     case UnableToGetFirstBlockHash
 }
 
@@ -19858,6 +19782,8 @@ public enum WalletCreationError {
     )
     case Import(String
     )
+    case MultiFormatError(MultiFormatError
+    )
 }
 
 
@@ -19888,6 +19814,9 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
             )
         case 5: return .Import(
             try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .MultiFormatError(
+            try FfiConverterTypeMultiFormatError.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -19924,6 +19853,11 @@ public struct FfiConverterTypeWalletCreationError: FfiConverterRustBuffer {
         case let .Import(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .MultiFormatError(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeMultiFormatError.write(v1, into: &buf)
             
         }
     }
@@ -19965,14 +19899,8 @@ public enum WalletDataError {
     )
     case TableAccess(id: WalletId, error: String
     )
-    /**
-     * Unable to read: {0}
-     */
     case Read(String
     )
-    /**
-     * Unable to save: {0}
-     */
     case Save(String
     )
 }
@@ -20152,6 +20080,8 @@ public enum WalletError {
     )
     case WalletAlreadyExists(WalletId
     )
+    case MultiFormatError(MultiFormatError
+    )
 }
 
 
@@ -20193,6 +20123,9 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
             )
         case 10: return .WalletAlreadyExists(
             try FfiConverterTypeWalletId.read(from: &buf)
+            )
+        case 11: return .MultiFormatError(
+            try FfiConverterTypeMultiFormatError.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -20252,6 +20185,11 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
         case let .WalletAlreadyExists(v1):
             writeInt(&buf, Int32(10))
             FfiConverterTypeWalletId.write(v1, into: &buf)
+            
+        
+        case let .MultiFormatError(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterTypeMultiFormatError.write(v1, into: &buf)
             
         }
     }
@@ -20969,18 +20907,9 @@ public enum WalletScannerError {
 
     
     
-    /**
-     * No address types to scan
-     */
     case NoAddressTypes
-    /**
-     * Unable to create wallet
-     */
     case WalletCreationError(WalletError
     )
-    /**
-     * No mnemonic available for id {0}
-     */
     case NoMnemonicAvailable(WalletId
     )
 }
@@ -23439,6 +23368,20 @@ public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> B
     )
 })
 }
+public func displayMultiFormatError(error: MultiFormatError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_display_multi_format_error(
+        FfiConverterTypeMultiFormatError_lower(error),$0
+    )
+})
+}
+public func displayWalletError(error: WalletError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_display_wallet_error(
+        FfiConverterTypeWalletError_lower(error),$0
+    )
+})
+}
 public func feeRateOptionsWithTotalFeeIsEqual(lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_fee_rate_options_with_total_fee_is_equal(
@@ -23702,6 +23645,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_display_multi_format_error() != 20531) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_display_wallet_error() != 59170) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fee_rate_options_with_total_fee_is_equal() != 21429) {
