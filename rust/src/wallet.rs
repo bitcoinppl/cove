@@ -209,12 +209,12 @@ impl Wallet {
         }
 
         let xpub = xpub.trim();
-        if xpub.starts_with("UR:") || xpub.starts_with("UR:") {
+        if xpub.starts_with("UR:") || xpub.starts_with("ur:") {
             return Err(MultiFormatError::UrFormatNotSupported.into());
         }
 
         // already returned if its a valid xpub
-        return Err(hardware_export.unwrap_err());
+        Err(hardware_export.unwrap_err())
     }
 
     /// Import from a hardware export
