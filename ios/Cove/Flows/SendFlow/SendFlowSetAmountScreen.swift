@@ -134,17 +134,38 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
-        Task {
-            guard
-                let max = try? await manager.rust.getMaxSendAmount(
-                    fee: selectedFeeRate)
-            else {
-                return Log.error("unable to get max send amount")
-            }
+        guard let address = try? Address.fromString(address: address) else { return }
+        guard let feeRateOptions else { return }
 
-            await MainActor.run {
-                setAmount(max)
-                maxSelected = max
+        Task {
+            do {
+                let max = try await manager.rust.maxSendAmount(
+                    address: address,
+                    fee: selectedFeeRate
+                )
+
+                let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(feeRateOptions: feeRateOptions, address: address)
+                let selectedFeeRate = switch self.selectedFeeRate?.feeSpeed() {
+                case .fast:
+                    feeRateOptions.fast()
+                case .medium:
+                    feeRateOptions.medium()
+                case .slow:
+                    feeRateOptions.slow()
+                case let .custom(durationMins):
+                    feeRateOptions.custom() ?? feeRateOptions.medium()
+                case nil:
+                    feeRateOptions.medium()
+                }
+
+                await MainActor.run {
+                    self.feeRateOptions = feeRateOptions
+                    self.selectedFeeRate = selectedFeeRate
+                    setAmount(max)
+                    maxSelected = max
+                }
+            } catch {
+                Log.error("Unable to set max amount: \(error)")
             }
         }
     }
@@ -678,6 +699,7 @@ struct SendFlowSetAmountScreen: View {
         let address: Address? = {
             switch address {
             case let .some(address): return address
+
             case .none:
                 let addressString = self.address.trimmingCharacters(
                     in: .whitespacesAndNewlines)
@@ -697,24 +719,24 @@ struct SendFlowSetAmountScreen: View {
         let amount =
             amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
 
-        guard
-            let feeRateOptions = try? await manager.rust
-            .feeRateOptionsWithTotalFee(
-                feeRateOptions: feeRateOptionsBase, amount: amount,
+        do {
+            let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFee(
+                feeRateOptions: feeRateOptionsBase,
+                amount: amount,
                 address: address
             )
-        else { return }
 
-        await MainActor.run {
-            self.feeRateOptions = feeRateOptions
-            if selectedFeeRate == nil {
-                selectedFeeRate = feeRateOptions.medium()
-            }
-
-            if feeRateOptions.custom() == nil, case .custom = selectedFeeRate?.feeSpeed() {
-                let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
+            await MainActor.run {
                 self.feeRateOptions = feeRateOptions
+                if selectedFeeRate == nil { selectedFeeRate = feeRateOptions.medium() }
+
+                if feeRateOptions.custom() == nil, case .custom = selectedFeeRate?.feeSpeed() {
+                    let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
+                    self.feeRateOptions = feeRateOptions
+                }
             }
+        } catch {
+            Log.error("Unable to get feeRateOptions: \(error)")
         }
     }
 

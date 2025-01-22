@@ -3,7 +3,7 @@ use crate::{
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::client::NodeClient,
-    transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
+    transaction::{fees::BdkFeeRate, FeeRate, Transaction, TransactionDetails, TxId},
     wallet::{
         balance::Balance,
         confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
@@ -143,6 +143,19 @@ impl WalletActor {
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
 
         Produces::ok(transactions)
+    }
+
+    pub async fn max_send_psbt(&mut self, address: Address, fee: FeeRate) -> ActorResult<Psbt> {
+        let script_pubkey = address.script_pubkey();
+        let mut tx_builder = self.wallet.build_tx();
+
+        tx_builder
+            .drain_wallet()
+            .drain_to(script_pubkey)
+            .fee_rate(fee.into());
+
+        let psbt = tx_builder.finish()?;
+        Produces::ok(psbt)
     }
 
     pub async fn split_transaction_outputs(

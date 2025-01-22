@@ -1,4 +1,4 @@
-use crate::transaction::{Amount, TxId};
+use crate::transaction::{Amount, BdkAmount, TxId};
 use bdk_wallet::psbt::PsbtUtils as _;
 use bitcoin::TxOut;
 use derive_more::{AsRef, Deref, From, Into};
@@ -69,6 +69,19 @@ impl Psbt {
     /// Get the transaction id of the unsigned transaction
     pub fn tx_id(&self) -> TxId {
         self.0.unsigned_tx.compute_txid().into()
+    }
+
+    /// Get total sending amount of all outputs
+    pub fn output_total_amount(&self) -> Amount {
+        let amount: BdkAmount = self
+            .0
+            .unsigned_tx
+            .output
+            .iter()
+            .map(|output| output.value)
+            .sum();
+
+        amount.into()
     }
 }
 

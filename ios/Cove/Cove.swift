@@ -7456,6 +7456,11 @@ public protocol PsbtProtocol : AnyObject {
     func fee() throws  -> Amount
     
     /**
+     * Get total sending amount of all outputs
+     */
+    func outputTotalAmount()  -> Amount
+    
+    /**
      * Get the transaction id of the unsigned transaction
      */
     func txId()  -> TxId
@@ -7532,6 +7537,16 @@ public convenience init(data: Data)throws  {
 open func fee()throws  -> Amount  {
     return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypePsbtError_lift) {
     uniffi_cove_fn_method_psbt_fee(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get total sending amount of all outputs
+     */
+open func outputTotalAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_psbt_output_total_amount(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -8633,6 +8648,8 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Amount, address: Address) async throws  -> FeeRateOptionsWithTotalFee
     
+    func feeRateOptionsWithTotalFeeForDrain(feeRateOptions: FeeRateOptionsWithTotalFee, address: Address) async throws  -> FeeRateOptionsWithTotalFee
+    
     func fees()  -> FeeResponse?
     
     func fingerprint()  -> String
@@ -8645,13 +8662,13 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func getFeeOptions() async throws  -> FeeRateOptions
     
-    func getMaxSendAmount(fee: FeeRateOptionWithTotalFee) async throws  -> Amount
-    
     func getUnsignedTransactions() throws  -> [UnsignedTransaction]
     
     func listenForUpdates(reconciler: WalletManagerReconciler) 
     
     func markWalletAsVerified() throws 
+    
+    func maxSendAmount(address: Address, fee: FeeRateOptionWithTotalFee) async throws  -> Amount
     
     /**
      * Get the next address for the wallet
@@ -9000,6 +9017,23 @@ open func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Am
         )
 }
     
+open func feeRateOptionsWithTotalFeeForDrain(feeRateOptions: FeeRateOptionsWithTotalFee, address: Address)async throws  -> FeeRateOptionsWithTotalFee  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_fee_rate_options_with_total_fee_for_drain(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeFeeRateOptionsWithTotalFee_lower(feeRateOptions),FfiConverterTypeAddress_lower(address)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeFeeRateOptionsWithTotalFee_lift,
+            errorHandler: FfiConverterTypeWalletManagerError.lift
+        )
+}
+    
 open func fees() -> FeeResponse?  {
     return try!  FfiConverterOptionTypeFeeResponse.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_fees(self.uniffiClonePointer(),$0
@@ -9083,23 +9117,6 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
         )
 }
     
-open func getMaxSendAmount(fee: FeeRateOptionWithTotalFee)async throws  -> Amount  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_get_max_send_amount(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeFeeRateOptionWithTotalFee_lower(fee)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_pointer,
-            completeFunc: ffi_cove_rust_future_complete_pointer,
-            freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeAmount_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
-        )
-}
-    
 open func getUnsignedTransactions()throws  -> [UnsignedTransaction]  {
     return try  FfiConverterSequenceTypeUnsignedTransaction.lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(self.uniffiClonePointer(),$0
@@ -9118,6 +9135,23 @@ open func markWalletAsVerified()throws   {try rustCallWithError(FfiConverterType
     uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(self.uniffiClonePointer(),$0
     )
 }
+}
+    
+open func maxSendAmount(address: Address, fee: FeeRateOptionWithTotalFee)async throws  -> Amount  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_max_send_amount(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeAddress_lower(address),FfiConverterTypeFeeRateOptionWithTotalFee_lower(fee)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeAmount_lift,
+            errorHandler: FfiConverterTypeWalletManagerError.lift
+        )
 }
     
     /**
@@ -24503,6 +24537,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_psbt_fee() != 37973) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_psbt_output_total_amount() != 50903) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_psbt_tx_id() != 61047) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24665,6 +24702,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options_with_total_fee() != 43269) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options_with_total_fee_for_drain() != 63475) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_fees() != 1824) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24683,9 +24723,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 9964) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_get_max_send_amount() != 18292) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 63072) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24693,6 +24730,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified() != 7383) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_max_send_amount() != 2390) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 51147) {
