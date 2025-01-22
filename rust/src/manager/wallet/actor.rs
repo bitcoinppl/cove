@@ -5,8 +5,10 @@ use crate::{
     node::client::NodeClient,
     transaction::{fees::BdkFeeRate, Transaction, TransactionDetails, TxId},
     wallet::{
-        balance::Balance, confirm::ConfirmDetails, metadata::BlockSizeLast, Address, AddressInfo,
-        Wallet, WalletAddressType,
+        balance::Balance,
+        confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
+        metadata::BlockSizeLast,
+        Address, AddressInfo, Wallet, WalletAddressType,
     },
 };
 use act_zero::*;
@@ -143,6 +145,25 @@ impl WalletActor {
         Produces::ok(transactions)
     }
 
+    pub async fn split_transaction_outputs(
+        &mut self,
+        outputs: Vec<AddressAndAmount>,
+    ) -> ActorResult<SplitOutput> {
+        let external = outputs
+            .iter()
+            .filter(|output| !self.wallet.is_mine(output.address.script_pubkey()))
+            .cloned()
+            .collect();
+
+        let internal = outputs
+            .iter()
+            .filter(|output| self.wallet.is_mine(output.address.script_pubkey()))
+            .cloned()
+            .collect();
+
+        Produces::ok(SplitOutput { external, internal })
+    }
+
     pub async fn get_confirm_details(
         &mut self,
         psbt: Psbt,
@@ -184,13 +205,17 @@ impl WalletActor {
             .checked_add(fee)
             .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
 
+        let network = self.wallet.network();
+        let psbt = psbt.into();
+        let more_details = InputOutputDetails::new(&psbt, network);
         let details = ConfirmDetails {
             spending_amount: spending_amount.into(),
             sending_amount: sending_amount.into(),
             fee_total: fee.into(),
             fee_rate: fee_rate.into(),
             sending_to: sending_to.into(),
-            psbt: psbt.into(),
+            psbt,
+            more_details,
         };
 
         Produces::ok(details)

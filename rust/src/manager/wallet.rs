@@ -35,7 +35,7 @@ use crate::{
     },
     wallet::{
         balance::Balance,
-        confirm::ConfirmDetails,
+        confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
@@ -180,6 +180,9 @@ pub enum WalletManagerError {
 
     #[error("Unable to sign and broadcast transaction, {0}")]
     SignAndBroadcastError(String),
+
+    #[error("Unknown error: {0}")]
+    UnknownError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -290,6 +293,18 @@ impl RustWalletManager {
             .expect("failed to send update");
 
         Ok(())
+    }
+
+    #[uniffi::method]
+    pub async fn split_transaction_outputs(
+        &self,
+        outputs: Vec<AddressAndAmount>,
+    ) -> Result<SplitOutput, Error> {
+        let outputs = call!(self.actor.split_transaction_outputs(outputs))
+            .await
+            .map_err(|_| Error::UnknownError("failed to split outputs".to_string()))?;
+
+        Ok(outputs)
     }
 
     #[uniffi::method]

@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use bitcoin::{params::Params, Network, TxOut};
+
 use crate::{
     psbt::Psbt,
     transaction::{Amount, FeeRate, TxId},
@@ -15,6 +19,31 @@ pub struct ConfirmDetails {
     pub fee_rate: FeeRate,
     pub sending_to: Address,
     pub psbt: Psbt,
+    pub more_details: InputOutputDetails,
+}
+
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, serde::Serialize, serde::Deserialize,
+)]
+pub struct AddressAndAmount {
+    pub address: Arc<Address>,
+    pub amount: Arc<Amount>,
+}
+
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, serde::Serialize, serde::Deserialize,
+)]
+pub struct InputOutputDetails {
+    pub inputs: Vec<AddressAndAmount>,
+    pub outputs: Vec<AddressAndAmount>,
+}
+
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, serde::Serialize, serde::Deserialize,
+)]
+pub struct SplitOutput {
+    pub external: Vec<AddressAndAmount>,
+    pub internal: Vec<AddressAndAmount>,
 }
 
 use crate::transaction::fees::BdkFeeRate;
@@ -62,6 +91,14 @@ impl ConfirmDetails {
         self.sending_to.clone()
     }
 
+    pub fn inputs(&self) -> Vec<AddressAndAmount> {
+        self.more_details.inputs.clone()
+    }
+
+    pub fn outputs(&self) -> Vec<AddressAndAmount> {
+        self.more_details.outputs.clone()
+    }
+
     pub fn psbt(&self) -> Psbt {
         self.psbt.clone()
     }
@@ -101,6 +138,38 @@ impl ConfirmDetails {
     }
 }
 
+impl InputOutputDetails {
+    pub fn new(psbt: &Psbt, network: Network) -> Self {
+        let utxos = psbt.utxos().unwrap_or_default();
+
+        let inputs = utxos
+            .iter()
+            .map(|input| AddressAndAmount::try_new(input, network))
+            .filter_map(Result::ok)
+            .collect();
+
+        let outputs = psbt
+            .unsigned_tx
+            .output
+            .iter()
+            .map(|output| AddressAndAmount::try_new(output, network))
+            .filter_map(Result::ok)
+            .collect();
+
+        Self { inputs, outputs }
+    }
+}
+
+impl AddressAndAmount {
+    pub fn try_new(tx_out: &TxOut, network: Network) -> eyre::Result<Self> {
+        let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
+        Ok(Self {
+            address: Arc::new(address.into()),
+            amount: Arc::new(tx_out.value.into()),
+        })
+    }
+}
+
 // MARK: CONFIRM DETAILS PREVIEW
 mod ffi_preview {
     use crate::psbt::BdkPsbt;
@@ -111,13 +180,17 @@ mod ffi_preview {
     impl ConfirmDetails {
         #[uniffi::constructor(default(amount = 16338))]
         pub fn preview_new(amount: u64) -> Self {
+            let psbt = psbt_preview_new();
+            let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
+
             Self {
                 spending_amount: Amount::from_sat(amount),
                 sending_amount: Amount::from_sat(amount - 658),
                 fee_total: Amount::from_sat(658),
                 fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(658).into(),
                 sending_to: Address::preview_new(),
-                psbt: psbt_preview_new(),
+                psbt,
+                more_details,
             }
         }
     }

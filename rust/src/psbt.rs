@@ -1,4 +1,6 @@
 use crate::transaction::{Amount, TxId};
+use bdk_wallet::psbt::PsbtUtils as _;
+use bitcoin::TxOut;
 use derive_more::{AsRef, Deref, From, Into};
 use std::fmt::Debug;
 
@@ -67,6 +69,16 @@ impl Psbt {
     /// Get the transaction id of the unsigned transaction
     pub fn tx_id(&self) -> TxId {
         self.0.unsigned_tx.compute_txid().into()
+    }
+}
+
+impl Psbt {
+    /// Get all UTXOs
+    pub fn utxos(&self) -> Option<Vec<TxOut>> {
+        let tx = &self.unsigned_tx;
+        (0..tx.input.len())
+            .map(|i| self.0.get_utxo_for(i))
+            .collect()
     }
 }
 

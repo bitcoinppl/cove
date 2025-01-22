@@ -5,7 +5,7 @@
 //  Created by Praveen Perera on 11/7/24.
 //
 
-extension Address {
+extension Address: Hashable {
     static func checkValid(_ address: String, network: Network? = nil) -> Result<Void, AddressError> {
         if address.isEmpty { return .failure(AddressError.EmptyAddress) }
 
@@ -20,5 +20,9 @@ extension Address {
 
     static func isValid(_ address: String, network: Network? = nil) -> Bool {
         Address.checkValid(address, network: network).isSuccess()
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.string())
     }
 }
