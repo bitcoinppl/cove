@@ -122,6 +122,23 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    private func updateSelectedFeeRate(_ feeRateOptions: FeeRateOptionsWithTotalFee) {
+        let selectedFeeRate = switch self.selectedFeeRate?.feeSpeed() {
+        case .fast:
+            feeRateOptions.fast()
+        case .medium:
+            feeRateOptions.medium()
+        case .slow:
+            feeRateOptions.slow()
+        case let .custom(durationMins):
+            feeRateOptions.custom() ?? feeRateOptions.medium()
+        case nil:
+            feeRateOptions.medium()
+        }
+
+        self.selectedFeeRate = selectedFeeRate
+    }
+
     // MARK: Actions
 
     private func setAmount(_ amount: Amount) {
@@ -145,18 +162,7 @@ struct SendFlowSetAmountScreen: View {
                 )
 
                 let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(feeRateOptions: feeRateOptions, address: address)
-                let selectedFeeRate = switch self.selectedFeeRate?.feeSpeed() {
-                case .fast:
-                    feeRateOptions.fast()
-                case .medium:
-                    feeRateOptions.medium()
-                case .slow:
-                    feeRateOptions.slow()
-                case let .custom(durationMins):
-                    feeRateOptions.custom() ?? feeRateOptions.medium()
-                case nil:
-                    feeRateOptions.medium()
-                }
+                updateSelectedFeeRate(feeRateOptions)
 
                 await MainActor.run {
                     self.feeRateOptions = feeRateOptions
@@ -542,10 +548,7 @@ struct SendFlowSetAmountScreen: View {
 
         // fiat
         let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
-
-        if feeRateOptions == nil {
-            Task { await getFeeRateOptions() }
-        }
+        Task { await getFeeRateOptions() }
 
         sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount)
 
@@ -734,6 +737,8 @@ struct SendFlowSetAmountScreen: View {
                     let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
                     self.feeRateOptions = feeRateOptions
                 }
+
+                updateSelectedFeeRate(feeRateOptions)
             }
         } catch {
             Log.error("Unable to get feeRateOptions: \(error)")
