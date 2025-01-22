@@ -119,7 +119,7 @@ struct SendFlowDetailsView: View {
         }
         .sheet(isPresented: $sheetIsOpen) {
             MoreDetails(manager: manager, details: details, btcOrFiat: $btcOrFiat)
-                .presentationDetents([.medium, .height(430), .large])
+                .presentationDetents([.height(430), .height(550), .large])
                 .padding(.horizontal)
         }
     }
