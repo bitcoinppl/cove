@@ -727,20 +727,20 @@ impl RustWalletManager {
         let address = Arc::unwrap_or_clone(address);
         let mut options = Arc::unwrap_or_clone(fee_rate_options);
 
-        let fast_fee_rate = options.fast.fee_rate.into();
-        let fast_psbt: Psbt = call!(self.actor.max_send_psbt(address.clone(), fast_fee_rate))
+        let fast_fee_rate = options.fast.fee_rate;
+        let fast_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), fast_fee_rate))
             .await
             .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
             .into();
 
-        let medium_fee_rate = options.medium.fee_rate.into();
-        let medium_psbt: Psbt = call!(self.actor.max_send_psbt(address.clone(), medium_fee_rate))
+        let medium_fee_rate = options.medium.fee_rate;
+        let medium_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), medium_fee_rate))
             .await
             .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
             .into();
 
-        let slow_fee_rate = options.slow.fee_rate.into();
-        let slow_psbt: Psbt = call!(self.actor.max_send_psbt(address.clone(), slow_fee_rate))
+        let slow_fee_rate = options.slow.fee_rate;
+        let slow_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), slow_fee_rate))
             .await
             .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
             .into();
@@ -758,8 +758,8 @@ impl RustWalletManager {
             .map_err(|e| Error::FeesError(e.to_string()))?;
 
         if let Some(mut custom) = options.custom {
-            let custom_fee_rate = custom.fee_rate.into();
-            let custom_psbt: Psbt = call!(self.actor.max_send_psbt(address, custom_fee_rate))
+            let custom_fee_rate = custom.fee_rate;
+            let custom_psbt: Psbt = call!(self.actor.build_drain_tx(address, custom_fee_rate))
                 .await
                 .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
                 .into();

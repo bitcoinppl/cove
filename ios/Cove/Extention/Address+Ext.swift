@@ -23,6 +23,6 @@ extension Address: Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(self.string())
+        hasher.combine(string())
     }
 }

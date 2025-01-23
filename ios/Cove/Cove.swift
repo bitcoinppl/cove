@@ -8670,8 +8670,6 @@ public protocol RustWalletManagerProtocol : AnyObject {
     
     func markWalletAsVerified() throws 
     
-    func maxSendAmount(address: Address, fee: FeeRate) async throws  -> Amount
-    
     /**
      * Get the next address for the wallet
      */
@@ -9154,23 +9152,6 @@ open func markWalletAsVerified()throws   {try rustCallWithError(FfiConverterType
     uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(self.uniffiClonePointer(),$0
     )
 }
-}
-    
-open func maxSendAmount(address: Address, fee: FeeRate)async throws  -> Amount  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_max_send_amount(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeAddress_lower(address),FfiConverterTypeFeeRate_lower(fee)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_pointer,
-            completeFunc: ffi_cove_rust_future_complete_pointer,
-            freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeAmount_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
-        )
 }
     
     /**
@@ -24752,9 +24733,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified() != 7383) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_max_send_amount() != 15862) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 51147) {
