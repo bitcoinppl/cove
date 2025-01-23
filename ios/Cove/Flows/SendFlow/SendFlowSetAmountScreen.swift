@@ -120,19 +120,26 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func updateSelectedFeeRate(_ feeRateOptions: FeeRateOptionsWithTotalFee) {
-        let selectedFeeRate =
+        let selectedFeeRate = {
             switch self.selectedFeeRate?.feeSpeed() {
             case .fast:
-                feeRateOptions.fast()
+                return feeRateOptions.fast()
             case .medium:
-                feeRateOptions.medium()
+                return feeRateOptions.medium()
             case .slow:
-                feeRateOptions.slow()
+                return feeRateOptions.slow()
             case .custom:
-                feeRateOptions.custom() ?? feeRateOptions.medium()
+                if let custom = feeRateOptions.custom() { return custom }
+                Log.debug("Custom fee rate not found, even tho its selected, keeping current, waiting for update")
+
+                // the fee rate task is probably still resolving, keep selected at custom,
+                // and when the task resolves this function will run again and the total fee will be updated
+                return self.selectedFeeRate ?? feeRateOptions.medium()
             case nil:
-                feeRateOptions.medium()
+                Log.warn("No fee rate selected, defaulting to medium")
+                return feeRateOptions.medium()
             }
+        }()
 
         self.selectedFeeRate = selectedFeeRate
     }
@@ -261,8 +268,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                            selectedFeeRate != nil,
-                            Address.isValid(address)
+                           selectedFeeRate != nil,
+                           Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -503,8 +510,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -517,8 +524,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -733,7 +740,6 @@ struct SendFlowSetAmountScreen: View {
 
             await MainActor.run {
                 self.feeRateOptions = feeRateOptions
-                if selectedFeeRate == nil { selectedFeeRate = feeRateOptions.medium() }
 
                 if feeRateOptions.custom() == nil, case .custom = selectedFeeRate?.feeSpeed() {
                     let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
