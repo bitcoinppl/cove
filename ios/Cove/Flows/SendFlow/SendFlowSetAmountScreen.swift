@@ -44,9 +44,6 @@ struct SendFlowSetAmountScreen: View {
     @State private var sendAmount: String = "0"
     @State private var sendAmountFiat: String = ""
 
-    // max
-    @State private var maxSelected: Amount? = nil
-
     private var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -122,6 +119,31 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
+    private func updateSelectedFeeRate(_ feeRateOptions: FeeRateOptionsWithTotalFee) {
+        let selectedFeeRate = {
+            switch self.selectedFeeRate?.feeSpeed() {
+            case .fast:
+                return feeRateOptions.fast()
+            case .medium:
+                return feeRateOptions.medium()
+            case .slow:
+                return feeRateOptions.slow()
+            case .custom:
+                if let custom = feeRateOptions.custom() { return custom }
+                Log.debug("Custom fee rate not found, even tho its selected, keeping current, waiting for update")
+
+                // the fee rate task is probably still resolving, keep selected at custom,
+                // and when the task resolves this function will run again and the total fee will be updated
+                return self.selectedFeeRate ?? feeRateOptions.medium()
+            case nil:
+                Log.warn("No fee rate selected, defaulting to medium")
+                return feeRateOptions.medium()
+            }
+        }()
+
+        self.selectedFeeRate = selectedFeeRate
+    }
+
     // MARK: Actions
 
     private func setAmount(_ amount: Amount) {
@@ -134,17 +156,31 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
-        Task {
-            guard
-                let max = try? await manager.rust.getMaxSendAmount(
-                    fee: selectedFeeRate)
-            else {
-                return Log.error("unable to get max send amount")
-            }
+        guard let address = try? Address.fromString(address: address) else { return }
+        guard let feeRateOptions else { return }
 
-            await MainActor.run {
-                setAmount(max)
-                maxSelected = max
+        Task {
+            do {
+                let psbt = try await manager.rust.buildDrainTransaction(
+                    address: address,
+                    fee: selectedFeeRate.feeRate()
+                )
+
+                let max = psbt.outputTotalAmount()
+
+                let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(
+                    feeRateOptions: feeRateOptions, address: address
+                )
+                updateSelectedFeeRate(feeRateOptions)
+
+                await MainActor.run {
+                    self.feeRateOptions = feeRateOptions
+                    self.selectedFeeRate = selectedFeeRate
+                    setAmount(max)
+                    presenter.maxSelected = max
+                }
+            } catch {
+                Log.error("Unable to set max amount: \(error)")
             }
         }
     }
@@ -495,16 +531,16 @@ struct SendFlowSetAmountScreen: View {
 
         // if we had max selected before, but then start entering a different amount
         // cancel max selected
-        if let maxSelected {
+        if let maxSelected = presenter.maxSelected {
             switch metadata.selectedUnit {
             case .sat:
                 if amount < Double(maxSelected.asSats()) {
-                    self.maxSelected = nil
+                    presenter.maxSelected = nil
                 }
 
             case .btc:
                 if amount < Double(maxSelected.asBtc()) {
-                    self.maxSelected = nil
+                    presenter.maxSelected = nil
                 }
             }
         }
@@ -521,10 +557,7 @@ struct SendFlowSetAmountScreen: View {
 
         // fiat
         let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
-
-        if feeRateOptions == nil {
-            Task { await getFeeRateOptions() }
-        }
+        Task { await getFeeRateOptions() }
 
         sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount)
 
@@ -678,6 +711,7 @@ struct SendFlowSetAmountScreen: View {
         let address: Address? = {
             switch address {
             case let .some(address): return address
+
             case .none:
                 let addressString = self.address.trimmingCharacters(
                     in: .whitespacesAndNewlines)
@@ -697,24 +731,25 @@ struct SendFlowSetAmountScreen: View {
         let amount =
             amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
 
-        guard
-            let feeRateOptions = try? await manager.rust
-            .feeRateOptionsWithTotalFee(
-                feeRateOptions: feeRateOptionsBase, amount: amount,
+        do {
+            let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFee(
+                feeRateOptions: feeRateOptionsBase,
+                amount: amount,
                 address: address
             )
-        else { return }
 
-        await MainActor.run {
-            self.feeRateOptions = feeRateOptions
-            if selectedFeeRate == nil {
-                selectedFeeRate = feeRateOptions.medium()
-            }
-
-            if feeRateOptions.custom() == nil, case .custom = selectedFeeRate?.feeSpeed() {
-                let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
+            await MainActor.run {
                 self.feeRateOptions = feeRateOptions
+
+                if feeRateOptions.custom() == nil, case .custom = selectedFeeRate?.feeSpeed() {
+                    let feeRateOptions = feeRateOptions.addCustomFeeRate(feeRate: selectedFeeRate!)
+                    self.feeRateOptions = feeRateOptions
+                }
+
+                updateSelectedFeeRate(feeRateOptions)
             }
+        } catch {
+            Log.error("Unable to get feeRateOptions: \(error)")
         }
     }
 
@@ -981,7 +1016,7 @@ struct SendFlowSetAmountScreen: View {
                     get: { selectedFeeRate! },
                     set: { newValue in
                         // in maxSelected mode, so adjust with new rate
-                        if maxSelected != nil {
+                        if presenter.maxSelected != nil {
                             setMaxSelected(newValue)
                         }
 

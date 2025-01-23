@@ -31,11 +31,11 @@ use crate::{
         },
         ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
-        Amount, BdkAmount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
+        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
     },
     wallet::{
         balance::Balance,
-        confirm::ConfirmDetails,
+        confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
@@ -180,6 +180,9 @@ pub enum WalletManagerError {
 
     #[error("Unable to sign and broadcast transaction, {0}")]
     SignAndBroadcastError(String),
+
+    #[error("Unknown error: {0}")]
+    UnknownError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -293,6 +296,18 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub async fn split_transaction_outputs(
+        &self,
+        outputs: Vec<AddressAndAmount>,
+    ) -> Result<SplitOutput, Error> {
+        let outputs = call!(self.actor.split_transaction_outputs(outputs))
+            .await
+            .map_err(|_| Error::UnknownError("failed to split outputs".to_string()))?;
+
+        Ok(outputs)
+    }
+
+    #[uniffi::method]
     pub fn get_unsigned_transactions(&self) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
         let wallet_id = &self.id;
 
@@ -360,26 +375,6 @@ impl RustWalletManager {
         self.force_wallet_scan().await;
 
         Ok(())
-    }
-
-    #[uniffi::method]
-    pub async fn get_max_send_amount(
-        &self,
-        fee: Arc<FeeRateOptionWithTotalFee>,
-    ) -> Result<Arc<Amount>, Error> {
-        let balance = call!(self.actor.balance())
-            .await
-            .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
-
-        let confirmed: BdkAmount = balance.trusted_spendable();
-        let fee: BdkAmount = fee.total_fee.into();
-
-        let available: Amount = confirmed
-            .checked_sub(fee)
-            .ok_or_else(|| Error::InsufficientFunds("unable to get max send amount".to_string()))?
-            .into();
-
-        Ok(available.into())
     }
 
     #[uniffi::method]
@@ -724,6 +719,59 @@ impl RustWalletManager {
         Ok(fees.into())
     }
 
+    pub async fn fee_rate_options_with_total_fee_for_drain(
+        &self,
+        fee_rate_options: Arc<FeeRateOptionsWithTotalFee>,
+        address: Arc<Address>,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let address = Arc::unwrap_or_clone(address);
+        let mut options = Arc::unwrap_or_clone(fee_rate_options);
+
+        let fast_fee_rate = options.fast.fee_rate;
+        let fast_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), fast_fee_rate))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+            .into();
+
+        let medium_fee_rate = options.medium.fee_rate;
+        let medium_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), medium_fee_rate))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+            .into();
+
+        let slow_fee_rate = options.slow.fee_rate;
+        let slow_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), slow_fee_rate))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+            .into();
+
+        options.fast.total_fee = fast_psbt
+            .fee()
+            .map_err(|e| Error::FeesError(e.to_string()))?;
+
+        options.medium.total_fee = medium_psbt
+            .fee()
+            .map_err(|e| Error::FeesError(e.to_string()))?;
+
+        options.slow.total_fee = slow_psbt
+            .fee()
+            .map_err(|e| Error::FeesError(e.to_string()))?;
+
+        if let Some(mut custom) = options.custom {
+            let custom_fee_rate = custom.fee_rate;
+            let custom_psbt: Psbt = call!(self.actor.build_drain_tx(address, custom_fee_rate))
+                .await
+                .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+                .into();
+
+            custom.total_fee = custom_psbt
+                .fee()
+                .map_err(|e| Error::FeesError(e.to_string()))?;
+        }
+
+        Ok(options)
+    }
+
     pub async fn fee_rate_options_with_total_fee(
         &self,
         fee_rate_options: Option<Arc<FeeRateOptions>>,
@@ -779,6 +827,22 @@ impl RustWalletManager {
         };
 
         Ok(options)
+    }
+
+    pub async fn build_drain_transaction(
+        &self,
+        address: Arc<Address>,
+        fee: Arc<FeeRate>,
+    ) -> Result<Psbt, Error> {
+        let address = Arc::unwrap_or_clone(address);
+        let fee = Arc::unwrap_or_clone(fee);
+
+        let psbt: Psbt = call!(self.actor.build_drain_tx(address, fee))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get max send psbt".to_string()))?
+            .into();
+
+        Ok(psbt)
     }
 
     pub async fn build_transaction(
