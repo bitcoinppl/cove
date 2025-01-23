@@ -113,6 +113,19 @@ impl WalletActor {
         Produces::ok(balance)
     }
 
+    pub async fn build_drain_tx(&mut self, address: Address, fee: FeeRate) -> ActorResult<Psbt> {
+        let script_pubkey = address.script_pubkey();
+        let mut tx_builder = self.wallet.build_tx();
+
+        tx_builder
+            .drain_wallet()
+            .drain_to(script_pubkey)
+            .fee_rate(fee.into());
+
+        let psbt = tx_builder.finish()?;
+        Produces::ok(psbt)
+    }
+
     pub async fn build_tx(
         &mut self,
         amount: Amount,
@@ -143,19 +156,6 @@ impl WalletActor {
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
 
         Produces::ok(transactions)
-    }
-
-    pub async fn max_send_psbt(&mut self, address: Address, fee: FeeRate) -> ActorResult<Psbt> {
-        let script_pubkey = address.script_pubkey();
-        let mut tx_builder = self.wallet.build_tx();
-
-        tx_builder
-            .drain_wallet()
-            .drain_to(script_pubkey)
-            .fee_rate(fee.into());
-
-        let psbt = tx_builder.finish()?;
-        Produces::ok(psbt)
     }
 
     pub async fn split_transaction_outputs(

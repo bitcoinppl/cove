@@ -378,22 +378,6 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn max_send_amount(
-        &self,
-        address: Arc<Address>,
-        fee: Arc<FeeRateOptionWithTotalFee>,
-    ) -> Result<Amount, Error> {
-        let address = Arc::unwrap_or_clone(address);
-
-        let psbt: Psbt = call!(self.actor.max_send_psbt(address, fee.fee_rate()))
-            .await
-            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-            .into();
-
-        Ok(psbt.output_total_amount())
-    }
-
-    #[uniffi::method]
     pub async fn balance_in_fiat(&self) -> Result<f64, Error> {
         let balance = call!(self.actor.balance())
             .await
@@ -843,6 +827,22 @@ impl RustWalletManager {
         };
 
         Ok(options)
+    }
+
+    pub async fn build_drain_transaction(
+        &self,
+        address: Arc<Address>,
+        fee: Arc<FeeRate>,
+    ) -> Result<Psbt, Error> {
+        let address = Arc::unwrap_or_clone(address);
+        let fee = Arc::unwrap_or_clone(fee);
+
+        let psbt: Psbt = call!(self.actor.build_drain_tx(address, fee))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get max send psbt".to_string()))?
+            .into();
+
+        Ok(psbt)
     }
 
     pub async fn build_transaction(

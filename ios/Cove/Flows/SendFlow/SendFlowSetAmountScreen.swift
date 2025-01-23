@@ -44,9 +44,6 @@ struct SendFlowSetAmountScreen: View {
     @State private var sendAmount: String = "0"
     @State private var sendAmountFiat: String = ""
 
-    // max
-    @State private var maxSelected: Amount? = nil
-
     private var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -123,18 +120,19 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func updateSelectedFeeRate(_ feeRateOptions: FeeRateOptionsWithTotalFee) {
-        let selectedFeeRate = switch self.selectedFeeRate?.feeSpeed() {
-        case .fast:
-            feeRateOptions.fast()
-        case .medium:
-            feeRateOptions.medium()
-        case .slow:
-            feeRateOptions.slow()
-        case let .custom(durationMins):
-            feeRateOptions.custom() ?? feeRateOptions.medium()
-        case nil:
-            feeRateOptions.medium()
-        }
+        let selectedFeeRate =
+            switch self.selectedFeeRate?.feeSpeed() {
+            case .fast:
+                feeRateOptions.fast()
+            case .medium:
+                feeRateOptions.medium()
+            case .slow:
+                feeRateOptions.slow()
+            case .custom:
+                feeRateOptions.custom() ?? feeRateOptions.medium()
+            case nil:
+                feeRateOptions.medium()
+            }
 
         self.selectedFeeRate = selectedFeeRate
     }
@@ -156,19 +154,23 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             do {
-                let max = try await manager.rust.maxSendAmount(
+                let psbt = try await manager.rust.buildDrainTransaction(
                     address: address,
-                    fee: selectedFeeRate
+                    fee: selectedFeeRate.feeRate()
                 )
 
-                let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(feeRateOptions: feeRateOptions, address: address)
+                let max = psbt.outputTotalAmount()
+
+                let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(
+                    feeRateOptions: feeRateOptions, address: address
+                )
                 updateSelectedFeeRate(feeRateOptions)
 
                 await MainActor.run {
                     self.feeRateOptions = feeRateOptions
                     self.selectedFeeRate = selectedFeeRate
                     setAmount(max)
-                    maxSelected = max
+                    presenter.maxSelected = max
                 }
             } catch {
                 Log.error("Unable to set max amount: \(error)")
@@ -259,8 +261,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                           selectedFeeRate != nil,
-                           Address.isValid(address)
+                            selectedFeeRate != nil,
+                            Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -501,8 +503,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -515,23 +517,23 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
         // if we had max selected before, but then start entering a different amount
         // cancel max selected
-        if let maxSelected {
+        if let maxSelected = presenter.maxSelected {
             switch metadata.selectedUnit {
             case .sat:
                 if amount < Double(maxSelected.asSats()) {
-                    self.maxSelected = nil
+                    presenter.maxSelected = nil
                 }
 
             case .btc:
                 if amount < Double(maxSelected.asBtc()) {
-                    self.maxSelected = nil
+                    presenter.maxSelected = nil
                 }
             }
         }
@@ -1008,7 +1010,7 @@ struct SendFlowSetAmountScreen: View {
                     get: { selectedFeeRate! },
                     set: { newValue in
                         // in maxSelected mode, so adjust with new rate
-                        if maxSelected != nil {
+                        if presenter.maxSelected != nil {
                             setMaxSelected(newValue)
                         }
 

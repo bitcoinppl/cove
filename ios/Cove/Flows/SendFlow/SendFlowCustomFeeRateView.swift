@@ -64,14 +64,21 @@ struct SendFlowCustomFeeRateView: View {
         guard let amount = presenter.amount else { return }
         let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
 
+        let isMaxSelected = presenter.maxSelected != nil
+
         if let totalSatsTask { totalSatsTask.cancel() }
         totalSatsTask = Task {
             try? await Task.sleep(for: .milliseconds(50))
 
             do {
-                let psbt = try await manager.rust.buildTransactionWithFeeRate(
-                    amount: amount, address: address, feeRate: feeRate
-                )
+                let psbt = if isMaxSelected {
+                    try await manager.rust.buildDrainTransaction(address: address, fee: feeRate)
+                } else {
+                    try await manager.rust.buildTransactionWithFeeRate(
+                        amount: amount, address: address, feeRate: feeRate
+                    )
+                }
+
                 let totalFee = try psbt.fee()
                 let totalFeeSats = totalFee.asSats()
                 totalSats = Int(totalFeeSats)

@@ -16,6 +16,7 @@ import SwiftUI
 
     var amount: Amount?
     var address: Address?
+    var maxSelected: Amount?
 
     var disappearing: Bool = false
     var focusField: FocusField?
