@@ -18,6 +18,7 @@ struct SendFlowDetailsView: View {
     // private
     @State private var btcOrFiat = FiatOrBtc.btc
     @State private var sheetIsOpen = false
+    @State private var presentationSize: PresentationDetent = .medium
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -119,8 +120,14 @@ struct SendFlowDetailsView: View {
         }
         .sheet(isPresented: $sheetIsOpen) {
             MoreDetails(manager: manager, details: details, btcOrFiat: $btcOrFiat)
-                .presentationDetents([.height(430), .height(550), .large])
+                .presentationDetents([.height(300), .height(400), .height(500), .large], selection: $presentationSize)
                 .padding(.horizontal)
+        }
+        .onAppear {
+            let total = details.outputs().count + details.inputs().count
+            if total == 3 { presentationSize = .height(300) }
+            if total > 3 { presentationSize = .height(400) }
+            if total > 5 { presentationSize = .height(500) }
         }
     }
 }
@@ -157,15 +164,42 @@ extension SendFlowDetailsView {
         }
 
         var body: some View {
-            VStack(spacing: 32) {
-                Text("More Details")
-                    .fontWeight(.semibold)
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 10) {
+                        HStack {
+                            Text("Inputs")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
 
-                ScrollView {
-                    VStack(spacing: 24) {
+                            Spacer()
+                        }
+
+                        VStack(spacing: 8) {
+                            ForEach(details.inputs(), id: \.address) { input in
+                                HStack {
+                                    Text(input.address.spacedOut())
+                                        .fontWeight(.medium)
+                                        .font(.caption)
+                                        .foregroundStyle(.primary)
+                                        .frame(maxWidth: screenWidth / 2, alignment: .leading)
+                                        .multilineTextAlignment(.leading)
+
+                                    Spacer()
+
+                                    Text(displayFiatOrBtcAmount(input.amount))
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+
+                    if splitOutput == nil {
                         VStack(spacing: 10) {
                             HStack {
-                                Text("Inputs")
+                                Text("Outputs")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.secondary)
@@ -174,9 +208,9 @@ extension SendFlowDetailsView {
                             }
 
                             VStack(spacing: 8) {
-                                ForEach(details.inputs(), id: \.address) { input in
+                                ForEach(details.outputs(), id: \.address) { output in
                                     HStack {
-                                        Text(input.address.spacedOut())
+                                        Text(output.address.spacedOut())
                                             .fontWeight(.medium)
                                             .font(.caption)
                                             .foregroundStyle(.primary)
@@ -185,103 +219,41 @@ extension SendFlowDetailsView {
 
                                         Spacer()
 
-                                        Text(displayFiatOrBtcAmount(input.amount))
-                                            .font(.footnote)
+                                        Text(displayFiatOrBtcAmount(output.amount))
+                                            .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
                                 }
                             }
                         }
+                    }
 
-                        if splitOutput == nil {
-                            VStack(spacing: 10) {
-                                HStack {
-                                    Text("Outputs")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(.secondary)
+                    if let splitOutput {
+                        VStack(spacing: 10) {
+                            HStack {
+                                Text("Outputs - External")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.secondary)
 
-                                    Spacer()
-                                }
-
-                                VStack(spacing: 8) {
-                                    ForEach(details.outputs(), id: \.address) { output in
-                                        HStack {
-                                            Text(output.address.spacedOut())
-                                                .fontWeight(.medium)
-                                                .font(.caption)
-                                                .foregroundStyle(.primary)
-                                                .frame(maxWidth: screenWidth / 2, alignment: .leading)
-                                                .multilineTextAlignment(.leading)
-
-                                            Spacer()
-
-                                            Text(displayFiatOrBtcAmount(output.amount))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if let splitOutput {
-                            VStack(spacing: 10) {
-                                HStack {
-                                    Text("Outputs - External")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(.secondary)
-
-                                    Spacer()
-                                }
-
-                                VStack(spacing: 8) {
-                                    ForEach(splitOutput.external, id: \.address) { output in
-                                        HStack {
-                                            Text(output.address.spacedOut())
-                                                .fontWeight(.medium)
-                                                .font(.caption)
-                                                .foregroundStyle(.primary)
-                                                .frame(maxWidth: screenWidth / 2, alignment: .leading)
-                                                .multilineTextAlignment(.leading)
-
-                                            Spacer()
-
-                                            Text(displayFiatOrBtcAmount(output.amount))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
+                                Spacer()
                             }
 
-                            VStack(spacing: 10) {
-                                HStack {
-                                    Text("Outputs - Internal")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(.secondary)
+                            VStack(spacing: 8) {
+                                ForEach(splitOutput.external, id: \.address) { output in
+                                    HStack {
+                                        Text(output.address.spacedOut())
+                                            .fontWeight(.medium)
+                                            .font(.caption)
+                                            .foregroundStyle(.primary)
+                                            .frame(maxWidth: screenWidth / 2, alignment: .leading)
+                                            .multilineTextAlignment(.leading)
 
-                                    Spacer()
-                                }
+                                        Spacer()
 
-                                VStack(spacing: 8) {
-                                    ForEach(splitOutput.internal, id: \.address) { output in
-                                        HStack {
-                                            Text(output.address.spacedOut())
-                                                .fontWeight(.medium)
-                                                .font(.caption)
-                                                .foregroundStyle(.primary)
-                                                .frame(maxWidth: screenWidth / 2, alignment: .leading)
-                                                .multilineTextAlignment(.leading)
-
-                                            Spacer()
-
-                                            Text(displayFiatOrBtcAmount(output.amount))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
+                                        Text(displayFiatOrBtcAmount(output.amount))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
                             }
@@ -289,34 +261,53 @@ extension SendFlowDetailsView {
 
                         VStack(spacing: 10) {
                             HStack {
-                                Text("Fees")
+                                Text("Outputs - Internal")
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.secondary)
 
                                 Spacer()
+                            }
 
-                                Text(displayFiatOrBtcAmount(details.feeTotal()))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            VStack(spacing: 8) {
+                                ForEach(splitOutput.internal, id: \.address) { output in
+                                    HStack {
+                                        Text(output.address.spacedOut())
+                                            .fontWeight(.medium)
+                                            .font(.caption)
+                                            .foregroundStyle(.primary)
+                                            .frame(maxWidth: screenWidth / 2, alignment: .leading)
+                                            .multilineTextAlignment(.leading)
+
+                                        Spacer()
+
+                                        Text(displayFiatOrBtcAmount(output.amount))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
                             }
                         }
                     }
-                } // </ScrollView>
-                .onTapGesture {
-                    btcOrFiat = btcOrFiat == .btc ? .fiat : .btc
-                }
 
-                Button(action: dismiss) {
-                    Text("Close")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.midnightBlue)
-                        .foregroundStyle(.white)
-                        .cornerRadius(10)
-                        .font(.footnote)
-                        .fontWeight(.semibold)
+                    VStack(spacing: 10) {
+                        HStack {
+                            Text("Fees")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+
+                            Spacer()
+
+                            Text(displayFiatOrBtcAmount(details.feeTotal()))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
+            } // </ScrollView>
+            .onTapGesture {
+                btcOrFiat = btcOrFiat == .btc ? .fiat : .btc
             }
             .padding()
             .task {
