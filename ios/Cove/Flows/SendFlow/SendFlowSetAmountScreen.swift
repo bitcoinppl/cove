@@ -35,7 +35,7 @@ struct SendFlowSetAmountScreen: View {
     @State private var scannedCode: TaggedString? = .none
 
     // fees
-    @State private var selectedPresentationDetent: PresentationDetent = .height(300)
+    @State private var selectedPresentationDetent: PresentationDetent = .height(440)
     @State private var selectedFeeRate: FeeRateOptionWithTotalFee? = .none
     @State private var feeRateOptions: FeeRateOptionsWithTotalFee? = .none
     @State private var feeRateOptionsBase: FeeRateOptions? = .none
@@ -173,11 +173,11 @@ struct SendFlowSetAmountScreen: View {
                 let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(
                     feeRateOptions: feeRateOptions, address: address
                 )
+
                 updateSelectedFeeRate(feeRateOptions)
 
                 await MainActor.run {
                     self.feeRateOptions = feeRateOptions
-                    self.selectedFeeRate = selectedFeeRate
                     setAmount(max)
                     presenter.maxSelected = max
                 }
@@ -270,8 +270,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                            selectedFeeRate != nil,
-                            Address.isValid(address)
+                           selectedFeeRate != nil,
+                           Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -519,8 +519,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -533,8 +533,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -1028,7 +1028,7 @@ struct SendFlowSetAmountScreen: View {
                 selectedPresentationDetent: $selectedPresentationDetent
             )
             .presentationDetents(
-                [.height(300), .height(440), .height(550), .large],
+                [.height(440), .height(550), .large],
                 selection: $selectedPresentationDetent
             )
         }
