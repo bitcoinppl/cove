@@ -17,6 +17,7 @@ import SwiftUI
     var amount: Amount?
     var address: Address?
     var maxSelected: Amount?
+    var fiatOrBtc: FiatOrBtc = .btc
 
     var disappearing: Bool = false
     var focusField: FocusField?

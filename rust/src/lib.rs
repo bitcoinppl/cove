@@ -10,6 +10,7 @@ pub(crate) mod bip39;
 pub(crate) mod color;
 pub(crate) mod color_scheme;
 pub(crate) mod consts;
+mod converter;
 pub(crate) mod cove_nfc;
 pub(crate) mod device;
 pub(crate) mod encryption;

@@ -255,7 +255,7 @@ struct SendFlowSetAmountScreen: View {
                         AmountInfoSection
 
                         // Amount input
-                        EnterAmountView(sendAmount: $sendAmount, sendAmountFiat: sendAmountFiat)
+                        EnterAmountView(sendAmount: $sendAmount, sendAmountFiat: $sendAmountFiat)
 
                         // Address Section
                         VStack {
@@ -460,7 +460,7 @@ struct SendFlowSetAmountScreen: View {
         let balance = Double(manager.balance.spendable().asSats())
         let amountSats = amountSats(amount)
 
-        if amountSats < 10000 {
+        if amountSats < 5000 {
             if displayAlert { setAlertState(.sendAmountToLow) }
             return false
         }
@@ -495,17 +495,22 @@ struct SendFlowSetAmountScreen: View {
 
     // MARK: OnChange Functions
 
+    // note: maybe this should be moved into `EnterAmountView`
     private func sendAmountChanged(_ oldValue: String, _ newValue: String) {
         Log.debug("sendAmountChanged \(oldValue) -> \(newValue)")
+        if feeRateOptions == nil { Task { await getFeeRateOptions() } }
 
-        if feeRateOptions == nil {
-            Task { await getFeeRateOptions() }
-        }
+        // if entering fiat, skip formatting send amount (btc/sats)
+        if presenter.fiatOrBtc == .fiat { return }
 
         // allow clearing completely
-        if newValue == "" {
-            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
-            return
+        if newValue == "" { return sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0) }
+
+        var newValue = newValue
+
+        // no decimals when entering sats
+        if metadata.selectedUnit == .sat {
+            newValue = newValue.replacingOccurrences(of: ".", with: "")
         }
 
         let value =
@@ -594,13 +599,6 @@ struct SendFlowSetAmountScreen: View {
         )
 
         _privateFocusField = newField
-
-        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
-        if newField == .amount {
-            self.sendAmount = sendAmount
-        } else {
-            setFormattedAmount(sendAmount)
-        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
