@@ -8,16 +8,16 @@ import SwiftUI
 
 // MARK: Aliases
 
-private typealias FocusField = SendFlowSetAmountPresenter.FocusField
+private typealias FocusField = SendFlowPresenter.FocusField
 
 struct EnterAddressView: View {
-    @Environment(SendFlowSetAmountPresenter.self) private var presenter
+    @Environment(SendFlowPresenter.self) private var presenter
 
     // args
     @Binding var address: String
 
     // private
-    @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
+    @FocusState private var focusField: SendFlowPresenter.FocusField?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -60,7 +60,7 @@ struct EnterAddressView: View {
     AsyncPreview {
         let app = AppManager()
         let manager = WalletManager(preview: "preview_only")
-        let presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
+        let presenter = SendFlowPresenter(app: app, manager: manager)
 
         EnterAddressView(address: Binding.constant("bc1qdgxdn046v8tvxtx2k6ml7q7mcanj6dy63atva9"))
             .environment(app)

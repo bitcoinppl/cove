@@ -101,3 +101,9 @@ extension FeeRateOptionWithTotalFee: Equatable {
         lhs.isEqual(rhs: rhs)
     }
 }
+
+extension FiatOrBtc {
+    func toggle() -> FiatOrBtc {
+        self == .fiat ? .btc : .fiat
+    }
+}

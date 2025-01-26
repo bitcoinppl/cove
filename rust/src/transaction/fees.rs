@@ -281,7 +281,7 @@ impl FeeRateOptionsWithTotalFee {
 
     #[uniffi::method]
     pub fn calculate_custom_fee_speed(&self, fee_rate: f32) -> FeeSpeed {
-        let fee_rate_kwu = ((fee_rate * 1000.0) / 4.0).ceil() as u64;
+        let fee_rate_kwu = ((fee_rate * 1000.0) / 4.0).round() as u64;
 
         let fast_fee_rate = self.fast.fee_rate.to_sat_per_kwu();
         let medium_fee_rate = self.medium.fee_rate.to_sat_per_kwu();

@@ -10,7 +10,7 @@ import SwiftUI
 struct SendFlowCustomFeeRateView: View {
     @Environment(AppManager.self) private var app
     @Environment(WalletManager.self) private var manager
-    @Environment(SendFlowSetAmountPresenter.self) private var presenter
+    @Environment(SendFlowPresenter.self) private var presenter
 
     // args
     @Binding var feeOptions: FeeRateOptionsWithTotalFee
@@ -205,7 +205,7 @@ struct SendFlowCustomFeeRateView: View {
             .environment(WalletManager(preview: "preview_only"))
             .environment(AppManager())
             .environment(
-                SendFlowSetAmountPresenter(
+                SendFlowPresenter(
                     app: AppManager(), manager: WalletManager(preview: "preview_only")
                 )
             )

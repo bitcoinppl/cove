@@ -16,7 +16,7 @@ public struct SendFlowContainer: View {
 
     // private
     @State private var manager: WalletManager? = nil
-    @State private var presenter: SendFlowSetAmountPresenter? = nil
+    @State private var presenter: SendFlowPresenter? = nil
 
     func initOnAppear() {
         let id = sendRoute.id()
@@ -27,7 +27,7 @@ public struct SendFlowContainer: View {
             let manager = try app.getWalletManager(id: id)
 
             self.manager = manager
-            presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
+            presenter = SendFlowPresenter(app: app, manager: manager)
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)

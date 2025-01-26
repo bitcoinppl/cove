@@ -10,12 +10,12 @@ import SwiftUI
 
 // MARK: SendFlowSetAmountScreen
 
-private typealias FocusField = SendFlowSetAmountPresenter.FocusField
-private typealias SheetState = SendFlowSetAmountPresenter.SheetState
-private typealias AlertState = SendFlowSetAmountPresenter.AlertState
+private typealias FocusField = SendFlowPresenter.FocusField
+private typealias SheetState = SendFlowPresenter.SheetState
+private typealias AlertState = SendFlowPresenter.AlertState
 
 struct SendFlowSetAmountScreen: View {
-    @Environment(SendFlowSetAmountPresenter.self) private var presenter
+    @Environment(SendFlowPresenter.self) private var presenter
     @Environment(AppManager.self) private var app
     @Environment(\.colorScheme) private var colorScheme
 
@@ -28,14 +28,14 @@ struct SendFlowSetAmountScreen: View {
     @State private var isLoading: Bool = true
     @State private var loadingOpacity: CGFloat = 1
 
-    @FocusState private var _privateFocusField: SendFlowSetAmountPresenter.FocusField?
+    @FocusState private var _privateFocusField: SendFlowPresenter.FocusField?
     @State private var scrollPosition: ScrollPosition = .init(
-        idType: SendFlowSetAmountPresenter.FocusField.self)
+        idType: SendFlowPresenter.FocusField.self)
 
     @State private var scannedCode: TaggedString? = .none
 
     // fees
-    @State private var selectedPresentationDetent: PresentationDetent = .height(300)
+    @State private var selectedPresentationDetent: PresentationDetent = .height(440)
     @State private var selectedFeeRate: FeeRateOptionWithTotalFee? = .none
     @State private var feeRateOptions: FeeRateOptionsWithTotalFee? = .none
     @State private var feeRateOptionsBase: FeeRateOptions? = .none
@@ -130,7 +130,9 @@ struct SendFlowSetAmountScreen: View {
                 return feeRateOptions.slow()
             case .custom:
                 if let custom = feeRateOptions.custom() { return custom }
-                Log.debug("Custom fee rate not found, even tho its selected, keeping current, waiting for update")
+                Log.debug(
+                    "Custom fee rate not found, even tho its selected, keeping current, waiting for update"
+                )
 
                 // the fee rate task is probably still resolving, keep selected at custom,
                 // and when the task resolves this function will run again and the total fee will be updated
@@ -171,11 +173,11 @@ struct SendFlowSetAmountScreen: View {
                 let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(
                     feeRateOptions: feeRateOptions, address: address
                 )
+
                 updateSelectedFeeRate(feeRateOptions)
 
                 await MainActor.run {
                     self.feeRateOptions = feeRateOptions
-                    self.selectedFeeRate = selectedFeeRate
                     setAmount(max)
                     presenter.maxSelected = max
                 }
@@ -255,7 +257,7 @@ struct SendFlowSetAmountScreen: View {
                         AmountInfoSection
 
                         // Amount input
-                        EnterAmountView(sendAmount: $sendAmount, sendAmountFiat: sendAmountFiat)
+                        EnterAmountView(sendAmount: $sendAmount, sendAmountFiat: $sendAmountFiat)
 
                         // Address Section
                         VStack {
@@ -460,7 +462,7 @@ struct SendFlowSetAmountScreen: View {
         let balance = Double(manager.balance.spendable().asSats())
         let amountSats = amountSats(amount)
 
-        if amountSats < 10000 {
+        if amountSats < 5000 {
             if displayAlert { setAlertState(.sendAmountToLow) }
             return false
         }
@@ -495,17 +497,24 @@ struct SendFlowSetAmountScreen: View {
 
     // MARK: OnChange Functions
 
+    // note: maybe this should be moved into `EnterAmountView`
     private func sendAmountChanged(_ oldValue: String, _ newValue: String) {
         Log.debug("sendAmountChanged \(oldValue) -> \(newValue)")
+        if feeRateOptions == nil { Task { await getFeeRateOptions() } }
 
-        if feeRateOptions == nil {
-            Task { await getFeeRateOptions() }
-        }
+        // if entering fiat, skip formatting send amount (btc/sats)
+        if metadata.fiatOrBtc == .fiat { return }
 
         // allow clearing completely
         if newValue == "" {
             sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
             return
+        }
+        var newValue = newValue
+
+        // no decimals when entering sats
+        if metadata.selectedUnit == .sat {
+            newValue = newValue.replacingOccurrences(of: ".", with: "")
         }
 
         let value =
@@ -594,13 +603,6 @@ struct SendFlowSetAmountScreen: View {
         )
 
         _privateFocusField = newField
-
-        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
-        if newField == .amount {
-            self.sendAmount = sendAmount
-        } else {
-            setFormattedAmount(sendAmount)
-        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
@@ -1026,7 +1028,7 @@ struct SendFlowSetAmountScreen: View {
                 selectedPresentationDetent: $selectedPresentationDetent
             )
             .presentationDetents(
-                [.height(300), .height(440), .height(550), .large],
+                [.height(440), .height(550), .large],
                 selection: $selectedPresentationDetent
             )
         }
@@ -1045,7 +1047,7 @@ struct SendFlowSetAmountScreen: View {
             )
             .environment(manager)
             .environment(AppManager())
-            .environment(SendFlowSetAmountPresenter(app: AppManager(), manager: manager))
+            .environment(SendFlowPresenter(app: AppManager(), manager: manager))
         }
     }
 }
@@ -1062,7 +1064,7 @@ struct SendFlowSetAmountScreen: View {
             )
             .environment(manager)
             .environment(AppManager())
-            .environment(SendFlowSetAmountPresenter(app: AppManager(), manager: manager))
+            .environment(SendFlowPresenter(app: AppManager(), manager: manager))
         }
     }
 }

@@ -14,6 +14,7 @@ use tracing::{debug, error, warn};
 
 use crate::{
     app::FfiApp,
+    converter::{ConverterError, CONVERTER},
     database::{error::DatabaseError, Database},
     fiat::{
         client::{PriceResponse, FIAT_CLIENT},
@@ -181,6 +182,9 @@ pub enum WalletManagerError {
     #[error("Unable to sign and broadcast transaction, {0}")]
     SignAndBroadcastError(String),
 
+    #[error(transparent)]
+    ConverterError(#[from] ConverterError),
+
     #[error("Unknown error: {0}")]
     UnknownError(String),
 }
@@ -216,6 +220,27 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             scanner,
         })
+    }
+
+    #[uniffi::method]
+    pub fn convert_fiat_string_to_btc(
+        &self,
+        fiat_amount: String,
+        prices: Arc<PriceResponse>,
+    ) -> Result<Amount, Error> {
+        let fiat_value = CONVERTER.get_fiat_value(fiat_amount)?;
+        let amount = self.convert_fiat_to_btc(fiat_value, prices);
+        Ok(amount)
+    }
+
+    #[uniffi::method]
+    pub fn convert_fiat_to_btc(&self, fiat_amount: f64, prices: Arc<PriceResponse>) -> Amount {
+        let currency = self.selected_fiat_currency();
+        let price = prices.get_for_currency(currency) as f64;
+        let btc_amount = fiat_amount / price;
+        let sat_amount = (btc_amount * 100_000_000.0) as u64;
+
+        Amount::from_sat(sat_amount)
     }
 
     #[uniffi::constructor(name = "try_new_from_xpub")]
@@ -427,8 +452,8 @@ impl RustWalletManager {
         sent_and_received.amount_fmt(unit)
     }
 
-    #[uniffi::method]
-    pub fn display_fiat_amount(&self, amount: f64) -> String {
+    #[uniffi::method(default(with_suffix = true))]
+    pub fn display_fiat_amount(&self, amount: f64, with_suffix: bool) -> String {
         {
             let sensitive_visible = self.metadata.read().sensitive_visible;
             if !sensitive_visible {
@@ -442,20 +467,30 @@ impl RustWalletManager {
         let symbol = currency.symbol();
         let suffix = currency.suffix();
 
-        format!("{symbol}{fiat} {suffix}")
+        if with_suffix && !suffix.is_empty() {
+            return format!("{symbol}{fiat} {suffix}");
+        }
+
+        format!("{symbol}{fiat}")
     }
 
     #[uniffi::method]
+    pub fn convert_to_fiat(&self, amount: Arc<Amount>, prices: Arc<PriceResponse>) -> f64 {
+        let currency = self.selected_fiat_currency();
+        let price = prices.get_for_currency(currency) as f64;
+
+        amount.as_btc() * price
+    }
+
+    #[uniffi::method(default(with_suffix = true))]
     pub fn convert_and_display_fiat(
         &self,
         amount: Arc<Amount>,
         prices: Arc<PriceResponse>,
+        with_suffix: bool,
     ) -> String {
-        let currency = self.selected_fiat_currency();
-        let price = prices.get_for_currency(currency) as f64;
-        let fiat = amount.as_btc() * price;
-
-        self.display_fiat_amount(fiat)
+        let fiat = self.convert_to_fiat(amount, prices);
+        self.display_fiat_amount(fiat, with_suffix)
     }
 
     #[uniffi::method]
