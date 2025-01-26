@@ -20,9 +20,7 @@ struct SendFlowDetailsView: View {
     @State private var sheetIsOpen = false
     @State private var presentationSize: PresentationDetent = .medium
 
-    var metadata: WalletMetadata {
-        manager.walletMetadata
-    }
+    var metadata: WalletMetadata { manager.walletMetadata }
 
     func fiatAmount(_ amount: Amount) -> String {
         guard let prices = prices ?? app.prices else {
@@ -34,19 +32,13 @@ struct SendFlowDetailsView: View {
     }
 
     func displayFiatOrBtcAmount(_ amount: Amount) -> String {
-        switch presenter.fiatOrBtc {
+        switch metadata.fiatOrBtc {
         case .fiat:
             return "≈ \(fiatAmount(amount))"
         case .btc:
             let units = metadata.selectedUnit == .sat ? "sats" : "btc"
             return "\(manager.amountFmt(amount)) \(units)"
         }
-    }
-
-    func toggleFiatOrBtc() {
-        if prices == nil, app.prices == nil { return }
-        let opposite = presenter.fiatOrBtc == .btc ? FiatOrBtc.fiat : FiatOrBtc.btc
-        presenter.fiatOrBtc = opposite
     }
 
     var body: some View {
@@ -112,7 +104,7 @@ struct SendFlowDetailsView: View {
                 .font(.footnote)
                 .fontWeight(.semibold)
             }
-            .onTapGesture { toggleFiatOrBtc() }
+            .onTapGesture { manager.dispatch(action: .toggleFiatOrBtc) }
         }
         .onChange(of: app.prices, initial: true) { _, newPrices in
             guard let prices = newPrices else { return }
@@ -146,6 +138,8 @@ extension SendFlowDetailsView {
         // private
         @State private var splitOutput: SplitOutput? = nil
 
+        var metadata: WalletMetadata { manager.walletMetadata }
+
         func fiatAmount(_ amount: Amount) -> String {
             guard let prices = app.prices else {
                 app.dispatch(action: .updateFiatPrices)
@@ -156,7 +150,7 @@ extension SendFlowDetailsView {
         }
 
         func displayFiatOrBtcAmount(_ amount: Amount) -> String {
-            switch presenter.fiatOrBtc {
+            switch metadata.fiatOrBtc {
             case .fiat:
                 return "≈ \(fiatAmount(amount))"
             case .btc:
@@ -307,10 +301,8 @@ extension SendFlowDetailsView {
                         }
                     }
                 }
-            }  // </ScrollView>
-            .onTapGesture {
-                presenter.fiatOrBtc = presenter.fiatOrBtc == .btc ? .fiat : .btc
-            }
+            } // </ScrollView>
+            .onTapGesture { manager.dispatch(action: .toggleFiatOrBtc) }
             .padding()
             .task {
                 splitOutput = try? await manager.rust.splitTransactionOutputs(
@@ -341,6 +333,7 @@ extension SendFlowDetailsView {
         .environment(AppManager())
         .environment(
             SendFlowPresenter(
-                app: AppManager(), manager: WalletManager(preview: "preview_only")))
+                app: AppManager(), manager: WalletManager(preview: "preview_only")
+            ))
     }
 }

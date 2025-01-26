@@ -26,12 +26,12 @@ struct EnterAmountView: View {
     var metadata: WalletMetadata { manager.walletMetadata }
 
     var offset: CGFloat {
-        if presenter.fiatOrBtc == .fiat { return 0 }
+        if metadata.fiatOrBtc == .fiat { return 0 }
         return metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
     }
 
     var textField: Binding<String> {
-        if presenter.fiatOrBtc == .btc { return $sendAmount }
+        if metadata.fiatOrBtc == .btc { return $sendAmount }
         return $fiatText
     }
 
@@ -50,7 +50,7 @@ struct EnterAmountView: View {
                     .scrollDisabled(true)
 
                 HStack(spacing: 0) {
-                    if presenter.fiatOrBtc == .btc {
+                    if metadata.fiatOrBtc == .btc {
                         Button(action: { showingMenu.toggle() }) {
                             Text(manager.unit)
                                 .padding(.vertical, 10)
@@ -69,7 +69,7 @@ struct EnterAmountView: View {
                     presenter.focusField = newFocusField
 
                     // focusField changed when entering btc/sats
-                    if presenter.fiatOrBtc == .btc {
+                    if metadata.fiatOrBtc == .btc {
                         let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
                         if newFocusField == .amount { self.sendAmount = sendAmount }
 
@@ -79,7 +79,7 @@ struct EnterAmountView: View {
                     }
 
                     // focusField changed when entering fiat
-                    if presenter.fiatOrBtc == .fiat {
+                    if metadata.fiatOrBtc == .fiat {
                         if newFocusField == .amount {
                             do {
                                 let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
@@ -104,7 +104,7 @@ struct EnterAmountView: View {
                     }
                 }
                 .onChange(of: fiatText, initial: true) { _, new in
-                    guard presenter.fiatOrBtc == .fiat else { return }
+                    guard metadata.fiatOrBtc == .fiat else { return }
                     guard let prices = app.prices else { return }
 
                     do {
@@ -117,7 +117,7 @@ struct EnterAmountView: View {
                         Log.error("'EnterAmountView' failed to convert fiat amount to btc: \(error)")
                     }
                 }
-                .onChange(of: presenter.fiatOrBtc, initial: true) { old, new in
+                .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
                     if old == .btc, new == .fiat {
                         fiatText = Converter().removeFiatSuffix(fiatAmount: sendAmountFiat)
                     }
@@ -152,19 +152,19 @@ struct EnterAmountView: View {
             }
 
             HStack(spacing: 4) {
-                Text(presenter.fiatOrBtc == .btc ? sendAmountFiat : sendAmount)
+                Text(metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmount)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
-                if presenter.fiatOrBtc == .fiat {
+                if metadata.fiatOrBtc == .fiat {
                     Text(manager.unit)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
             }
             .onTapGesture {
-                if presenter.fiatOrBtc == .btc, app.prices == nil { return }
-                presenter.fiatOrBtc = presenter.fiatOrBtc == .btc ? .fiat : .btc
+                if metadata.fiatOrBtc == .btc, app.prices == nil { return }
+                manager.dispatch(action: .toggleFiatOrBtc)
             }
         }
     }

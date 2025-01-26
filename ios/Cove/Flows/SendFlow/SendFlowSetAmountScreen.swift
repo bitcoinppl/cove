@@ -130,7 +130,9 @@ struct SendFlowSetAmountScreen: View {
                 return feeRateOptions.slow()
             case .custom:
                 if let custom = feeRateOptions.custom() { return custom }
-                Log.debug("Custom fee rate not found, even tho its selected, keeping current, waiting for update")
+                Log.debug(
+                    "Custom fee rate not found, even tho its selected, keeping current, waiting for update"
+                )
 
                 // the fee rate task is probably still resolving, keep selected at custom,
                 // and when the task resolves this function will run again and the total fee will be updated
@@ -268,8 +270,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                           selectedFeeRate != nil,
-                           Address.isValid(address)
+                            selectedFeeRate != nil,
+                            Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -501,10 +503,13 @@ struct SendFlowSetAmountScreen: View {
         if feeRateOptions == nil { Task { await getFeeRateOptions() } }
 
         // if entering fiat, skip formatting send amount (btc/sats)
-        if presenter.fiatOrBtc == .fiat { return }
+        if metadata.fiatOrBtc == .fiat { return }
 
         // allow clearing completely
-        if newValue == "" { return sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0) }
+        if newValue == "" {
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+            return
+        }
         var newValue = newValue
 
         // no decimals when entering sats
@@ -514,8 +519,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -528,8 +533,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
