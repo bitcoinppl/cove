@@ -10,12 +10,12 @@ import SwiftUI
 
 // MARK: SendFlowSetAmountScreen
 
-private typealias FocusField = SendFlowSetAmountPresenter.FocusField
-private typealias SheetState = SendFlowSetAmountPresenter.SheetState
-private typealias AlertState = SendFlowSetAmountPresenter.AlertState
+private typealias FocusField = SendFlowPresenter.FocusField
+private typealias SheetState = SendFlowPresenter.SheetState
+private typealias AlertState = SendFlowPresenter.AlertState
 
 struct SendFlowSetAmountScreen: View {
-    @Environment(SendFlowSetAmountPresenter.self) private var presenter
+    @Environment(SendFlowPresenter.self) private var presenter
     @Environment(AppManager.self) private var app
     @Environment(\.colorScheme) private var colorScheme
 
@@ -28,9 +28,9 @@ struct SendFlowSetAmountScreen: View {
     @State private var isLoading: Bool = true
     @State private var loadingOpacity: CGFloat = 1
 
-    @FocusState private var _privateFocusField: SendFlowSetAmountPresenter.FocusField?
+    @FocusState private var _privateFocusField: SendFlowPresenter.FocusField?
     @State private var scrollPosition: ScrollPosition = .init(
-        idType: SendFlowSetAmountPresenter.FocusField.self)
+        idType: SendFlowPresenter.FocusField.self)
 
     @State private var scannedCode: TaggedString? = .none
 
@@ -505,7 +505,6 @@ struct SendFlowSetAmountScreen: View {
 
         // allow clearing completely
         if newValue == "" { return sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0) }
-
         var newValue = newValue
 
         // no decimals when entering sats
@@ -1043,7 +1042,7 @@ struct SendFlowSetAmountScreen: View {
             )
             .environment(manager)
             .environment(AppManager())
-            .environment(SendFlowSetAmountPresenter(app: AppManager(), manager: manager))
+            .environment(SendFlowPresenter(app: AppManager(), manager: manager))
         }
     }
 }
@@ -1060,7 +1059,7 @@ struct SendFlowSetAmountScreen: View {
             )
             .environment(manager)
             .environment(AppManager())
-            .environment(SendFlowSetAmountPresenter(app: AppManager(), manager: manager))
+            .environment(SendFlowPresenter(app: AppManager(), manager: manager))
         }
     }
 }

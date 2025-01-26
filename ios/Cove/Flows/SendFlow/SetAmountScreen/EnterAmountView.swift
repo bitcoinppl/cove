@@ -8,7 +8,7 @@ import SwiftUI
 
 struct EnterAmountView: View {
     @Environment(AppManager.self) private var app
-    @Environment(SendFlowSetAmountPresenter.self) private var presenter
+    @Environment(SendFlowPresenter.self) private var presenter
     @Environment(WalletManager.self) private var manager
 
     // args
@@ -20,7 +20,7 @@ struct EnterAmountView: View {
     // private state for entering sendAmountFiat, don't show sendAmountFiat update
     @State private var fiatText: String = ""
 
-    @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
+    @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
 
     var metadata: WalletMetadata { manager.walletMetadata }

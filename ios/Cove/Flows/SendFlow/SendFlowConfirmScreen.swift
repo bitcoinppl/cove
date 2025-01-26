@@ -151,7 +151,8 @@ struct SendFlowConfirmScreen: View {
                         if let txn = signedTransaction {
                             _ = try await manager.rust.broadcastTransaction(signedTransaction: txn)
                         } else {
-                            _ = try await manager.rust.signAndBroadcastTransaction(psbt: details.psbt())
+                            _ = try await manager.rust.signAndBroadcastTransaction(
+                                psbt: details.psbt())
                         }
                         sendState = .sent
                         isShowingAlert = true

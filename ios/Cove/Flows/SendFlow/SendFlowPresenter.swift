@@ -1,5 +1,5 @@
 //
-//  SendFlowSetAmountPresenter.swift
+//  SendFlowPresenter.swift
 //  Cove
 //
 //  Created by Praveen Perera on 11/20/24.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-@Observable class SendFlowSetAmountPresenter {
+@Observable class SendFlowPresenter {
     @ObservationIgnored
     let app: AppManager
 

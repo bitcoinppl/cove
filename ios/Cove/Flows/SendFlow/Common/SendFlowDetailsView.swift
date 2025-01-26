@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SendFlowDetailsView: View {
     @Environment(AppManager.self) private var app
+    @Environment(SendFlowPresenter.self) private var presenter
 
     // args
     let manager: WalletManager
@@ -16,7 +17,6 @@ struct SendFlowDetailsView: View {
     @State var prices: PriceResponse?
 
     // private
-    @State private var btcOrFiat = FiatOrBtc.btc
     @State private var sheetIsOpen = false
     @State private var presentationSize: PresentationDetent = .medium
 
@@ -34,7 +34,7 @@ struct SendFlowDetailsView: View {
     }
 
     func displayFiatOrBtcAmount(_ amount: Amount) -> String {
-        switch btcOrFiat {
+        switch presenter.fiatOrBtc {
         case .fiat:
             return "≈ \(fiatAmount(amount))"
         case .btc:
@@ -45,8 +45,8 @@ struct SendFlowDetailsView: View {
 
     func toggleFiatOrBtc() {
         if prices == nil, app.prices == nil { return }
-        let opposite = btcOrFiat == .btc ? FiatOrBtc.fiat : FiatOrBtc.btc
-        btcOrFiat = opposite
+        let opposite = presenter.fiatOrBtc == .btc ? FiatOrBtc.fiat : FiatOrBtc.btc
+        presenter.fiatOrBtc = opposite
     }
 
     var body: some View {
@@ -119,8 +119,10 @@ struct SendFlowDetailsView: View {
             self.prices = prices
         }
         .sheet(isPresented: $sheetIsOpen) {
-            MoreDetails(manager: manager, details: details, btcOrFiat: $btcOrFiat)
-                .presentationDetents([.height(300), .height(400), .height(500), .large], selection: $presentationSize)
+            MoreDetails(manager: manager, details: details)
+                .presentationDetents(
+                    [.height(300), .height(400), .height(500), .large], selection: $presentationSize
+                )
                 .padding(.horizontal)
         }
         .onAppear {
@@ -135,11 +137,11 @@ struct SendFlowDetailsView: View {
 extension SendFlowDetailsView {
     struct MoreDetails: View {
         @Environment(AppManager.self) private var app
+        @Environment(SendFlowPresenter.self) private var presenter
         @Environment(\.dismiss) private var dismiss
 
         let manager: WalletManager
         let details: ConfirmDetails
-        @Binding var btcOrFiat: FiatOrBtc
 
         // private
         @State private var splitOutput: SplitOutput? = nil
@@ -154,7 +156,7 @@ extension SendFlowDetailsView {
         }
 
         func displayFiatOrBtcAmount(_ amount: Amount) -> String {
-            switch btcOrFiat {
+            switch presenter.fiatOrBtc {
             case .fiat:
                 return "≈ \(fiatAmount(amount))"
             case .btc:
@@ -305,13 +307,14 @@ extension SendFlowDetailsView {
                         }
                     }
                 }
-            } // </ScrollView>
+            }  // </ScrollView>
             .onTapGesture {
-                btcOrFiat = btcOrFiat == .btc ? .fiat : .btc
+                presenter.fiatOrBtc = presenter.fiatOrBtc == .btc ? .fiat : .btc
             }
             .padding()
             .task {
-                splitOutput = try? await manager.rust.splitTransactionOutputs(outputs: details.outputs())
+                splitOutput = try? await manager.rust.splitTransactionOutputs(
+                    outputs: details.outputs())
             }
         }
     }
@@ -333,9 +336,11 @@ extension SendFlowDetailsView {
     AsyncPreview {
         SendFlowDetailsView.MoreDetails(
             manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew(),
-            btcOrFiat: Binding.constant(.btc)
+            details: ConfirmDetails.previewNew()
         )
         .environment(AppManager())
+        .environment(
+            SendFlowPresenter(
+                app: AppManager(), manager: WalletManager(preview: "preview_only")))
     }
 }

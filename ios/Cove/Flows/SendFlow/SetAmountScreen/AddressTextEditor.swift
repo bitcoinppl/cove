@@ -8,13 +8,13 @@
 import SwiftUI
 
 struct AddressTextEditor: View {
-    @Environment(SendFlowSetAmountPresenter.self) var presenter
+    @Environment(SendFlowPresenter.self) var presenter
 
     // args
     @Binding var text: String
 
     // private
-    @FocusState private var focusField: SendFlowSetAmountPresenter.FocusField?
+    @FocusState private var focusField: SendFlowPresenter.FocusField?
 
     var isFocused: Bool {
         presenter.focusField == .address
@@ -65,7 +65,7 @@ struct AddressTextEditor: View {
     AsyncPreview {
         let app = AppManager()
         let manager = WalletManager(preview: "preview_only")
-        let presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
+        let presenter = SendFlowPresenter(app: app, manager: manager)
 
         AddressTextEditor(
             text: .constant("bc1qw8wrek2m7nlqldll66ajnwr9mh64syvkt67zlu")
@@ -81,7 +81,7 @@ struct AddressTextEditor: View {
     AsyncPreview {
         let app = AppManager()
         let manager = WalletManager(preview: "preview_only")
-        let presenter = SendFlowSetAmountPresenter(app: app, manager: manager)
+        let presenter = SendFlowPresenter(app: app, manager: manager)
 
         AddressTextEditor(
             text: .constant("bc1qwzrryqr3ja8w7hnja2spmkgfdcgvqwp5swz4af4ngsjecfz0w0pqud7k38")
