@@ -45,6 +45,16 @@ impl Database {
         Self::global().clone()
     }
 
+    #[uniffi::constructor(name = "switchToMainMode")]
+    pub fn _switch_to_main_mode() -> Arc<Self> {
+        Self::switch_to_main_mode()
+    }
+
+    #[uniffi::constructor(name = "switchToDecoyMode")]
+    pub fn _switch_to_decoy_mode() -> Arc<Self> {
+        Self::switch_to_decoy_mode()
+    }
+
     pub fn wallets(&self) -> WalletsTable {
         self.wallets.clone()
     }
@@ -78,7 +88,7 @@ impl Database {
 }
 
 impl Database {
-    pub fn global() -> Arc<Database> {
+    pub fn global() -> Arc<Self> {
         let db = DATABASE
             .get_or_init(|| ArcSwap::new(Self::init_main()))
             .load();
@@ -86,7 +96,7 @@ impl Database {
         Arc::clone(&db)
     }
 
-    pub fn switch_to_main_mode() -> Arc<Database> {
+    pub fn switch_to_main_mode() -> Arc<Self> {
         let db = Self::switch_to_mode(Self::init_main);
         db.global_config
             .set_main_mode()
@@ -95,7 +105,7 @@ impl Database {
         db
     }
 
-    pub fn switch_to_decoy_mode() -> Arc<Database> {
+    pub fn switch_to_decoy_mode() -> Arc<Self> {
         let db = Self::switch_to_mode(Self::init_decoy);
         db.global_config
             .set_decoy_mode()
