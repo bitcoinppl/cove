@@ -58,28 +58,89 @@ impl Database {
     }
 
     pub fn dangerous_reset_all_data(&self) {
-        let current_location = ROOT_DATA_DIR.join("cove.db");
+        let dbs = [
+            (database_location(), "cove_main"),
+            (decoy_database_location(), "cove_decoy"),
+        ];
 
-        if let Err(error) = std::fs::remove_file(&current_location) {
-            error!("unable to delete database: {error}");
-            return;
+        for (location, name) in dbs {
+            if let Err(error) = std::fs::remove_file(&location) {
+                error!("unable to delete database {name} error: {error}");
+                return;
+            }
         }
 
         DATABASE
             .get()
             .expect("database not initialized")
-            .swap(Self::init());
+            .swap(Self::init_main());
     }
 }
 
 impl Database {
     pub fn global() -> Arc<Database> {
-        let db = DATABASE.get_or_init(|| ArcSwap::new(Self::init())).load();
+        let db = DATABASE
+            .get_or_init(|| ArcSwap::new(Self::init_main()))
+            .load();
+
         Arc::clone(&db)
     }
 
-    fn init() -> Arc<Database> {
-        let db = get_or_create_database();
+    pub fn switch_to_main_mode() -> Arc<Database> {
+        let init = Self::init_main;
+
+        if let Some(db) = DATABASE.get() {
+            db.swap(init());
+            let db = DATABASE.get().expect("already checked").load();
+            return Arc::clone(&db);
+        }
+
+        DATABASE
+            .set(ArcSwap::new(init()))
+            .expect("failed to set database");
+
+        let db = DATABASE.get().expect("already checked").load();
+        Arc::clone(&db)
+    }
+
+    pub fn switch_to_decoy_mode() -> Arc<Database> {
+        let init = Self::init_decoy;
+
+        if let Some(db) = DATABASE.get() {
+            db.swap(init());
+            let db = DATABASE.get().expect("already checked").load();
+            return Arc::clone(&db);
+        }
+
+        DATABASE
+            .set(ArcSwap::new(init()))
+            .expect("failed to set database");
+
+        let db = DATABASE.get().expect("already checked").load();
+        Arc::clone(&db)
+    }
+
+    fn init_main() -> Arc<Database> {
+        let db = Self::do_init();
+        Arc::new(db)
+    }
+
+    fn init_decoy() -> Arc<Database> {
+        let mut db = Self::do_init();
+
+        let decoy_db = get_or_create_decoy_database();
+        let write_txn = decoy_db
+            .begin_write()
+            .expect("failed to begin write transaction");
+
+        let wallets = WalletsTable::new(Arc::new(decoy_db), &write_txn);
+        db.wallets = wallets;
+
+        Arc::new(db)
+    }
+
+    fn do_init() -> Database {
+        let db = get_or_create_main_database();
 
         let write_txn = db.begin_write().expect("failed to begin write transaction");
         let db = Arc::new(db);
@@ -94,21 +155,27 @@ impl Database {
             .commit()
             .expect("failed to commit write transaction");
 
-        let db = Database {
+        Database {
             wallets,
             global_flag,
             global_config,
             global_cache,
             unsigned_transactions,
-        };
-
-        Arc::new(db)
+        }
     }
 }
 
-fn get_or_create_database() -> redb::Database {
-    let database_location = database_location();
+fn get_or_create_main_database() -> redb::Database {
+    let location = database_location();
+    get_or_create_database_with_location(location)
+}
 
+fn get_or_create_decoy_database() -> redb::Database {
+    let location = decoy_database_location();
+    get_or_create_database_with_location(location)
+}
+
+fn get_or_create_database_with_location(database_location: PathBuf) -> redb::Database {
     if database_location.exists() {
         let db = redb::Database::open(&database_location);
         match db {
@@ -130,6 +197,10 @@ fn get_or_create_database() -> redb::Database {
 #[cfg(not(test))]
 fn database_location() -> PathBuf {
     ROOT_DATA_DIR.join("cove.db")
+}
+
+fn decoy_database_location() -> PathBuf {
+    ROOT_DATA_DIR.join("cove_decoy.db")
 }
 
 #[cfg(test)]
