@@ -371,7 +371,9 @@ struct CoveApp: App {
                     isPinCorrect: auth.checkPin,
                     showPin: false,
                     lockState: $auth.lockState,
-                    onUnlock: { _ in showCover = false }
+                    onUnlock: { _ in
+                        showCover = false
+                    }
                 ) {
                     SidebarContainer {
                         NavigationStack(path: $app.router.routes) {

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use redb::TableDefinition;
+use tap::TapFallible as _;
+use tracing::{error, warn};
 
 use crate::{
     app::reconcile::{Update, Updater},
@@ -30,6 +32,8 @@ pub enum GlobalConfigKey {
     HashedPinCode,
     WipeDataPin,
     InDecoyMode,
+    MainSelectedWalletId,
+    DecoySelectedWalletId,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -46,6 +50,8 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::HashedPinCode => "hashed_pin_code",
             GlobalConfigKey::WipeDataPin => "wipe_data_pin",
             GlobalConfigKey::InDecoyMode => "in_decoy_mode",
+            GlobalConfigKey::MainSelectedWalletId => "main_selected_wallet_id",
+            GlobalConfigKey::DecoySelectedWalletId => "decoy_selected_wallet_id",
         }
     }
 }
@@ -157,13 +163,66 @@ impl GlobalConfigTable {
     }
 
     pub fn set_decoy_mode(&self) -> Result<()> {
+        // already in decoy mode, nothing to do
+        if self.is_in_decoy_mode() {
+            warn!("already in decoy mode");
+            return Ok(());
+        }
+
+        // currently in main mode, save the selected wallet id as the decoy selected wallet id
+        if let Some(id) = self.selected_wallet() {
+            let _ = self
+                .set(GlobalConfigKey::MainSelectedWalletId, id.to_string())
+                .tap_err(|error| error!("unable to set main selected wallet id ({id}): {error}"));
+        }
+
+        // get the selected wallet id for decoy mode if it exists and select it
+        if let Some(id) = self
+            .get(GlobalConfigKey::DecoySelectedWalletId)
+            .ok()
+            .flatten()
+        {
+            let _ = self
+                .select_wallet(id.clone().into())
+                .tap_err(|error| error!("unable to select wallet for decoy {id}: {error}"));
+        };
+
         self.set(GlobalConfigKey::InDecoyMode, "true".to_string())?;
+
         Ok(())
     }
 
     pub fn set_main_mode(&self) -> Result<()> {
+        // already in main mode, nothing to do
+        if self.is_in_main_mode() {
+            warn!("already in main mode");
+            return Ok(());
+        }
+
+        // currently in decoy mode, save the selected wallet id as the decoy selected wallet id
+        if let Some(id) = self.selected_wallet() {
+            let _ = self
+                .set(GlobalConfigKey::DecoySelectedWalletId, id.to_string())
+                .tap_err(|error| error!("unable to set decoy selected wallet id ({id}): {error}"));
+        }
+
+        // set the selected wallet id to the one saved if there is one
+        if let Some(id) = self
+            .get(GlobalConfigKey::MainSelectedWalletId)
+            .ok()
+            .flatten()
+        {
+            let _ = self
+                .select_wallet(id.clone().into())
+                .tap_err(|error| error!("unable to select wallet for main {id}: {error}"));
+        };
+
         self.set(GlobalConfigKey::InDecoyMode, "false".to_string())?;
         Ok(())
+    }
+
+    pub fn is_in_main_mode(&self) -> bool {
+        !self.is_in_decoy_mode()
     }
 
     pub fn is_in_decoy_mode(&self) -> bool {

@@ -3373,6 +3373,20 @@ public convenience init() {
     }
 
     
+public static func switchToDecoyMode() -> Database  {
+    return try!  FfiConverterTypeDatabase_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_database_switchtodecoymode($0
+    )
+})
+}
+    
+public static func switchToMainMode() -> Database  {
+    return try!  FfiConverterTypeDatabase_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_database_switchtomainmode($0
+    )
+})
+}
+    
 
     
 open func dangerousResetAllData()  {try! rustCall() {
@@ -5496,6 +5510,8 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     
     func hashedPinCode() throws  -> String
     
+    func isInDecoyMode()  -> Bool
+    
     func selectWallet(id: WalletId) throws 
     
     func selectedFiatCurrency()  -> FiatCurrency
@@ -5510,7 +5526,11 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     
     func setColorScheme(colorScheme: ColorSchemeSelection) throws 
     
+    func setDecoyMode() throws 
+    
     func setHashedPinCode(hashedPinCode: String) throws 
+    
+    func setMainMode() throws 
     
     func setSelectedNetwork(network: Network) throws 
     
@@ -5617,6 +5637,13 @@ open func hashedPinCode()throws  -> String  {
 })
 }
     
+open func isInDecoyMode() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_is_in_decoy_mode(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func selectWallet(id: WalletId)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_select_wallet(self.uniffiClonePointer(),
         FfiConverterTypeWalletId_lower(id),$0
@@ -5667,9 +5694,21 @@ open func setColorScheme(colorScheme: ColorSchemeSelection)throws   {try rustCal
 }
 }
     
+open func setDecoyMode()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_decoy_mode(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
 open func setHashedPinCode(hashedPinCode: String)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_set_hashed_pin_code(self.uniffiClonePointer(),
         FfiConverterString.lower(hashedPinCode),$0
+    )
+}
+}
+    
+open func setMainMode()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalconfigtable_set_main_mode(self.uniffiClonePointer(),$0
     )
 }
 }
@@ -16264,6 +16303,9 @@ public enum GlobalConfigKey {
     case authType
     case hashedPinCode
     case wipeDataPin
+    case inDecoyMode
+    case mainSelectedWalletId
+    case decoySelectedWalletId
 }
 
 
@@ -16293,6 +16335,12 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 7: return .hashedPinCode
         
         case 8: return .wipeDataPin
+        
+        case 9: return .inDecoyMode
+        
+        case 10: return .mainSelectedWalletId
+        
+        case 11: return .decoySelectedWalletId
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16333,6 +16381,18 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .wipeDataPin:
             writeInt(&buf, Int32(8))
+        
+        
+        case .inDecoyMode:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .mainSelectedWalletId:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .decoySelectedWalletId:
+            writeInt(&buf, Int32(11))
         
         }
     }
@@ -24683,6 +24743,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_hashed_pin_code() != 15707) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_is_in_decoy_mode() != 20658) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 52001) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24704,7 +24767,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_setcolorscheme() != 57216) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_decoy_mode() != 20238) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 36127) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_set_main_mode() != 1833) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_network() != 34312) {
@@ -25254,6 +25323,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_database_new() != 41458) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_database_switchtodecoymode() != 32942) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_database_switchtomainmode() != 60394) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_device_new() != 52650) {
