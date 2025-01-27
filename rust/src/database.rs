@@ -87,34 +87,31 @@ impl Database {
     }
 
     pub fn switch_to_main_mode() -> Arc<Database> {
-        let init = Self::init_main;
+        let db = Self::switch_to_mode(Self::init_main);
+        db.global_config
+            .set_main_mode()
+            .expect("failed to set main mode");
 
-        if let Some(db) = DATABASE.get() {
-            db.swap(init());
-            let db = DATABASE.get().expect("already checked").load();
-            return Arc::clone(&db);
-        }
-
-        DATABASE
-            .set(ArcSwap::new(init()))
-            .expect("failed to set database");
-
-        let db = DATABASE.get().expect("already checked").load();
-        Arc::clone(&db)
+        db
     }
 
     pub fn switch_to_decoy_mode() -> Arc<Database> {
-        let init = Self::init_decoy;
+        let db = Self::switch_to_mode(Self::init_decoy);
+        db.global_config
+            .set_decoy_mode()
+            .expect("failed to set decoy mode");
 
+        db
+    }
+
+    fn switch_to_mode(init_fn: fn() -> Arc<Database>) -> Arc<Database> {
         if let Some(db) = DATABASE.get() {
-            db.swap(init());
-            let db = DATABASE.get().expect("already checked").load();
-            return Arc::clone(&db);
+            db.swap(init_fn());
+        } else {
+            DATABASE
+                .set(ArcSwap::new(init_fn()))
+                .expect("failed to set database");
         }
-
-        DATABASE
-            .set(ArcSwap::new(init()))
-            .expect("failed to set database");
 
         let db = DATABASE.get().expect("already checked").load();
         Arc::clone(&db)

@@ -29,6 +29,7 @@ pub enum GlobalConfigKey {
     AuthType,
     HashedPinCode,
     WipeDataPin,
+    InDecoyMode,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -44,6 +45,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::AuthType => "auth_type",
             GlobalConfigKey::HashedPinCode => "hashed_pin_code",
             GlobalConfigKey::WipeDataPin => "wipe_data_pin",
+            GlobalConfigKey::InDecoyMode => "in_decoy_mode",
         }
     }
 }
@@ -97,6 +99,12 @@ impl GlobalConfigTable {
 
     string_config_accessor!(pub wipe_data_pin, GlobalConfigKey::WipeDataPin, String);
     string_config_accessor!(priv_hashed_pin_code, GlobalConfigKey::HashedPinCode, String);
+
+    // string_config_accessor!(
+    //     pub auth_type,
+    //     GlobalConfigKey::AuthType,
+    //     AuthType
+    // );
 }
 
 #[uniffi::export]
@@ -146,6 +154,23 @@ impl GlobalConfigTable {
         self.set(GlobalConfigKey::SelectedNetwork, network.to_string())?;
 
         Ok(())
+    }
+
+    pub fn set_decoy_mode(&self) -> Result<()> {
+        self.set(GlobalConfigKey::InDecoyMode, "true".to_string())?;
+        Ok(())
+    }
+
+    pub fn set_main_mode(&self) -> Result<()> {
+        self.set(GlobalConfigKey::InDecoyMode, "false".to_string())?;
+        Ok(())
+    }
+
+    pub fn is_in_decoy_mode(&self) -> bool {
+        self.get(GlobalConfigKey::InDecoyMode)
+            .unwrap_or(None)
+            .unwrap_or("false".to_string())
+            == "true"
     }
 
     pub fn selected_node(&self) -> Node {
