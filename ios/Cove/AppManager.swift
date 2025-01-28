@@ -24,6 +24,9 @@ import SwiftUI
     var prices: PriceResponse?
     var fees: FeeResponse?
 
+    @MainActor
+    var isLoading = false
+
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
 
@@ -171,6 +174,16 @@ import SwiftUI
                         Task {
                             await walletManager.forceWalletScan()
                             await walletManager.getFiatBalance()
+                        }
+                    }
+
+                case .walletModeChanged:
+                    self.isLoading = true
+
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(200))
+                        await MainActor.run {
+                            withAnimation { self.isLoading = false }
                         }
                     }
                 }

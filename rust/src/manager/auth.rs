@@ -7,8 +7,10 @@ use tap::TapFallible as _;
 use tracing::{debug, error};
 
 use crate::{
+    app::reconcile::{AppStateReconcileMessage, Updater},
     auth::{AuthPin, AuthType},
     database::{self, Database},
+    wallet::metadata::WalletMode,
 };
 
 type Message = AuthManagerReconcileMessage;
@@ -175,6 +177,10 @@ impl RustAuthManager {
             .global_config
             .set_decoy_mode()
             .expect("failed to set decoy mode");
+
+        Updater::send_update(AppStateReconcileMessage::WalletModeChanged(
+            WalletMode::Decoy,
+        ));
     }
 
     /// Switch from decoy mode to main mode
@@ -183,6 +189,10 @@ impl RustAuthManager {
             .global_config
             .set_main_mode()
             .expect("failed to set main mode");
+
+        Updater::send_update(AppStateReconcileMessage::WalletModeChanged(
+            WalletMode::Main,
+        ));
     }
 
     // MARK: WIPE DATA PIN

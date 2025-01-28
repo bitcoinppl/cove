@@ -54,10 +54,10 @@ enum UnlockMode {
                 rust.switchToMainMode()
 
                 let app = AppManager.shared
-                let db = Database()
-
                 app.reset()
+                app.isLoading = true
 
+                let db = Database()
                 if let selectedWalletId = db.globalConfig().selectedWallet() {
                     try? app.rust.selectWallet(id: selectedWalletId)
                 } else {
@@ -66,6 +66,28 @@ enum UnlockMode {
             }
 
             return .main
+        }
+
+        // check if the entered pin a the decoy pin, if so enter decoy mode
+        if checkDecoyPin(pin) {
+            // enter decoy mode if not already in decoy mode and reset app and router
+            if Database().globalConfig().isInMainMode() {
+                rust.switchToDecoyMode()
+                lockState = .unlocked
+
+                let app = AppManager.shared
+                app.reset()
+                app.isLoading = true
+
+                let db = Database()
+                if let selectedWalletId = db.globalConfig().selectedWallet() {
+                    try? app.rust.selectWallet(id: selectedWalletId)
+                } else {
+                    app.loadAndReset(to: RouteFactory().newWalletSelect())
+                }
+            }
+
+            return .decoy
         }
 
         // check if the entered pin is a wipeDataPin
@@ -82,26 +104,6 @@ enum UnlockMode {
             AppManager.shared.reset()
 
             return .wipe
-        }
-
-        // check if the entered pin a the decoy pin, if so enter decoy mode
-        if checkDecoyPin(pin) {
-            // enter decoy mode if not already in decoy mode and reset app and router
-            if Database().globalConfig().isInMainMode() {
-                rust.switchToDecoyMode()
-
-                let db = Database()
-                let app = AppManager.shared
-                app.reset()
-
-                if let selectedWalletId = db.globalConfig().selectedWallet() {
-                    try? app.rust.selectWallet(id: selectedWalletId)
-                } else {
-                    app.loadAndReset(to: RouteFactory().newWalletSelect())
-                }
-            }
-
-            return .decoy
         }
 
         return .locked

@@ -365,9 +365,12 @@ struct CoveApp: App {
         Group {
             if showCover {
                 CoverView()
+            } else if app.isLoading {
+                FullPageLoadingView()
             } else {
                 LockView(
                     lockType: auth.type,
+                    // NOTE: auth.checkPin also handles unlocking for WipeDataPin and DecoyPin
                     isPinCorrect: auth.checkPin,
                     showPin: false,
                     lockState: $auth.lockState,

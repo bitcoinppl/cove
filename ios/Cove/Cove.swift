@@ -14178,6 +14178,8 @@ public enum AppStateReconcileMessage {
     )
     case fiatCurrencyChanged(FiatCurrency
     )
+    case walletModeChanged(WalletMode
+    )
 }
 
 
@@ -14212,6 +14214,9 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         )
         
         case 8: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        )
+        
+        case 9: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14260,6 +14265,11 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case let .fiatCurrencyChanged(v1):
             writeInt(&buf, Int32(8))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
+            
+        
+        case let .walletModeChanged(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeWalletMode.write(v1, into: &buf)
             
         }
     }
