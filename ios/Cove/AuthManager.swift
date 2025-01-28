@@ -44,11 +44,11 @@ enum UnlockMode {
 
     @MainActor
     public func checkPin(_ pin: String) -> Bool {
-        checkUnlockMode(pin) != .locked
+        AuthPin().check(pin: pin)
     }
 
     @MainActor
-    public func checkUnlockMode(_ pin: String) -> UnlockMode {
+    public func handleAndReturnUnlockMode(_ pin: String) -> UnlockMode {
         if AuthPin().check(pin: pin) {
             if Database().globalConfig().isInDecoyMode() {
                 rust.switchToMainMode()

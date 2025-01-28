@@ -58,7 +58,7 @@ impl Database {
     }
 
     pub fn dangerous_reset_all_data(&self) {
-        if let Err(error) = std::fs::remove_file(&database_location()) {
+        if let Err(error) = std::fs::remove_file(database_location()) {
             error!("unable to delete database cove_main error: {error}");
             return;
         }

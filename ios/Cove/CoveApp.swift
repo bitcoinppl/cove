@@ -370,8 +370,9 @@ struct CoveApp: App {
             } else {
                 LockView(
                     lockType: auth.type,
-                    // NOTE: auth.checkPin also handles unlocking for WipeDataPin and DecoyPin
-                    isPinCorrect: auth.checkPin,
+                    isPinCorrect: { pin in
+                        auth.handleAndReturnUnlockMode(pin) != .locked
+                    },
                     showPin: false,
                     lockState: $auth.lockState,
                     onUnlock: { _ in

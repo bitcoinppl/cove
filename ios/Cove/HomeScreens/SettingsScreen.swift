@@ -4,6 +4,8 @@ import SwiftUI
 private enum SheetState: Equatable {
     case newPin,
          removePin,
+         removeWipeDataPin,
+         removeDecoyPin,
          changePin,
          disableBiometric,
          enableAuth,
@@ -97,7 +99,7 @@ struct SettingsScreen: View {
                 }
 
                 // disable
-                if !enable { auth.dispatch(action: .disableWipeDataPin) }
+                if !enable { sheetState = .init(.removeWipeDataPin) }
             }
         )
     }
@@ -122,7 +124,7 @@ struct SettingsScreen: View {
                 }
 
                 // disable
-                if !enable { auth.dispatch(action: .disableDecoyPin) }
+                if !enable { sheetState = .init(.removeDecoyPin) }
             }
         )
     }
@@ -470,10 +472,35 @@ struct SettingsScreen: View {
             NumberPadPinView(
                 title: "Enter Current PIN",
                 isPinCorrect: auth.checkPin,
+                showPin: false,
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
                     auth.dispatch(action: .disablePin)
                     auth.dispatch(action: .disableWipeDataPin)
+                    sheetState = .none
+                }
+            )
+
+        case .removeWipeDataPin:
+            NumberPadPinView(
+                title: "Enter Current PIN",
+                isPinCorrect: auth.checkPin,
+                showPin: false,
+                backAction: { sheetState = .none },
+                onUnlock: { _ in
+                    auth.dispatch(action: .disableWipeDataPin)
+                    sheetState = .none
+                }
+            )
+
+        case .removeDecoyPin:
+            NumberPadPinView(
+                title: "Enter Current PIN",
+                isPinCorrect: auth.checkPin,
+                showPin: false,
+                backAction: { sheetState = .none },
+                onUnlock: { _ in
+                    auth.dispatch(action: .disableDecoyPin)
                     sheetState = .none
                 }
             )

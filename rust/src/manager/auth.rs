@@ -18,6 +18,7 @@ type Message = AuthManagerReconcileMessage;
 pub static AUTH_MANAGER: LazyLock<Arc<RustAuthManager>> = LazyLock::new(RustAuthManager::init);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[allow(clippy::enum_variant_names)]
 pub enum AuthManagerReconcileMessage {
     AuthTypeChanged(AuthType),
     WipeDataPinChanged,
@@ -54,7 +55,10 @@ type Error = AuthManagerError;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum AuthManagerError {
     #[error("Unable to set the wipe data PIN, because {0}")]
-    WipeDataSet(#[from] WipeDataPinError),
+    WipeDataSet(SpecialPinError),
+
+    #[error("Unable to set the decoy PIN, because {0}")]
+    DecoySet(SpecialPinError),
 
     #[error("There was a database error: {0}")]
     DatabaseError(#[from] database::Error),
@@ -66,20 +70,20 @@ fn auth_manager_error_to_string(error: AuthManagerError) -> String {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum WipeDataPinError {
-    /// Unable to set wipe data pin, because PIN is not enabled
+pub enum SpecialPinError {
+    /// Unable to set special PIN, because PIN is not enabled
     #[error("PIN is not enabled")]
     PinNotEnabled,
 
-    /// Unable to set wipe data or decoy pin, because its the same as the current pin
+    /// Unable to set special PIN, because its the same as the current pin
     #[error("its is the same as the current pin")]
     SameAsCurrentPin,
 
-    /// Unable to set wipe data or decoy pin, its the same as another PIN
+    /// Unable to set special PIN, its the same as another PIN
     #[error("its is the same as another PIN")]
     SameAsAnotherPin,
 
-    /// Unable to set wipe data pin, because biometrics is enabled
+    /// Unable to set special PIN, because biometrics is enabled
     #[error("biometrics is enabled")]
     BiometricsEnabled,
 }
@@ -162,7 +166,8 @@ impl RustAuthManager {
 
     /// Set the decoy pin
     pub fn set_decoy_pin(&self, pin: String) -> Result<()> {
-        self.validate_pin_settings(&pin)?;
+        self.validate_pin_settings(&pin)
+            .map_err(AuthManagerError::DecoySet)?;
 
         // set the pin
         Database::global().global_config.set_decoy_pin(pin)?;
@@ -209,8 +214,8 @@ impl RustAuthManager {
 
     /// Set the wipe data pin
     pub fn set_wipe_data_pin(&self, pin: String) -> Result<()> {
-        // validate if we are able to set a wipe data pin
-        self.validate_pin_settings(&pin)?;
+        self.validate_pin_settings(&pin)
+            .map_err(AuthManagerError::WipeDataSet)?;
 
         // set the pin
         Database::global().global_config.set_wipe_data_pin(pin)?;
@@ -238,23 +243,23 @@ impl RustAuthManager {
     // private
 
     /// Validate if we have the correct settings to be able to set a decoy or wipe data pin
-    fn validate_pin_settings(&self, pin: &str) -> Result<()> {
+    fn validate_pin_settings(&self, pin: &str) -> Result<(), SpecialPinError> {
         let auth_type = self.auth_type();
 
         if auth_type == AuthType::None {
-            return Err(WipeDataPinError::PinNotEnabled.into());
+            return Err(SpecialPinError::PinNotEnabled);
         }
 
         if auth_type == AuthType::Biometric || auth_type == AuthType::Both {
-            return Err(WipeDataPinError::BiometricsEnabled.into());
+            return Err(SpecialPinError::BiometricsEnabled);
         }
 
         if AuthPin::new().check(pin) {
-            return Err(WipeDataPinError::SameAsCurrentPin.into());
+            return Err(SpecialPinError::SameAsCurrentPin);
         }
 
-        if self.check_decoy_pin(pin) && self.check_wipe_data_pin(pin) {
-            return Err(WipeDataPinError::SameAsAnotherPin.into());
+        if self.check_decoy_pin(pin) || self.check_wipe_data_pin(pin) {
+            return Err(SpecialPinError::SameAsAnotherPin);
         }
 
         // valid

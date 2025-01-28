@@ -8469,7 +8469,7 @@ open func switchToMainMode()  {try! rustCall() {
     /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
-open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
+open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiConverterTypeSpecialPinError_lift) {
     uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(self.uniffiClonePointer(),
         FfiConverterString.lower(pin),$0
     )
@@ -14516,7 +14516,9 @@ public enum AuthManagerError {
 
     
     
-    case WipeDataSet(WipeDataPinError
+    case WipeDataSet(SpecialPinError
+    )
+    case DecoySet(SpecialPinError
     )
     case DatabaseError(DatabaseError
     )
@@ -14537,9 +14539,12 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
 
         
         case 1: return .WipeDataSet(
-            try FfiConverterTypeWipeDataPinError.read(from: &buf)
+            try FfiConverterTypeSpecialPinError.read(from: &buf)
             )
-        case 2: return .DatabaseError(
+        case 2: return .DecoySet(
+            try FfiConverterTypeSpecialPinError.read(from: &buf)
+            )
+        case 3: return .DatabaseError(
             try FfiConverterTypeDatabaseError.read(from: &buf)
             )
 
@@ -14556,11 +14561,16 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
         
         case let .WipeDataSet(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeWipeDataPinError.write(v1, into: &buf)
+            FfiConverterTypeSpecialPinError.write(v1, into: &buf)
+            
+        
+        case let .DecoySet(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSpecialPinError.write(v1, into: &buf)
             
         
         case let .DatabaseError(v1):
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
             
         }
@@ -19728,6 +19738,105 @@ extension SerdeError: Foundation.LocalizedError {
 }
 
 
+
+public enum SpecialPinError {
+
+    
+    
+    /**
+     * Unable to set special PIN, because PIN is not enabled
+     */
+    case PinNotEnabled
+    /**
+     * Unable to set special PIN, because its the same as the current pin
+     */
+    case SameAsCurrentPin
+    /**
+     * Unable to set special PIN, its the same as another PIN
+     */
+    case SameAsAnotherPin
+    /**
+     * Unable to set special PIN, because biometrics is enabled
+     */
+    case BiometricsEnabled
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSpecialPinError: FfiConverterRustBuffer {
+    typealias SwiftType = SpecialPinError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SpecialPinError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .PinNotEnabled
+        case 2: return .SameAsCurrentPin
+        case 3: return .SameAsAnotherPin
+        case 4: return .BiometricsEnabled
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SpecialPinError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .PinNotEnabled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .SameAsCurrentPin:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .SameAsAnotherPin:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .BiometricsEnabled:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSpecialPinError_lift(_ buf: RustBuffer) throws -> SpecialPinError {
+    return try FfiConverterTypeSpecialPinError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSpecialPinError_lower(_ value: SpecialPinError) -> RustBuffer {
+    return FfiConverterTypeSpecialPinError.lower(value)
+}
+
+
+extension SpecialPinError: Equatable, Hashable {}
+
+
+
+extension SpecialPinError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -21954,105 +22063,6 @@ public func FfiConverterTypeWalletType_lower(_ value: WalletType) -> RustBuffer 
 
 extension WalletType: Equatable, Hashable {}
 
-
-
-
-public enum WipeDataPinError {
-
-    
-    
-    /**
-     * Unable to set wipe data pin, because PIN is not enabled
-     */
-    case PinNotEnabled
-    /**
-     * Unable to set wipe data or decoy pin, because its the same as the current pin
-     */
-    case SameAsCurrentPin
-    /**
-     * Unable to set wipe data or decoy pin, its the same as another PIN
-     */
-    case SameAsAnotherPin
-    /**
-     * Unable to set wipe data pin, because biometrics is enabled
-     */
-    case BiometricsEnabled
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWipeDataPinError: FfiConverterRustBuffer {
-    typealias SwiftType = WipeDataPinError
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WipeDataPinError {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        
-
-        
-        case 1: return .PinNotEnabled
-        case 2: return .SameAsCurrentPin
-        case 3: return .SameAsAnotherPin
-        case 4: return .BiometricsEnabled
-
-         default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: WipeDataPinError, into buf: inout [UInt8]) {
-        switch value {
-
-        
-
-        
-        
-        case .PinNotEnabled:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .SameAsCurrentPin:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .SameAsAnotherPin:
-            writeInt(&buf, Int32(3))
-        
-        
-        case .BiometricsEnabled:
-            writeInt(&buf, Int32(4))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWipeDataPinError_lift(_ buf: RustBuffer) throws -> WipeDataPinError {
-    return try FfiConverterTypeWipeDataPinError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWipeDataPinError_lower(_ value: WipeDataPinError) -> RustBuffer {
-    return FfiConverterTypeWipeDataPinError.lower(value)
-}
-
-
-extension WipeDataPinError: Equatable, Hashable {}
-
-
-
-extension WipeDataPinError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
 
 
 
@@ -25186,7 +25196,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 17037) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 13865) {
+    if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 16288) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 61781) {
