@@ -20,8 +20,9 @@ private enum AlertState: Equatable {
     case confirmEnableWipeMePin
     case confirmDecoyPin
     case noteNoFaceIdWhenWipeMePin
+    case noteNoFaceIdWhenDecoyPin
     case notePinRequired
-    case noteFaceIdDisabling
+    indirect case noteFaceIdDisabling(AlertState)
     case extraSetPinError(String)
 }
 
@@ -56,10 +57,14 @@ struct SettingsScreen: View {
 
                 // enable
                 if auth.isWipeDataPinEnabled {
-                    alertState = .init(.noteNoFaceIdWhenWipeMePin)
-                } else {
-                    sheetState = .init(.enableBiometric)
+                    return alertState = .init(.noteNoFaceIdWhenWipeMePin)
                 }
+
+                if auth.isDecoyPinEnabled {
+                    return alertState = .init(.noteNoFaceIdWhenDecoyPin)
+                }
+
+                sheetState = .init(.enableBiometric)
             }
         )
     }
@@ -82,17 +87,16 @@ struct SettingsScreen: View {
                     if !app.rust.unverifiedWalletIds().isEmpty {
                         alertState = .init(
                             .unverifiedWallets(app.rust.unverifiedWalletIds().first!))
+
                         return
                     }
 
                     if auth.type == .biometric {
-                        alertState = .init(.notePinRequired)
-                        return
+                        return alertState = .init(.notePinRequired)
                     }
 
                     if auth.type == .both {
-                        alertState = .init(.noteFaceIdDisabling)
-                        return
+                        return alertState = .init(.noteFaceIdDisabling(.confirmEnableWipeMePin))
                     }
 
                     alertState = .init(.confirmEnableWipeMePin)
@@ -111,13 +115,11 @@ struct SettingsScreen: View {
                 // enable
                 if enable {
                     if auth.type == .biometric {
-                        alertState = .init(.notePinRequired)
-                        return
+                        return alertState = .init(.notePinRequired)
                     }
 
                     if auth.type == .both {
-                        alertState = .init(.noteFaceIdDisabling)
-                        return
+                        return alertState = .init(.noteFaceIdDisabling(.confirmDecoyPin))
                     }
 
                     alertState = .init(.confirmDecoyPin)
@@ -397,12 +399,12 @@ struct SettingsScreen: View {
                 actions: { Button("OK") { alertState = .none } }
             ).eraseToAny()
 
-        case .noteFaceIdDisabling:
+        case let .noteFaceIdDisabling(nextAlertState):
             AlertBuilder(
                 title: "Disable FaceID Unlock?",
                 message: """
 
-                Enabling the wipe data PIN will disable FaceID unlock for Cove. 
+                Enabling this special PIN will disable FaceID unlock for Cove. 
 
                 Going forward, you will have to use your PIN to unlock Cove.
                 """,
@@ -410,7 +412,7 @@ struct SettingsScreen: View {
                     Button("Disable FaceID", role: .destructive) {
                         auth.dispatch(action: .disableBiometric)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.350) {
-                            alertState = .init(.confirmEnableWipeMePin)
+                            alertState = .init(nextAlertState)
                         }
                     }
                     Button("Cancel", role: .cancel) { alertState = .none }
@@ -424,10 +426,19 @@ struct SettingsScreen: View {
                 actions: {
                     Button("Cancel", role: .cancel) { alertState = .none }
                     Button("Disable Wipe Data PIN", role: .destructive) {
-                        auth.dispatch(action: .disableWipeDataPin)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.350) {
-                            auth.dispatch(action: .enableBiometric)
-                        }
+                        sheetState = .init(.removeWipeDataPin)
+                    }
+                }
+            ).eraseToAny()
+
+        case .noteNoFaceIdWhenDecoyPin:
+            AlertBuilder(
+                title: "Can't do that",
+                message: "You can't have both Decoy PIN and FaceID active at the same time",
+                actions: {
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                    Button("Disable Decoy Pin", role: .destructive) {
+                        sheetState = .init(.removeDecoyPin)
                     }
                 }
             ).eraseToAny()
