@@ -8,17 +8,19 @@ private enum SheetState: Equatable {
          disableBiometric,
          enableAuth,
          enableBiometric,
-         enableWipeDataPin
+         enableWipeDataPin,
+         enableDecoyPin
 }
 
 private enum AlertState: Equatable {
     case networkChanged(Network)
     case unverifiedWallets(WalletId)
     case confirmEnableWipeMePin
+    case confirmDecoyPin
     case noteNoFaceIdWhenWipeMePin
     case notePinRequired
     case noteFaceIdDisabling
-    case wipeDataSetPinError(String)
+    case extraSetPinError(String)
 }
 
 struct SettingsScreen: View {
@@ -100,6 +102,31 @@ struct SettingsScreen: View {
         )
     }
 
+    var toggleDecoyPin: Binding<Bool> {
+        Binding(
+            get: { auth.isDecoyPinEnabled },
+            set: { enable in
+                // enable
+                if enable {
+                    if auth.type == .biometric {
+                        alertState = .init(.notePinRequired)
+                        return
+                    }
+
+                    if auth.type == .both {
+                        alertState = .init(.noteFaceIdDisabling)
+                        return
+                    }
+
+                    alertState = .init(.confirmDecoyPin)
+                }
+
+                // disable
+                if !enable { auth.dispatch(action: .disableDecoyPin) }
+            }
+        )
+    }
+
     @ViewBuilder
     var GeneralSection: some View {
         Section(header: Text("General")) {
@@ -160,7 +187,11 @@ struct SettingsScreen: View {
                 }
 
                 Toggle(isOn: toggleWipeMePin) {
-                    Label("Enable Wipe Data PIN", systemImage: "trash.slash")
+                    Label("Enable Wipe Data PIN", systemImage: "exclamationmark.lock.fill")
+                }
+
+                Toggle(isOn: toggleDecoyPin) {
+                    Label("Enable Decoy PIN", systemImage: "theatermasks")
                 }
             }
         }
@@ -336,6 +367,27 @@ struct SettingsScreen: View {
                 }
             ).eraseToAny()
 
+        case .confirmDecoyPin:
+            AlertBuilder(
+                title: "Are you sure?",
+                message:
+                """
+
+                Enabling Decoy PIN will let you chose a PIN that if entered, will show you a different set of wallets.
+
+                These wallets will only be accessible by entering the decoy PIN instead of your regular PIN.
+
+                To access your regular wallets, you will have to close the app, start it again and enter your regular PIN.
+                """,
+                actions: {
+                    Button("Yes, Enable Decoy PIN") {
+                        alertState = .none
+                        sheetState = .init(.enableDecoyPin)
+                    }
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                }
+            ).eraseToAny()
+
         case .notePinRequired:
             AlertBuilder(
                 title: "PIN is required",
@@ -378,7 +430,7 @@ struct SettingsScreen: View {
                 }
             ).eraseToAny()
 
-        case let .wipeDataSetPinError(error):
+        case let .extraSetPinError(error):
             AlertBuilder(
                 title: "Something went wrong!",
                 message: error,
@@ -435,7 +487,7 @@ struct SettingsScreen: View {
 
                     if auth.checkWipeDataPin(pin) {
                         alertState = .init(
-                            .wipeDataSetPinError(
+                            .extraSetPinError(
                                 "Can't update PIN because its the same as your wipe data PIN")
                         )
                         return
@@ -476,6 +528,14 @@ struct SettingsScreen: View {
                     sheetState = .none
                 }
             )
+
+        case .enableDecoyPin:
+            DecoyPinView(
+                onComplete: setDecoyPin,
+                backAction: {
+                    sheetState = .none
+                }
+            )
         }
     }
 
@@ -484,13 +544,22 @@ struct SettingsScreen: View {
 
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
-            alertState = .init(.wipeDataSetPinError(error.describe))
+            alertState = .init(.extraSetPinError(error.describe))
+        }
+    }
+
+    func setDecoyPin(_ pin: String) {
+        sheetState = .none
+
+        do { try auth.rust.setDecoyPin(pin: pin) } catch {
+            let error = error as! AuthManagerError
+            alertState = .init(.extraSetPinError(error.describe))
         }
     }
 }
 
 #Preview {
     SettingsScreen()
-        .environment(AppManager())
+        .environment(AppManager.shared)
         .environment(AuthManager())
 }

@@ -20,7 +20,7 @@ use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
 use once_cell::sync::OnceCell;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::consts::ROOT_DATA_DIR;
 
@@ -30,7 +30,9 @@ pub type Error = error::DatabaseError;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
-    #[allow(dead_code)]
+    main: Arc<redb::Database>,
+    decoy: Arc<redb::Database>,
+
     pub global_flag: GlobalFlagTable,
     pub global_config: GlobalConfigTable,
     pub global_cache: GlobalCacheTable,
@@ -45,14 +47,14 @@ impl Database {
         Self::global().clone()
     }
 
-    #[uniffi::constructor(name = "switchToMainMode")]
-    pub fn _switch_to_main_mode() -> Arc<Self> {
-        Self::switch_to_main_mode()
+    #[uniffi::method(name = "switchToMainMode")]
+    pub fn _switch_to_main_mode(&self) {
+        self.switch_to_main_mode()
     }
 
-    #[uniffi::constructor(name = "switchToDecoyMode")]
-    pub fn _switch_to_decoy_mode() -> Arc<Self> {
-        Self::switch_to_decoy_mode()
+    #[uniffi::method(name = "switchToDecoyMode")]
+    pub fn _switch_to_decoy_mode(&self) {
+        self.switch_to_decoy_mode()
     }
 
     pub fn wallets(&self) -> WalletsTable {
@@ -83,86 +85,86 @@ impl Database {
         DATABASE
             .get()
             .expect("database not initialized")
-            .swap(Self::init_main());
+            .swap(Arc::new(Self::init()));
     }
 }
 
 impl Database {
     pub fn global() -> Arc<Self> {
         let db = DATABASE
-            .get_or_init(|| ArcSwap::new(Self::init_main()))
+            .get_or_init(|| ArcSwap::new(Arc::new(Self::init())))
             .load();
 
         Arc::clone(&db)
     }
 
-    pub fn switch_to_main_mode() -> Arc<Self> {
-        let db = Self::switch_to_mode(Self::init_main);
-        db.global_config
-            .set_main_mode()
-            .expect("failed to set main mode");
+    pub fn switch_to_main_mode(&self) {
+        debug!("switching to main mode");
 
-        db
-    }
-
-    pub fn switch_to_decoy_mode() -> Arc<Self> {
-        let db = Self::switch_to_mode(Self::init_decoy);
-        db.global_config
-            .set_decoy_mode()
-            .expect("failed to set decoy mode");
-
-        db
-    }
-
-    fn switch_to_mode(init_fn: fn() -> Arc<Database>) -> Arc<Database> {
-        if let Some(db) = DATABASE.get() {
-            db.swap(init_fn());
-        } else {
-            DATABASE
-                .set(ArcSwap::new(init_fn()))
-                .expect("failed to set database");
-        }
-
-        let db = DATABASE.get().expect("already checked").load();
-        Arc::clone(&db)
-    }
-
-    fn init_main() -> Arc<Database> {
-        let db = Self::do_init();
-        Arc::new(db)
-    }
-
-    fn init_decoy() -> Arc<Database> {
-        let mut db = Self::do_init();
-
-        let decoy_db = get_or_create_decoy_database();
-        let write_txn = decoy_db
+        let main_db = self.main.clone();
+        let write_txn = main_db
+            .as_ref()
             .begin_write()
             .expect("failed to begin write transaction");
 
-        let wallets = WalletsTable::new(Arc::new(decoy_db), &write_txn);
-        db.wallets = wallets;
-
-        Arc::new(db)
+        let wallets = WalletsTable::new(main_db.clone(), &write_txn);
+        self.switch_wallets_table(wallets);
     }
 
-    fn do_init() -> Database {
-        let db = get_or_create_main_database();
+    pub fn switch_to_decoy_mode(&self) {
+        debug!("switching to decoy mode");
 
-        let write_txn = db.begin_write().expect("failed to begin write transaction");
-        let db = Arc::new(db);
+        let decoy_db = self.decoy.clone();
+        let write_txn = decoy_db
+            .as_ref()
+            .begin_write()
+            .expect("failed to begin write transaction");
 
-        let wallets = WalletsTable::new(db.clone(), &write_txn);
-        let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
-        let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
-        let global_cache = GlobalCacheTable::new(db.clone(), &write_txn);
-        let unsigned_transactions = UnsignedTransactionsTable::new(db.clone(), &write_txn);
+        let wallets = WalletsTable::new(decoy_db.clone(), &write_txn);
+        self.switch_wallets_table(wallets);
+    }
+
+    fn switch_wallets_table(&self, wallets: WalletsTable) {
+        let db = Database {
+            main: self.main.clone(),
+            decoy: self.decoy.clone(),
+            wallets,
+            global_flag: self.global_flag.clone(),
+            global_config: self.global_config.clone(),
+            global_cache: self.global_cache.clone(),
+            unsigned_transactions: self.unsigned_transactions.clone(),
+        };
+
+        DATABASE
+            .get()
+            .expect("database initialized")
+            .swap(Arc::new(db));
+    }
+
+    fn init() -> Database {
+        let main_db = get_or_create_main_database();
+        let decoy_db = get_or_create_decoy_database();
+
+        let main_db_arc = Arc::new(main_db);
+        let decoy_db_arc = Arc::new(decoy_db);
+
+        let write_txn = main_db_arc
+            .begin_write()
+            .expect("failed to begin write transaction");
+
+        let wallets = WalletsTable::new(main_db_arc.clone(), &write_txn);
+        let global_flag = GlobalFlagTable::new(main_db_arc.clone(), &write_txn);
+        let global_config = GlobalConfigTable::new(main_db_arc.clone(), &write_txn);
+        let global_cache = GlobalCacheTable::new(main_db_arc.clone(), &write_txn);
+        let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
 
         write_txn
             .commit()
             .expect("failed to commit write transaction");
 
         Database {
+            main: main_db_arc,
+            decoy: decoy_db_arc,
             wallets,
             global_flag,
             global_config,

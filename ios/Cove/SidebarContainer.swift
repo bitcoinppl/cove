@@ -119,5 +119,5 @@ struct SidebarContainer<Content: View>: View {
                 )
             )
     }
-    .environment(AppManager())
+    .environment(AppManager.shared)
 }

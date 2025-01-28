@@ -2,6 +2,8 @@ import Observation
 import SwiftUI
 
 @Observable class AppManager: FfiReconcile {
+    static let shared = AppManager()
+
     private let logger = Log(id: "AppManager")
 
     var rust: FfiApp
@@ -43,7 +45,7 @@ import SwiftUI
         }
     }
 
-    public init() {
+    private init() {
         logger.debug("Initializing AppManager")
 
         let rust = FfiApp()
@@ -75,12 +77,16 @@ import SwiftUI
     }
 
     /// Reset the manager state
-    public func reset() {
+    public func reset(db: Database = Database()) {
         rust = FfiApp()
-        database = Database()
+        database = db
 
         let state = rust.state()
         router = state.router
+    }
+
+    public func changeDb(db: Database) {
+        database = db
     }
 
     var currentRoute: Route {

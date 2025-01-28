@@ -153,7 +153,7 @@ struct WalletSettingsSheet: View {
 #Preview {
     AsyncPreview {
         WalletSettingsSheet(manager: WalletManager(preview: "preview_only"))
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .environment(\.navigate) { _ in
                 ()
             }
