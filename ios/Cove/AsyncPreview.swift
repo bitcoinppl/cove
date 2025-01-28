@@ -15,7 +15,7 @@ struct AsyncPreview<Content: View>: View {
         self.content = content
     }
 
-    @State private var manager = AppManager()
+    @State private var manager = AppManager.shared
 
     var body: some View {
         Group {

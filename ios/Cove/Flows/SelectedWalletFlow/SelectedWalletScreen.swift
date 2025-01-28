@@ -275,7 +275,7 @@ struct VerifyReminder: View {
     AsyncPreview {
         NavigationStack {
             SelectedWalletScreen(manager: WalletManager(preview: "preview_only"))
-                .environment(AppManager())
+                .environment(AppManager.shared)
         }
     }
 }

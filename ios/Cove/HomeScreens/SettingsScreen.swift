@@ -561,5 +561,5 @@ struct SettingsScreen: View {
 #Preview {
     SettingsScreen()
         .environment(AppManager.shared)
-        .environment(AuthManager())
+        .environment(AuthManager.shared)
 }

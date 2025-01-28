@@ -198,7 +198,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .environment(WalletManager(preview: "preview_only"))
         }
 }
@@ -218,7 +218,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .environment(WalletManager(preview: "preview_only"))
         }
 }
@@ -237,7 +237,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .environment(WalletManager(preview: "preview_only"))
         }
 }
@@ -256,7 +256,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .environment(WalletManager(preview: "preview_only"))
         }
 }
@@ -276,7 +276,7 @@ struct WalletBalanceHeaderView: View {
                 updater: { _ in () },
                 showReceiveSheet: {}
             )
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .environment(WalletManager(preview: "preview_only"))
         }
 }

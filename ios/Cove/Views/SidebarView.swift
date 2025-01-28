@@ -198,7 +198,7 @@ struct SidebarView: View {
                     WalletMetadata("Coldcard Q1", preview: true),
                 ]
             )
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .background(Color.white)
             .frame(width: 280)
 

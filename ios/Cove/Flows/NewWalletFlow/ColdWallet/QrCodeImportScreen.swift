@@ -319,7 +319,7 @@ struct HelpView: View {
 
 #Preview {
     QrCodeImportScreen()
-        .environment(AppManager())
+        .environment(AppManager.shared)
         .background(.red)
 }
 

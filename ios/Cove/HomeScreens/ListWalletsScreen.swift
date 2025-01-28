@@ -68,5 +68,5 @@ struct ListWalletsScreen: View {
 
 #Preview {
     ListWalletsScreen()
-        .environment(AppManager())
+        .environment(AppManager.shared)
 }

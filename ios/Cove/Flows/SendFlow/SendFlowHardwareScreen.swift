@@ -508,7 +508,7 @@ struct SendFlowHardwareScreen: View {
                 manager: WalletManager(preview: "preview_only"),
                 details: ConfirmDetails.previewNew()
             )
-            .environment(AppManager())
+            .environment(AppManager.shared)
         }
     }
 }

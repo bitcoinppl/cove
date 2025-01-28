@@ -203,10 +203,10 @@ struct SendFlowCustomFeeRateView: View {
                 selectedPresentationDetent: Binding.constant(PresentationDetent.large)
             )
             .environment(WalletManager(preview: "preview_only"))
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .environment(
                 SendFlowPresenter(
-                    app: AppManager(), manager: WalletManager(preview: "preview_only")
+                    app: AppManager.shared, manager: WalletManager(preview: "preview_only")
                 )
             )
             .frame(height: 300)

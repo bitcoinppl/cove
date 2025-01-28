@@ -135,7 +135,7 @@ struct QrCodeScanView: View {
 
 #Preview {
     struct PreviewContainer: View {
-        @State private var app = AppManager()
+        @State private var app = AppManager.shared
         @State private var alert: TaggedItem<AppAlertState>? = nil
         @State private var scannedCode: TaggedItem<StringOrData>? = nil
 

@@ -211,8 +211,8 @@ struct SendFlowConfirmScreen: View {
                                     details: ConfirmDetails.previewNew(amount: 30333),
                                     signedTransaction: nil
                                 )
-                                .environment(AppManager())
-                                .environment(AuthManager())
+                                .environment(AppManager.shared)
+                                .environment(AuthManager.shared)
                             }
                         }
                     }
@@ -236,7 +236,7 @@ struct SendFlowConfirmScreen: View {
             details: ConfirmDetails.previewNew(amount: 30_333_312),
             signedTransaction: nil
         )
-        .environment(AppManager())
-        .environment(AuthManager())
+        .environment(AppManager.shared)
+        .environment(AuthManager.shared)
     }
 }

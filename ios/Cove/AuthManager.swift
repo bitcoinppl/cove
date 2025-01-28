@@ -5,6 +5,8 @@ enum UnlockMode {
 }
 
 @Observable class AuthManager: AuthManagerReconciler {
+    static let shared = AuthManager()
+
     private let logger = Log(id: "AuthManager")
     var rust: RustAuthManager
     var type = Database().globalConfig().authType()
@@ -15,9 +17,12 @@ enum UnlockMode {
     @MainActor
     var isUsingBiometrics: Bool = false
 
-    public init() {
+    private init() {
+        Log.debug("Initializing AuthManager")
+
         let rust = RustAuthManager()
         self.rust = rust
+
         isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
         isDecoyPinEnabled = rust.isDecoyPinEnabled()
 
@@ -49,7 +54,7 @@ enum UnlockMode {
                 Database().switchToMainMode()
                 let db = Database()
 
-                let app = AppManaged.shared
+                let app = AppManager.shared
                 app.reset(db: db)
 
                 if let selectedWalletId = db.globalConfig().selectedWallet() {
@@ -73,7 +78,7 @@ enum UnlockMode {
             type = .none
 
             // reset app manager
-            AppManager().reset()
+            AppManager.shared.reset()
 
             return .wipe
         }

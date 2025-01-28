@@ -50,5 +50,5 @@ struct DecoyPinView: View {
 
 #Preview {
     DecoyPinView(onComplete: { _ in }, backAction: {})
-        .environment(AuthManager())
+        .environment(AuthManager.shared)
 }

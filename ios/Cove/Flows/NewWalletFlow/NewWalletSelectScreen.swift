@@ -254,6 +254,6 @@ private enum SheetState {
 #Preview {
     NavigationStack {
         NewWalletSelectScreen()
-            .environment(AppManager())
+            .environment(AppManager.shared)
     }
 }

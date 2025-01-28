@@ -64,5 +64,5 @@ struct WipePin: View {
 
 #Preview {
     WipePin(onComplete: { _ in }, backAction: {})
-        .environment(AppManager())
+        .environment(AppManager.shared)
 }

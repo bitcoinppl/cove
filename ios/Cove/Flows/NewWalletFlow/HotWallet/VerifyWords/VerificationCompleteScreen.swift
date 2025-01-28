@@ -84,6 +84,6 @@ struct VerificationCompleteScreen: View {
 #Preview {
     AsyncPreview {
         VerificationCompleteScreen(manager: WalletManager(preview: "preview_only"))
-            .environment(AppManager())
+            .environment(AppManager.shared)
     }
 }

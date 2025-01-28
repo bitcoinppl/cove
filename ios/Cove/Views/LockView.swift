@@ -272,7 +272,7 @@ private var isBiometricAvailable: Bool {
             Text("Hello World")
         }
     }
-    .environment(AppManager())
+    .environment(AppManager.shared)
 }
 
 #Preview("need permissions") {
@@ -281,7 +281,7 @@ private var isBiometricAvailable: Bool {
             Text("Hello World")
         }
     }
-    .environment(AppManager())
+    .environment(AppManager.shared)
 }
 
 #Preview("with navigation") {
@@ -303,5 +303,5 @@ private var isBiometricAvailable: Bool {
             }
         }
     }
-    .environment(AppManager())
+    .environment(AppManager.shared)
 }

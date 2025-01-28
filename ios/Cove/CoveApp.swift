@@ -166,8 +166,8 @@ struct CoveApp: App {
         _ = Keychain(keychain: KeychainAccessor())
         _ = Device(device: DeviceAccesor())
 
-        let app = AppManager()
-        let auth = AuthManager()
+        let app = AppManager.shared
+        let auth = AuthManager.shared
 
         self.app = app
         self.auth = auth
