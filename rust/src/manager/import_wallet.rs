@@ -107,12 +107,13 @@ impl RustImportWalletManager {
             .map_err(|e| ImportWalletError::InvalidWordGroup(e.to_string()))?;
 
         let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
 
         // make sure its not already imported
         let fingerprint: Fingerprint = mnemonic.xpub(network.into()).fingerprint().into();
         let all_fingerprints: Vec<(WalletId, Fingerprint)> = Database::global()
             .wallets
-            .get_all(network)
+            .get_all(network, mode)
             .map(|wallets| {
                 wallets
                     .into_iter()
@@ -132,7 +133,7 @@ impl RustImportWalletManager {
         }
 
         // get current number of wallets and add one;
-        let number_of_wallets = Database::global().wallets.len(network).unwrap_or(0);
+        let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
         let wallet_metadata =

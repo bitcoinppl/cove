@@ -3311,10 +3311,6 @@ public protocol DatabaseProtocol : AnyObject {
     
     func globalConfig()  -> GlobalConfigTable
     
-    func switchToDecoyMode() 
-    
-    func switchToMainMode() 
-    
     func unsignedTransactions()  -> UnsignedTransactionsTable
     
     func wallets()  -> WalletsTable
@@ -3390,18 +3386,6 @@ open func globalConfig() -> GlobalConfigTable  {
     uniffi_cove_fn_method_database_global_config(self.uniffiClonePointer(),$0
     )
 })
-}
-    
-open func switchToDecoyMode()  {try! rustCall() {
-    uniffi_cove_fn_method_database_switchtodecoymode(self.uniffiClonePointer(),$0
-    )
-}
-}
-    
-open func switchToMainMode()  {try! rustCall() {
-    uniffi_cove_fn_method_database_switchtomainmode(self.uniffiClonePointer(),$0
-    )
-}
 }
     
 open func unsignedTransactions() -> UnsignedTransactionsTable  {
@@ -5536,6 +5520,8 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     
     func setSelectedNode(node: Node) throws 
     
+    func walletMode()  -> WalletMode
+    
 }
 
 open class GlobalConfigTable:
@@ -5720,6 +5706,13 @@ open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverte
         FfiConverterTypeNode_lower(node),$0
     )
 }
+}
+    
+open func walletMode() -> WalletMode  {
+    return try!  FfiConverterTypeWalletMode_lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_wallet_mode(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 
@@ -8250,6 +8243,16 @@ public protocol RustAuthManagerProtocol : AnyObject {
     func setWipeDataPin(pin: String) throws 
     
     /**
+     * Switch from main mode to decoy mode
+     */
+    func switchToDecoyMode() 
+    
+    /**
+     * Switch from decoy mode to main mode
+     */
+    func switchToMainMode() 
+    
+    /**
      * Validate if we have the correct settings to be able to set a decoy or wipe data pin
      */
     func validatePinSettings(pin: String) throws 
@@ -8441,6 +8444,24 @@ open func setDecoyPin(pin: String)throws   {try rustCallWithError(FfiConverterTy
 open func setWipeDataPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
     uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(self.uniffiClonePointer(),
         FfiConverterString.lower(pin),$0
+    )
+}
+}
+    
+    /**
+     * Switch from main mode to decoy mode
+     */
+open func switchToDecoyMode()  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+    /**
+     * Switch from decoy mode to main mode
+     */
+open func switchToMainMode()  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(self.uniffiClonePointer(),$0
     )
 }
 }
@@ -11701,7 +11722,7 @@ public protocol WalletsTableProtocol : AnyObject {
     
     func isEmpty() throws  -> Bool
     
-    func len(network: Network) throws  -> UInt16
+    func len(network: Network, mode: WalletMode) throws  -> UInt16
     
 }
 
@@ -11770,10 +11791,11 @@ open func isEmpty()throws  -> Bool  {
 })
 }
     
-open func len(network: Network)throws  -> UInt16  {
+open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
     return try  FfiConverterUInt16.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_len(self.uniffiClonePointer(),
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork_lower(network),
+        FfiConverterTypeWalletMode_lower(mode),$0
     )
 })
 }
@@ -13673,6 +13695,7 @@ public struct WalletMetadata {
     public var sensitiveVisible: Bool
     public var detailsExpanded: Bool
     public var walletType: WalletType
+    public var walletMode: WalletMode
     public var discoveryState: DiscoveryState
     public var addressType: WalletAddressType
     public var fiatOrBtc: FiatOrBtc
@@ -13680,7 +13703,7 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, `internal`: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, `internal`: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -13692,6 +13715,7 @@ public struct WalletMetadata {
         self.sensitiveVisible = sensitiveVisible
         self.detailsExpanded = detailsExpanded
         self.walletType = walletType
+        self.walletMode = walletMode
         self.discoveryState = discoveryState
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
@@ -13719,6 +13743,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 sensitiveVisible: FfiConverterBool.read(from: &buf), 
                 detailsExpanded: FfiConverterBool.read(from: &buf), 
                 walletType: FfiConverterTypeWalletType.read(from: &buf), 
+                walletMode: FfiConverterTypeWalletMode.read(from: &buf), 
                 discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf), 
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
@@ -13738,6 +13763,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
         FfiConverterBool.write(value.detailsExpanded, into: &buf)
         FfiConverterTypeWalletType.write(value.walletType, into: &buf)
+        FfiConverterTypeWalletMode.write(value.walletMode, into: &buf)
         FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
@@ -21614,6 +21640,70 @@ public func FfiConverterTypeWalletManagerReconcileMessage_lower(_ value: WalletM
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum WalletMode {
+    
+    case main
+    case decoy
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletMode: FfiConverterRustBuffer {
+    typealias SwiftType = WalletMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .main
+        
+        case 2: return .decoy
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .main:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .decoy:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletMode_lift(_ buf: RustBuffer) throws -> WalletMode {
+    return try FfiConverterTypeWalletMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletMode_lower(_ value: WalletMode) -> RustBuffer {
+    return FfiConverterTypeWalletMode.lower(value)
+}
+
+
+
+extension WalletMode: Equatable, Hashable {}
+
+
+
 
 public enum WalletScannerError {
 
@@ -24675,12 +24765,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_database_global_config() != 4476) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_database_switchtodecoymode() != 16721) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_database_switchtomainmode() != 18648) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_database_unsigned_transactions() != 8913) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24900,6 +24984,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 35090) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 13805) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalflagtable_get() != 42810) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25081,6 +25168,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 20226) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode() != 54579) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 17037) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 13865) {
@@ -25398,7 +25491,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_walletstable_is_empty() != 57763) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_walletstable_len() != 35149) {
+    if (uniffi_cove_checksum_method_walletstable_len() != 22218) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordvalidator_is_complete() != 18257) {

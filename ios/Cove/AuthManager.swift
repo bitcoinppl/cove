@@ -51,11 +51,12 @@ enum UnlockMode {
     public func checkUnlockMode(_ pin: String) -> UnlockMode {
         if AuthPin().check(pin: pin) {
             if Database().globalConfig().isInDecoyMode() {
-                Database().switchToMainMode()
-                let db = Database()
+                rust.switchToMainMode()
 
                 let app = AppManager.shared
-                app.reset(db: db)
+                let db = Database()
+
+                app.reset()
 
                 if let selectedWalletId = db.globalConfig().selectedWallet() {
                     try? app.rust.selectWallet(id: selectedWalletId)
@@ -87,11 +88,11 @@ enum UnlockMode {
         if checkDecoyPin(pin) {
             // enter decoy mode if not already in decoy mode and reset app and router
             if Database().globalConfig().isInMainMode() {
-                Database().switchToDecoyMode()
-                let db = Database()
+                rust.switchToDecoyMode()
 
+                let db = Database()
                 let app = AppManager.shared
-                app.reset(db: db)
+                app.reset()
 
                 if let selectedWalletId = db.globalConfig().selectedWallet() {
                     try? app.rust.selectWallet(id: selectedWalletId)

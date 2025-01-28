@@ -20,7 +20,7 @@ use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
 use once_cell::sync::OnceCell;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use crate::consts::ROOT_DATA_DIR;
 
@@ -30,9 +30,7 @@ pub type Error = error::DatabaseError;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
-    main: Arc<redb::Database>,
-    decoy: Arc<redb::Database>,
-
+    #[allow(dead_code, unused)]
     pub global_flag: GlobalFlagTable,
     pub global_config: GlobalConfigTable,
     pub global_cache: GlobalCacheTable,
@@ -45,16 +43,6 @@ impl Database {
     #[uniffi::constructor(name = "new")]
     pub fn new() -> Arc<Self> {
         Self::global().clone()
-    }
-
-    #[uniffi::method(name = "switchToMainMode")]
-    pub fn _switch_to_main_mode(&self) {
-        self.switch_to_main_mode()
-    }
-
-    #[uniffi::method(name = "switchToDecoyMode")]
-    pub fn _switch_to_decoy_mode(&self) {
-        self.switch_to_decoy_mode()
     }
 
     pub fn wallets(&self) -> WalletsTable {
@@ -70,16 +58,9 @@ impl Database {
     }
 
     pub fn dangerous_reset_all_data(&self) {
-        let dbs = [
-            (database_location(), "cove_main"),
-            (decoy_database_location(), "cove_decoy"),
-        ];
-
-        for (location, name) in dbs {
-            if let Err(error) = std::fs::remove_file(&location) {
-                error!("unable to delete database {name} error: {error}");
-                return;
-            }
+        if let Err(error) = std::fs::remove_file(&database_location()) {
+            error!("unable to delete database cove_main error: {error}");
+            return;
         }
 
         DATABASE
@@ -98,55 +79,9 @@ impl Database {
         Arc::clone(&db)
     }
 
-    pub fn switch_to_main_mode(&self) {
-        debug!("switching to main mode");
-
-        let main_db = self.main.clone();
-        let write_txn = main_db
-            .as_ref()
-            .begin_write()
-            .expect("failed to begin write transaction");
-
-        let wallets = WalletsTable::new(main_db.clone(), &write_txn);
-        self.switch_wallets_table(wallets);
-    }
-
-    pub fn switch_to_decoy_mode(&self) {
-        debug!("switching to decoy mode");
-
-        let decoy_db = self.decoy.clone();
-        let write_txn = decoy_db
-            .as_ref()
-            .begin_write()
-            .expect("failed to begin write transaction");
-
-        let wallets = WalletsTable::new(decoy_db.clone(), &write_txn);
-        self.switch_wallets_table(wallets);
-    }
-
-    fn switch_wallets_table(&self, wallets: WalletsTable) {
-        let db = Database {
-            main: self.main.clone(),
-            decoy: self.decoy.clone(),
-            wallets,
-            global_flag: self.global_flag.clone(),
-            global_config: self.global_config.clone(),
-            global_cache: self.global_cache.clone(),
-            unsigned_transactions: self.unsigned_transactions.clone(),
-        };
-
-        DATABASE
-            .get()
-            .expect("database initialized")
-            .swap(Arc::new(db));
-    }
-
     fn init() -> Database {
         let main_db = get_or_create_main_database();
-        let decoy_db = get_or_create_decoy_database();
-
         let main_db_arc = Arc::new(main_db);
-        let decoy_db_arc = Arc::new(decoy_db);
 
         let write_txn = main_db_arc
             .begin_write()
@@ -163,8 +98,6 @@ impl Database {
             .expect("failed to commit write transaction");
 
         Database {
-            main: main_db_arc,
-            decoy: decoy_db_arc,
             wallets,
             global_flag,
             global_config,
@@ -176,11 +109,6 @@ impl Database {
 
 fn get_or_create_main_database() -> redb::Database {
     let location = database_location();
-    get_or_create_database_with_location(location)
-}
-
-fn get_or_create_decoy_database() -> redb::Database {
-    let location = decoy_database_location();
     get_or_create_database_with_location(location)
 }
 
@@ -206,10 +134,6 @@ fn get_or_create_database_with_location(database_location: PathBuf) -> redb::Dat
 #[cfg(not(test))]
 fn database_location() -> PathBuf {
     ROOT_DATA_DIR.join("cove.db")
-}
-
-fn decoy_database_location() -> PathBuf {
-    ROOT_DATA_DIR.join("cove_decoy.db")
 }
 
 #[cfg(test)]

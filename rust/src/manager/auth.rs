@@ -169,6 +169,22 @@ impl RustAuthManager {
         Ok(())
     }
 
+    /// Switch from main mode to decoy mode
+    pub fn switch_to_decoy_mode(&self) {
+        Database::global()
+            .global_config
+            .set_decoy_mode()
+            .expect("failed to set decoy mode");
+    }
+
+    /// Switch from decoy mode to main mode
+    pub fn switch_to_main_mode(&self) {
+        Database::global()
+            .global_config
+            .set_main_mode()
+            .expect("failed to set main mode");
+    }
+
     // MARK: WIPE DATA PIN
 
     /// Check if the wipe data pin is enabled

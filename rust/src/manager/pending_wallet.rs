@@ -111,9 +111,10 @@ impl RustPendingWalletManager {
     #[uniffi::method]
     pub fn save_wallet(&self) -> Result<WalletMetadata, Error> {
         let network = self.state.read().wallet.network;
+        let mode = Database::global().global_config.wallet_mode();
 
         // get current number of wallets and add one;
-        let number_of_wallets = Database::global().wallets.len(network).unwrap_or(0);
+        let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
         let fingerprint: Fingerprint = self

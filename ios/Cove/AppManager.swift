@@ -77,16 +77,13 @@ import SwiftUI
     }
 
     /// Reset the manager state
-    public func reset(db: Database = Database()) {
+    public func reset() {
         rust = FfiApp()
-        database = db
+        database = Database()
+        walletManager = nil
 
         let state = rust.state()
         router = state.router
-    }
-
-    public func changeDb(db: Database) {
-        database = db
     }
 
     var currentRoute: Route {

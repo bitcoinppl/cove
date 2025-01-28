@@ -196,10 +196,11 @@ impl RustWalletManager {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
 
         let metadata = Database::global()
             .wallets
-            .get(&id, network)
+            .get(&id, network, mode)
             .map_err(|e| Error::GetSelectedWalletError(e.to_string()))?
             .ok_or(Error::WalletDoesNotExist)?;
 

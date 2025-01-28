@@ -353,9 +353,10 @@ impl WalletScanner {
     fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
         debug!("setting wallet metadata: {discovery_state:?}");
         let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
         let db = Database::global().wallets();
 
-        let Ok(Some(mut metadata)) = db.get(&self.id, network) else {
+        let Ok(Some(mut metadata)) = db.get(&self.id, network, mode) else {
             error!("wallet metadata not found");
             return Produces::ok(());
         };

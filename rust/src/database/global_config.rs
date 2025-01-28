@@ -11,7 +11,7 @@ use crate::{
     fiat::FiatCurrency,
     network::Network,
     node::Node,
-    wallet::metadata::WalletId,
+    wallet::metadata::{WalletId, WalletMode},
 };
 
 use super::{error::SerdeError, Error};
@@ -232,6 +232,14 @@ impl GlobalConfigTable {
 
     pub fn is_in_main_mode(&self) -> bool {
         !self.is_in_decoy_mode()
+    }
+
+    pub fn wallet_mode(&self) -> WalletMode {
+        if self.is_in_decoy_mode() {
+            WalletMode::Decoy
+        } else {
+            WalletMode::Main
+        }
     }
 
     pub fn is_in_decoy_mode(&self) -> bool {

@@ -609,7 +609,11 @@ impl WalletActor {
 
         let metadata = Database::global()
             .wallets()
-            .get(&self.wallet.id, self.wallet.network)
+            .get(
+                &self.wallet.id,
+                self.wallet.network,
+                self.wallet.metadata.wallet_mode,
+            )
             .ok()??;
 
         let last_scan_finished = metadata.internal().last_scan_finished;
@@ -624,7 +628,13 @@ impl WalletActor {
 
         let wallets = Database::global().wallets();
 
-        let mut metadata = wallets.get(&self.wallet.id, self.wallet.network).ok()??;
+        let mut metadata = wallets
+            .get(
+                &self.wallet.id,
+                self.wallet.network,
+                self.wallet.metadata.wallet_mode,
+            )
+            .ok()??;
         metadata.internal_mut().last_scan_finished = Some(now);
 
         wallets.create_wallet(metadata).ok()
@@ -637,7 +647,11 @@ impl WalletActor {
 
         let metadata = Database::global()
             .wallets()
-            .get(&self.wallet.id, self.wallet.network)
+            .get(
+                &self.wallet.id,
+                self.wallet.network,
+                self.wallet.metadata.wallet_mode,
+            )
             .ok()??;
 
         let BlockSizeLast {
@@ -656,7 +670,13 @@ impl WalletActor {
         self.last_height_fetched_ = Some((now, block_height));
 
         let wallets = Database::global().wallets();
-        let mut metadata = wallets.get(&self.wallet.id, self.wallet.network).ok()??;
+        let mut metadata = wallets
+            .get(
+                &self.wallet.id,
+                self.wallet.network,
+                self.wallet.metadata.wallet_mode,
+            )
+            .ok()??;
 
         metadata.internal_mut().last_height_fetched = Some(BlockSizeLast {
             block_height: block_height as u64,
