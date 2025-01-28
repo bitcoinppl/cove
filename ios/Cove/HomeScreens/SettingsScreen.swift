@@ -2,16 +2,16 @@ import LocalAuthentication
 import SwiftUI
 
 private enum SheetState: Equatable {
-    case newPin,
-         removePin,
-         removeWipeDataPin,
-         removeDecoyPin,
-         changePin,
-         disableBiometric,
-         enableAuth,
-         enableBiometric,
-         enableWipeDataPin,
-         enableDecoyPin
+    case newPin
+    case removePin
+    indirect case removeWipeDataPin(TaggedItem<SheetState>? = .none)
+    indirect case removeDecoyPin(TaggedItem<SheetState>? = .none)
+    case changePin
+    case disableBiometric
+    case enableAuth
+    case enableBiometric
+    case enableWipeDataPin
+    case enableDecoyPin
 }
 
 private enum AlertState: Equatable {
@@ -103,7 +103,7 @@ struct SettingsScreen: View {
                 }
 
                 // disable
-                if !enable { sheetState = .init(.removeWipeDataPin) }
+                if !enable { sheetState = .init(.removeWipeDataPin()) }
             }
         )
     }
@@ -126,7 +126,7 @@ struct SettingsScreen: View {
                 }
 
                 // disable
-                if !enable { sheetState = .init(.removeDecoyPin) }
+                if !enable { sheetState = .init(.removeDecoyPin()) }
             }
         )
     }
@@ -426,7 +426,12 @@ struct SettingsScreen: View {
                 actions: {
                     Button("Cancel", role: .cancel) { alertState = .none }
                     Button("Disable Wipe Data PIN", role: .destructive) {
-                        sheetState = .init(.removeWipeDataPin)
+                        if !auth.isDecoyPinEnabled {
+                            let nextSheetState = TaggedItem(SheetState.enableBiometric)
+                            sheetState = .init(.removeWipeDataPin(nextSheetState))
+                        } else {
+                            sheetState = .init(.removeWipeDataPin(.none))
+                        }
                     }
                 }
             ).eraseToAny()
@@ -438,7 +443,12 @@ struct SettingsScreen: View {
                 actions: {
                     Button("Cancel", role: .cancel) { alertState = .none }
                     Button("Disable Decoy Pin", role: .destructive) {
-                        sheetState = .init(.removeDecoyPin)
+                        if !auth.isWipeDataPinEnabled {
+                            let nextSheetState = TaggedItem(SheetState.enableBiometric)
+                            sheetState = .init(.removeDecoyPin(nextSheetState))
+                        } else {
+                            sheetState = .init(.removeDecoyPin(.none))
+                        }
                     }
                 }
             ).eraseToAny()
@@ -492,7 +502,7 @@ struct SettingsScreen: View {
                 }
             )
 
-        case .removeWipeDataPin:
+        case let .removeWipeDataPin(nextSheet):
             NumberPadPinView(
                 title: "Enter Current PIN",
                 isPinCorrect: auth.checkPin,
@@ -500,11 +510,11 @@ struct SettingsScreen: View {
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
                     auth.dispatch(action: .disableWipeDataPin)
-                    sheetState = .none
+                    sheetState = nextSheet
                 }
             )
 
-        case .removeDecoyPin:
+        case let .removeDecoyPin(nextState):
             NumberPadPinView(
                 title: "Enter Current PIN",
                 isPinCorrect: auth.checkPin,
@@ -512,7 +522,7 @@ struct SettingsScreen: View {
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
                     auth.dispatch(action: .disableDecoyPin)
-                    sheetState = .none
+                    sheetState = nextState
                 }
             )
 
