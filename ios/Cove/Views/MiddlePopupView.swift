@@ -43,13 +43,11 @@ struct MiddlePopupView: View {
         case .loading:
             EmptyView()
         case .failure:
-            Image(systemName: "x.square.fill")
-                .padding(.top, 12)
+            Image(systemName: "x.circle.fill")
                 .font(.title)
                 .foregroundColor(.red)
         case .success:
-            Image(systemName: "checkmark.square.fill")
-                .padding(.top, 12)
+            Image(systemName: "checkmark.circle.fill")
                 .font(.title)
                 .foregroundColor(.green)
         }
@@ -64,15 +62,14 @@ struct MiddlePopupView: View {
             case .loading:
                 ""
             case .failure:
-                "Failure"
+                "Something went wrong"
             case .success:
-                "Success"
+                "You're all set"
             }
 
         Text(heading ?? headingFromState)
             .foregroundColor(.primary)
-            .font(.title)
-            .padding(.top, 12)
+            .font(.headline)
     }
 
     var popupMessage: String {
@@ -91,52 +88,51 @@ struct MiddlePopupView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             if !isLoading {
-                HStack {
+                VStack(spacing: 12) {
                     HeadingIcon
                     Heading
                 }
 
                 Text(popupMessage)
-                    .font(.subheadline)
+                    .font(.footnote)
+                    .fontWeight(.regular)
                     .foregroundColor(.primary)
-                    .opacity(colorScheme == .light ? 0.6 : 1)
-                    .padding(.top, 20)
-                    .padding(.bottom, 20)
+                    .multilineTextAlignment(.center)
 
                 Button {
                     dismiss()
                     onClose()
                 } label: {
                     Text(buttonText)
-                        .font(.title3)
-                        .fontWeight(.bold)
+                        .font(.caption)
+                        .fontWeight(.semibold)
                         .foregroundColor(Color.white)
+                        .padding(.vertical, 10)
+                        .frame(minWidth: screenWidth * 0.5)
                 }
-                .frame(minWidth: screenWidth * 0.6)
-                .padding(.vertical, 12)
-                .background(.black.opacity(0.7))
-                .cornerRadius(6)
-                .padding()
+                .background(.midnightBtn)
+                .cornerRadius(10)
+                .frame(minWidth: screenWidth * 0.62)
 
             } else {
                 ProgressView(label: {
-                    Text("Loading")
+                    Text("Working on it...")
                         .font(.caption)
-                        .foregroundColor(colorScheme == .light ? .secondary : .white.opacity(0.7))
+                        .padding(.vertical)
+
                 })
                 .progressViewStyle(.circular)
-                .frame(minWidth: screenWidth * 0.65)
-                .padding(.top)
+                .frame(minWidth: screenWidth * 0.65, minHeight: screenHeight * 0.1)
             }
         }
-        .cornerRadius(20)
+        .padding(4)
         .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 0)
         .shadow(color: .black.opacity(0.16), radius: 24, x: 0, y: 0)
-        .padding()
-        .background(.regularMaterial)
-        .cornerRadius(12)
+        .padding(18)
+        .background(.coveBg)
+        .cornerRadius(10)
     }
 }
 
@@ -144,12 +140,22 @@ struct MiddlePopupView: View {
     VStack {
         MiddlePopupView(state: .loading)
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(.gray)
 }
 
 #Preview("Success") {
-    MiddlePopupView(state: .success("Node loaded successfully"))
+    VStack {
+        MiddlePopupView(state: .success("Node loaded successfully"))
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(.gray)
 }
 
 #Preview("Failure") {
-    MiddlePopupView(state: .failure("Node did not load!"))
+    VStack {
+        MiddlePopupView(state: .failure("Node did not load!"))
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(.gray)
 }
