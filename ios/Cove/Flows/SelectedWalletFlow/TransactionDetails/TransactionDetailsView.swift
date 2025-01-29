@@ -272,7 +272,7 @@ struct TransactionDetailsView: View {
             transactionDetails: TransactionDetails.previewConfirmedReceived(),
             manager: WalletManager(preview: "preview_only")
         )
-        .environment(AppManager())
+        .environment(AppManager.shared)
     }
 }
 
@@ -283,7 +283,7 @@ struct TransactionDetailsView: View {
             transactionDetails: TransactionDetails.previewConfirmedSent(),
             manager: WalletManager(preview: "preview_only")
         )
-        .environment(AppManager())
+        .environment(AppManager.shared)
     }
 }
 
@@ -294,7 +294,7 @@ struct TransactionDetailsView: View {
             transactionDetails: TransactionDetails.previewPendingReceived(),
             manager: WalletManager(preview: "preview_only")
         )
-        .environment(AppManager())
+        .environment(AppManager.shared)
     }
 }
 
@@ -305,6 +305,6 @@ struct TransactionDetailsView: View {
             transactionDetails: TransactionDetails.previewPendingSent(),
             manager: WalletManager(preview: "preview_only")
         )
-        .environment(AppManager())
+        .environment(AppManager.shared)
     }
 }

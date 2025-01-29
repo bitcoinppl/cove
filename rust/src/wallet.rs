@@ -172,6 +172,7 @@ impl Wallet {
     /// Try to load an existing wallet from the persisted bdk wallet filestore
     pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
         let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
 
         let mut db =
             Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
@@ -184,7 +185,7 @@ impl Wallet {
 
         let metadata = Database::global()
             .wallets
-            .get(&id, network)
+            .get(&id, network, mode)
             .map_err(WalletError::DatabaseError)?
             .ok_or(WalletError::WalletNotFound)?;
 
@@ -221,7 +222,8 @@ impl Wallet {
     pub fn try_new_persisted_from_pubport(pubport: pubport::Format) -> Result<Self, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
-        let network = Database::global().global_config.selected_network();
+        let network = database.global_config.selected_network();
+        let mode = database.global_config.wallet_mode();
 
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
@@ -258,7 +260,7 @@ impl Wallet {
 
             let all_fingerprints: Vec<(WalletId, Arc<Fingerprint>)> = Database::global()
                 .wallets
-                .get_all(network)
+                .get_all(network, mode)
                 .map(|wallets| {
                     wallets
                         .into_iter()

@@ -159,6 +159,6 @@ private struct AddressView: View {
 #Preview {
     AsyncPreview {
         ReceiveView(manager: WalletManager(preview: "preview_only"))
-            .environment(AppManager())
+            .environment(AppManager.shared)
     }
 }

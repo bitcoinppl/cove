@@ -11,6 +11,7 @@ use crate::{
     node::Node,
     router::Route,
     transaction::fees::client::FeeResponse,
+    wallet::metadata::WalletMode,
 };
 
 #[derive(uniffi::Enum)]
@@ -24,6 +25,7 @@ pub enum AppStateReconcileMessage {
     FiatPricesChanged(Arc<PriceResponse>),
     FeesChanged(FeeResponse),
     FiatCurrencyChanged(FiatCurrency),
+    WalletModeChanged(WalletMode),
 }
 
 // alias for easier imports on the rust side

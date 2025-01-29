@@ -50,5 +50,5 @@ struct WipeDataPinView: View {
 
 #Preview {
     WipeDataPinView(onComplete: { _ in }, backAction: {})
-        .environment(AuthManager())
+        .environment(AuthManager.shared)
 }

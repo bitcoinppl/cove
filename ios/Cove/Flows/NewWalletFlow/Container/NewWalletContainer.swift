@@ -23,5 +23,5 @@ struct NewWalletContainer: View {
 }
 
 #Preview {
-    NewWalletContainer(route: NewWalletRoute.select).environment(AppManager())
+    NewWalletContainer(route: NewWalletRoute.select).environment(AppManager.shared)
 }

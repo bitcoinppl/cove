@@ -54,6 +54,8 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub wallet_type: WalletType,
     #[serde(default)]
+    pub wallet_mode: WalletMode,
+    #[serde(default)]
     pub discovery_state: DiscoveryState,
     #[serde(default = "default_address_type")]
     pub address_type: WalletAddressType,
@@ -134,6 +136,15 @@ pub enum WalletType {
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum,
 )]
+pub enum WalletMode {
+    #[default]
+    Main,
+    Decoy,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum,
+)]
 pub enum FiatOrBtc {
     #[default]
     Btc,
@@ -143,6 +154,7 @@ pub enum FiatOrBtc {
 impl WalletMetadata {
     pub fn new(name: impl Into<String>, fingerprint: impl Into<Arc<Fingerprint>>) -> Self {
         let network = Database::global().global_config.selected_network();
+        let wallet_mode = Database::global().global_config.wallet_mode();
 
         Self {
             id: WalletId::new(),
@@ -158,6 +170,7 @@ impl WalletMetadata {
             details_expanded: false,
             address_type: WalletAddressType::default(),
             wallet_type: WalletType::Hot,
+            wallet_mode,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
         }
@@ -213,6 +226,7 @@ impl WalletMetadata {
             sensitive_visible: true,
             details_expanded: false,
             wallet_type: WalletType::Hot,
+            wallet_mode: WalletMode::Main,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
         }

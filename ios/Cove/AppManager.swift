@@ -2,6 +2,8 @@ import Observation
 import SwiftUI
 
 @Observable class AppManager: FfiReconcile {
+    static let shared = AppManager()
+
     private let logger = Log(id: "AppManager")
 
     var rust: FfiApp
@@ -21,6 +23,9 @@ import SwiftUI
 
     var prices: PriceResponse?
     var fees: FeeResponse?
+
+    @MainActor
+    var isLoading = false
 
     // changed when route is reset, to clear lifecycle view state
     var routeId = UUID()
@@ -43,7 +48,7 @@ import SwiftUI
         }
     }
 
-    public init() {
+    private init() {
         logger.debug("Initializing AppManager")
 
         let rust = FfiApp()
@@ -78,6 +83,7 @@ import SwiftUI
     public func reset() {
         rust = FfiApp()
         database = Database()
+        walletManager = nil
 
         let state = rust.state()
         router = state.router
@@ -168,6 +174,16 @@ import SwiftUI
                         Task {
                             await walletManager.forceWalletScan()
                             await walletManager.getFiatBalance()
+                        }
+                    }
+
+                case .walletModeChanged:
+                    self.isLoading = true
+
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(200))
+                        await MainActor.run {
+                            withAnimation { self.isLoading = false }
                         }
                     }
                 }

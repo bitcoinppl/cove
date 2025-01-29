@@ -1046,8 +1046,8 @@ struct SendFlowSetAmountScreen: View {
                 address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
             )
             .environment(manager)
-            .environment(AppManager())
-            .environment(SendFlowPresenter(app: AppManager(), manager: manager))
+            .environment(AppManager.shared)
+            .environment(SendFlowPresenter(app: AppManager.shared, manager: manager))
         }
     }
 }
@@ -1063,8 +1063,8 @@ struct SendFlowSetAmountScreen: View {
                 address: ""
             )
             .environment(manager)
-            .environment(AppManager())
-            .environment(SendFlowPresenter(app: AppManager(), manager: manager))
+            .environment(AppManager.shared)
+            .environment(SendFlowPresenter(app: AppManager.shared, manager: manager))
         }
     }
 }

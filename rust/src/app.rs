@@ -282,7 +282,9 @@ impl FfiApp {
     /// Number of wallets
     pub fn num_wallets(&self) -> u16 {
         let network = Database::global().global_config.selected_network();
-        Database::global().wallets().len(network).unwrap_or(0)
+        let mode = Database::global().global_config.wallet_mode();
+
+        Database::global().wallets().len(network, mode).unwrap_or(0)
     }
 
     /// Get wallets that have not been backed up and verified

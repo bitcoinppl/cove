@@ -1,17 +1,18 @@
 //
-//  NewPinView.swift
+//  DecoyPinView.swift
 //  Cove
 //
-//  Created by Praveen Perera on 12/12/24.
+//  Created by Praveen Perera on 01/28/25.
 //
 
 import SwiftUI
 
 private enum PinState {
-    case new, confirm(String)
+    case new
+    case confirm(String)
 }
 
-struct NewPinView: View {
+struct DecoyPinView: View {
     /// args
     var onComplete: (String) -> Void
     var backAction: () -> Void
@@ -24,9 +25,9 @@ struct NewPinView: View {
             switch pinState {
             case .new:
                 NumberPadPinView(
-                    title: "Enter New PIN",
+                    title: "Enter Decoy PIN",
                     isPinCorrect: { _ in true },
-                    showPin: true,
+                    showPin: false,
                     backAction: backAction,
                     onUnlock: { enteredPin in
                         withAnimation {
@@ -36,7 +37,7 @@ struct NewPinView: View {
                 )
             case let .confirm(pinToConfirm):
                 NumberPadPinView(
-                    title: "Confirm New PIN",
+                    title: "Confirm Decoy PIN",
                     isPinCorrect: { $0 == pinToConfirm },
                     showPin: false,
                     backAction: backAction,
@@ -48,5 +49,6 @@ struct NewPinView: View {
 }
 
 #Preview {
-    NewPinView(onComplete: { _ in }, backAction: {})
+    DecoyPinView(onComplete: { _ in }, backAction: {})
+        .environment(AuthManager.shared)
 }

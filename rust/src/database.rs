@@ -30,7 +30,7 @@ pub type Error = error::DatabaseError;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
-    #[allow(dead_code)]
+    #[allow(dead_code, unused)]
     pub global_flag: GlobalFlagTable,
     pub global_config: GlobalConfigTable,
     pub global_cache: GlobalCacheTable,
@@ -58,57 +58,61 @@ impl Database {
     }
 
     pub fn dangerous_reset_all_data(&self) {
-        let current_location = ROOT_DATA_DIR.join("cove.db");
-
-        if let Err(error) = std::fs::remove_file(&current_location) {
-            error!("unable to delete database: {error}");
+        if let Err(error) = std::fs::remove_file(database_location()) {
+            error!("unable to delete database cove_main error: {error}");
             return;
         }
 
         DATABASE
             .get()
             .expect("database not initialized")
-            .swap(Self::init());
+            .swap(Arc::new(Self::init()));
     }
 }
 
 impl Database {
-    pub fn global() -> Arc<Database> {
-        let db = DATABASE.get_or_init(|| ArcSwap::new(Self::init())).load();
+    pub fn global() -> Arc<Self> {
+        let db = DATABASE
+            .get_or_init(|| ArcSwap::new(Arc::new(Self::init())))
+            .load();
+
         Arc::clone(&db)
     }
 
-    fn init() -> Arc<Database> {
-        let db = get_or_create_database();
+    fn init() -> Database {
+        let main_db = get_or_create_main_database();
+        let main_db_arc = Arc::new(main_db);
 
-        let write_txn = db.begin_write().expect("failed to begin write transaction");
-        let db = Arc::new(db);
+        let write_txn = main_db_arc
+            .begin_write()
+            .expect("failed to begin write transaction");
 
-        let wallets = WalletsTable::new(db.clone(), &write_txn);
-        let global_flag = GlobalFlagTable::new(db.clone(), &write_txn);
-        let global_config = GlobalConfigTable::new(db.clone(), &write_txn);
-        let global_cache = GlobalCacheTable::new(db.clone(), &write_txn);
-        let unsigned_transactions = UnsignedTransactionsTable::new(db.clone(), &write_txn);
+        let wallets = WalletsTable::new(main_db_arc.clone(), &write_txn);
+        let global_flag = GlobalFlagTable::new(main_db_arc.clone(), &write_txn);
+        let global_config = GlobalConfigTable::new(main_db_arc.clone(), &write_txn);
+        let global_cache = GlobalCacheTable::new(main_db_arc.clone(), &write_txn);
+        let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
 
         write_txn
             .commit()
             .expect("failed to commit write transaction");
 
-        let db = Database {
+        Database {
             wallets,
             global_flag,
             global_config,
             global_cache,
             unsigned_transactions,
-        };
-
-        Arc::new(db)
+        }
     }
 }
 
-fn get_or_create_database() -> redb::Database {
-    let database_location = database_location();
+fn get_or_create_main_database() -> redb::Database {
+    let location = database_location();
+    get_or_create_database_with_location(location)
+}
 
+fn get_or_create_database_with_location(database_location: PathBuf) -> redb::Database {
     if database_location.exists() {
         let db = redb::Database::open(&database_location);
         match db {

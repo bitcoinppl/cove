@@ -195,7 +195,7 @@ private struct FeeOptionView: View {
                 selectedPresentationDetent: Binding.constant(PresentationDetent.large)
             )
             .environment(WalletManager(preview: "preview_only"))
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .frame(height: 440)
         }
         .frame(maxHeight: .infinity)
@@ -216,7 +216,7 @@ private struct FeeOptionView: View {
                 selectedPresentationDetent: Binding.constant(PresentationDetent.large)
             )
             .environment(WalletManager(preview: "preview_only"))
-            .environment(AppManager())
+            .environment(AppManager.shared)
             .frame(height: 550)
         }
         .frame(maxHeight: .infinity)

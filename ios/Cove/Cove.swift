@@ -5496,6 +5496,10 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     
     func hashedPinCode() throws  -> String
     
+    func isInDecoyMode()  -> Bool
+    
+    func isInMainMode()  -> Bool
+    
     func selectWallet(id: WalletId) throws 
     
     func selectedFiatCurrency()  -> FiatCurrency
@@ -5515,6 +5519,8 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     func setSelectedNetwork(network: Network) throws 
     
     func setSelectedNode(node: Node) throws 
+    
+    func walletMode()  -> WalletMode
     
 }
 
@@ -5617,6 +5623,20 @@ open func hashedPinCode()throws  -> String  {
 })
 }
     
+open func isInDecoyMode() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_is_in_decoy_mode(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func isInMainMode() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func selectWallet(id: WalletId)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalconfigtable_select_wallet(self.uniffiClonePointer(),
         FfiConverterTypeWalletId_lower(id),$0
@@ -5686,6 +5706,13 @@ open func setSelectedNode(node: Node)throws   {try rustCallWithError(FfiConverte
         FfiConverterTypeNode_lower(node),$0
     )
 }
+}
+    
+open func walletMode() -> WalletMode  {
+    return try!  FfiConverterTypeWalletMode_lift(try! rustCall() {
+    uniffi_cove_fn_method_globalconfigtable_wallet_mode(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 
@@ -8160,9 +8187,19 @@ public protocol RustAuthManagerProtocol : AnyObject {
     func authType()  -> AuthType
     
     /**
+     * Check to see if the passed in PIN matches the decoy pin
+     */
+    func checkDecoyPin(pin: String)  -> Bool
+    
+    /**
      * Check to see if the passed in PIN matches the wipe data PIN
      */
     func checkWipeDataPin(pin: String)  -> Bool
+    
+    /**
+     * Delete the decoy pin
+     */
+    func deleteDecoyPin() 
     
     /**
      * Delete the wipe data pin
@@ -8173,6 +8210,16 @@ public protocol RustAuthManagerProtocol : AnyObject {
      * Action from the frontend to change the state of the view model
      */
     func dispatch(action: AuthManagerAction) 
+    
+    /**
+     * Check if decoy pin is enabled, not if the user is in decoy mode
+     */
+    func isDecoyPinEnabled()  -> Bool
+    
+    /**
+     * Actually check if the user is in decoy mode
+     */
+    func isInDecoyMode()  -> Bool
     
     /**
      * Check if the wipe data pin is enabled
@@ -8186,9 +8233,29 @@ public protocol RustAuthManagerProtocol : AnyObject {
     func setAuthType(authType: AuthType) 
     
     /**
+     * Set the decoy pin
+     */
+    func setDecoyPin(pin: String) throws 
+    
+    /**
      * Set the wipe data pin
      */
     func setWipeDataPin(pin: String) throws 
+    
+    /**
+     * Switch from main mode to decoy mode
+     */
+    func switchToDecoyMode() 
+    
+    /**
+     * Switch from decoy mode to main mode
+     */
+    func switchToMainMode() 
+    
+    /**
+     * Validate if we have the correct settings to be able to set a decoy or wipe data pin
+     */
+    func validatePinSettings(pin: String) throws 
     
 }
 
@@ -8261,14 +8328,34 @@ open func authType() -> AuthType  {
 }
     
     /**
+     * Check to see if the passed in PIN matches the decoy pin
+     */
+open func checkDecoyPin(pin: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_checkdecoypin(self.uniffiClonePointer(),
+        FfiConverterString.lower(pin),$0
+    )
+})
+}
+    
+    /**
      * Check to see if the passed in PIN matches the wipe data PIN
      */
 open func checkWipeDataPin(pin: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustauthmanager_check_wipe_data_pin(self.uniffiClonePointer(),
+    uniffi_cove_fn_method_rustauthmanager_checkwipedatapin(self.uniffiClonePointer(),
         FfiConverterString.lower(pin),$0
     )
 })
+}
+    
+    /**
+     * Delete the decoy pin
+     */
+open func deleteDecoyPin()  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_delete_decoy_pin(self.uniffiClonePointer(),$0
+    )
+}
 }
     
     /**
@@ -8288,6 +8375,26 @@ open func dispatch(action: AuthManagerAction)  {try! rustCall() {
         FfiConverterTypeAuthManagerAction_lower(action),$0
     )
 }
+}
+    
+    /**
+     * Check if decoy pin is enabled, not if the user is in decoy mode
+     */
+open func isDecoyPinEnabled() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_is_decoy_pin_enabled(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Actually check if the user is in decoy mode
+     */
+open func isInDecoyMode() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_is_in_decoy_mode(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -8322,10 +8429,48 @@ open func setAuthType(authType: AuthType)  {try! rustCall() {
 }
     
     /**
+     * Set the decoy pin
+     */
+open func setDecoyPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
+    uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(self.uniffiClonePointer(),
+        FfiConverterString.lower(pin),$0
+    )
+}
+}
+    
+    /**
      * Set the wipe data pin
      */
 open func setWipeDataPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
     uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(self.uniffiClonePointer(),
+        FfiConverterString.lower(pin),$0
+    )
+}
+}
+    
+    /**
+     * Switch from main mode to decoy mode
+     */
+open func switchToDecoyMode()  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_switch_to_decoy_mode(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+    /**
+     * Switch from decoy mode to main mode
+     */
+open func switchToMainMode()  {try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(self.uniffiClonePointer(),$0
+    )
+}
+}
+    
+    /**
+     * Validate if we have the correct settings to be able to set a decoy or wipe data pin
+     */
+open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiConverterTypeSpecialPinError_lift) {
+    uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(self.uniffiClonePointer(),
         FfiConverterString.lower(pin),$0
     )
 }
@@ -11577,7 +11722,7 @@ public protocol WalletsTableProtocol : AnyObject {
     
     func isEmpty() throws  -> Bool
     
-    func len(network: Network) throws  -> UInt16
+    func len(network: Network, mode: WalletMode) throws  -> UInt16
     
 }
 
@@ -11646,10 +11791,11 @@ open func isEmpty()throws  -> Bool  {
 })
 }
     
-open func len(network: Network)throws  -> UInt16  {
+open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
     return try  FfiConverterUInt16.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_len(self.uniffiClonePointer(),
-        FfiConverterTypeNetwork_lower(network),$0
+        FfiConverterTypeNetwork_lower(network),
+        FfiConverterTypeWalletMode_lower(mode),$0
     )
 })
 }
@@ -13549,6 +13695,7 @@ public struct WalletMetadata {
     public var sensitiveVisible: Bool
     public var detailsExpanded: Bool
     public var walletType: WalletType
+    public var walletMode: WalletMode
     public var discoveryState: DiscoveryState
     public var addressType: WalletAddressType
     public var fiatOrBtc: FiatOrBtc
@@ -13556,7 +13703,7 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, `internal`: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, `internal`: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -13568,6 +13715,7 @@ public struct WalletMetadata {
         self.sensitiveVisible = sensitiveVisible
         self.detailsExpanded = detailsExpanded
         self.walletType = walletType
+        self.walletMode = walletMode
         self.discoveryState = discoveryState
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
@@ -13595,6 +13743,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 sensitiveVisible: FfiConverterBool.read(from: &buf), 
                 detailsExpanded: FfiConverterBool.read(from: &buf), 
                 walletType: FfiConverterTypeWalletType.read(from: &buf), 
+                walletMode: FfiConverterTypeWalletMode.read(from: &buf), 
                 discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf), 
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
@@ -13614,6 +13763,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
         FfiConverterBool.write(value.detailsExpanded, into: &buf)
         FfiConverterTypeWalletType.write(value.walletType, into: &buf)
+        FfiConverterTypeWalletMode.write(value.walletMode, into: &buf)
         FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
@@ -14028,6 +14178,8 @@ public enum AppStateReconcileMessage {
     )
     case fiatCurrencyChanged(FiatCurrency
     )
+    case walletModeChanged(WalletMode
+    )
 }
 
 
@@ -14062,6 +14214,9 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         )
         
         case 8: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        )
+        
+        case 9: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14110,6 +14265,11 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case let .fiatCurrencyChanged(v1):
             writeInt(&buf, Int32(8))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
+            
+        
+        case let .walletModeChanged(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeWalletMode.write(v1, into: &buf)
             
         }
     }
@@ -14259,6 +14419,7 @@ public enum AuthManagerAction {
     case setPin(String
     )
     case disableWipeDataPin
+    case disableDecoyPin
 }
 
 
@@ -14285,6 +14446,8 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
         )
         
         case 6: return .disableWipeDataPin
+        
+        case 7: return .disableDecoyPin
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14319,6 +14482,10 @@ public struct FfiConverterTypeAuthManagerAction: FfiConverterRustBuffer {
         case .disableWipeDataPin:
             writeInt(&buf, Int32(6))
         
+        
+        case .disableDecoyPin:
+            writeInt(&buf, Int32(7))
+        
         }
     }
 }
@@ -14349,7 +14516,9 @@ public enum AuthManagerError {
 
     
     
-    case WipeDataSet(WipeDataPinError
+    case WipeDataSet(SpecialPinError
+    )
+    case DecoySet(SpecialPinError
     )
     case DatabaseError(DatabaseError
     )
@@ -14370,9 +14539,12 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
 
         
         case 1: return .WipeDataSet(
-            try FfiConverterTypeWipeDataPinError.read(from: &buf)
+            try FfiConverterTypeSpecialPinError.read(from: &buf)
             )
-        case 2: return .DatabaseError(
+        case 2: return .DecoySet(
+            try FfiConverterTypeSpecialPinError.read(from: &buf)
+            )
+        case 3: return .DatabaseError(
             try FfiConverterTypeDatabaseError.read(from: &buf)
             )
 
@@ -14389,11 +14561,16 @@ public struct FfiConverterTypeAuthManagerError: FfiConverterRustBuffer {
         
         case let .WipeDataSet(v1):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeWipeDataPinError.write(v1, into: &buf)
+            FfiConverterTypeSpecialPinError.write(v1, into: &buf)
+            
+        
+        case let .DecoySet(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeSpecialPinError.write(v1, into: &buf)
             
         
         case let .DatabaseError(v1):
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
             FfiConverterTypeDatabaseError.write(v1, into: &buf)
             
         }
@@ -14435,6 +14612,7 @@ public enum AuthManagerReconcileMessage {
     case authTypeChanged(AuthType
     )
     case wipeDataPinChanged
+    case decoyPinChanged
 }
 
 
@@ -14453,6 +14631,8 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
         
         case 2: return .wipeDataPinChanged
         
+        case 3: return .decoyPinChanged
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -14468,6 +14648,10 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
         
         case .wipeDataPinChanged:
             writeInt(&buf, Int32(2))
+        
+        
+        case .decoyPinChanged:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -16264,6 +16448,10 @@ public enum GlobalConfigKey {
     case authType
     case hashedPinCode
     case wipeDataPin
+    case decoyPin
+    case inDecoyMode
+    case mainSelectedWalletId
+    case decoySelectedWalletId
 }
 
 
@@ -16293,6 +16481,14 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 7: return .hashedPinCode
         
         case 8: return .wipeDataPin
+        
+        case 9: return .decoyPin
+        
+        case 10: return .inDecoyMode
+        
+        case 11: return .mainSelectedWalletId
+        
+        case 12: return .decoySelectedWalletId
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16333,6 +16529,22 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .wipeDataPin:
             writeInt(&buf, Int32(8))
+        
+        
+        case .decoyPin:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .inDecoyMode:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .mainSelectedWalletId:
+            writeInt(&buf, Int32(11))
+        
+        
+        case .decoySelectedWalletId:
+            writeInt(&buf, Int32(12))
         
         }
     }
@@ -19526,6 +19738,105 @@ extension SerdeError: Foundation.LocalizedError {
 }
 
 
+
+public enum SpecialPinError {
+
+    
+    
+    /**
+     * Unable to set special PIN, because PIN is not enabled
+     */
+    case PinNotEnabled
+    /**
+     * Unable to set special PIN, because its the same as the current pin
+     */
+    case SameAsCurrentPin
+    /**
+     * Unable to set special PIN, its the same as another PIN
+     */
+    case SameAsAnotherPin
+    /**
+     * Unable to set special PIN, because biometrics is enabled
+     */
+    case BiometricsEnabled
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSpecialPinError: FfiConverterRustBuffer {
+    typealias SwiftType = SpecialPinError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SpecialPinError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .PinNotEnabled
+        case 2: return .SameAsCurrentPin
+        case 3: return .SameAsAnotherPin
+        case 4: return .BiometricsEnabled
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SpecialPinError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .PinNotEnabled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .SameAsCurrentPin:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .SameAsAnotherPin:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .BiometricsEnabled:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSpecialPinError_lift(_ buf: RustBuffer) throws -> SpecialPinError {
+    return try FfiConverterTypeSpecialPinError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSpecialPinError_lower(_ value: SpecialPinError) -> RustBuffer {
+    return FfiConverterTypeSpecialPinError.lower(value)
+}
+
+
+extension SpecialPinError: Equatable, Hashable {}
+
+
+
+extension SpecialPinError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -21448,6 +21759,70 @@ public func FfiConverterTypeWalletManagerReconcileMessage_lower(_ value: WalletM
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum WalletMode {
+    
+    case main
+    case decoy
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletMode: FfiConverterRustBuffer {
+    typealias SwiftType = WalletMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .main
+        
+        case 2: return .decoy
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .main:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .decoy:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletMode_lift(_ buf: RustBuffer) throws -> WalletMode {
+    return try FfiConverterTypeWalletMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletMode_lower(_ value: WalletMode) -> RustBuffer {
+    return FfiConverterTypeWalletMode.lower(value)
+}
+
+
+
+extension WalletMode: Equatable, Hashable {}
+
+
+
 
 public enum WalletScannerError {
 
@@ -21688,96 +22063,6 @@ public func FfiConverterTypeWalletType_lower(_ value: WalletType) -> RustBuffer 
 
 extension WalletType: Equatable, Hashable {}
 
-
-
-
-public enum WipeDataPinError {
-
-    
-    
-    /**
-     * Unable to set wipe data pin, because PIN is not enabled
-     */
-    case PinNotEnabled
-    /**
-     * Unable to set wipe data pin, because its the same as the current pin
-     */
-    case SameAsCurrentPin
-    /**
-     * Unable to set wipe data pin, because biometrics is enabled
-     */
-    case BiometricsEnabled
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWipeDataPinError: FfiConverterRustBuffer {
-    typealias SwiftType = WipeDataPinError
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WipeDataPinError {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        
-
-        
-        case 1: return .PinNotEnabled
-        case 2: return .SameAsCurrentPin
-        case 3: return .BiometricsEnabled
-
-         default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: WipeDataPinError, into buf: inout [UInt8]) {
-        switch value {
-
-        
-
-        
-        
-        case .PinNotEnabled:
-            writeInt(&buf, Int32(1))
-        
-        
-        case .SameAsCurrentPin:
-            writeInt(&buf, Int32(2))
-        
-        
-        case .BiometricsEnabled:
-            writeInt(&buf, Int32(3))
-        
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWipeDataPinError_lift(_ buf: RustBuffer) throws -> WipeDataPinError {
-    return try FfiConverterTypeWipeDataPinError.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWipeDataPinError_lower(_ value: WipeDataPinError) -> RustBuffer {
-    return FfiConverterTypeWipeDataPinError.lower(value)
-}
-
-
-extension WipeDataPinError: Equatable, Hashable {}
-
-
-
-extension WipeDataPinError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
-}
 
 
 
@@ -24683,6 +24968,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_hashed_pin_code() != 15707) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_is_in_decoy_mode() != 20658) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 45671) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 52001) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24711,6 +25002,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_selected_node() != 35090) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 13805) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalflagtable_get() != 42810) {
@@ -24857,13 +25151,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_auth_type() != 13301) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustauthmanager_check_wipe_data_pin() != 50482) {
+    if (uniffi_cove_checksum_method_rustauthmanager_checkdecoypin() != 58987) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_checkwipedatapin() != 25594) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_delete_decoy_pin() != 43659) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_delete_wipe_data_pin() != 30374) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_dispatch() != 58198) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_is_decoy_pin_enabled() != 21960) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_is_in_decoy_mode() != 46889) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled() != 29022) {
@@ -24878,7 +25184,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_set_auth_type() != 20435) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 2272) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 20226) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode() != 54579) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 17037) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 16288) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 61781) {
@@ -25193,7 +25511,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_walletstable_is_empty() != 57763) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_walletstable_len() != 35149) {
+    if (uniffi_cove_checksum_method_walletstable_len() != 22218) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_wordvalidator_is_complete() != 18257) {

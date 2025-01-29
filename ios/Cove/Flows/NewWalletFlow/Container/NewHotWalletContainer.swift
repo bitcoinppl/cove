@@ -26,15 +26,15 @@ struct NewHotWalletContainer: View {
 
 #Preview("Select") {
     NewHotWalletContainer(route: .select)
-        .environment(AppManager())
+        .environment(AppManager.shared)
 }
 
 #Preview("Create") {
     NewHotWalletContainer(route: .create(.twelve))
-        .environment(AppManager())
+        .environment(AppManager.shared)
 }
 
 #Preview("Import") {
     NewHotWalletContainer(route: .import(.twelve, .manual))
-        .environment(AppManager())
+        .environment(AppManager.shared)
 }

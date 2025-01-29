@@ -528,13 +528,13 @@ private struct DuplicateWalletItem: Identifiable {
 #Preview("12 Words") {
     NavigationStack {
         HotWalletImportScreen(numberOfWords: .twelve)
-            .environment(AppManager())
+            .environment(AppManager.shared)
     }
 }
 
 #Preview("24 Words") {
     NavigationStack {
         HotWalletImportScreen(numberOfWords: .twentyFour)
-            .environment(AppManager())
+            .environment(AppManager.shared)
     }
 }

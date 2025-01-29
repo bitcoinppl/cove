@@ -82,5 +82,5 @@ struct SelectedWalletContainer: View {
 
 #Preview {
     SelectedWalletContainer(id: WalletId())
-        .environment(AppManager())
+        .environment(AppManager.shared)
 }

@@ -419,8 +419,8 @@ enum CheckState: Equatable {
                 validator: validator,
                 verificationComplete: Binding.constant(false)
             )
-            .environment(AppManager())
-            .environment(AuthManager())
+            .environment(AppManager.shared)
+            .environment(AuthManager.shared)
         }
     }
 

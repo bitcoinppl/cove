@@ -141,7 +141,7 @@ struct QrCodeAddressView: View {
 #Preview {
     VStack {
         QrCodeAddressView(scannedCode: Binding.constant(nil))
-            .environment(AppManager())
+            .environment(AppManager.shared)
     }
     .ignoresSafeArea(.all)
     .frame(maxWidth: .infinity, maxHeight: .infinity)

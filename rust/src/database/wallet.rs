@@ -7,7 +7,7 @@ use crate::{
     app::reconcile::{AppStateReconcileMessage, Update, Updater},
     network::Network,
     redb::Json,
-    wallet::metadata::{WalletId, WalletMetadata},
+    wallet::metadata::{WalletId, WalletMetadata, WalletMode},
 };
 
 use super::{Database, Error};
@@ -33,17 +33,21 @@ pub enum WalletTableError {
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Object)]
-pub struct WalletKey(Network, Version);
+pub struct WalletKey(Network, Version, WalletMode);
 
 impl Display for WalletKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.0, self.1)
+        if self.2 == WalletMode::Main {
+            write!(f, "{}::{}", self.0, self.1)
+        } else {
+            write!(f, "DECOY::{}::{}", self.0, self.1)
+        }
     }
 }
 
-impl From<Network> for WalletKey {
-    fn from(network: Network) -> Self {
-        WalletKey(network, VERSION)
+impl From<(Network, WalletMode)> for WalletKey {
+    fn from((network, mode): (Network, WalletMode)) -> Self {
+        WalletKey(network, VERSION, mode)
     }
 }
 
@@ -56,25 +60,30 @@ pub struct WalletsTable {
 impl WalletsTable {
     pub fn is_empty(&self) -> Result<bool, Error> {
         let network = Database::global().global_config.selected_network();
+        let wallet_mode = Database::global().global_config.wallet_mode();
 
         let table = self.read_table()?;
         if table.is_empty()? {
             return Ok(true);
         }
 
-        Ok(self.len(network)? == 0)
+        Ok(self.len(network, wallet_mode)? == 0)
     }
 
-    pub fn len(&self, network: Network) -> Result<u16, Error> {
-        let count = self.get_all(network).map(|wallets| wallets.len() as u16)?;
+    pub fn len(&self, network: Network, mode: WalletMode) -> Result<u16, Error> {
+        let count = self
+            .get_all(network, mode)
+            .map(|wallets| wallets.len() as u16)?;
+
         Ok(count)
     }
 
     pub fn all(&self) -> Result<Vec<WalletMetadata>, Error> {
         let network = Database::global().global_config.selected_network();
+        let wallet_mode = Database::global().global_config.wallet_mode();
 
         debug!("getting all wallets for {network}");
-        let wallets = self.get_all(network)?;
+        let wallets = self.get_all(network, wallet_mode)?;
 
         Ok(wallets)
     }
@@ -90,7 +99,9 @@ impl WalletsTable {
 
     pub fn mark_wallet_as_verified(&self, id: WalletId) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
-        let mut wallets = self.get_all(network)?;
+        let mode = Database::global().global_config.wallet_mode();
+
+        let mut wallets = self.get_all(network, mode)?;
 
         // update the wallet
         wallets.iter_mut().for_each(|wallet| {
@@ -99,24 +110,33 @@ impl WalletsTable {
             }
         });
 
-        self.save_all_wallets(network, wallets)?;
+        self.save_all_wallets(network, mode, wallets)?;
         Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }
 
     /// Get a wallet by id for that network
-    pub fn get(&self, id: &WalletId, network: Network) -> Result<Option<WalletMetadata>, Error> {
-        let wallets = self.get_all(network)?;
+    pub fn get(
+        &self,
+        id: &WalletId,
+        network: Network,
+        mode: WalletMode,
+    ) -> Result<Option<WalletMetadata>, Error> {
+        let wallets = self.get_all(network, mode)?;
         let wallet = wallets.into_iter().find(|wallet| &wallet.id == id);
 
         Ok(wallet)
     }
 
     /// Get all wallets for a network
-    pub fn get_all(&self, network: Network) -> Result<Vec<WalletMetadata>, Error> {
+    pub fn get_all(
+        &self,
+        network: Network,
+        mode: WalletMode,
+    ) -> Result<Vec<WalletMetadata>, Error> {
         let table = self.read_table()?;
-        let key = WalletKey::from(network).to_string();
+        let key = WalletKey::from((network, mode)).to_string();
 
         let value = table
             .get(key.as_str())
@@ -129,7 +149,9 @@ impl WalletsTable {
 
     pub fn update_wallet_metadata(&self, metadata: WalletMetadata) -> Result<(), Error> {
         let network = metadata.network;
-        let mut wallets = self.get_all(network)?;
+        let mode = metadata.wallet_mode;
+
+        let mut wallets = self.get_all(network, mode)?;
 
         // update the wallet
         wallets.iter_mut().for_each(|wallet| {
@@ -138,31 +160,35 @@ impl WalletsTable {
             }
         });
 
-        self.save_all_wallets(network, wallets)?;
+        self.save_all_wallets(network, mode, wallets)?;
 
         Ok(())
     }
 
     pub fn delete(&self, id: &WalletId) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
-        let mut wallets = self.get_all(network)?;
+        let mode = Database::global().global_config.wallet_mode();
+
+        let mut wallets = self.get_all(network, mode)?;
 
         wallets.retain(|wallet| &wallet.id != id);
-        self.save_all_wallets(network, wallets)?;
+        self.save_all_wallets(network, mode, wallets)?;
 
         Ok(())
     }
 
     pub fn create_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
         let network = wallet.network;
-        let mut wallets = self.get_all(network)?;
+        let mode = wallet.wallet_mode;
+
+        let mut wallets = self.get_all(network, mode)?;
 
         if wallets.iter().any(|w| w.id == wallet.id) {
             return Err(WalletTableError::WalletAlreadyExists.into());
         }
 
         wallets.push(wallet);
-        self.save_all_wallets(network, wallets)?;
+        self.save_all_wallets(network, mode, wallets)?;
 
         Ok(())
     }
@@ -170,13 +196,14 @@ impl WalletsTable {
     pub fn save_all_wallets(
         &self,
         network: Network,
+        mode: WalletMode,
         wallets: Vec<WalletMetadata>,
     ) -> Result<(), Error> {
         let write_txn = self.db.begin_write()?;
 
         {
             let mut table = write_txn.open_table(TABLE)?;
-            let key = WalletKey::from(network).to_string();
+            let key = WalletKey::from((network, mode)).to_string();
 
             table
                 .insert(&*key, wallets)

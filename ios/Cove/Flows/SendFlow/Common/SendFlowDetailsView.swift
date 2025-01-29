@@ -320,7 +320,7 @@ extension SendFlowDetailsView {
             prices: nil
         )
         .padding()
-        .environment(AppManager())
+        .environment(AppManager.shared)
     }
 }
 
@@ -330,10 +330,10 @@ extension SendFlowDetailsView {
             manager: WalletManager(preview: "preview_only"),
             details: ConfirmDetails.previewNew()
         )
-        .environment(AppManager())
+        .environment(AppManager.shared)
         .environment(
             SendFlowPresenter(
-                app: AppManager(), manager: WalletManager(preview: "preview_only")
+                app: AppManager.shared, manager: WalletManager(preview: "preview_only")
             ))
     }
 }
