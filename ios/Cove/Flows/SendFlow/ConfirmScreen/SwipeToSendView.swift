@@ -70,7 +70,7 @@ struct SwipeToSendView: View {
             HStack {
                 Spacer()
                 Text("Swipe to Send")
-                    .foregroundColor(colorScheme == .dark ? .white : .midnightBlue)
+                    .foregroundColor(colorScheme == .dark ? .white : .midnightBtn)
                     .fontWeight(.medium)
                     .opacity(fontOpacity)
 
