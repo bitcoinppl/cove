@@ -4,6 +4,7 @@ import SwiftUI
 private enum SheetState: Equatable {
     case newPin
     case removePin
+    case removeAllSpecialPins
     indirect case removeWipeDataPin(TaggedItem<SheetState>? = .none)
     indirect case removeDecoyPin(TaggedItem<SheetState>? = .none)
     case changePin
@@ -19,6 +20,7 @@ private enum AlertState: Equatable {
     case unverifiedWallets(WalletId)
     case confirmEnableWipeMePin
     case confirmDecoyPin
+    case noteNoFaceIdWhenSpecialPins
     case noteNoFaceIdWhenWipeMePin
     case noteNoFaceIdWhenDecoyPin
     case notePinRequired
@@ -56,6 +58,10 @@ struct SettingsScreen: View {
                 }
 
                 // enable
+                if auth.isDecoyPinEnabled, auth.isWipeDataPinEnabled {
+                    return alertState = .init(.noteNoFaceIdWhenSpecialPins)
+                }
+
                 if auth.isWipeDataPinEnabled {
                     return alertState = .init(.noteNoFaceIdWhenWipeMePin)
                 }
@@ -419,6 +425,23 @@ struct SettingsScreen: View {
                 }
             ).eraseToAny()
 
+        case .noteNoFaceIdWhenSpecialPins:
+            AlertBuilder(
+                title: "Can't do that",
+                message: """
+
+                You can't have Decoy PIN & Wipe Data Pin enabled and FaceID active at the same time.
+
+                Do you wan't to disable both of these special PINs and enable FaceID?
+                """,
+                actions: {
+                    Button("Cancel", role: .cancel) { alertState = .none }
+                    Button("Yes, Disable Special PINs", role: .destructive) {
+                        sheetState = .init(.removeAllSpecialPins)
+                    }
+                }
+            ).eraseToAny()
+
         case .noteNoFaceIdWhenWipeMePin:
             AlertBuilder(
                 title: "Can't do that",
@@ -523,6 +546,19 @@ struct SettingsScreen: View {
                 onUnlock: { _ in
                     auth.dispatch(action: .disableDecoyPin)
                     sheetState = nextState
+                }
+            )
+
+        case .removeAllSpecialPins:
+            NumberPadPinView(
+                title: "Enter Current PIN",
+                isPinCorrect: auth.checkPin,
+                showPin: false,
+                backAction: { sheetState = .none },
+                onUnlock: { _ in
+                    auth.dispatch(action: .disableDecoyPin)
+                    auth.dispatch(action: .disableWipeDataPin)
+                    sheetState = .init(.enableBiometric)
                 }
             )
 
