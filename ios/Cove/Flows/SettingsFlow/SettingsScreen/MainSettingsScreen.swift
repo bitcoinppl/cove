@@ -28,7 +28,7 @@ private enum AlertState: Equatable {
     case extraSetPinError(String)
 }
 
-struct SettingsScreen: View {
+struct MainSettingsScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
@@ -59,15 +59,18 @@ struct SettingsScreen: View {
 
                 // enable
                 if auth.isDecoyPinEnabled, auth.isWipeDataPinEnabled {
-                    return alertState = .init(.noteNoFaceIdWhenSpecialPins)
+                    alertState = .init(.noteNoFaceIdWhenSpecialPins)
+                    return
                 }
 
                 if auth.isWipeDataPinEnabled {
-                    return alertState = .init(.noteNoFaceIdWhenWipeMePin)
+                    alertState = .init(.noteNoFaceIdWhenWipeMePin)
+                    return
                 }
 
                 if auth.isDecoyPinEnabled {
-                    return alertState = .init(.noteNoFaceIdWhenDecoyPin)
+                    alertState = .init(.noteNoFaceIdWhenDecoyPin)
+                    return
                 }
 
                 sheetState = .init(.enableBiometric)
@@ -98,11 +101,13 @@ struct SettingsScreen: View {
                     }
 
                     if auth.type == .biometric {
-                        return alertState = .init(.notePinRequired)
+                        alertState = .init(.notePinRequired)
+                        return
                     }
 
                     if auth.type == .both {
-                        return alertState = .init(.noteFaceIdDisabling(.confirmEnableWipeMePin))
+                        alertState = .init(.noteFaceIdDisabling(.confirmEnableWipeMePin))
+                        return
                     }
 
                     alertState = .init(.confirmEnableWipeMePin)
@@ -121,11 +126,13 @@ struct SettingsScreen: View {
                 // enable
                 if enable {
                     if auth.type == .biometric {
-                        return alertState = .init(.notePinRequired)
+                        alertState = .init(.notePinRequired)
+                        return
                     }
 
                     if auth.type == .both {
-                        return alertState = .init(.noteFaceIdDisabling(.confirmDecoyPin))
+                        alertState = .init(.noteFaceIdDisabling(.confirmDecoyPin))
+                        return
                     }
 
                     alertState = .init(.confirmDecoyPin)
@@ -643,7 +650,7 @@ struct SettingsScreen: View {
 }
 
 #Preview {
-    SettingsScreen()
+    MainSettingsScreen()
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
 }

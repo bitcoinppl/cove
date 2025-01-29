@@ -21,7 +21,7 @@ pub enum Route {
     SelectedWallet(WalletId),
     WalletSettings(WalletId),
     NewWallet(NewWalletRoute),
-    Settings,
+    Settings(SettingsRoute),
     SecretWords(WalletId),
     TransactionDetails {
         id: WalletId,
@@ -58,6 +58,18 @@ pub enum ImportType {
     Manual,
     Nfc,
     Qr,
+}
+
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq, From, uniffi::Enum)]
+pub enum SettingsRoute {
+    #[default]
+    Main,
+
+    Network,
+    Appearance,
+    Node,
+    FiatCurrency,
+    Wallet(WalletId),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

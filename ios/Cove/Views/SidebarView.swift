@@ -148,7 +148,7 @@ struct SidebarView: View {
                     }
 
                     HStack {
-                        Button(action: { goTo(Route.settings) }) {
+                        Button(action: { goTo(Route.settings(.main)) }) {
                             HStack(spacing: 22) {
                                 Image(systemName: "gear")
                                 Text("Settings")

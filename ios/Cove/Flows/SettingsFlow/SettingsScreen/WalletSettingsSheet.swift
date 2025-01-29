@@ -59,7 +59,7 @@ struct WalletSettingsSheet: View {
                 Section(header: Text("App Settings")) {
                     Button(action: {
                         dismiss()
-                        navigate(Route.settings)
+                        navigate(Route.settings(.main))
                     }) {
                         HStack {
                             Text("App Settings")
@@ -103,7 +103,7 @@ struct WalletSettingsSheet: View {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
                             dismiss()
-                            navigate(Route.settings)
+                            navigate(Route.settings(.wallet(manager.walletMetadata.id)))
                         } label: {
                             Label("App Settings", systemImage: "gear")
                                 .foregroundColor(.blue)

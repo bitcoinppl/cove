@@ -67,7 +67,7 @@ struct SelectedWalletScreen: View {
             Alert(
                 title: Text("Node Connection Failed"),
                 message: Text("Would you like to select a different node?"),
-                primaryButton: .default(Text("Yes, Change Node"), action: { navigate(.settings) }),
+                primaryButton: .default(Text("Yes, Change Node"), action: { navigate(.settings(.node)) }),
                 secondaryButton: .cancel()
             )
         case .noBalance:
