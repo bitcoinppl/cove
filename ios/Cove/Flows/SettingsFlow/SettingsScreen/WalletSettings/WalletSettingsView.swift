@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct WalletSettingsSheet: View {
+struct WalletSettingsView: View {
     let manager: WalletManager
     @Environment(\.navigate) private var navigate
     @Environment(\.dismiss) private var dismiss
@@ -152,7 +152,7 @@ struct WalletSettingsSheet: View {
 
 #Preview {
     AsyncPreview {
-        WalletSettingsSheet(manager: WalletManager(preview: "preview_only"))
+        WalletSettingsView(manager: WalletManager(preview: "preview_only"))
             .environment(AppManager.shared)
             .environment(\.navigate) { _ in
                 ()

@@ -105,7 +105,7 @@ struct SelectedWalletScreen: View {
         case .receive:
             ReceiveView(manager: manager)
         case .settings:
-            WalletSettingsSheet(manager: manager)
+            WalletSettingsView(manager: manager)
         case let .chooseAddressType(foundAddresses):
             ChooseWalletTypeView(manager: manager, foundAddresses: foundAddresses)
         }

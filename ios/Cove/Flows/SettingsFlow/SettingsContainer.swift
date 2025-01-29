@@ -23,7 +23,7 @@ struct SettingsContainer: View {
         case .fiatCurrency:
             EmptyView()
         case .wallet(let walletId):
-            WalletSettingsSheet(id: walletId)
+            WalletSettingsContainer(id: walletId)
         }
     }
 }
