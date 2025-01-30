@@ -8,6 +8,7 @@ use once_cell::sync::OnceCell;
 use crate::{
     color_scheme::ColorSchemeSelection,
     fiat::{client::PriceResponse, FiatCurrency},
+    network::Network,
     node::Node,
     router::Route,
     transaction::fees::client::FeeResponse,
@@ -22,6 +23,7 @@ pub enum AppStateReconcileMessage {
     DatabaseUpdated,
     ColorSchemeChanged(ColorSchemeSelection),
     SelectedNodeChanged(Node),
+    SelectedNetworkChanged(Network),
     FiatPricesChanged(Arc<PriceResponse>),
     FeesChanged(FeeResponse),
     FiatCurrencyChanged(FiatCurrency),

@@ -226,6 +226,7 @@ impl GlobalConfigTable {
 
     pub fn set_selected_network(&self, network: Network) -> Result<()> {
         self.set(GlobalConfigKey::SelectedNetwork, network.to_string())?;
+        Updater::send_update(Update::SelectedNetworkChanged(network));
 
         Ok(())
     }

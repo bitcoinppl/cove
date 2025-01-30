@@ -123,6 +123,7 @@ struct NodeSelectionView: View {
                 Text("Custom Electrum").tag("Custom Electrum")
                 Text("Custom Esplora").tag("Custom Esplora")
             }
+//            .pickerStyle(.navigationLink)
 
             if showCustomUrlField {
                 CustomFields

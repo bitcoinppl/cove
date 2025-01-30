@@ -28,6 +28,10 @@ extension String {
         self = feeSpeedToString(feeSpeed: feeSpeed)
     }
 
+    init(_ network: Network) {
+        self = network.toString()
+    }
+
     func removingLeadingZeros() -> String {
         guard self != "0" else { return self }
         if contains(".") {

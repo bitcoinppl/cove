@@ -33,13 +33,15 @@ struct MainSettingsScreen: View {
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
 
-    @State private var notificationFrequency = 1
-    @State private var networkChanged = false
-
+    // private
     @State private var sheetState: TaggedItem<SheetState>? = nil
     @State private var alertState: TaggedItem<AlertState>? = nil
 
     let themes = allColorSchemes()
+
+    var networkChanged: Bool {
+        app.selectedNetwork != app.previousSelectedNetwork
+    }
 
     private func canUseBiometrics() -> Bool {
         let context = LAContext()
@@ -147,42 +149,10 @@ struct MainSettingsScreen: View {
     @ViewBuilder
     var GeneralSection: some View {
         Section(header: Text("General")) {
-            HStack {
-                Picker(
-                    "Network",
-                    selection: Binding(
-                        get: { app.selectedNetwork },
-                        set: {
-                            networkChanged.toggle()
-                            app.dispatch(action: .changeNetwork(network: $0))
-                        }
-                    )
-                ) {
-                    ForEach(allNetworks(), id: \.self) {
-                        Text($0.toString())
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-            }
-        }
-    }
-
-    @ViewBuilder
-    var FiatCurrencySection: some View {
-        Section("Currency & Units") {
-            Picker(
-                "Fiat Currency",
-                selection: Binding(
-                    get: { app.selectedFiatCurrency },
-                    set: {
-                        app.dispatch(action: .changeFiatCurrency($0))
-                    }
-                )
-            ) {
-                ForEach(allFiatCurrencies(), id: \.self) { currency in
-                    Text("\(currency.emoji()) \(currency.toString())")
-                }
-            }
+            SettingsLink(title: "Network", route: .network, symbol: "network")
+            SettingsLink(title: "Appearence", route: .appearance, symbol: "sun.righthalf.filled")
+            SettingsLink(title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted")
+            SettingsLink(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
         }
     }
 
@@ -237,10 +207,10 @@ struct MainSettingsScreen: View {
 
             NodeSelectionView()
 
-            FiatCurrencySection
-
             SecuritySection
         }
+
+        .scrollContentBackground(.hidden)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(networkChanged)
@@ -273,7 +243,6 @@ struct MainSettingsScreen: View {
             actions: { MyAlert($0).actions },
             message: { MyAlert($0).message }
         )
-        .preferredColorScheme(app.colorScheme)
         .gesture(
             networkChanged
                 ? DragGesture()
@@ -340,7 +309,8 @@ struct MainSettingsScreen: View {
                 message: "You've changed your network to \(network)",
                 actions: {
                     Button("Yes, Change Network") {
-                        app.resetRoute(to: .listWallets)
+                        app.dispatch(action: .changeNetwork(network: network))
+                        app.loadAndReset(to: .listWallets)
                         dismiss()
                     }
                     Button("Cancel", role: .cancel) { alertState = .none }
@@ -650,7 +620,7 @@ struct MainSettingsScreen: View {
 }
 
 #Preview {
-    MainSettingsScreen()
+    SettingsContainer(route: .main)
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
 }

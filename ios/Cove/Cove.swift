@@ -7938,8 +7938,6 @@ public protocol RouteFactoryProtocol : AnyObject {
     
     func sendSetAmount(id: WalletId, address: Address?, amount: Amount?)  -> Route
     
-    func settings(settings: SettingsRoute)  -> Route
-    
 }
 
 open class RouteFactory:
@@ -8120,14 +8118,6 @@ open func sendSetAmount(id: WalletId, address: Address? = nil, amount: Amount? =
         FfiConverterTypeWalletId_lower(id),
         FfiConverterOptionTypeAddress.lower(address),
         FfiConverterOptionTypeAmount.lower(amount),$0
-    )
-})
-}
-    
-open func settings(settings: SettingsRoute) -> Route  {
-    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
-    uniffi_cove_fn_method_routefactory_settings(self.uniffiClonePointer(),
-        FfiConverterTypeSettingsRoute_lower(settings),$0
     )
 })
 }
@@ -14182,6 +14172,8 @@ public enum AppStateReconcileMessage {
     )
     case selectedNodeChanged(Node
     )
+    case selectedNetworkChanged(Network
+    )
     case fiatPricesChanged(PriceResponse
     )
     case feesChanged(FeeResponse
@@ -14217,16 +14209,19 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case 5: return .selectedNodeChanged(try FfiConverterTypeNode.read(from: &buf)
         )
         
-        case 6: return .fiatPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
+        case 6: return .selectedNetworkChanged(try FfiConverterTypeNetwork.read(from: &buf)
         )
         
-        case 7: return .feesChanged(try FfiConverterTypeFeeResponse.read(from: &buf)
+        case 7: return .fiatPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
         )
         
-        case 8: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        case 8: return .feesChanged(try FfiConverterTypeFeeResponse.read(from: &buf)
         )
         
-        case 9: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
+        case 9: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        )
+        
+        case 10: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14262,23 +14257,28 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             FfiConverterTypeNode.write(v1, into: &buf)
             
         
-        case let .fiatPricesChanged(v1):
+        case let .selectedNetworkChanged(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterTypeNetwork.write(v1, into: &buf)
+            
+        
+        case let .fiatPricesChanged(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypePriceResponse.write(v1, into: &buf)
             
         
         case let .feesChanged(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeFeeResponse.write(v1, into: &buf)
             
         
         case let .fiatCurrencyChanged(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
             
         
         case let .walletModeChanged(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeWalletMode.write(v1, into: &buf)
             
         }
@@ -25254,9 +25254,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_set_amount() != 33578) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_routefactory_settings() != 5784) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_auth_type() != 13301) {

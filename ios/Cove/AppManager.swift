@@ -15,6 +15,9 @@ import SwiftUI
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
 
+    var selectedNetwork = Database().globalConfig().selectedNetwork()
+    var previousSelectedNetwork: Network? = nil
+
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
     var selectedFiatCurrency = Database().globalConfig().selectedFiatCurrency()
@@ -32,10 +35,6 @@ import SwiftUI
 
     @ObservationIgnored
     weak var walletManager: WalletManager?
-
-    public var selectedNetwork: Network {
-        rust.network()
-    }
 
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
@@ -154,6 +153,10 @@ import SwiftUI
 
                 case let .selectedNodeChanged(node):
                     self.selectedNode = node
+
+                case let .selectedNetworkChanged(network):
+                    self.previousSelectedNetwork = self.selectedNetwork
+                    self.selectedNetwork = network
 
                 case let .defaultRouteChanged(route, nestedRoutes):
                     self.router.routes = nestedRoutes
