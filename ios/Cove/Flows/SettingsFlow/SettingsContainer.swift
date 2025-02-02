@@ -20,14 +20,30 @@ struct SettingsContainer: View {
         )
     }
 
-    var FiatCurrencyPicker: SettingsPicker<FiatCurrency> {
+    @ViewBuilder
+    var FiatCurrencyPicker: some View {
         SettingsPicker(selection:
             Binding(
                 get: { app.selectedFiatCurrency },
                 set: {
                     app.dispatch(action: .changeFiatCurrency($0))
                 }
-            ))
+            )
+        )
+        .navigationTitle("Currency")
+    }
+
+    @ViewBuilder
+    var AppearencePicker: some View {
+        SettingsPicker(selection:
+            Binding(
+                get: { app.colorSchemeSelection },
+                set: {
+                    app.dispatch(action: .changeColorScheme($0))
+                }
+            )
+        )
+        .navigationTitle("Appearence")
     }
 
     var body: some View {
@@ -37,18 +53,17 @@ struct SettingsContainer: View {
                 MainSettingsScreen()
             case .network:
                 SettingsPicker(selection: selectedNetwork)
-                    .navigationTitle("Network")
             case .appearance:
-                EmptyView()
+                AppearencePicker
             case .node:
                 EmptyView()
             case .fiatCurrency:
                 FiatCurrencyPicker
-                    .navigationTitle("Network")
             case .wallet(let walletId):
                 WalletSettingsContainer(id: walletId)
             }
         }
+        .navigationBarTitleDisplayMode(.inline)
         .background(
             ZStack {
                 Color(UIColor.systemGroupedBackground)

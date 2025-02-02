@@ -32,6 +32,7 @@ struct MainSettingsScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     // private
     @State private var sheetState: TaggedItem<SheetState>? = nil
@@ -40,7 +41,8 @@ struct MainSettingsScreen: View {
     let themes = allColorSchemes()
 
     var networkChanged: Bool {
-        app.selectedNetwork != app.previousSelectedNetwork
+        if app.previousSelectedNetwork == nil { return false }
+        return app.selectedNetwork != app.previousSelectedNetwork
     }
 
     private func canUseBiometrics() -> Bool {
@@ -150,7 +152,7 @@ struct MainSettingsScreen: View {
     var GeneralSection: some View {
         Section(header: Text("General")) {
             SettingsLink(title: "Network", route: .network, symbol: "network")
-            SettingsLink(title: "Appearence", route: .appearance, symbol: "sun.righthalf.filled")
+            SettingsLink(title: "Appearence", route: .appearance, symbol: "sun.max.fill")
             SettingsLink(title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted")
             SettingsLink(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
         }
@@ -187,26 +189,6 @@ struct MainSettingsScreen: View {
     var body: some View {
         Form {
             GeneralSection
-
-            Section("Appreance") {
-                Picker(
-                    "Theme",
-                    selection: Binding(
-                        get: { app.colorSchemeSelection },
-                        set: {
-                            app.dispatch(action: .changeColorScheme($0))
-                        }
-                    )
-                ) {
-                    ForEach(themes, id: \.self) {
-                        Text($0.capitalizedString)
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-            }
-
-            NodeSelectionView()
-
             SecuritySection
         }
 

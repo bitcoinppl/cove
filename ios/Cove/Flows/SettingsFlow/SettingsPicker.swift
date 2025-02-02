@@ -7,13 +7,25 @@
 
 import SwiftUI
 
-struct SettingsPicker<T: CaseIterable & Hashable & CustomStringConvertible>: View where T.AllCases: RandomAccessCollection {
+protocol SettingsEnum: CustomStringConvertible & CaseIterable & Hashable {
+    var symbol: String { get }
+}
+
+extension SettingsEnum {
+    var symbol: String { "" }
+}
+
+struct SettingsPicker<T: SettingsEnum>: View where T.AllCases: RandomAccessCollection {
     @Binding var selection: T
 
     var body: some View {
         Form {
             ForEach(T.allCases, id: \.self) { item in
                 HStack {
+                    if !item.symbol.isEmpty {
+                        Image(systemName: item.symbol)
+                    }
+
                     Text(item.description)
                         .font(.subheadline)
 

@@ -1,6 +1,9 @@
-extension Network: CaseIterable & CustomStringConvertible {
+import Foundation
+import SwiftUI
+
+extension Network: SettingsEnum {
     public var description: String {
-        toString()
+        self.toString()
     }
 
     public static var allCases: [Network] {
@@ -12,7 +15,7 @@ extension Network: CaseIterable & CustomStringConvertible {
     }
 }
 
-extension FiatCurrency: CaseIterable & CustomStringConvertible {
+extension FiatCurrency: SettingsEnum {
     public var description: String {
         "\(self.emoji()) \(self.toString())"
     }
@@ -35,5 +38,23 @@ extension FiatCurrency: CaseIterable & CustomStringConvertible {
 
     func suffix() -> String {
         fiatCurrencySuffix(fiatCurrency: self)
+    }
+}
+
+extension ColorSchemeSelection: SettingsEnum {
+    public var description: String {
+        colorSchemeSelectionCapitalizedString(colorScheme: self)
+    }
+
+    var symbol: String {
+        switch self {
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.stars.fill"
+        case .system: return "circle.lefthalf.fill"
+        }
+    }
+
+    public static var allCases: [ColorSchemeSelection] {
+        allColorSchemes()
     }
 }
