@@ -136,6 +136,10 @@ import SwiftUI
         rust.loadAndResetDefaultRoute(route: route)
     }
 
+    func confirmNetworkChange() {
+        previousSelectedNetwork = nil
+    }
+
     func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {
@@ -155,7 +159,7 @@ import SwiftUI
                     self.selectedNode = node
 
                 case let .selectedNetworkChanged(network):
-                    self.previousSelectedNetwork = self.selectedNetwork
+                    if previousSelectedNetwork == nil { self.previousSelectedNetwork = self.selectedNetwork }
                     self.selectedNetwork = network
 
                 case let .defaultRouteChanged(route, nestedRoutes):

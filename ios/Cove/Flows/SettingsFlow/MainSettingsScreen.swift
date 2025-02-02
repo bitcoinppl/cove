@@ -309,11 +309,13 @@ struct MainSettingsScreen: View {
                 message: "You've changed your network to \(network)",
                 actions: {
                     Button("Yes, Change Network") {
-                        app.dispatch(action: .changeNetwork(network: network))
+                        app.confirmNetworkChange()
                         app.loadAndReset(to: .listWallets)
                         dismiss()
                     }
-                    Button("Cancel", role: .cancel) { alertState = .none }
+                    Button("Cancel", role: .cancel) {
+                        alertState = .none
+                    }
                 }
             ).eraseToAny()
 
