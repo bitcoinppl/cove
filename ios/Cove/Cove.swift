@@ -20613,8 +20613,19 @@ public enum WalletColor {
     case orange
     case purple
     case pink
+    case coolGray
     case custom(r: UInt8, g: UInt8, b: UInt8
     )
+    case wAlmostGray
+    case wAlmostWhite
+    case wBeige
+    case wPastelBlue
+    case wPastelNavy
+    case wPastelRed
+    case wPastelYellow
+    case wLightMint
+    case wPastelTeal
+    case wLightPastelYellow
 }
 
 
@@ -20642,8 +20653,30 @@ public struct FfiConverterTypeWalletColor: FfiConverterRustBuffer {
         
         case 7: return .pink
         
-        case 8: return .custom(r: try FfiConverterUInt8.read(from: &buf), g: try FfiConverterUInt8.read(from: &buf), b: try FfiConverterUInt8.read(from: &buf)
+        case 8: return .coolGray
+        
+        case 9: return .custom(r: try FfiConverterUInt8.read(from: &buf), g: try FfiConverterUInt8.read(from: &buf), b: try FfiConverterUInt8.read(from: &buf)
         )
+        
+        case 10: return .wAlmostGray
+        
+        case 11: return .wAlmostWhite
+        
+        case 12: return .wBeige
+        
+        case 13: return .wPastelBlue
+        
+        case 14: return .wPastelNavy
+        
+        case 15: return .wPastelRed
+        
+        case 16: return .wPastelYellow
+        
+        case 17: return .wLightMint
+        
+        case 18: return .wPastelTeal
+        
+        case 19: return .wLightPastelYellow
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -20681,12 +20714,56 @@ public struct FfiConverterTypeWalletColor: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
         
         
-        case let .custom(r,g,b):
+        case .coolGray:
             writeInt(&buf, Int32(8))
+        
+        
+        case let .custom(r,g,b):
+            writeInt(&buf, Int32(9))
             FfiConverterUInt8.write(r, into: &buf)
             FfiConverterUInt8.write(g, into: &buf)
             FfiConverterUInt8.write(b, into: &buf)
             
+        
+        case .wAlmostGray:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .wAlmostWhite:
+            writeInt(&buf, Int32(11))
+        
+        
+        case .wBeige:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .wPastelBlue:
+            writeInt(&buf, Int32(13))
+        
+        
+        case .wPastelNavy:
+            writeInt(&buf, Int32(14))
+        
+        
+        case .wPastelRed:
+            writeInt(&buf, Int32(15))
+        
+        
+        case .wPastelYellow:
+            writeInt(&buf, Int32(16))
+        
+        
+        case .wLightMint:
+            writeInt(&buf, Int32(17))
+        
+        
+        case .wPastelTeal:
+            writeInt(&buf, Int32(18))
+        
+        
+        case .wLightPastelYellow:
+            writeInt(&buf, Int32(19))
+        
         }
     }
 }
@@ -24047,6 +24124,31 @@ fileprivate struct FfiConverterSequenceTypeUnit: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeWalletColor: FfiConverterRustBuffer {
+    typealias SwiftType = [WalletColor]
+
+    public static func write(_ value: [WalletColor], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWalletColor.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WalletColor] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WalletColor]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWalletColor.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [[String]]
 
@@ -24321,6 +24423,12 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
 public func defaultNodeSelection() -> NodeSelection  {
     return try!  FfiConverterTypeNodeSelection_lift(try! rustCall() {
     uniffi_cove_fn_func_default_node_selection($0
+    )
+})
+}
+public func defaultWalletColors() -> [WalletColor]  {
+    return try!  FfiConverterSequenceTypeWalletColor.lift(try! rustCall() {
+    uniffi_cove_fn_func_default_wallet_colors($0
     )
 })
 }
@@ -24606,6 +24714,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_node_selection() != 14665) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_default_wallet_colors() != 39034) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {

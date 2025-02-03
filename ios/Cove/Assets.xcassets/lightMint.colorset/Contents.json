@@ -13,7 +13,12 @@
       "idiom": "universal"
     },
     {
-      "appearances": [{ "appearance": "luminosity", "value": "dark" }],
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
       "color": {
         "color-space": "srgb",
         "components": {
@@ -26,5 +31,8 @@
       "idiom": "universal"
     }
   ],
-  "info": { "author": "xcode", "version": 1 }
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
 }

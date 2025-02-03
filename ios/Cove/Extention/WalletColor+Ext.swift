@@ -32,6 +32,9 @@ extension WalletColor {
         case let .custom(r, g, b):
             let color = customToColor(r: r, g: g, b: b)
             return [color, color.opacity(0.99)]
+        default:
+            let color = self.toColor()
+            return [color, color.opacity(0.99)]
         }
     }
 
@@ -51,6 +54,28 @@ extension WalletColor {
             .purple
         case .pink:
             .pink
+        case .coolGray:
+            .coolGray
+        case .wPastelTeal:
+            .pastelTeal
+        case .wLightPastelYellow:
+            .lightPastelYellow
+        case .wLightMint:
+            .lightMint
+        case .wPastelBlue:
+            .pastelBlue
+        case .wPastelNavy:
+            .pastelNavy
+        case .wPastelRed:
+            .pastelRed
+        case .wPastelYellow:
+            .pastelYellow
+        case .wAlmostGray:
+            .almostGray
+        case .wAlmostWhite:
+            .almostWhite
+        case .wBeige:
+            .beige
         case let .custom(r, g, b):
             Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
         }
