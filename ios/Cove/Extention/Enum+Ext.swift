@@ -46,13 +46,13 @@ extension ColorSchemeSelection: SettingsEnum {
         colorSchemeSelectionCapitalizedString(colorScheme: self)
     }
 
-    var symbol: String {
-        switch self {
-        case .light: return "sun.max.fill"
-        case .dark: return "moon.stars.fill"
-        case .system: return "circle.lefthalf.fill"
-        }
-    }
+//    var symbol: String {
+//        switch self {
+//        case .light: return "sun.max.fill"
+//        case .dark: return "moon.stars.fill"
+//        case .system: return "circle.lefthalf.fill"
+//        }
+//    }
 
     public static var allCases: [ColorSchemeSelection] {
         allColorSchemes()

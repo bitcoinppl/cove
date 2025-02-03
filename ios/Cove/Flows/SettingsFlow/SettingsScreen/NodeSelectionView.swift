@@ -70,65 +70,124 @@ struct NodeSelectionView: View {
 
     @ViewBuilder
     var CustomFields: some View {
-        TextField("Enter \(selectedNodeName) URL", text: $customUrl)
-            .keyboardType(.URL)
-            .textInputAutocapitalization(.never)
+        if showCustomUrlField {
+            Section(selectedNodeName) {
+                HStack {
+                    Text("URL")
+                        .frame(width: 60, alignment: .leading)
 
-        TextField("Enter Node Name (optional)", text: $customNodeName)
-            .textInputAutocapitalization(.never)
-
-        Button("Save \(selectedNodeName)") {
-            var node: Node? = nil
-            do {
-                node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName, enteredName: customNodeName)
-                customUrl = node?.url ?? customUrl
-                customNodeName = node?.name ?? customNodeName
-            } catch {
-                showParseUrlAlert = true
-                switch error {
-                case let NodeSelectorError.ParseNodeUrlError(errorString):
-                    parseUrlMessage = errorString
-                default:
-                    parseUrlMessage = "Unknown error \(error.localizedDescription)"
+                    TextField("Enter URL", text: $customUrl)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
                 }
+                .font(.subheadline)
+
+                HStack {
+                    Text("Name")
+                        .frame(width: 60, alignment: .leading)
+
+                    TextField("Node Name (optional)", text: $customNodeName)
+                        .textInputAutocapitalization(.never)
+                }
+                .font(.subheadline)
+
+                Button("Save Custom Node", action: checkAndSaveNode)
+                    .disabled(customUrl.isEmpty)
             }
+        }
+    }
 
-            if let node {
-                Task {
-                    showLoadingPopup()
-                    let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
+    func checkAndSaveNode() {
+        var node: Node? = nil
 
-                    switch result {
-                    case .success: completeLoading(.success("Connected to node successfully"))
-                    case let .failure(error):
-                        let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
-                        let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
+        do {
+            node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName, enteredName: customNodeName)
+            customUrl = node?.url ?? customUrl
+            customNodeName = node?.name ?? customNodeName
+        } catch {
+            showParseUrlAlert = true
+            switch error {
+            case let NodeSelectorError.ParseNodeUrlError(errorString):
+                parseUrlMessage = errorString
+            default:
+                parseUrlMessage = "Unknown error \(error.localizedDescription)"
+            }
+        }
 
-                        completeLoading(.failure(formattedMessage))
-                    }
+        if let node {
+            Task {
+                showLoadingPopup()
+                let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
+
+                switch result {
+                case .success: completeLoading(.success("Connected to node successfully"))
+                case let .failure(error):
+                    let errorMessage = "Failed to connect to node\n \(error.localizedDescription)"
+                    let formattedMessage = errorMessage.replacingOccurrences(of: "\\n", with: "\n")
+
+                    completeLoading(.failure(formattedMessage))
                 }
             }
         }
-        .disabled(customUrl.isEmpty)
     }
 
     var body: some View {
-        Section(header: Text("Node Selection")) {
-            Picker("Select Node", selection: $selectedNodeName) {
+        Form {
+            Section {
                 ForEach(nodeList, id: \.name) { (node: NodeSelection) in
-                    Text(node.name)
-                        .tag(node.name)
+                    HStack {
+                        Text(node.name)
+                            .font(.subheadline)
+
+                        Spacer()
+
+                        if selectedNodeName == node.name {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.blue)
+                                .font(.footnote)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedNodeName = node.name }
                 }
 
-                Text("Custom Electrum").tag("Custom Electrum")
-                Text("Custom Esplora").tag("Custom Esplora")
-            }
-//            .pickerStyle(.navigationLink)
+                HStack {
+                    Text("Custom Electrum")
+                        .font(.subheadline)
 
-            if showCustomUrlField {
-                CustomFields
+                    Spacer()
+
+                    if selectedNodeName == "Custom Electrum" {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.blue)
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { selectedNodeName = "Custom Electrum" }
+
+                HStack {
+                    Text("Custom Esplora")
+                        .font(.subheadline)
+
+                    Spacer()
+
+                    if selectedNodeName == "Custom Esplora" {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.blue)
+                            .font(.footnote)
+                            .fontWeight(.semibold)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { selectedNodeName = "Custom Esplora" }
             }
+
+            CustomFields
         }
+        .scrollContentBackground(.hidden)
         .onChange(of: selectedNodeName) { _, newSelectedNodeName in
             if selectedNodeName.hasPrefix("Custom") {
                 if case let .custom(savedSelectedNode) = nodeSelector.selectedNode() {
@@ -162,6 +221,10 @@ struct NodeSelectionView: View {
         .onChange(of: nodeList) { _, _ in
             selectedNodeName = nodeSelector.selectedNode().name
         }
+        .onDisappear {
+            // custom esplora or electrum is selected
+            if showCustomUrlField { checkAndSaveNode() }
+        }
         .alert(isPresented: $showParseUrlAlert) {
             Alert(
                 title: Text("Unable to parse URL"),
@@ -177,5 +240,7 @@ struct NodeSelectionView: View {
 }
 
 #Preview {
-    NodeSelectionView()
+    SettingsContainer(route: .node)
+        .environment(AppManager.shared)
+        .environment(AuthManager.shared)
 }

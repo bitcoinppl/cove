@@ -56,7 +56,7 @@ struct SettingsContainer: View {
             case .appearance:
                 AppearencePicker
             case .node:
-                EmptyView()
+                NodeSelectionView()
             case .fiatCurrency:
                 FiatCurrencyPicker
             case .wallet(let walletId):

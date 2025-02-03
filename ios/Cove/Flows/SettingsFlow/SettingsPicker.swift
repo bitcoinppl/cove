@@ -44,9 +44,7 @@ struct SettingsPicker<T: SettingsEnum>: View where T.AllCases: RandomAccessColle
                 }
             }
         }
-        .onChange(of: selection) { o, n in
-            print("Selection changed from \(o) to \(n)")
-        }
+        .scrollContentBackground(.hidden)
     }
 }
 

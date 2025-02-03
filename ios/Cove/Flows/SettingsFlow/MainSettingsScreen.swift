@@ -161,27 +161,26 @@ struct MainSettingsScreen: View {
     var SecuritySection: some View {
         Section("Security") {
             if canUseBiometrics() {
-                Toggle(isOn: toggleBiometric) {
-                    Label("Enable Face ID", systemImage: "faceid")
-                }
+                SettingsToggle(title: "Enable FaceID", symbol: "faceid", item: toggleBiometric)
             }
 
-            Toggle(isOn: togglePin) {
-                Label("Enable PIN", systemImage: "lock")
-            }
+            SettingsToggle(title: "Enable PIN", symbol: "lock", item: togglePin)
 
             if togglePin.wrappedValue {
                 Button(action: { sheetState = .init(.changePin) }) {
-                    Label("Change PIN", systemImage: "lock.open.rotation")
+                    HStack {
+                        SettingsIcon(symbol: "lock.open.rotation")
+
+                        Text("Change PIN")
+                            .font(.subheadline)
+                            .padding(8)
+                    }
+                    .contentShape(Rectangle())
+                    .padding(.vertical, 1)
                 }
 
-                Toggle(isOn: toggleWipeMePin) {
-                    Label("Enable Wipe Data PIN", systemImage: "exclamationmark.lock.fill")
-                }
-
-                Toggle(isOn: toggleDecoyPin) {
-                    Label("Enable Decoy PIN", systemImage: "theatermasks")
-                }
+                SettingsToggle(title: "Enable Wipe Data PIN", symbol: "exclamationmark.lock.fill", item: toggleWipeMePin)
+                SettingsToggle(title: "Enable Decoy PIN", symbol: "theatermasks", item: toggleDecoyPin)
             }
         }
     }
@@ -189,9 +188,9 @@ struct MainSettingsScreen: View {
     var body: some View {
         Form {
             GeneralSection
+            WalletSettingsSection()
             SecuritySection
         }
-
         .scrollContentBackground(.hidden)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
