@@ -414,7 +414,7 @@ struct CoveApp: App {
 
     var routeToTint: Color {
         switch app.router.routes.last {
-        case .settings, .walletSettings, .transactionDetails:
+        case .settings, .transactionDetails:
             .blue
         default:
             .white

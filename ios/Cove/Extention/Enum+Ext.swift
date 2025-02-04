@@ -3,7 +3,7 @@ import SwiftUI
 
 extension Network: SettingsEnum {
     public var description: String {
-        self.toString()
+        toString()
     }
 
     public static var allCases: [Network] {
@@ -17,7 +17,7 @@ extension Network: SettingsEnum {
 
 extension FiatCurrency: SettingsEnum {
     public var description: String {
-        "\(self.emoji()) \(self.toString())"
+        "\(emoji()) \(toString())"
     }
 
     public static var allCases: [FiatCurrency] {

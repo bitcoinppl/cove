@@ -109,6 +109,11 @@ import SwiftUI
         router.routes.append(route)
     }
 
+    func pushRoutes(_ routes: [Route]) {
+        isSidebarVisible = false
+        router.routes.append(contentsOf: routes)
+    }
+
     func popRoute() {
         router.routes.removeLast()
     }
@@ -159,7 +164,9 @@ import SwiftUI
                     self.selectedNode = node
 
                 case let .selectedNetworkChanged(network):
-                    if previousSelectedNetwork == nil { self.previousSelectedNetwork = self.selectedNetwork }
+                    if previousSelectedNetwork == nil {
+                        self.previousSelectedNetwork = self.selectedNetwork
+                    }
                     self.selectedNetwork = network
 
                 case let .defaultRouteChanged(route, nestedRoutes):

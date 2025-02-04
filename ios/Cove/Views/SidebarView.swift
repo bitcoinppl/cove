@@ -113,16 +113,7 @@ struct SidebarView: View {
                         .contextMenu {
                             Button("Settings") {
                                 app.isSidebarVisible = false
-
-                                do {
-                                    try app.rust.selectWallet(
-                                        id: wallet.id,
-                                        nextRoute: Route.walletSettings(wallet.id)
-                                    )
-                                } catch {
-                                    Log.error("Failed to select wallet \(error)")
-                                    goTo(Route.selectedWallet(wallet.id))
-                                }
+                                app.pushRoutes(RouteFactory().nestedWalletSettings(id: wallet.id))
                             }
                         }
                     }

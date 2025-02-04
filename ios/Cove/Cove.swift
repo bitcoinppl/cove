@@ -7922,6 +7922,12 @@ public protocol RouteFactoryProtocol : AnyObject {
     
     func loadAndResetToAfter(resetTo: Route, time: UInt32)  -> Route
     
+    func mainWalletSettings(id: WalletId)  -> Route
+    
+    func nestedSettings(route: SettingsRoute)  -> [Route]
+    
+    func nestedWalletSettings(id: WalletId)  -> [Route]
+    
     func newHotWallet()  -> Route
     
     func newWalletSelect()  -> Route
@@ -7937,6 +7943,8 @@ public protocol RouteFactoryProtocol : AnyObject {
     func sendHardwareExport(id: WalletId, details: ConfirmDetails)  -> Route
     
     func sendSetAmount(id: WalletId, address: Address?, amount: Amount?)  -> Route
+    
+    func walletSettings(id: WalletId, route: WalletSettingsRoute)  -> Route
     
 }
 
@@ -8056,6 +8064,30 @@ open func loadAndResetToAfter(resetTo: Route, time: UInt32) -> Route  {
 })
 }
     
+open func mainWalletSettings(id: WalletId) -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_main_wallet_settings(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId_lower(id),$0
+    )
+})
+}
+    
+open func nestedSettings(route: SettingsRoute) -> [Route]  {
+    return try!  FfiConverterSequenceTypeRoute.lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_nested_settings(self.uniffiClonePointer(),
+        FfiConverterTypeSettingsRoute_lower(route),$0
+    )
+})
+}
+    
+open func nestedWalletSettings(id: WalletId) -> [Route]  {
+    return try!  FfiConverterSequenceTypeRoute.lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_nested_wallet_settings(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId_lower(id),$0
+    )
+})
+}
+    
 open func newHotWallet() -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
     uniffi_cove_fn_method_routefactory_new_hot_wallet(self.uniffiClonePointer(),$0
@@ -8118,6 +8150,15 @@ open func sendSetAmount(id: WalletId, address: Address? = nil, amount: Amount? =
         FfiConverterTypeWalletId_lower(id),
         FfiConverterOptionTypeAddress.lower(address),
         FfiConverterOptionTypeAmount.lower(amount),$0
+    )
+})
+}
+    
+open func walletSettings(id: WalletId, route: WalletSettingsRoute) -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_wallet_settings(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId_lower(id),
+        FfiConverterTypeWalletSettingsRoute_lower(route),$0
     )
 })
 }
@@ -19159,8 +19200,6 @@ public enum Route {
     case listWallets
     case selectedWallet(WalletId
     )
-    case walletSettings(WalletId
-    )
     case newWallet(NewWalletRoute
     )
     case settings(SettingsRoute
@@ -19192,22 +19231,19 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 3: return .selectedWallet(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 4: return .walletSettings(try FfiConverterTypeWalletId.read(from: &buf)
+        case 4: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
         )
         
-        case 5: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
+        case 5: return .settings(try FfiConverterTypeSettingsRoute.read(from: &buf)
         )
         
-        case 6: return .settings(try FfiConverterTypeSettingsRoute.read(from: &buf)
+        case 6: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 7: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
+        case 7: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
         )
         
-        case 8: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
-        )
-        
-        case 9: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
+        case 8: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -19233,34 +19269,29 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
-        case let .walletSettings(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterTypeWalletId.write(v1, into: &buf)
-            
-        
         case let .newWallet(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeNewWalletRoute.write(v1, into: &buf)
             
         
         case let .settings(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeSettingsRoute.write(v1, into: &buf)
             
         
         case let .secretWords(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
         case let .transactionDetails(id,details):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeTransactionDetails.write(details, into: &buf)
             
         
         case let .send(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeSendRoute.write(v1, into: &buf)
             
         }
@@ -19770,7 +19801,7 @@ public enum SettingsRoute {
     case appearance
     case node
     case fiatCurrency
-    case wallet(WalletId
+    case wallet(id: WalletId, route: WalletSettingsRoute
     )
     case allWallets
 }
@@ -19796,7 +19827,7 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
         
         case 5: return .fiatCurrency
         
-        case 6: return .wallet(try FfiConverterTypeWalletId.read(from: &buf)
+        case 6: return .wallet(id: try FfiConverterTypeWalletId.read(from: &buf), route: try FfiConverterTypeWalletSettingsRoute.read(from: &buf)
         )
         
         case 7: return .allWallets
@@ -19829,9 +19860,10 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
         
         
-        case let .wallet(v1):
+        case let .wallet(id,route):
             writeInt(&buf, Int32(6))
-            FfiConverterTypeWalletId.write(v1, into: &buf)
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            FfiConverterTypeWalletSettingsRoute.write(route, into: &buf)
             
         
         case .allWallets:
@@ -22111,6 +22143,70 @@ extension WalletScannerError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum WalletSettingsRoute {
+    
+    case main
+    case changeName
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletSettingsRoute: FfiConverterRustBuffer {
+    typealias SwiftType = WalletSettingsRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletSettingsRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .main
+        
+        case 2: return .changeName
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletSettingsRoute, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .main:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .changeName:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletSettingsRoute_lift(_ buf: RustBuffer) throws -> WalletSettingsRoute {
+    return try FfiConverterTypeWalletSettingsRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletSettingsRoute_lower(_ value: WalletSettingsRoute) -> RustBuffer {
+    return FfiConverterTypeWalletSettingsRoute.lower(value)
+}
+
+
+
+extension WalletSettingsRoute: Equatable, Hashable {}
+
 
 
 
@@ -25359,6 +25455,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_load_and_reset_to_after() != 39743) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_routefactory_main_wallet_settings() != 49313) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_nested_settings() != 56664) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_nested_wallet_settings() != 50153) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_routefactory_new_hot_wallet() != 51032) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25381,6 +25486,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_set_amount() != 33578) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_wallet_settings() != 15273) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_auth_type() != 13301) {

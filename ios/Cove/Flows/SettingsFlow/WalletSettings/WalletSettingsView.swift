@@ -5,119 +5,77 @@ struct WalletSettingsView: View {
     @Environment(\.navigate) private var navigate
     @Environment(\.dismiss) private var dismiss
 
-    // args
-    @State var isSheet = true
-
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
 
     let colors: [WalletColor] = WalletColor.red.all()
 
     var body: some View {
-        NavigationView {
-            List {
-                Section(header: Text("Wallet Information")) {
-                    HStack {
-                        Text("Network")
-                        Spacer()
-                        Text(manager.walletMetadata.network.toString())
-                            .foregroundColor(.secondary)
-                    }
-                    HStack {
-                        Text("Fingerprint")
-                        Spacer()
-                        Text(manager.rust.fingerprint())
-                            .foregroundColor(.secondary)
-                    }
+        List {
+            Section(header: Text("Wallet Information")) {
+                HStack {
+                    Text("Network")
+                    Spacer()
+                    Text(manager.walletMetadata.network.toString())
+                        .foregroundColor(.secondary)
                 }
+                .font(.subheadline)
 
-                Section(header: Text("Basic Settings")) {
-                    TextField(
-                        "Wallet Name",
-                        text: Binding(
-                            get: { manager.walletMetadata.name },
-                            set: { manager.dispatch(action: .updateName($0)) }
-                        )
+                HStack {
+                    Text("Fingerprint")
+                    Spacer()
+                    Text(manager.rust.fingerprint())
+                        .foregroundColor(.secondary)
+                }
+                .font(.subheadline)
+            }
+
+            Section(header: Text("Settings")) {
+                TextField(
+                    "Wallet Name",
+                    text: Binding(
+                        get: { manager.walletMetadata.name },
+                        set: { manager.dispatch(action: .updateName($0)) }
                     )
+                )
+                .font(.subheadline)
 
-                    Picker(
-                        "Wallet Color",
-                        selection: Binding(
-                            get: { manager.walletMetadata.color },
-                            set: { manager.dispatch(action: .updateColor($0)) }
-                        )
-                    ) {
-                        ForEach(colors, id: \.self) { color in
-                            Text(color.toColor().description)
-                                .tag(color)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                    .tint(manager.walletMetadata.color.toColor())
-                }
-
-                Section(header: Text("App Settings")) {
-                    Button(action: {
-                        dismiss()
-                        navigate(Route.settings(.main))
-                    }) {
-                        HStack {
-                            Text("App Settings")
-                                .foregroundColor(.primary)
-
-                            Spacer()
-
-                            Image(systemName: "link")
-                                .foregroundColor(.secondary)
-                        }
+                Picker(
+                    "Wallet Color",
+                    selection: Binding(
+                        get: { manager.walletMetadata.color },
+                        set: { manager.dispatch(action: .updateColor($0)) }
+                    )
+                ) {
+                    ForEach(colors, id: \.self) { color in
+                        Text(color.toColor().description)
+                            .tag(color)
+                            .font(.subheadline)
                     }
                 }
+                .pickerStyle(MenuPickerStyle())
+                .tint(manager.walletMetadata.color.toColor())
+            }
 
-                Section(header: Text("Danger Zone")) {
-                    if manager.walletMetadata.walletType == .hot {
-                        Button {
-                            showingSecretWordsConfirmation = true
-                        } label: {
-                            Label {
-                                Text("View Secret Words")
-                                    .foregroundColor(.orange)
-                            } icon: {
-                                Image(systemName: "lock.trianglebadge.exclamationmark")
-                                    .foregroundColor(.orange)
-                            }
-                        }
-                    }
-
+            Section(header: Text("Danger Zone")) {
+                if manager.walletMetadata.walletType == .hot {
                     Button {
-                        showingDeleteConfirmation = true
+                        showingSecretWordsConfirmation = true
                     } label: {
-                        Label("Delete Wallet", systemImage: "trash")
-                            .foregroundColor(.red)
+                        Text("View Secret Words")
+                            .font(.subheadline)
                     }
                 }
-            }
-            .listStyle(InsetGroupedListStyle())
-            .navigationTitle("Wallet Settings")
-            .toolbar {
-                if isSheet {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            dismiss()
-                            navigate(Route.settings(.wallet(manager.walletMetadata.id)))
-                        } label: {
-                            Label("App Settings", systemImage: "gear")
-                                .foregroundColor(.blue)
-                        }
-                    }
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Done") {
-                            dismiss()
-                            manager.validateMetadata()
-                        }
-                    }
+                Button {
+                    showingDeleteConfirmation = true
+                } label: {
+                    Text("Delete Wallet").foregroundStyle(.red)
+                        .font(.subheadline)
                 }
             }
+            .navigationTitle(manager.walletMetadata.name)
+            .navigationBarTitleDisplayMode(.inline)
             .foregroundColor(.primary)
             .confirmationDialog("Are you sure?", isPresented: $showingDeleteConfirmation) {
                 Button("Delete", role: .destructive) {

@@ -40,8 +40,6 @@ func routeToView(app: AppManager, route: Route) -> some View {
         switch route {
         case let .loadAndReset(resetTo: routes, afterMillis: time):
             LoadAndResetContainer(nextRoute: routes.routes, loadingTimeMs: Int(time))
-        case let .walletSettings(id):
-            WalletSettingsContainer(id: id)
         case let .settings(route):
             SettingsContainer(route: route)
         case .listWallets:

@@ -59,8 +59,8 @@ struct SettingsContainer: View {
                 NodeSelectionView()
             case .fiatCurrency:
                 FiatCurrencyPicker
-            case .wallet(let walletId):
-                WalletSettingsContainer(id: walletId)
+            case let .wallet(id: walletId, route: route):
+                WalletSettingsContainer(id: walletId, route: route)
             case .allWallets:
                 Form {
                     Text("All Wallets")

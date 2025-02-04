@@ -1,5 +1,5 @@
 //
-//  SettingsNetworkView.swift
+//  SettingsPicker.swift
 //  Cove
 //
 //  Created by Praveen Perera on 1/30/25.

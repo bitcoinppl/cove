@@ -33,7 +33,7 @@ extension WalletColor {
             let color = customToColor(r: r, g: g, b: b)
             return [color, color.opacity(0.99)]
         default:
-            let color = self.toColor()
+            let color = toColor()
             return [color, color.opacity(0.99)]
         }
     }

@@ -39,7 +39,11 @@ struct WalletSettingsSection: View {
     var body: some View {
         Section("Wallet Settings") {
             ForEach(top5Wallets) { wallet in
-                SettingsRow(title: wallet.name, route: .wallet(wallet.id), icon: WalletIcon(wallet))
+                SettingsRow(
+                    title: wallet.name,
+                    route: .wallet(id: wallet.id, route: .main),
+                    icon: WalletIcon(wallet)
+                )
             }
 
             if wallets.count > 5 {
@@ -65,7 +69,7 @@ struct WalletSettingsSection: View {
             WalletMetadata("Test 3", preview: true),
             WalletMetadata("Test 4", preview: true),
             WalletMetadata("Test 5", preview: true),
-            WalletMetadata("Test 6", preview: true)
+            WalletMetadata("Test 6", preview: true),
         ])
     }
     .environment(AppManager.shared)

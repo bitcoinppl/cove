@@ -13,6 +13,7 @@ struct WalletSettingsContainer: View {
 
     // args
     let id: WalletId
+    let route: WalletSettingsRoute
 
     // private
     @State private var manager: WalletManager? = nil
@@ -28,18 +29,39 @@ struct WalletSettingsContainer: View {
         }
     }
 
+    @ViewBuilder
+    func WalletSettingsRoute(manager: WalletManager, route: WalletSettingsRoute) -> some View {
+        switch route {
+        case .main:
+            WalletSettingsView(manager: manager)
+        case .changeName:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    var LoadingOrError: some View {
+        Group {
+            if let error {
+                Text(error)
+            } else {
+                FullPageLoadingView()
+            }
+        }
+        .task {
+            guard let error else { return }
+            Log.error(error)
+            try? await Task.sleep(for: .seconds(5))
+            app.resetRoute(to: .listWallets)
+        }
+        .onAppear(perform: initOnAppear)
+    }
+
     var body: some View {
         if let manager {
-            WalletSettingsView(manager: manager, isSheet: false)
+            WalletSettingsRoute(manager: manager, route: route)
         } else {
-            Text(error ?? "Loading...")
-                .task {
-                    guard let error else { return }
-                    Log.error(error)
-                    try? await Task.sleep(for: .seconds(5))
-                    app.resetRoute(to: .listWallets)
-                }
-                .onAppear(perform: initOnAppear)
+            LoadingOrError
         }
     }
 }
