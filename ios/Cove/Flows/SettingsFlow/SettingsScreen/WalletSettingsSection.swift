@@ -58,6 +58,11 @@ struct WalletSettingsSection: View {
                 )
             }
         }
+        .onAppear {
+            if let wallets = try? Database().wallets().allSortedActive() {
+                self.wallets = wallets
+            }
+        }
     }
 }
 

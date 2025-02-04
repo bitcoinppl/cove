@@ -68,7 +68,7 @@ struct WalletSettingsView: View {
                                 ZStack {
                                     if color == metadata.color {
                                         Circle()
-                                            .stroke(Color(color).opacity(0.5), lineWidth: 2)
+                                            .stroke(Color(color).opacity(0.7), lineWidth: 2)
                                             .frame(width: 32, height: 32)
                                     }
 

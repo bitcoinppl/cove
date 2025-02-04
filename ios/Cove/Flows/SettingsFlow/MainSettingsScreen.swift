@@ -211,7 +211,7 @@ struct MainSettingsScreen: View {
                         HStack(spacing: 0) {
                             Image(systemName: "chevron.left")
                                 .fontWeight(.semibold)
-                                .padding(.horizontal, 0)
+
                             Text("Back")
                                 .offset(x: 5)
                         }
