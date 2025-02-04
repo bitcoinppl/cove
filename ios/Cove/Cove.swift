@@ -11720,6 +11720,8 @@ public protocol WalletsTableProtocol : AnyObject {
     
     func all() throws  -> [WalletMetadata]
     
+    func allSortedActive() throws  -> [WalletMetadata]
+    
     func isEmpty() throws  -> Bool
     
     func len(network: Network, mode: WalletMode) throws  -> UInt16
@@ -11780,6 +11782,13 @@ open class WalletsTable:
 open func all()throws  -> [WalletMetadata]  {
     return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_all(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func allSortedActive()throws  -> [WalletMetadata]  {
+    return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_walletstable_all_sorted_active(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -19763,6 +19772,7 @@ public enum SettingsRoute {
     case fiatCurrency
     case wallet(WalletId
     )
+    case allWallets
 }
 
 
@@ -19788,6 +19798,8 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
         
         case 6: return .wallet(try FfiConverterTypeWalletId.read(from: &buf)
         )
+        
+        case 7: return .allWallets
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -19821,6 +19833,10 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
+        
+        case .allWallets:
+            writeInt(&buf, Int32(7))
+        
         }
     }
 }
@@ -25725,6 +25741,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_all() != 19569) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_walletstable_all_sorted_active() != 16744) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_is_empty() != 57763) {

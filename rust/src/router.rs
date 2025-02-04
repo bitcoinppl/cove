@@ -70,6 +70,7 @@ pub enum SettingsRoute {
     Node,
     FiatCurrency,
     Wallet(WalletId),
+    AllWallets,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

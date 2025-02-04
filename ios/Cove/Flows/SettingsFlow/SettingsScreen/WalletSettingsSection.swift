@@ -8,11 +8,65 @@
 import SwiftUI
 
 struct WalletSettingsSection: View {
+    @State var wallets: [WalletMetadata]
+
+    init(wallets: [WalletMetadata]? = nil) {
+        if let wallets { self.wallets = wallets; return }
+
+        do {
+            self.wallets = try Database().wallets().allSortedActive()
+            Log.debug("Wallets: \(self.wallets)")
+        } catch {
+            Log.error("Failed to get wallets \(error)")
+            self.wallets = []
+        }
+    }
+
+    func WalletIcon(_ wallet: WalletMetadata) -> SettingsIcon {
+        let foregroundColor = switch wallet.swiftColor {
+        case .almostWhite: Color.black
+        case .lightMint: Color.black
+        default: Color.white
+        }
+
+        return SettingsIcon(symbol: "wallet.bifold", foregroundColor: foregroundColor, backgroundColor: wallet.swiftColor)
+    }
+
+    var top5Wallets: [WalletMetadata] {
+        wallets.count > 5 ? Array(wallets[0 ... 4]) : wallets
+    }
+
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        Section("Wallet Settings") {
+            ForEach(top5Wallets) { wallet in
+                SettingsRow(title: wallet.name, route: .wallet(wallet.id), icon: WalletIcon(wallet))
+            }
+
+            if wallets.count > 5 {
+                SettingsRow(
+                    title: "More",
+                    route: .allWallets,
+                    icon: SettingsIcon(
+                        symbol: "ellipsis",
+                        foregroundColor: .secondary,
+                        backgroundColor: .clear
+                    )
+                )
+            }
+        }
     }
 }
 
 #Preview {
-    WalletSettingsSection()
+    Form {
+        WalletSettingsSection(wallets: [
+            WalletMetadata("Test 1", preview: true),
+            WalletMetadata("Test 2", preview: true),
+            WalletMetadata("Test 3", preview: true),
+            WalletMetadata("Test 4", preview: true),
+            WalletMetadata("Test 5", preview: true),
+            WalletMetadata("Test 6", preview: true)
+        ])
+    }
+    .environment(AppManager.shared)
 }

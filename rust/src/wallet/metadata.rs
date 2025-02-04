@@ -292,16 +292,17 @@ pub enum WalletColor {
 #[uniffi::export]
 fn default_wallet_colors() -> Vec<WalletColor> {
     vec![
-        WalletColor::WAlmostGray,
-        WalletColor::WAlmostWhite,
         WalletColor::WBeige,
         WalletColor::WPastelBlue,
         WalletColor::WPastelNavy,
         WalletColor::WPastelRed,
         WalletColor::WPastelYellow,
-        WalletColor::WLightMint,
         WalletColor::WPastelTeal,
-        WalletColor::WLightPastelYellow,
+        WalletColor::Blue,
+        WalletColor::Green,
+        WalletColor::Orange,
+        WalletColor::Purple,
+        WalletColor::Pink,
     ]
 }
 

@@ -151,10 +151,12 @@ struct MainSettingsScreen: View {
     @ViewBuilder
     var GeneralSection: some View {
         Section(header: Text("General")) {
-            SettingsLink(title: "Network", route: .network, symbol: "network")
-            SettingsLink(title: "Appearence", route: .appearance, symbol: "sun.max.fill")
-            SettingsLink(title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted")
-            SettingsLink(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
+            SettingsRow(title: "Network", route: .network, symbol: "network")
+            SettingsRow(title: "Appearence", route: .appearance, symbol: "sun.max.fill")
+            SettingsRow(
+                title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted"
+            )
+            SettingsRow(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
         }
     }
 
@@ -168,19 +170,20 @@ struct MainSettingsScreen: View {
 
             if togglePin.wrappedValue {
                 Button(action: { sheetState = .init(.changePin) }) {
-                    HStack {
-                        SettingsIcon(symbol: "lock.open.rotation")
-
-                        Text("Change PIN")
-                            .font(.subheadline)
-                            .padding(8)
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.vertical, 1)
+                    SettingsRow(title: "Change PIN", symbol: "lock.open.rotation")
                 }
 
-                SettingsToggle(title: "Enable Wipe Data PIN", symbol: "exclamationmark.lock.fill", item: toggleWipeMePin)
-                SettingsToggle(title: "Enable Decoy PIN", symbol: "theatermasks", item: toggleDecoyPin)
+                SettingsToggle(
+                    title: "Enable Wipe Data PIN",
+                    symbol: "exclamationmark.lock.fill",
+                    item: toggleWipeMePin
+                )
+
+                SettingsToggle(
+                    title: "Enable Decoy PIN",
+                    symbol: "theatermasks",
+                    item: toggleDecoyPin
+                )
             }
         }
     }

@@ -61,6 +61,10 @@ struct SettingsContainer: View {
                 FiatCurrencyPicker
             case .wallet(let walletId):
                 WalletSettingsContainer(id: walletId)
+            case .allWallets:
+                Form {
+                    Text("All Wallets")
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)

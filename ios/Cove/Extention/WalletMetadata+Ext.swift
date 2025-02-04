@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-extension WalletMetadata {
+extension WalletMetadata: Identifiable {
     var swiftColor: Color {
         Color(color)
     }

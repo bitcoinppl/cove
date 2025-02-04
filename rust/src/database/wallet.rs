@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fmt::Display, sync::Arc};
+use std::{cmp::Ordering, fmt::Display, sync::Arc, time::Duration};
 
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 use tracing::debug;
@@ -84,6 +84,20 @@ impl WalletsTable {
 
         debug!("getting all wallets for {network}");
         let wallets = self.get_all(network, wallet_mode)?;
+
+        Ok(wallets)
+    }
+
+    pub fn all_sorted_active(&self) -> Result<Vec<WalletMetadata>, Error> {
+        let mut wallets = self.all()?;
+
+        wallets.sort_unstable_by(|a, b| {
+            let a_last_scan = a.internal.last_scan_finished.unwrap_or(Duration::ZERO);
+            let b_last_scan = b.internal.last_scan_finished.unwrap_or(Duration::ZERO);
+
+            // largest to smallest
+            a_last_scan.cmp(&b_last_scan).reverse()
+        });
 
         Ok(wallets)
     }
