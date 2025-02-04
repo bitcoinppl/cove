@@ -228,7 +228,7 @@ struct LockView<Content: View>: View {
         let context = LAContext()
 
         return try await context.evaluatePolicy(
-            .deviceOwnerAuthenticationWithBiometrics,
+            .deviceOwnerAuthentication,
             localizedReason: bioMetricUnlockMessage
         )
     }
@@ -263,7 +263,7 @@ struct LockView<Content: View>: View {
 private var isBiometricAvailable: Bool {
     /// Lock Context
     let context = LAContext()
-    return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+    return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil)
 }
 
 #Preview("normal") {
