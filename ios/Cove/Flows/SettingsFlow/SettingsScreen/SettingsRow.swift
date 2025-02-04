@@ -28,7 +28,7 @@ struct SettingsRow: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(UIColor.tertiaryLabel))
                     .font(.footnote)
                     .fontWeight(.semibold)
             }

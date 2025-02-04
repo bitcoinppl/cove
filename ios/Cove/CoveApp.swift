@@ -500,9 +500,15 @@ struct CoveApp: App {
             let sinceLocked = Date.now.timeIntervalSince(lockedAt)
             Log.debug("LOCKED AT: \(lockedAt) == \(sinceLocked)")
 
-            // less than 1 seconds, auto unlock if PIN only, and not in decoy mode
+            // less than 3 seconds, auto unlock if PIN only, and not in decoy mode
             // TODO: make this configurable and put in DB
-            if auth.type == .pin, !auth.isInDecoyMode(), sinceLocked < 2 {
+            if auth.type == .pin, !auth.isInDecoyMode(), sinceLocked < 3 {
+                showCover = false
+                auth.lockState = .unlocked
+            }
+
+            // auto unlock if its less than a second for other lock type
+            if !auth.isInDecoyMode(), sinceLocked < 1 {
                 showCover = false
                 auth.lockState = .unlocked
             }

@@ -19,7 +19,7 @@ struct HotWalletCreateScreen: View {
     }
 }
 
-let columns = [
+private let columns = [
     GridItem(.flexible()),
     GridItem(.flexible()),
     GridItem(.flexible()),

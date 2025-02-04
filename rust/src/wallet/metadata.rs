@@ -302,7 +302,6 @@ fn default_wallet_colors() -> Vec<WalletColor> {
         WalletColor::Green,
         WalletColor::Orange,
         WalletColor::Purple,
-        WalletColor::Pink,
     ]
 }
 

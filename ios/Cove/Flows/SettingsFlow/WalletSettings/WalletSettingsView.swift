@@ -8,7 +8,11 @@ struct WalletSettingsView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
 
-    let colors: [WalletColor] = WalletColor.red.all()
+    var metadata: WalletMetadata {
+        manager.walletMetadata
+    }
+
+    let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
 
     var body: some View {
         List {
@@ -16,7 +20,7 @@ struct WalletSettingsView: View {
                 HStack {
                     Text("Network")
                     Spacer()
-                    Text(manager.walletMetadata.network.toString())
+                    Text(metadata.network.toString())
                         .foregroundColor(.secondary)
                 }
                 .font(.subheadline)
@@ -31,30 +35,56 @@ struct WalletSettingsView: View {
             }
 
             Section(header: Text("Settings")) {
-                TextField(
-                    "Wallet Name",
-                    text: Binding(
-                        get: { manager.walletMetadata.name },
-                        set: { manager.dispatch(action: .updateName($0)) }
-                    )
-                )
+                HStack {
+                    Text("Name")
+                    Spacer()
+
+                    Text(metadata.name)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(Color(UIColor.tertiaryLabel))
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                }
                 .font(.subheadline)
 
-                Picker(
-                    "Wallet Color",
-                    selection: Binding(
-                        get: { manager.walletMetadata.color },
-                        set: { manager.dispatch(action: .updateColor($0)) }
-                    )
-                ) {
-                    ForEach(colors, id: \.self) { color in
-                        Text(color.toColor().description)
-                            .tag(color)
+                VStack(spacing: 14) {
+                    HStack {
+                        Text("Wallet Color")
                             .font(.subheadline)
+                        Spacer()
+                    }
+
+                    HStack {
+                        Rectangle()
+                            .fill(metadata.swiftColor)
+                            .cornerRadius(10)
+                            .frame(width: 80, height: 80)
+
+                        LazyVGrid(columns: colorColumns, spacing: 20) {
+                            ForEach(defaultWalletColors(), id: \.self) { color in
+                                ZStack {
+                                    if color == metadata.color {
+                                        Circle()
+                                            .stroke(Color(color).opacity(0.5), lineWidth: 2)
+                                            .frame(width: 32, height: 32)
+                                    }
+
+                                    Circle()
+                                        .fill(Color(color))
+                                        .frame(width: 28, height: 28)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { manager.dispatch(action: .updateColor(color)) }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                 }
-                .pickerStyle(MenuPickerStyle())
-                .tint(manager.walletMetadata.color.toColor())
+                .padding(.vertical, 8)
             }
 
             Section(header: Text("Danger Zone")) {
