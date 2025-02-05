@@ -138,10 +138,10 @@ fn database_location() -> PathBuf {
 
 #[cfg(test)]
 fn database_location() -> PathBuf {
-    use rand::distributions::Alphanumeric;
+    use rand::distr::Alphanumeric;
     use rand::prelude::*;
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let random_string: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
     let cove_db = format!("cove_{}.db", random_string);
 

@@ -7,7 +7,7 @@ use derive_more::{AsRef, Deref, Display, From, Into};
 
 // MARK: FeeRate
 //
-pub type BdkFeeRate = bitcoin_units::FeeRate;
+pub type BdkFeeRate = bitcoin::FeeRate;
 
 #[derive(
     Debug,

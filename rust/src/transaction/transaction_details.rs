@@ -239,11 +239,11 @@ impl TransactionDetails {
         let ts = Timestamp::from_second(confirm_time).ok()?;
 
         // Convert to local time zone
-        let local = match ts.intz(&timezone_string) {
+        let local = match ts.in_tz(&timezone_string) {
             Ok(local) => local,
             Err(error) => {
                 tracing::warn!("unable to convert timestamp: {error}");
-                ts.intz("UTC").ok()?
+                ts.in_tz("UTC").ok()?
             }
         };
 

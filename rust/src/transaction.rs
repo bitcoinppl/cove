@@ -28,7 +28,7 @@ pub type Unit = unit::Unit;
 pub type TransactionDetails = transaction_details::TransactionDetails;
 pub type FeeRate = fees::FeeRate;
 
-pub type BdkAmount = bitcoin_units::Amount;
+pub type BdkAmount = bitcoin::Amount;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionDirection {
@@ -108,8 +108,8 @@ pub struct OutPoint {
 
 impl TxId {
     pub fn preview_new() -> Self {
-        let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
-        let hash = *bitcoin_hashes::sha256d::Hash::from_bytes_ref(&random_bytes);
+        let random_bytes = rand::rng().random::<[u8; 32]>();
+        let hash = *bitcoin::hashes::sha256d::Hash::from_bytes_ref(&random_bytes);
 
         Self(BdkTxid::from_raw_hash(hash))
     }
