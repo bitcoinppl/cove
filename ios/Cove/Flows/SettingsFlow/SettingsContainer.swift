@@ -62,9 +62,7 @@ struct SettingsContainer: View {
             case let .wallet(id: walletId, route: route):
                 WalletSettingsContainer(id: walletId, route: route)
             case .allWallets:
-                Form {
-                    Text("All Wallets")
-                }
+                SettingsListAllWallets()
             }
         }
         .navigationBarTitleDisplayMode(.inline)

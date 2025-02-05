@@ -144,6 +144,7 @@ struct WalletSettingsView: View {
             manager.validateMetadata()
             metadata = manager.walletMetadata
         }
+        .scrollContentBackground(.hidden)
     }
 }
 

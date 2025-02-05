@@ -32,8 +32,9 @@ struct WalletSettingsSection: View {
         return SettingsIcon(symbol: "wallet.bifold", foregroundColor: foregroundColor, backgroundColor: wallet.swiftColor)
     }
 
-    var top5Wallets: [WalletMetadata] {
-        wallets.count > 5 ? Array(wallets[0 ... 4]) : wallets
+    private var topAmount = 5
+    private var top5Wallets: [WalletMetadata] {
+        wallets.count > topAmount ? Array(wallets[0 ... topAmount - 1]) : wallets
     }
 
     var body: some View {
@@ -46,7 +47,7 @@ struct WalletSettingsSection: View {
                 )
             }
 
-            if wallets.count > 5 {
+            if wallets.count > topAmount {
                 SettingsRow(
                     title: "More",
                     route: .allWallets,
