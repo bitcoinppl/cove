@@ -19,6 +19,13 @@ struct WalletSettingsContainer: View {
     @State private var manager: WalletManager? = nil
     @State private var error: String? = nil
 
+    func walletNameBinding(_ manager: WalletManager) -> Binding<String> {
+        Binding(
+            get: { manager.walletMetadata.name },
+            set: { manager.dispatch(action: .updateName($0)) }
+        )
+    }
+
     func initOnAppear() {
         do {
             let manager = try app.getWalletManager(id: id)
@@ -35,7 +42,7 @@ struct WalletSettingsContainer: View {
         case .main:
             WalletSettingsView(manager: manager)
         case .changeName:
-            EmptyView()
+            WalletSettingsChangeNameView(name: walletNameBinding(manager))
         }
     }
 
