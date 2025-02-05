@@ -68,17 +68,17 @@ struct WalletSettingsSection: View {
 }
 
 #if DEBUG
-#Preview {
-    Form {
-        WalletSettingsSection(wallets: [
-            WalletMetadata("Test 1", preview: true),
-            WalletMetadata("Test 2", preview: true),
-            WalletMetadata("Test 3", preview: true),
-            WalletMetadata("Test 4", preview: true),
-            WalletMetadata("Test 5", preview: true),
-            WalletMetadata("Test 6", preview: true),
-        ])
+    #Preview {
+        Form {
+            WalletSettingsSection(wallets: [
+                WalletMetadata("Test 1", preview: true),
+                WalletMetadata("Test 2", preview: true),
+                WalletMetadata("Test 3", preview: true),
+                WalletMetadata("Test 4", preview: true),
+                WalletMetadata("Test 5", preview: true),
+                WalletMetadata("Test 6", preview: true),
+            ])
+        }
+        .environment(AppManager.shared)
     }
-    .environment(AppManager.shared)
-}
 #endif

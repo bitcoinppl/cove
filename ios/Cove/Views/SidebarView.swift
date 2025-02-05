@@ -131,6 +131,7 @@ struct SidebarView: View {
                             HStack(spacing: 20) {
                                 Image(systemName: "wallet.bifold")
                                 Text("Add Wallet")
+                                    .font(.callout)
                             }
                             .foregroundColor(.white)
                         }
@@ -143,6 +144,7 @@ struct SidebarView: View {
                             HStack(spacing: 22) {
                                 Image(systemName: "gear")
                                 Text("Settings")
+                                    .font(.callout)
                             }
                             .foregroundColor(.white)
                         }
