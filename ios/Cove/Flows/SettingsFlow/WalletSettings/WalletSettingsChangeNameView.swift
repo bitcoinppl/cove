@@ -11,6 +11,11 @@ struct WalletSettingsChangeNameView: View {
     @Binding var name: String
     @FocusState private var isFocused: Bool
 
+    init(name: Binding<String>) {
+        self._name = name
+        self.isFocused = true
+    }
+
     var body: some View {
         Form {
             TextField("Wallet Name", text: $name)

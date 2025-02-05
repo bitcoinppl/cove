@@ -130,8 +130,7 @@ struct WalletSettingsView: View {
             }
             .confirmationDialog("Are you sure?", isPresented: $showingSecretWordsConfirmation) {
                 Button("Show Me") {
-                    dismiss()
-                    navigate(Route.secretWords(manager.walletMetadata.id))
+                    app.pushRoute(Route.secretWords(manager.walletMetadata.id))
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
