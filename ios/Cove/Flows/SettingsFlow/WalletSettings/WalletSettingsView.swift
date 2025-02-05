@@ -9,11 +9,13 @@ struct WalletSettingsView: View {
 
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
-    @State private var metadata: WalletMetadata
 
     init(manager: WalletManager) {
         self.manager = manager
-        metadata = manager.walletMetadata
+    }
+
+    var metadata: WalletMetadata {
+        manager.walletMetadata
     }
 
     let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
@@ -140,10 +142,7 @@ struct WalletSettingsView: View {
             }
         }
         .onDisappear { manager.validateMetadata() }
-        .onAppear {
-            manager.validateMetadata()
-            metadata = manager.walletMetadata
-        }
+        .onAppear { manager.validateMetadata() }
         .scrollContentBackground(.hidden)
     }
 }
