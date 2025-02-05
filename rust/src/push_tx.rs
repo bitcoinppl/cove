@@ -1,7 +1,7 @@
 use bitcoin::base64::{prelude::BASE64_URL_SAFE, Engine as _};
 use winnow::{
     token::{take_until, take_while},
-    PResult, Parser as _,
+    Parser as _, Result as WinnowResult,
 };
 
 use crate::transaction::ffi::BitcoinTransaction;
@@ -43,7 +43,7 @@ impl PushTx {
     }
 }
 
-fn extract_tx<'s>(input: &mut &'s str) -> PResult<&'s str> {
+fn extract_tx<'s>(input: &mut &'s str) -> WinnowResult<&'s str> {
     // skip until we find "pushtx#t="
     let _ = take_until(1.., "pushtx#t=").parse_next(input)?;
 

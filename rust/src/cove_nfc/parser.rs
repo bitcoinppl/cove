@@ -7,9 +7,9 @@ use winnow::{
         bits::{bits, bool as take_bool, take as take_bits},
         Endianness,
     },
-    error::{ErrMode, InputError, ParserError as _},
+    error::{ContextError, ErrMode},
     token::{any, literal, take},
-    PResult, Parser,
+    ModalResult, Parser,
 };
 
 use crate::cove_nfc::{
@@ -20,7 +20,10 @@ use crate::cove_nfc::{
     record::NdefRecord,
 };
 
-pub fn parse_ndef_records(input: &mut Stream<'_>, info: &MessageInfo) -> PResult<Vec<NdefRecord>> {
+pub fn parse_ndef_records(
+    input: &mut Stream<'_>,
+    info: &MessageInfo,
+) -> ModalResult<Vec<NdefRecord>> {
     let mut records = Vec::new();
     let payload_length = info.payload_length as usize;
     let mut total_parsed_bytes = 0;
@@ -42,7 +45,7 @@ pub fn parse_ndef_records(input: &mut Stream<'_>, info: &MessageInfo) -> PResult
     Ok(records)
 }
 
-pub fn parse_ndef_record(input: &mut Stream<'_>) -> PResult<NdefRecord> {
+pub fn parse_ndef_record(input: &mut Stream<'_>) -> ModalResult<NdefRecord> {
     let header = parse_header.parse_next(input)?;
     let type_ = parse_type(input, header.type_length)?;
     let id = parse_id(input, header.id_length)?;
@@ -56,7 +59,7 @@ pub fn parse_ndef_record(input: &mut Stream<'_>) -> PResult<NdefRecord> {
     })
 }
 
-pub fn parse_message_info(input: &mut Stream<'_>) -> PResult<MessageInfo> {
+pub fn parse_message_info(input: &mut Stream<'_>) -> ModalResult<MessageInfo> {
     let _ = literal([226, 67, 0, 1, 0, 0, 4, 0, 3]).parse_next(input)?;
 
     let length_indicator = be_u8.parse_next(input)?;
@@ -71,8 +74,8 @@ pub fn parse_message_info(input: &mut Stream<'_>) -> PResult<MessageInfo> {
 }
 
 // private
-fn parse_header_byte(input: &mut Stream<'_>) -> PResult<(bool, bool, bool, bool, bool, u8)> {
-    bits::<_, _, InputError<(_, usize)>, _, _>((
+fn parse_header_byte(input: &mut Stream<'_>) -> ModalResult<(bool, bool, bool, bool, bool, u8)> {
+    bits::<_, _, ErrMode<ContextError>, _, _>((
         take_bool,
         take_bool,
         take_bool,
@@ -81,12 +84,9 @@ fn parse_header_byte(input: &mut Stream<'_>) -> PResult<(bool, bool, bool, bool,
         take_bits(3_u8),
     ))
     .parse_next(input)
-    .map_err(|_: ErrMode<InputError<_>>| {
-        ErrMode::from_error_kind(input, winnow::error::ErrorKind::Slice)
-    })
 }
 
-fn parse_header(input: &mut Stream<'_>) -> PResult<NdefHeader> {
+fn parse_header(input: &mut Stream<'_>) -> ModalResult<NdefHeader> {
     let (message_begin, message_end, chunked, short_record, has_id_length, type_name_format) =
         parse_header_byte(input)?;
 
@@ -129,13 +129,13 @@ fn parse_header(input: &mut Stream<'_>) -> PResult<NdefHeader> {
     })
 }
 
-fn parse_type(input: &mut Stream<'_>, type_length: u8) -> PResult<Vec<u8>> {
+fn parse_type(input: &mut Stream<'_>, type_length: u8) -> ModalResult<Vec<u8>> {
     take(type_length as usize)
         .map(|s: &[u8]| s.to_vec())
         .parse_next(input)
 }
 
-fn parse_id(input: &mut Stream<'_>, id_length: Option<u8>) -> PResult<Option<Vec<u8>>> {
+fn parse_id(input: &mut Stream<'_>, id_length: Option<u8>) -> ModalResult<Option<Vec<u8>>> {
     if let Some(id_len) = id_length {
         take(id_len as usize)
             .map(|s: &[u8]| Some(s.to_vec()))
@@ -149,14 +149,11 @@ fn parse_payload(
     input: &mut Stream<'_>,
     payload_length: u32,
     type_: &[u8],
-) -> PResult<NdefPayload> {
+) -> ModalResult<NdefPayload> {
     if type_ == b"T" {
         let (is_utf16, language_code_length): (bool, u8) =
-            bits::<_, _, InputError<(_, usize)>, _, _>((take_bool, take_bits(7_u8)))
-                .parse_next(input)
-                .map_err(|_: ErrMode<InputError<_>>| {
-                    ErrMode::from_error_kind(input, winnow::error::ErrorKind::Slice)
-                })?;
+            bits::<_, _, ErrMode<ContextError>, _, _>((take_bool, take_bits(7_u8)))
+                .parse_next(input)?;
 
         let language_code = take(language_code_length as usize).parse_next(input)?;
 
@@ -207,7 +204,7 @@ mod tests {
         Stream::new(Bytes::new(bytes))
     }
 
-    fn parse_ndef_message(input: &mut Stream<'_>) -> PResult<Vec<NdefRecord>> {
+    fn parse_ndef_message(input: &mut Stream<'_>) -> ModalResult<Vec<NdefRecord>> {
         let info = parse_message_info.parse_next(input)?;
         parse_ndef_records(input, &info)
     }
@@ -457,12 +454,10 @@ mod tests {
         let mut export = owned_stream((*EXPORT)[..100].to_vec());
         let message = parse_ndef_message(&mut export);
 
-        assert!(matches!(
-            message,
-            Err(winnow::error::ErrMode::Incomplete(Needed::Size(_)))
-        ));
-
-        if let Err(winnow::error::ErrMode::Incomplete(needed)) = message {
+        assert!(message.is_err());
+        if let Err(e) = message {
+            assert!(e.is_incomplete());
+            let needed = e.needed().unwrap();
             assert_eq!(needed, Needed::new(original_length - 101));
         }
     }
@@ -482,7 +477,8 @@ mod tests {
                 Ok(message) => {
                     assert_eq!(message.len(), 1)
                 }
-                Err(winnow::error::ErrMode::Incomplete(Needed::Size(_))) => {
+
+                Err(e) if e.is_incomplete() => {
                     chunks_processed += 1;
                     data = chunk_data;
                 }
