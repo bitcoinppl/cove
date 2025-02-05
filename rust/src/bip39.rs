@@ -180,7 +180,7 @@ mod test {
     #[test]
     fn check_final_words_are_accurate_12_words() {
         // 128 / 8  = 16
-        let random_bytes = rand::rng().gen::<[u8; 16]>();
+        let random_bytes = rand::rng().random::<[u8; 16]>();
         let words = Mnemonic::from_entropy(&random_bytes)
             .expect("failed to create mnemonic")
             .words()
@@ -198,7 +198,7 @@ mod test {
     #[test]
     fn check_final_words_are_accurate_24_words() {
         // 256 / 8  = 32
-        let random_bytes = rand::rng().gen::<[u8; 32]>();
+        let random_bytes = rand::rng().random::<[u8; 32]>();
         let words = Mnemonic::from_entropy(&random_bytes)
             .expect("failed to create mnemonic")
             .words()

@@ -313,7 +313,7 @@ impl WalletColor {
     pub fn random() -> Self {
         let options = default_wallet_colors();
 
-        let random_index = rand::rng().gen_range(0..options.len());
+        let random_index = rand::rng().random_range(0..options.len());
         options[random_index]
     }
 }

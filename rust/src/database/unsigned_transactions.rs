@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, sync::Arc};
 
-use bitcoin_hashes::{sha256d::Hash, Hash as _};
+use bitcoin::hashes::{sha256d::Hash, Hash as _};
 use redb::TableDefinition;
 use tracing::debug;
 

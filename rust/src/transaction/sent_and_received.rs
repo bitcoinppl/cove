@@ -1,5 +1,5 @@
 use super::{Amount, TransactionDirection, Unit};
-use bitcoin_units::Amount as BdkAmount;
+use bitcoin::Amount as BdkAmount;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct SentAndReceived {

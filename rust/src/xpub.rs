@@ -78,6 +78,9 @@ impl From<descriptor::Error> for DescriptorError {
             DS::SinglePubkeyNotSupported => Self::SinglePubkeyNotSupported,
             DS::UnableToParseXpub(error) => Self::UnableToParseXpub(error.to_string()),
             DS::NoXpubInDescriptor => Self::NoXpubInDescriptor,
+            DS::InvalidJsonDescriptor(..) => {
+                Self::InvalidDescriptor("invalid json descriptor".to_string())
+            }
         }
     }
 }

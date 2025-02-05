@@ -27,7 +27,7 @@ pub struct Amount(pub BdkAmount);
 // rust only
 impl Amount {
     pub fn from_btc(btc: f64) -> Result<Self, eyre::Report> {
-        Ok(Self(bitcoin_units::Amount::from_btc(btc)?))
+        Ok(Self(bitcoin::Amount::from_btc(btc)?))
     }
 }
 
@@ -35,17 +35,17 @@ impl Amount {
 impl Amount {
     #[uniffi::constructor]
     pub fn from_sat(sats: u64) -> Self {
-        Self(bitcoin_units::Amount::from_sat(sats))
+        Self(bitcoin::Amount::from_sat(sats))
     }
 
     #[uniffi::constructor]
     pub fn one_btc() -> Self {
-        Self(bitcoin_units::Amount::ONE_BTC)
+        Self(bitcoin::Amount::ONE_BTC)
     }
 
     #[uniffi::constructor]
     pub fn one_sat() -> Self {
-        Self(bitcoin_units::Amount::ONE_SAT)
+        Self(bitcoin::Amount::ONE_SAT)
     }
 
     pub fn as_btc(&self) -> f64 {

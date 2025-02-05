@@ -39,8 +39,6 @@ pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git"
 ] }
 
 bitcoin = "0.32"
-bitcoin-units = "0.2"
-bitcoin_hashes = "0.16.0"
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }

@@ -18,7 +18,7 @@ use bdk_chain::{
 };
 use bdk_wallet::{KeychainKind, TxOrdering};
 use bitcoin::{params::Params, Transaction as BdkTransaction};
-use bitcoin_units::Amount;
+use bitcoin::Amount;
 use crossbeam::channel::Sender;
 use eyre::Context as _;
 use std::time::{Duration, UNIX_EPOCH};
