@@ -8,9 +8,10 @@
 import SwiftUI
 
 struct TransactionDetailsView: View {
-    @Environment(AppManager.self) private var app
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(AppManager.self) private var app
     @Environment(\.openURL) private var openURL
+
     private let screenWidth = UIScreen.main.bounds.width
     private let screenHeight = UIScreen.main.bounds.height
 
@@ -264,11 +265,12 @@ struct TransactionDetailsView: View {
             }
         }
         .background(
-            Image(colorScheme == .light ? .transactionDetailsPatternLight : .transactionDetailsPatternDark)
+            Image(.transactionDetailsPattern)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .ignoresSafeArea(edges: .top)
+                .opacity(colorScheme == .light ? 0.55 : 1)
         )
     }
 }

@@ -1,5 +1,6 @@
 #[derive(Debug, Copy, Clone, PartialEq, uniffi::Enum)]
 pub enum FfiColor {
+    // default colors
     Red(FfiOpacity),
     Blue(FfiOpacity),
     Green(FfiOpacity),
@@ -10,7 +11,11 @@ pub enum FfiColor {
     White(FfiOpacity),
     Black(FfiOpacity),
     Gray(FfiOpacity),
+
+    // other custom colors
     CoolGray(FfiOpacity),
+
+    // any custom
     Custom(Rgb, FfiOpacity),
 }
 
@@ -37,46 +42,3 @@ pub struct Rgb {
     pub g: u8,
     pub b: u8,
 }
-
-// #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
-// pub enum DefaultColor {
-//     Red,
-//     Blue,
-//     Green,
-//     Yellow,
-//     Orange,
-//     Purple,
-//     Pink,
-//     White,
-//     Black,
-//     Gray,
-//     CoolGray,
-// }
-//
-// impl DefaultColor {
-//     pub fn to_color(&self) -> FfiColor {
-//         match self {
-//             DefaultColor::Red => FfiColor::Default(DefaultColor::Red),
-//             DefaultColor::Blue => FfiColor::Default(DefaultColor::Blue),
-//             DefaultColor::Green => FfiColor::Default(DefaultColor::Green),
-//             DefaultColor::Yellow => FfiColor::Default(DefaultColor::Yellow),
-//             DefaultColor::Orange => FfiColor::Default(DefaultColor::Orange),
-//             DefaultColor::Purple => FfiColor::Default(DefaultColor::Purple),
-//             DefaultColor::Pink => FfiColor::Default(DefaultColor::Pink),
-//             DefaultColor::White => FfiColor::Default(DefaultColor::White),
-//             DefaultColor::Black => FfiColor::Default(DefaultColor::Black),
-//             DefaultColor::Gray => FfiColor::Default(DefaultColor::Gray),
-//             DefaultColor::CoolGray => FfiColor::Default(DefaultColor::CoolGray),
-//         }
-//     }
-//
-//     pub fn with_opacity(&self, opacity: f32) -> FfiColor {
-//         FfiColor::WithOpacity(self.clone(), opacity)
-//     }
-// }
-//
-// impl From<DefaultColor> for FfiColor {
-//     fn from(color: DefaultColor) -> Self {
-//         color.to_color()
-//     }
-// }

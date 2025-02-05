@@ -10,7 +10,6 @@ import SwiftUI
 
 private enum SheetState: Equatable {
     case receive
-    case settings
     case chooseAddressType([FoundAddress])
 }
 
@@ -67,7 +66,12 @@ struct SelectedWalletScreen: View {
             Alert(
                 title: Text("Node Connection Failed"),
                 message: Text("Would you like to select a different node?"),
-                primaryButton: .default(Text("Yes, Change Node"), action: { navigate(.settings) }),
+                primaryButton: .default(
+                    Text("Yes, Change Node"),
+                    action: {
+                        app.pushRoutes(RouteFactory().nestedSettings(route: .node))
+                    }
+                ),
                 secondaryButton: .cancel()
             )
         case .noBalance:
@@ -104,8 +108,6 @@ struct SelectedWalletScreen: View {
         switch state.item {
         case .receive:
             ReceiveView(manager: manager)
-        case .settings:
-            WalletSettingsSheet(manager: manager)
         case let .chooseAddressType(foundAddresses):
             ChooseWalletTypeView(manager: manager, foundAddresses: foundAddresses)
         }
@@ -167,7 +169,7 @@ struct SelectedWalletScreen: View {
                 )
                 .contextMenu {
                     Button("Settings") {
-                        sheetState = .init(.settings)
+                        app.pushRoutes(RouteFactory().nestedWalletSettings(id: metadata.id))
                     }
                 }
             }

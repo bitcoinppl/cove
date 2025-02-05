@@ -113,16 +113,7 @@ struct SidebarView: View {
                         .contextMenu {
                             Button("Settings") {
                                 app.isSidebarVisible = false
-
-                                do {
-                                    try app.rust.selectWallet(
-                                        id: wallet.id,
-                                        nextRoute: Route.walletSettings(wallet.id)
-                                    )
-                                } catch {
-                                    Log.error("Failed to select wallet \(error)")
-                                    goTo(Route.selectedWallet(wallet.id))
-                                }
+                                app.pushRoutes(RouteFactory().nestedWalletSettings(id: wallet.id))
                             }
                         }
                     }
@@ -148,7 +139,7 @@ struct SidebarView: View {
                     }
 
                     HStack {
-                        Button(action: { goTo(Route.settings) }) {
+                        Button(action: { goTo(Route.settings(.main)) }) {
                             HStack(spacing: 22) {
                                 Image(systemName: "gear")
                                 Text("Settings")

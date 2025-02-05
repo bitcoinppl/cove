@@ -273,20 +273,41 @@ pub enum WalletColor {
     Orange,
     Purple,
     Pink,
+    CoolGray,
     Custom { r: u8, g: u8, b: u8 },
+
+    // prefixed with W to avoid conflicts with swift asset color name
+    WAlmostGray,
+    WAlmostWhite,
+    WBeige,
+    WPastelBlue,
+    WPastelNavy,
+    WPastelRed,
+    WPastelYellow,
+    WLightMint,
+    WPastelTeal,
+    WLightPastelYellow,
+}
+
+#[uniffi::export]
+fn default_wallet_colors() -> Vec<WalletColor> {
+    vec![
+        WalletColor::WBeige,
+        WalletColor::WPastelBlue,
+        WalletColor::WPastelNavy,
+        WalletColor::WPastelRed,
+        WalletColor::WPastelYellow,
+        WalletColor::WPastelTeal,
+        WalletColor::Blue,
+        WalletColor::Green,
+        WalletColor::Orange,
+        WalletColor::Purple,
+    ]
 }
 
 impl WalletColor {
     pub fn random() -> Self {
-        let options = [
-            WalletColor::Red,
-            WalletColor::Blue,
-            WalletColor::Green,
-            WalletColor::Yellow,
-            WalletColor::Orange,
-            WalletColor::Purple,
-            WalletColor::Pink,
-        ];
+        let options = default_wallet_colors();
 
         let random_index = rand::thread_rng().gen_range(0..options.len());
         options[random_index]

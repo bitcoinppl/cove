@@ -19,9 +19,8 @@ pub enum Route {
     },
     ListWallets,
     SelectedWallet(WalletId),
-    WalletSettings(WalletId),
     NewWallet(NewWalletRoute),
-    Settings,
+    Settings(SettingsRoute),
     SecretWords(WalletId),
     TransactionDetails {
         id: WalletId,
@@ -58,6 +57,31 @@ pub enum ImportType {
     Manual,
     Nfc,
     Qr,
+}
+
+#[derive(Debug, Clone, Default, Hash, From, Eq, PartialEq, uniffi::Enum)]
+pub enum SettingsRoute {
+    #[default]
+    Main,
+
+    Network,
+    Appearance,
+    Node,
+    FiatCurrency,
+
+    Wallet {
+        id: WalletId,
+        route: WalletSettingsRoute,
+    },
+
+    AllWallets,
+}
+
+#[derive(Debug, Clone, Default, Hash, From, Eq, PartialEq, uniffi::Enum)]
+pub enum WalletSettingsRoute {
+    #[default]
+    Main,
+    ChangeName,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -290,6 +314,25 @@ impl RouteFactory {
     pub fn send(&self, send: SendRoute) -> Route {
         Route::Send(send)
     }
+
+    pub fn nested_settings(&self, route: SettingsRoute) -> Vec<Route> {
+        vec![SettingsRoute::Main.into(), route.into()]
+    }
+
+    pub fn nested_wallet_settings(&self, id: WalletId) -> Vec<Route> {
+        vec![
+            Route::Settings(SettingsRoute::Main),
+            self.main_wallet_settings(id),
+        ]
+    }
+
+    pub fn main_wallet_settings(&self, id: WalletId) -> Route {
+        self.wallet_settings(id, WalletSettingsRoute::Main)
+    }
+
+    pub fn wallet_settings(&self, id: WalletId, route: WalletSettingsRoute) -> Route {
+        Route::Settings(SettingsRoute::Wallet { id, route })
+    }
 }
 
 impl Route {
@@ -311,4 +354,10 @@ fn hash_route(route: Route) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     route.hash(&mut hasher);
     hasher.finish()
+}
+
+impl From<SettingsRoute> for Route {
+    fn from(settings_route: SettingsRoute) -> Self {
+        Route::Settings(settings_route)
+    }
 }

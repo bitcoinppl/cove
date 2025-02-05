@@ -28,18 +28,22 @@ private enum AlertState: Equatable {
     case extraSetPinError(String)
 }
 
-struct SettingsScreen: View {
+struct MainSettingsScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
-    @State private var notificationFrequency = 1
-    @State private var networkChanged = false
-
+    // private
     @State private var sheetState: TaggedItem<SheetState>? = nil
     @State private var alertState: TaggedItem<AlertState>? = nil
 
     let themes = allColorSchemes()
+
+    var networkChanged: Bool {
+        if app.previousSelectedNetwork == nil { return false }
+        return app.selectedNetwork != app.previousSelectedNetwork
+    }
 
     private func canUseBiometrics() -> Bool {
         let context = LAContext()
@@ -59,15 +63,18 @@ struct SettingsScreen: View {
 
                 // enable
                 if auth.isDecoyPinEnabled, auth.isWipeDataPinEnabled {
-                    return alertState = .init(.noteNoFaceIdWhenSpecialPins)
+                    alertState = .init(.noteNoFaceIdWhenSpecialPins)
+                    return
                 }
 
                 if auth.isWipeDataPinEnabled {
-                    return alertState = .init(.noteNoFaceIdWhenWipeMePin)
+                    alertState = .init(.noteNoFaceIdWhenWipeMePin)
+                    return
                 }
 
                 if auth.isDecoyPinEnabled {
-                    return alertState = .init(.noteNoFaceIdWhenDecoyPin)
+                    alertState = .init(.noteNoFaceIdWhenDecoyPin)
+                    return
                 }
 
                 sheetState = .init(.enableBiometric)
@@ -98,11 +105,13 @@ struct SettingsScreen: View {
                     }
 
                     if auth.type == .biometric {
-                        return alertState = .init(.notePinRequired)
+                        alertState = .init(.notePinRequired)
+                        return
                     }
 
                     if auth.type == .both {
-                        return alertState = .init(.noteFaceIdDisabling(.confirmEnableWipeMePin))
+                        alertState = .init(.noteFaceIdDisabling(.confirmEnableWipeMePin))
+                        return
                     }
 
                     alertState = .init(.confirmEnableWipeMePin)
@@ -121,11 +130,13 @@ struct SettingsScreen: View {
                 // enable
                 if enable {
                     if auth.type == .biometric {
-                        return alertState = .init(.notePinRequired)
+                        alertState = .init(.notePinRequired)
+                        return
                     }
 
                     if auth.type == .both {
-                        return alertState = .init(.noteFaceIdDisabling(.confirmDecoyPin))
+                        alertState = .init(.noteFaceIdDisabling(.confirmDecoyPin))
+                        return
                     }
 
                     alertState = .init(.confirmDecoyPin)
@@ -140,69 +151,39 @@ struct SettingsScreen: View {
     @ViewBuilder
     var GeneralSection: some View {
         Section(header: Text("General")) {
-            HStack {
-                Picker(
-                    "Network",
-                    selection: Binding(
-                        get: { app.selectedNetwork },
-                        set: {
-                            networkChanged.toggle()
-                            app.dispatch(action: .changeNetwork(network: $0))
-                        }
-                    )
-                ) {
-                    ForEach(allNetworks(), id: \.self) {
-                        Text($0.toString())
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-            }
-        }
-    }
-
-    @ViewBuilder
-    var FiatCurrencySection: some View {
-        Section("Currency & Units") {
-            Picker(
-                "Fiat Currency",
-                selection: Binding(
-                    get: { app.selectedFiatCurrency },
-                    set: {
-                        app.dispatch(action: .changeFiatCurrency($0))
-                    }
-                )
-            ) {
-                ForEach(allFiatCurrencies(), id: \.self) { currency in
-                    Text("\(currency.emoji()) \(currency.toString())")
-                }
-            }
+            SettingsRow(title: "Network", route: .network, symbol: "network")
+            SettingsRow(title: "Appearence", route: .appearance, symbol: "sun.max.fill")
+            SettingsRow(
+                title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted"
+            )
+            SettingsRow(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
         }
     }
 
     var SecuritySection: some View {
         Section("Security") {
             if canUseBiometrics() {
-                Toggle(isOn: toggleBiometric) {
-                    Label("Enable Face ID", systemImage: "faceid")
-                }
+                SettingsToggle(title: "Enable FaceID", symbol: "faceid", item: toggleBiometric)
             }
 
-            Toggle(isOn: togglePin) {
-                Label("Enable PIN", systemImage: "lock")
-            }
+            SettingsToggle(title: "Enable PIN", symbol: "lock", item: togglePin)
 
             if togglePin.wrappedValue {
                 Button(action: { sheetState = .init(.changePin) }) {
-                    Label("Change PIN", systemImage: "lock.open.rotation")
+                    SettingsRow(title: "Change PIN", symbol: "lock.open.rotation")
                 }
 
-                Toggle(isOn: toggleWipeMePin) {
-                    Label("Enable Wipe Data PIN", systemImage: "exclamationmark.lock.fill")
-                }
+                SettingsToggle(
+                    title: "Enable Wipe Data PIN",
+                    symbol: "exclamationmark.lock.fill",
+                    item: toggleWipeMePin
+                )
 
-                Toggle(isOn: toggleDecoyPin) {
-                    Label("Enable Decoy PIN", systemImage: "theatermasks")
-                }
+                SettingsToggle(
+                    title: "Enable Decoy PIN",
+                    symbol: "theatermasks",
+                    item: toggleDecoyPin
+                )
             }
         }
     }
@@ -210,30 +191,10 @@ struct SettingsScreen: View {
     var body: some View {
         Form {
             GeneralSection
-
-            Section("Appreance") {
-                Picker(
-                    "Theme",
-                    selection: Binding(
-                        get: { app.colorSchemeSelection },
-                        set: {
-                            app.dispatch(action: .changeColorScheme($0))
-                        }
-                    )
-                ) {
-                    ForEach(themes, id: \.self) {
-                        Text($0.capitalizedString)
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-            }
-
-            NodeSelectionView()
-
-            FiatCurrencySection
-
+            WalletSettingsSection()
             SecuritySection
         }
+        .scrollContentBackground(.hidden)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(networkChanged)
@@ -250,7 +211,7 @@ struct SettingsScreen: View {
                         HStack(spacing: 0) {
                             Image(systemName: "chevron.left")
                                 .fontWeight(.semibold)
-                                .padding(.horizontal, 0)
+
                             Text("Back")
                                 .offset(x: 5)
                         }
@@ -266,7 +227,6 @@ struct SettingsScreen: View {
             actions: { MyAlert($0).actions },
             message: { MyAlert($0).message }
         )
-        .preferredColorScheme(app.colorScheme)
         .gesture(
             networkChanged
                 ? DragGesture()
@@ -333,10 +293,13 @@ struct SettingsScreen: View {
                 message: "You've changed your network to \(network)",
                 actions: {
                     Button("Yes, Change Network") {
-                        app.resetRoute(to: .listWallets)
+                        app.confirmNetworkChange()
+                        app.loadAndReset(to: .listWallets)
                         dismiss()
                     }
-                    Button("Cancel", role: .cancel) { alertState = .none }
+                    Button("Cancel", role: .cancel) {
+                        alertState = .none
+                    }
                 }
             ).eraseToAny()
 
@@ -643,7 +606,7 @@ struct SettingsScreen: View {
 }
 
 #Preview {
-    SettingsScreen()
+    SettingsContainer(route: .main)
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
 }

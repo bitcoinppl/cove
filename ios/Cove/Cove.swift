@@ -7922,6 +7922,12 @@ public protocol RouteFactoryProtocol : AnyObject {
     
     func loadAndResetToAfter(resetTo: Route, time: UInt32)  -> Route
     
+    func mainWalletSettings(id: WalletId)  -> Route
+    
+    func nestedSettings(route: SettingsRoute)  -> [Route]
+    
+    func nestedWalletSettings(id: WalletId)  -> [Route]
+    
     func newHotWallet()  -> Route
     
     func newWalletSelect()  -> Route
@@ -7937,6 +7943,8 @@ public protocol RouteFactoryProtocol : AnyObject {
     func sendHardwareExport(id: WalletId, details: ConfirmDetails)  -> Route
     
     func sendSetAmount(id: WalletId, address: Address?, amount: Amount?)  -> Route
+    
+    func walletSettings(id: WalletId, route: WalletSettingsRoute)  -> Route
     
 }
 
@@ -8056,6 +8064,30 @@ open func loadAndResetToAfter(resetTo: Route, time: UInt32) -> Route  {
 })
 }
     
+open func mainWalletSettings(id: WalletId) -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_main_wallet_settings(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId_lower(id),$0
+    )
+})
+}
+    
+open func nestedSettings(route: SettingsRoute) -> [Route]  {
+    return try!  FfiConverterSequenceTypeRoute.lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_nested_settings(self.uniffiClonePointer(),
+        FfiConverterTypeSettingsRoute_lower(route),$0
+    )
+})
+}
+    
+open func nestedWalletSettings(id: WalletId) -> [Route]  {
+    return try!  FfiConverterSequenceTypeRoute.lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_nested_wallet_settings(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId_lower(id),$0
+    )
+})
+}
+    
 open func newHotWallet() -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
     uniffi_cove_fn_method_routefactory_new_hot_wallet(self.uniffiClonePointer(),$0
@@ -8118,6 +8150,15 @@ open func sendSetAmount(id: WalletId, address: Address? = nil, amount: Amount? =
         FfiConverterTypeWalletId_lower(id),
         FfiConverterOptionTypeAddress.lower(address),
         FfiConverterOptionTypeAmount.lower(amount),$0
+    )
+})
+}
+    
+open func walletSettings(id: WalletId, route: WalletSettingsRoute) -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_wallet_settings(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId_lower(id),
+        FfiConverterTypeWalletSettingsRoute_lower(route),$0
     )
 })
 }
@@ -11720,6 +11761,8 @@ public protocol WalletsTableProtocol : AnyObject {
     
     func all() throws  -> [WalletMetadata]
     
+    func allSortedActive() throws  -> [WalletMetadata]
+    
     func isEmpty() throws  -> Bool
     
     func len(network: Network, mode: WalletMode) throws  -> UInt16
@@ -11780,6 +11823,13 @@ open class WalletsTable:
 open func all()throws  -> [WalletMetadata]  {
     return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_walletstable_all(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func allSortedActive()throws  -> [WalletMetadata]  {
+    return try  FfiConverterSequenceTypeWalletMetadata.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_walletstable_all_sorted_active(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -14172,6 +14222,8 @@ public enum AppStateReconcileMessage {
     )
     case selectedNodeChanged(Node
     )
+    case selectedNetworkChanged(Network
+    )
     case fiatPricesChanged(PriceResponse
     )
     case feesChanged(FeeResponse
@@ -14207,16 +14259,19 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case 5: return .selectedNodeChanged(try FfiConverterTypeNode.read(from: &buf)
         )
         
-        case 6: return .fiatPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
+        case 6: return .selectedNetworkChanged(try FfiConverterTypeNetwork.read(from: &buf)
         )
         
-        case 7: return .feesChanged(try FfiConverterTypeFeeResponse.read(from: &buf)
+        case 7: return .fiatPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
         )
         
-        case 8: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        case 8: return .feesChanged(try FfiConverterTypeFeeResponse.read(from: &buf)
         )
         
-        case 9: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
+        case 9: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        )
+        
+        case 10: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14252,23 +14307,28 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             FfiConverterTypeNode.write(v1, into: &buf)
             
         
-        case let .fiatPricesChanged(v1):
+        case let .selectedNetworkChanged(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterTypeNetwork.write(v1, into: &buf)
+            
+        
+        case let .fiatPricesChanged(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypePriceResponse.write(v1, into: &buf)
             
         
         case let .feesChanged(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeFeeResponse.write(v1, into: &buf)
             
         
         case let .fiatCurrencyChanged(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
             
         
         case let .walletModeChanged(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeWalletMode.write(v1, into: &buf)
             
         }
@@ -19140,11 +19200,10 @@ public enum Route {
     case listWallets
     case selectedWallet(WalletId
     )
-    case walletSettings(WalletId
-    )
     case newWallet(NewWalletRoute
     )
-    case settings
+    case settings(SettingsRoute
+    )
     case secretWords(WalletId
     )
     case transactionDetails(id: WalletId, details: TransactionDetails
@@ -19172,21 +19231,19 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 3: return .selectedWallet(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 4: return .walletSettings(try FfiConverterTypeWalletId.read(from: &buf)
+        case 4: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
         )
         
-        case 5: return .newWallet(try FfiConverterTypeNewWalletRoute.read(from: &buf)
+        case 5: return .settings(try FfiConverterTypeSettingsRoute.read(from: &buf)
         )
         
-        case 6: return .settings
-        
-        case 7: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
+        case 6: return .secretWords(try FfiConverterTypeWalletId.read(from: &buf)
         )
         
-        case 8: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
+        case 7: return .transactionDetails(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeTransactionDetails.read(from: &buf)
         )
         
-        case 9: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
+        case 8: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -19212,33 +19269,29 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
-        case let .walletSettings(v1):
-            writeInt(&buf, Int32(4))
-            FfiConverterTypeWalletId.write(v1, into: &buf)
-            
-        
         case let .newWallet(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeNewWalletRoute.write(v1, into: &buf)
             
         
-        case .settings:
-            writeInt(&buf, Int32(6))
-        
+        case let .settings(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeSettingsRoute.write(v1, into: &buf)
+            
         
         case let .secretWords(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeWalletId.write(v1, into: &buf)
             
         
         case let .transactionDetails(id,details):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeTransactionDetails.write(details, into: &buf)
             
         
         case let .send(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeSendRoute.write(v1, into: &buf)
             
         }
@@ -19736,6 +19789,109 @@ extension SerdeError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SettingsRoute {
+    
+    case main
+    case network
+    case appearance
+    case node
+    case fiatCurrency
+    case wallet(id: WalletId, route: WalletSettingsRoute
+    )
+    case allWallets
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
+    typealias SwiftType = SettingsRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SettingsRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .main
+        
+        case 2: return .network
+        
+        case 3: return .appearance
+        
+        case 4: return .node
+        
+        case 5: return .fiatCurrency
+        
+        case 6: return .wallet(id: try FfiConverterTypeWalletId.read(from: &buf), route: try FfiConverterTypeWalletSettingsRoute.read(from: &buf)
+        )
+        
+        case 7: return .allWallets
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SettingsRoute, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .main:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .network:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .appearance:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .node:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .fiatCurrency:
+            writeInt(&buf, Int32(5))
+        
+        
+        case let .wallet(id,route):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            FfiConverterTypeWalletSettingsRoute.write(route, into: &buf)
+            
+        
+        case .allWallets:
+            writeInt(&buf, Int32(7))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSettingsRoute_lift(_ buf: RustBuffer) throws -> SettingsRoute {
+    return try FfiConverterTypeSettingsRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSettingsRoute_lower(_ value: SettingsRoute) -> RustBuffer {
+    return FfiConverterTypeSettingsRoute.lower(value)
+}
+
+
+
+extension SettingsRoute: Equatable, Hashable {}
+
 
 
 
@@ -20505,8 +20661,19 @@ public enum WalletColor {
     case orange
     case purple
     case pink
+    case coolGray
     case custom(r: UInt8, g: UInt8, b: UInt8
     )
+    case wAlmostGray
+    case wAlmostWhite
+    case wBeige
+    case wPastelBlue
+    case wPastelNavy
+    case wPastelRed
+    case wPastelYellow
+    case wLightMint
+    case wPastelTeal
+    case wLightPastelYellow
 }
 
 
@@ -20534,8 +20701,30 @@ public struct FfiConverterTypeWalletColor: FfiConverterRustBuffer {
         
         case 7: return .pink
         
-        case 8: return .custom(r: try FfiConverterUInt8.read(from: &buf), g: try FfiConverterUInt8.read(from: &buf), b: try FfiConverterUInt8.read(from: &buf)
+        case 8: return .coolGray
+        
+        case 9: return .custom(r: try FfiConverterUInt8.read(from: &buf), g: try FfiConverterUInt8.read(from: &buf), b: try FfiConverterUInt8.read(from: &buf)
         )
+        
+        case 10: return .wAlmostGray
+        
+        case 11: return .wAlmostWhite
+        
+        case 12: return .wBeige
+        
+        case 13: return .wPastelBlue
+        
+        case 14: return .wPastelNavy
+        
+        case 15: return .wPastelRed
+        
+        case 16: return .wPastelYellow
+        
+        case 17: return .wLightMint
+        
+        case 18: return .wPastelTeal
+        
+        case 19: return .wLightPastelYellow
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -20573,12 +20762,56 @@ public struct FfiConverterTypeWalletColor: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
         
         
-        case let .custom(r,g,b):
+        case .coolGray:
             writeInt(&buf, Int32(8))
+        
+        
+        case let .custom(r,g,b):
+            writeInt(&buf, Int32(9))
             FfiConverterUInt8.write(r, into: &buf)
             FfiConverterUInt8.write(g, into: &buf)
             FfiConverterUInt8.write(b, into: &buf)
             
+        
+        case .wAlmostGray:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .wAlmostWhite:
+            writeInt(&buf, Int32(11))
+        
+        
+        case .wBeige:
+            writeInt(&buf, Int32(12))
+        
+        
+        case .wPastelBlue:
+            writeInt(&buf, Int32(13))
+        
+        
+        case .wPastelNavy:
+            writeInt(&buf, Int32(14))
+        
+        
+        case .wPastelRed:
+            writeInt(&buf, Int32(15))
+        
+        
+        case .wPastelYellow:
+            writeInt(&buf, Int32(16))
+        
+        
+        case .wLightMint:
+            writeInt(&buf, Int32(17))
+        
+        
+        case .wPastelTeal:
+            writeInt(&buf, Int32(18))
+        
+        
+        case .wLightPastelYellow:
+            writeInt(&buf, Int32(19))
+        
         }
     }
 }
@@ -21910,6 +22143,70 @@ extension WalletScannerError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum WalletSettingsRoute {
+    
+    case main
+    case changeName
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWalletSettingsRoute: FfiConverterRustBuffer {
+    typealias SwiftType = WalletSettingsRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletSettingsRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .main
+        
+        case 2: return .changeName
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: WalletSettingsRoute, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .main:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .changeName:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletSettingsRoute_lift(_ buf: RustBuffer) throws -> WalletSettingsRoute {
+    return try FfiConverterTypeWalletSettingsRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWalletSettingsRoute_lower(_ value: WalletSettingsRoute) -> RustBuffer {
+    return FfiConverterTypeWalletSettingsRoute.lower(value)
+}
+
+
+
+extension WalletSettingsRoute: Equatable, Hashable {}
+
 
 
 
@@ -23939,6 +24236,31 @@ fileprivate struct FfiConverterSequenceTypeUnit: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeWalletColor: FfiConverterRustBuffer {
+    typealias SwiftType = [WalletColor]
+
+    public static func write(_ value: [WalletColor], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWalletColor.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WalletColor] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WalletColor]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWalletColor.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [[String]]
 
@@ -24213,6 +24535,12 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
 public func defaultNodeSelection() -> NodeSelection  {
     return try!  FfiConverterTypeNodeSelection_lift(try! rustCall() {
     uniffi_cove_fn_func_default_node_selection($0
+    )
+})
+}
+public func defaultWalletColors() -> [WalletColor]  {
+    return try!  FfiConverterSequenceTypeWalletColor.lift(try! rustCall() {
+    uniffi_cove_fn_func_default_wallet_colors($0
     )
 })
 }
@@ -24498,6 +24826,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_node_selection() != 14665) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_default_wallet_colors() != 39034) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {
@@ -25124,6 +25455,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_load_and_reset_to_after() != 39743) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_routefactory_main_wallet_settings() != 49313) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_nested_settings() != 56664) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_nested_wallet_settings() != 50153) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_routefactory_new_hot_wallet() != 51032) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25146,6 +25486,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_send_set_amount() != 33578) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_wallet_settings() != 15273) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_auth_type() != 13301) {
@@ -25506,6 +25849,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_all() != 19569) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_walletstable_all_sorted_active() != 16744) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletstable_is_empty() != 57763) {

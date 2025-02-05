@@ -15,6 +15,9 @@ import SwiftUI
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
 
+    var selectedNetwork = Database().globalConfig().selectedNetwork()
+    var previousSelectedNetwork: Network? = nil
+
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
     var selectedFiatCurrency = Database().globalConfig().selectedFiatCurrency()
@@ -32,10 +35,6 @@ import SwiftUI
 
     @ObservationIgnored
     weak var walletManager: WalletManager?
-
-    public var selectedNetwork: Network {
-        rust.network()
-    }
 
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
@@ -110,6 +109,11 @@ import SwiftUI
         router.routes.append(route)
     }
 
+    func pushRoutes(_ routes: [Route]) {
+        isSidebarVisible = false
+        router.routes.append(contentsOf: routes)
+    }
+
     func popRoute() {
         router.routes.removeLast()
     }
@@ -137,6 +141,10 @@ import SwiftUI
         rust.loadAndResetDefaultRoute(route: route)
     }
 
+    func confirmNetworkChange() {
+        previousSelectedNetwork = nil
+    }
+
     func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {
@@ -154,6 +162,12 @@ import SwiftUI
 
                 case let .selectedNodeChanged(node):
                     self.selectedNode = node
+
+                case let .selectedNetworkChanged(network):
+                    if previousSelectedNetwork == nil {
+                        self.previousSelectedNetwork = self.selectedNetwork
+                    }
+                    self.selectedNetwork = network
 
                 case let .defaultRouteChanged(route, nestedRoutes):
                     self.router.routes = nestedRoutes
