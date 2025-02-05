@@ -1,15 +1,19 @@
 import SwiftUI
 
 struct WalletSettingsView: View {
-    let manager: WalletManager
+    @Environment(AppManager.self) private var app
     @Environment(\.navigate) private var navigate
     @Environment(\.dismiss) private var dismiss
 
+    let manager: WalletManager
+
     @State private var showingDeleteConfirmation = false
     @State private var showingSecretWordsConfirmation = false
+    @State private var metadata: WalletMetadata
 
-    var metadata: WalletMetadata {
-        manager.walletMetadata
+    init(manager: WalletManager) {
+        self.manager = manager
+        metadata = manager.walletMetadata
     }
 
     let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
@@ -48,7 +52,11 @@ struct WalletSettingsView: View {
                         .font(.footnote)
                         .fontWeight(.semibold)
                 }
+                .contentShape(Rectangle())
                 .font(.subheadline)
+                .onTapGesture {
+                    app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
+                }
 
                 VStack(spacing: 14) {
                     HStack {
@@ -132,8 +140,10 @@ struct WalletSettingsView: View {
                 )
             }
         }
-        .onDisappear {
+        .onDisappear { manager.validateMetadata() }
+        .onAppear {
             manager.validateMetadata()
+            metadata = manager.walletMetadata
         }
     }
 }
