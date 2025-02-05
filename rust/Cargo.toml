@@ -20,12 +20,12 @@ macros = { path = "./crates/macros" }
 
 # bdk / bitcoin
 bdk_core = { version = "0.4" }
-bdk_wallet = { version = "1.0.0", features = ["keys-bip39", "file_store"] }
+bdk_wallet = { version = "1.1", features = ["keys-bip39", "file_store"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
 bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
-bdk_electrum = { version = "0.20", features = [
+bdk_electrum = { version = "0.21", features = [
     "use-rustls-ring",
 ], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
@@ -39,8 +39,8 @@ pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git"
 ] }
 
 bitcoin = "0.32"
-bitcoin-units = "0.1"
-bitcoin_hashes = "0.14.0"
+bitcoin-units = "0.2"
+bitcoin_hashes = "0.16.0"
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }
@@ -50,7 +50,7 @@ futures = "0.3.30"
 tryhard = "0.5"
 
 # crypto
-rand = "0.8.5"
+rand = "0.9"
 zeroize = "1.8.1"
 
 # hashing
@@ -81,7 +81,7 @@ redb = "2.1"
 nid = "3.0"
 
 # derive stuff
-derive_more = { version = "1.0", features = [
+derive_more = { version = "2.0", features = [
     "display",
     "add",
     "mul",
@@ -137,7 +137,7 @@ hex = "0.4.3"
 base64 = "0.22.0"
 
 # parsing
-winnow = { version = "0.6.0", features = ["simd"] }
+winnow = { version = "0.7", features = ["simd"] }
 memchr = "2.7"
 
 # sync

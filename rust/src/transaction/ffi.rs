@@ -261,7 +261,7 @@ fn transaction_preview_confirmed_new() -> Transaction {
 
 impl SentAndReceived {
     pub fn preview_new() -> Self {
-        let rand = rand::thread_rng().gen_range(0..3);
+        let rand = rand::rng().gen_range(0..3);
 
         let direction = if rand == 0 {
             TransactionDirection::Outgoing
@@ -294,17 +294,17 @@ impl SentAndReceived {
 }
 
 fn random_block_height() -> u32 {
-    rand::thread_rng().gen_range(0..850_000)
+    rand::rng().gen_range(0..850_000)
 }
 
 fn random_amount() -> u64 {
-    rand::thread_rng().gen_range(100_000..=200_000_000)
+    rand::rng().gen_range(100_000..=200_000_000)
 }
 
 #[uniffi::export]
 fn transaction_preview_unconfirmed_new() -> Transaction {
-    let rand_hours = rand::thread_rng().gen_range(0..4);
-    let rand_minutes = rand::thread_rng().gen_range(0..60);
+    let rand_hours = rand::rng().gen_range(0..4);
+    let rand_minutes = rand::rng().gen_range(0..60);
     let random_last_seen = rand_hours.hours().minutes(rand_minutes);
 
     let last_seen = jiff::Timestamp::now()

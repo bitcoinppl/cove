@@ -28,9 +28,9 @@ impl WalletId {
 
     pub fn preview_new_random() -> Self {
         // random string id
-        let rng = rand::thread_rng();
+        let rng = rand::rng();
         let random_string: String = rng
-            .sample_iter(&rand::distributions::Alphanumeric)
+            .sample_iter(&rand::distr::Alphanumeric)
             .take(8)
             .map(char::from)
             .collect();
@@ -313,7 +313,7 @@ impl WalletColor {
     pub fn random() -> Self {
         let options = default_wallet_colors();
 
-        let random_index = rand::thread_rng().gen_range(0..options.len());
+        let random_index = rand::rng().gen_range(0..options.len());
         options[random_index]
     }
 }
