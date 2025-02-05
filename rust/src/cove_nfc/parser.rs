@@ -193,7 +193,10 @@ fn parse_payload(
 mod tests {
     use std::sync::LazyLock;
 
-    use winnow::{error::Needed, Bytes};
+    use winnow::{
+        error::{ErrMode, Needed},
+        Bytes,
+    };
 
     use super::*;
 
@@ -455,9 +458,9 @@ mod tests {
         let message = parse_ndef_message(&mut export);
 
         assert!(message.is_err());
-        if let Err(e) = message {
-            assert!(e.is_incomplete());
-            let needed = e.needed().unwrap();
+        assert!(matches!(message, Err(ErrMode::Incomplete(Needed::Size(_)))));
+
+        if let Err(ErrMode::Incomplete(needed)) = message {
             assert_eq!(needed, Needed::new(original_length - 101));
         }
     }
