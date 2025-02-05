@@ -67,6 +67,7 @@ struct WalletSettingsSection: View {
     }
 }
 
+#if DEBUG
 #Preview {
     Form {
         WalletSettingsSection(wallets: [
@@ -80,3 +81,4 @@ struct WalletSettingsSection: View {
     }
     .environment(AppManager.shared)
 }
+#endif
