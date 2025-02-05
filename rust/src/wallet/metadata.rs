@@ -1,4 +1,8 @@
-use std::{hash::Hash, sync::Arc, time::Duration};
+use std::{
+    hash::{Hash, Hasher as _},
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::transaction::Unit;
 use macros::{impl_default_for, new_type};
@@ -327,6 +331,17 @@ fn default_address_type() -> WalletAddressType {
 }
 
 // MARK: PREVIEW ONLY
+#[uniffi::export]
+fn wallet_metadata_is_equal(lhs: WalletMetadata, rhs: WalletMetadata) -> bool {
+    lhs == rhs
+}
+
+#[uniffi::export]
+fn wallet_metadata_hash(metadata: WalletMetadata) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    metadata.hash(&mut hasher);
+    hasher.finish()
+}
 
 #[uniffi::export]
 fn wallet_metadata_preview() -> WalletMetadata {

@@ -24765,6 +24765,21 @@ public func walletAddressTypeToString(walletAddressType: WalletAddressType) -> S
     )
 })
 }
+public func walletMetadataHash(metadata: WalletMetadata) -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_func_wallet_metadata_hash(
+        FfiConverterTypeWalletMetadata_lower(metadata),$0
+    )
+})
+}
+public func walletMetadataIsEqual(lhs: WalletMetadata, rhs: WalletMetadata) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_wallet_metadata_is_equal(
+        FfiConverterTypeWalletMetadata_lower(lhs),
+        FfiConverterTypeWalletMetadata_lower(rhs),$0
+    )
+})
+}
 public func walletMetadataPreview() -> WalletMetadata  {
     return try!  FfiConverterTypeWalletMetadata_lift(try! rustCall() {
     uniffi_cove_fn_func_wallet_metadata_preview($0
@@ -24919,6 +24934,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_address_type_to_string() != 36064) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_metadata_hash() != 62639) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_metadata_is_equal() != 19369) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_metadata_preview() != 1229) {

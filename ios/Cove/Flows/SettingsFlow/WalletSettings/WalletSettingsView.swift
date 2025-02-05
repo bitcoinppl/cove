@@ -84,8 +84,8 @@ struct WalletSettingsView: View {
                                         .fill(Color(color))
                                         .frame(width: 28, height: 28)
                                         .contentShape(Rectangle())
-                                        .onTapGesture { manager.dispatch(action: .updateColor(color)) }
                                 }
+                                .onTapGesture { manager.dispatch(action: .updateColor(color)) }
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
