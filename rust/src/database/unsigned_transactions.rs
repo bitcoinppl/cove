@@ -1,7 +1,5 @@
-use std::{cmp::Ordering, sync::Arc};
-
-use bitcoin::hashes::{sha256d::Hash, Hash as _};
 use redb::TableDefinition;
+use std::sync::Arc;
 use tracing::debug;
 
 use crate::{
@@ -267,53 +265,5 @@ impl UnsignedTransactionRecord {
     #[uniffi::method]
     pub fn created_at(&self) -> u64 {
         self.created_at
-    }
-}
-
-// MARK: redb serd/de impls
-
-impl redb::Key for TxId {
-    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
-        data1.cmp(data2)
-    }
-}
-
-impl redb::Value for TxId {
-    type SelfType<'a>
-        = TxId
-    where
-        Self: 'a;
-
-    type AsBytes<'a>
-        = Vec<u8>
-    where
-        Self: 'a;
-
-    fn fixed_width() -> Option<usize> {
-        None
-    }
-
-    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
-    where
-        Self: 'a,
-    {
-        let hash = Hash::from_slice(data).unwrap();
-        let txid = bitcoin::Txid::from_raw_hash(hash);
-        txid.into()
-    }
-
-    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
-    where
-        Self: 'a,
-        Self: 'b,
-    {
-        let hash: &Hash = value.0.as_raw_hash();
-        let bytes: &[u8] = hash.as_ref();
-
-        bytes.to_vec()
-    }
-
-    fn type_name() -> redb::TypeName {
-        redb::TypeName::new(std::any::type_name::<TxId>())
     }
 }

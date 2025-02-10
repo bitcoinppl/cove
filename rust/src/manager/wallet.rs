@@ -674,7 +674,7 @@ impl RustWalletManager {
 
         database
             .wallets
-            .mark_wallet_as_verified(id)
+            .mark_wallet_as_verified(&id)
             .map_err(Error::MarkWalletAsVerifiedError)?;
 
         Ok(())
