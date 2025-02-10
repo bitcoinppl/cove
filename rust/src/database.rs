@@ -1,13 +1,13 @@
 //! Module for interacting with redb database, to store high level state, and non sensitive data.
 //! That will be available across the app, and will be persisted across app launches.
 
+pub mod cbor;
 pub mod error;
 pub mod global_cache;
 pub mod global_config;
 pub mod global_flag;
 pub mod in_out_id;
 pub mod macros;
-pub mod postcard;
 pub mod unsigned_transactions;
 pub mod wallet;
 pub mod wallet_data;

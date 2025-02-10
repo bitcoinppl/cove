@@ -30,7 +30,7 @@ where
     where
         Self: 'a,
     {
-        postcard::from_bytes(data).unwrap()
+        serde_cbor::from_slice(data).unwrap()
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
@@ -38,11 +38,11 @@ where
         Self: 'a,
         Self: 'b,
     {
-        postcard::to_allocvec(value).unwrap()
+        serde_cbor::to_vec(value).unwrap()
     }
 
     fn type_name() -> TypeName {
-        TypeName::new(&format!("Postcard<{}>", std::any::type_name::<T>()))
+        TypeName::new(&format!("Cbor<{}>", std::any::type_name::<T>()))
     }
 }
 

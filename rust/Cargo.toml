@@ -104,7 +104,7 @@ jiff = { version = "0.1", features = [] }
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0"
-postcard = { version = "1.1", features = ["alloc", "use-std"], default-features = false }
+serde_cbor = "0.11"
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # bindings
@@ -155,6 +155,7 @@ uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["build"] }
 [dev-dependencies]
 tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["bindgen-tests"] }
+tempfile = "3.16"
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.
