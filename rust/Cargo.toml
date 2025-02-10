@@ -25,9 +25,7 @@ bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
 bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
-bdk_electrum = { version = "0.21", features = [
-    "use-rustls-ring",
-], default-features = false }
+bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # store bdk wallet data
@@ -35,10 +33,14 @@ bdk_file_store = { version = "0.18.0" }
 bdk_chain = { version = "0.21.0" }
 
 # import / export hardware wallet public keys
-pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = [
-] }
+pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = [] }
 
-bitcoin = "0.32"
+# bip329 labels
+# bip329 = { version = "0.1.0", features = [] }
+bip329 = { version = "0.2.0", features = [], path = "../../bip329" }
+
+# bitcoin
+bitcoin = { version = "0.32", features = ["serde"] }
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }
@@ -90,7 +92,7 @@ derive_more = { version = "2.0", features = [
     "deref",
     "deref_mut",
 ] }
-strum = { version = "0.26", features = ["derive"] }
+strum = { version = "0.27", features = ["derive"] }
 
 # helpers / utils / exts
 tap = "1.0.1"
@@ -102,6 +104,7 @@ jiff = { version = "0.1", features = [] }
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0"
+postcard = { version = "1.1", features = ["alloc", "use-std"], default-features = false }
 
 # bindings
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
@@ -149,9 +152,7 @@ uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["build"] }
 
 [dev-dependencies]
 tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = [
-    "bindgen-tests",
-] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["bindgen-tests"] }
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

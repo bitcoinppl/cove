@@ -1,5 +1,8 @@
+pub mod label;
+
 use std::{path::PathBuf, sync::Arc};
 
+use label::LabelsTable;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use redb::{ReadOnlyTable, TableDefinition};
@@ -58,6 +61,7 @@ pub struct ScanningInfo {
 pub struct WalletDataDb {
     pub id: WalletId,
     pub db: Arc<redb::Database>,
+    pub labels: LabelsTable,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -86,7 +90,9 @@ impl WalletDataDb {
         // create table if it doesn't exist
         write_txn.open_table(TABLE).expect("failed to create table");
 
-        Self { id, db }
+        let labels = LabelsTable::new(db.clone(), &write_txn);
+
+        Self { id, db, labels }
     }
 
     pub fn get_scan_state(&self, address_type: WalletAddressType) -> Result<Option<ScanState>> {
