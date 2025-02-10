@@ -30,7 +30,7 @@ where
     where
         Self: 'a,
     {
-        serde_cbor::from_slice(data).unwrap()
+        cbor4ii::serde::from_slice(data).unwrap()
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
@@ -38,7 +38,8 @@ where
         Self: 'a,
         Self: 'b,
     {
-        serde_cbor::to_vec(value).unwrap()
+        let buf = Vec::new();
+        cbor4ii::serde::to_vec(buf, value).unwrap()
     }
 
     fn type_name() -> TypeName {

@@ -104,7 +104,8 @@ jiff = { version = "0.1", features = [] }
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0"
-serde_cbor = "0.11"
+cbor4ii = { version = "1.0", features = ["serde1"] }
+
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # bindings
