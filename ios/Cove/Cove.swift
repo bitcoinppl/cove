@@ -623,17 +623,14 @@ fileprivate struct FfiConverterDuration: FfiConverterRustBuffer {
 
 
 
-public protocol AddressProtocol : AnyObject {
+public protocol AddressProtocol: AnyObject {
     
     func spacedOut()  -> String
     
     func string()  -> String
     
 }
-
-open class Address:
-    AddressProtocol
-    {
+open class Address: AddressProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -714,6 +711,7 @@ open func string() -> String  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -768,7 +766,7 @@ public func FfiConverterTypeAddress_lower(_ value: Address) -> UnsafeMutableRawP
 
 
 
-public protocol AddressInfoProtocol : AnyObject {
+public protocol AddressInfoProtocol: AnyObject {
     
     func address()  -> Address
     
@@ -777,10 +775,7 @@ public protocol AddressInfoProtocol : AnyObject {
     func index()  -> UInt32
     
 }
-
-open class AddressInfo:
-    AddressInfoProtocol
-    {
+open class AddressInfo: AddressInfoProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -853,6 +848,7 @@ open func index() -> UInt32  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -907,7 +903,7 @@ public func FfiConverterTypeAddressInfo_lower(_ value: AddressInfo) -> UnsafeMut
 
 
 
-public protocol AddressWithNetworkProtocol : AnyObject {
+public protocol AddressWithNetworkProtocol: AnyObject {
     
     func address()  -> Address
     
@@ -916,10 +912,7 @@ public protocol AddressWithNetworkProtocol : AnyObject {
     func network()  -> Network
     
 }
-
-open class AddressWithNetwork:
-    AddressWithNetworkProtocol
-    {
+open class AddressWithNetwork: AddressWithNetworkProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1000,6 +993,7 @@ open func network() -> Network  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1054,7 +1048,7 @@ public func FfiConverterTypeAddressWithNetwork_lower(_ value: AddressWithNetwork
 
 
 
-public protocol AmountProtocol : AnyObject {
+public protocol AmountProtocol: AnyObject {
     
     func asBtc()  -> Double
     
@@ -1071,10 +1065,7 @@ public protocol AmountProtocol : AnyObject {
     func satsStringWithUnit()  -> String
     
 }
-
-open class Amount:
-    AmountProtocol
-    {
+open class Amount: AmountProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1198,6 +1189,7 @@ open func satsStringWithUnit() -> String  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1252,15 +1244,12 @@ public func FfiConverterTypeAmount_lower(_ value: Amount) -> UnsafeMutableRawPoi
 
 
 
-public protocol AuthPinProtocol : AnyObject {
+public protocol AuthPinProtocol: AnyObject {
     
     func check(pin: String)  -> Bool
     
 }
-
-open class AuthPin:
-    AuthPinProtocol
-    {
+open class AuthPin: AuthPinProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1327,6 +1316,7 @@ open func check(pin: String) -> Bool  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1381,17 +1371,14 @@ public func FfiConverterTypeAuthPin_lower(_ value: AuthPin) -> UnsafeMutableRawP
 
 
 
-public protocol AutoComplete : AnyObject {
+public protocol AutoComplete: AnyObject {
     
     func autocomplete(word: String)  -> [String]
     
     func isValidWord(word: String)  -> Bool
     
 }
-
-open class AutoCompleteImpl:
-    AutoComplete
-    {
+open class AutoCompleteImpl: AutoComplete, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1536,6 +1523,7 @@ private func uniffiCallbackInitAutoComplete() {
     uniffi_cove_fn_init_callback_vtable_autocomplete(UniffiCallbackInterfaceAutoComplete.vtable)
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1594,17 +1582,14 @@ public func FfiConverterTypeAutoComplete_lower(_ value: AutoComplete) -> UnsafeM
 
 
 
-public protocol BalanceProtocol : AnyObject {
+public protocol BalanceProtocol: AnyObject {
     
     func spendable()  -> Amount
     
     func total()  -> Amount
     
 }
-
-open class Balance:
-    BalanceProtocol
-    {
+open class Balance: BalanceProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1677,6 +1662,7 @@ open func total() -> Amount  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1731,7 +1717,7 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> UnsafeMutableRawP
 
 
 
-public protocol BbqrJoinResultProtocol : AnyObject {
+public protocol BbqrJoinResultProtocol: AnyObject {
     
     func finalResult() throws  -> String
     
@@ -1740,10 +1726,7 @@ public protocol BbqrJoinResultProtocol : AnyObject {
     func partsLeft()  -> UInt32
     
 }
-
-open class BbqrJoinResult:
-    BbqrJoinResultProtocol
-    {
+open class BbqrJoinResult: BbqrJoinResultProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1816,6 +1799,7 @@ open func partsLeft() -> UInt32  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1870,17 +1854,14 @@ public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> Uns
 
 
 
-public protocol BbqrJoinedProtocol : AnyObject {
+public protocol BbqrJoinedProtocol: AnyObject {
     
     func getGroupedWords(chunks: UInt8) throws  -> [[String]]
     
     func getSeedWords() throws  -> [String]
     
 }
-
-open class BbqrJoined:
-    BbqrJoinedProtocol
-    {
+open class BbqrJoined: BbqrJoinedProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -1947,6 +1928,7 @@ open func getSeedWords()throws  -> [String]  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2001,7 +1983,7 @@ public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UnsafeMutab
 
 
 
-public protocol Bip39AutoCompleteProtocol : AnyObject {
+public protocol Bip39AutoCompleteProtocol: AnyObject {
     
     func autocomplete(word: String)  -> [String]
     
@@ -2013,12 +1995,7 @@ public protocol Bip39AutoCompleteProtocol : AnyObject {
     func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String])  -> UInt8
     
 }
-
-open class Bip39AutoComplete:
-    AutoComplete,
-    
-    Bip39AutoCompleteProtocol
-    {
+open class Bip39AutoComplete: Bip39AutoCompleteProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -2104,6 +2081,9 @@ open func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String]) -> 
     
 
 }
+extension Bip39AutoComplete: AutoComplete {}
+
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2159,7 +2139,7 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
 
 
 
-public protocol Bip39WordSpecificAutocompleteProtocol : AnyObject {
+public protocol Bip39WordSpecificAutocompleteProtocol: AnyObject {
     
     func autocomplete(word: String, allWords: [[String]])  -> [String]
     
@@ -2170,10 +2150,7 @@ public protocol Bip39WordSpecificAutocompleteProtocol : AnyObject {
     func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String])  -> UInt8
     
 }
-
-open class Bip39WordSpecificAutocomplete:
-    Bip39WordSpecificAutocompleteProtocol
-    {
+open class Bip39WordSpecificAutocomplete: Bip39WordSpecificAutocompleteProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -2269,6 +2246,7 @@ open func nextFieldNumber(currentFieldNumber: UInt8, enteredWords: [String]) -> 
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2323,7 +2301,7 @@ public func FfiConverterTypeBip39WordSpecificAutocomplete_lower(_ value: Bip39Wo
 
 
 
-public protocol BitcoinTransactionProtocol : AnyObject {
+public protocol BitcoinTransactionProtocol: AnyObject {
     
     func normalizeTxId()  -> String
     
@@ -2332,10 +2310,7 @@ public protocol BitcoinTransactionProtocol : AnyObject {
     func txIdHash()  -> String
     
 }
-
-open class BitcoinTransaction:
-    BitcoinTransactionProtocol
-    {
+open class BitcoinTransaction: BitcoinTransactionProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -2432,6 +2407,7 @@ open func txIdHash() -> String  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2486,15 +2462,12 @@ public func FfiConverterTypeBitcoinTransaction_lower(_ value: BitcoinTransaction
 
 
 
-public protocol BoxedRouteProtocol : AnyObject {
+public protocol BoxedRouteProtocol: AnyObject {
     
     func route()  -> Route
     
 }
-
-open class BoxedRoute:
-    BoxedRouteProtocol
-    {
+open class BoxedRoute: BoxedRouteProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -2561,6 +2534,7 @@ open func route() -> Route  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2615,13 +2589,10 @@ public func FfiConverterTypeBoxedRoute_lower(_ value: BoxedRoute) -> UnsafeMutab
 
 
 
-public protocol ChainPositionProtocol : AnyObject {
+public protocol ChainPositionProtocol: AnyObject {
     
 }
-
-open class ChainPosition:
-    ChainPositionProtocol
-    {
+open class ChainPosition: ChainPositionProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -2672,6 +2643,7 @@ open class ChainPosition:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2727,7 +2699,7 @@ public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> Unsaf
 
 
 
-public protocol ConfirmDetailsProtocol : AnyObject {
+public protocol ConfirmDetailsProtocol: AnyObject {
     
     func feeRate()  -> FeeRate
     
@@ -2758,10 +2730,7 @@ public protocol ConfirmDetailsProtocol : AnyObject {
     func spendingAmount()  -> Amount
     
 }
-
-open class ConfirmDetails:
-    ConfirmDetailsProtocol
-    {
+open class ConfirmDetails: ConfirmDetailsProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -2919,6 +2888,7 @@ open func spendingAmount() -> Amount  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -2973,7 +2943,7 @@ public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> Uns
 
 
 
-public protocol ConfirmedTransactionProtocol : AnyObject {
+public protocol ConfirmedTransactionProtocol: AnyObject {
     
     func blockHeight()  -> UInt32
     
@@ -2994,10 +2964,7 @@ public protocol ConfirmedTransactionProtocol : AnyObject {
     func sentAndReceived()  -> SentAndReceived
     
 }
-
-open class ConfirmedTransaction:
-    ConfirmedTransactionProtocol
-    {
+open class ConfirmedTransaction: ConfirmedTransactionProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -3112,6 +3079,7 @@ open func sentAndReceived() -> SentAndReceived  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3166,17 +3134,14 @@ public func FfiConverterTypeConfirmedTransaction_lower(_ value: ConfirmedTransac
 
 
 
-public protocol ConverterProtocol : AnyObject {
+public protocol ConverterProtocol: AnyObject {
     
     func getFiatValue(fiatAmount: String) throws  -> Double
     
     func removeFiatSuffix(fiatAmount: String)  -> String
     
 }
-
-open class Converter:
-    ConverterProtocol
-    {
+open class Converter: ConverterProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -3251,6 +3216,7 @@ open func removeFiatSuffix(fiatAmount: String) -> String  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3305,7 +3271,7 @@ public func FfiConverterTypeConverter_lower(_ value: Converter) -> UnsafeMutable
 
 
 
-public protocol DatabaseProtocol : AnyObject {
+public protocol DatabaseProtocol: AnyObject {
     
     func dangerousResetAllData() 
     
@@ -3316,10 +3282,7 @@ public protocol DatabaseProtocol : AnyObject {
     func wallets()  -> WalletsTable
     
 }
-
-open class Database:
-    DatabaseProtocol
-    {
+open class Database: DatabaseProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -3405,6 +3368,7 @@ open func wallets() -> WalletsTable  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3459,13 +3423,10 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRa
 
 
 
-public protocol DeviceProtocol : AnyObject {
+public protocol DeviceProtocol: AnyObject {
     
 }
-
-open class Device:
-    DeviceProtocol
-    {
+open class Device: DeviceProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -3525,6 +3486,7 @@ public convenience init(device: DeviceAccess) {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3579,15 +3541,12 @@ public func FfiConverterTypeDevice_lower(_ value: Device) -> UnsafeMutableRawPoi
 
 
 
-public protocol FeeRateProtocol : AnyObject {
+public protocol FeeRateProtocol: AnyObject {
     
     func satPerVb()  -> Float
     
 }
-
-open class FeeRate:
-    FeeRateProtocol
-    {
+open class FeeRate: FeeRateProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -3654,6 +3613,7 @@ open func satPerVb() -> Float  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3708,7 +3668,7 @@ public func FfiConverterTypeFeeRate_lower(_ value: FeeRate) -> UnsafeMutableRawP
 
 
 
-public protocol FeeRateOptionProtocol : AnyObject {
+public protocol FeeRateOptionProtocol: AnyObject {
     
     func duration()  -> String
     
@@ -3721,10 +3681,7 @@ public protocol FeeRateOptionProtocol : AnyObject {
     func satPerVb()  -> Float
     
 }
-
-open class FeeRateOption:
-    FeeRateOptionProtocol
-    {
+open class FeeRateOption: FeeRateOptionProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -3821,6 +3778,7 @@ open func satPerVb() -> Float  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3875,7 +3833,7 @@ public func FfiConverterTypeFeeRateOption_lower(_ value: FeeRateOption) -> Unsaf
 
 
 
-public protocol FeeRateOptionWithTotalFeeProtocol : AnyObject {
+public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject {
     
     func duration()  -> String
     
@@ -3892,10 +3850,7 @@ public protocol FeeRateOptionWithTotalFeeProtocol : AnyObject {
     func totalFee()  -> Amount
     
 }
-
-open class FeeRateOptionWithTotalFee:
-    FeeRateOptionWithTotalFeeProtocol
-    {
+open class FeeRateOptionWithTotalFee: FeeRateOptionWithTotalFeeProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4007,6 +3962,7 @@ open func totalFee() -> Amount  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4061,7 +4017,7 @@ public func FfiConverterTypeFeeRateOptionWithTotalFee_lower(_ value: FeeRateOpti
 
 
 
-public protocol FeeRateOptionsProtocol : AnyObject {
+public protocol FeeRateOptionsProtocol: AnyObject {
     
     func fast()  -> FeeRateOption
     
@@ -4070,10 +4026,7 @@ public protocol FeeRateOptionsProtocol : AnyObject {
     func slow()  -> FeeRateOption
     
 }
-
-open class FeeRateOptions:
-    FeeRateOptionsProtocol
-    {
+open class FeeRateOptions: FeeRateOptionsProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4153,6 +4106,7 @@ open func slow() -> FeeRateOption  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4207,7 +4161,7 @@ public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> Uns
 
 
 
-public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
+public protocol FeeRateOptionsWithTotalFeeProtocol: AnyObject {
     
     func addCustomFee(feeRate: Float)  -> FeeRateOptionsWithTotalFee
     
@@ -4228,10 +4182,7 @@ public protocol FeeRateOptionsWithTotalFeeProtocol : AnyObject {
     func transactionSize()  -> UInt64
     
 }
-
-open class FeeRateOptionsWithTotalFee:
-    FeeRateOptionsWithTotalFeeProtocol
-    {
+open class FeeRateOptionsWithTotalFee: FeeRateOptionsWithTotalFeeProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4356,6 +4307,7 @@ open func transactionSize() -> UInt64  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4413,7 +4365,7 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOpt
 /**
  * Representation of our app over FFI. Essenially a wrapper of [`App`].
  */
-public protocol FfiAppProtocol : AnyObject {
+public protocol FfiAppProtocol: AnyObject {
     
     /**
      * Get the auth type for the app
@@ -4492,13 +4444,10 @@ public protocol FfiAppProtocol : AnyObject {
     func unverifiedWalletIds()  -> [WalletId]
     
 }
-
 /**
  * Representation of our app over FFI. Essenially a wrapper of [`App`].
  */
-open class FfiApp:
-    FfiAppProtocol
-    {
+open class FfiApp: FfiAppProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4759,6 +4708,7 @@ open func unverifiedWalletIds() -> [WalletId]  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4813,7 +4763,7 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
 
 
 
-public protocol FfiNfcReaderProtocol : AnyObject {
+public protocol FfiNfcReaderProtocol: AnyObject {
     
     func dataFromRecords(records: [NdefRecord])  -> Data
     
@@ -4828,10 +4778,7 @@ public protocol FfiNfcReaderProtocol : AnyObject {
     func stringFromRecord(record: NdefRecord)  -> String?
     
 }
-
-open class FfiNfcReader:
-    FfiNfcReaderProtocol
-    {
+open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -4935,6 +4882,7 @@ open func stringFromRecord(record: NdefRecord) -> String?  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4989,13 +4937,10 @@ public func FfiConverterTypeFfiNfcReader_lower(_ value: FfiNfcReader) -> UnsafeM
 
 
 
-public protocol FiatClientProtocol : AnyObject {
+public protocol FiatClientProtocol: AnyObject {
     
 }
-
-open class FiatClient:
-    FiatClientProtocol
-    {
+open class FiatClient: FiatClientProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5046,6 +4991,7 @@ open class FiatClient:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -5101,15 +5047,12 @@ public func FfiConverterTypeFiatClient_lower(_ value: FiatClient) -> UnsafeMutab
 
 
 
-public protocol FileHandlerProtocol : AnyObject {
+public protocol FileHandlerProtocol: AnyObject {
     
     func read() throws  -> MultiFormat
     
 }
-
-open class FileHandler:
-    FileHandlerProtocol
-    {
+open class FileHandler: FileHandlerProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5176,6 +5119,7 @@ open func read()throws  -> MultiFormat  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5230,17 +5174,14 @@ public func FfiConverterTypeFileHandler_lower(_ value: FileHandler) -> UnsafeMut
 
 
 
-public protocol FingerprintProtocol : AnyObject {
+public protocol FingerprintProtocol: AnyObject {
     
     func asLowercase()  -> String
     
     func asUppercase()  -> String
     
 }
-
-open class Fingerprint:
-    FingerprintProtocol
-    {
+open class Fingerprint: FingerprintProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5314,6 +5255,7 @@ open func asUppercase() -> String  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5368,13 +5310,10 @@ public func FfiConverterTypeFingerprint_lower(_ value: Fingerprint) -> UnsafeMut
 
 
 
-public protocol FoundJsonProtocol : AnyObject {
+public protocol FoundJsonProtocol: AnyObject {
     
 }
-
-open class FoundJson:
-    FoundJsonProtocol
-    {
+open class FoundJson: FoundJsonProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5425,6 +5364,7 @@ open class FoundJson:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -5480,7 +5420,7 @@ public func FfiConverterTypeFoundJson_lower(_ value: FoundJson) -> UnsafeMutable
 
 
 
-public protocol GlobalConfigTableProtocol : AnyObject {
+public protocol GlobalConfigTableProtocol: AnyObject {
     
     func authType()  -> AuthType
     
@@ -5523,10 +5463,7 @@ public protocol GlobalConfigTableProtocol : AnyObject {
     func walletMode()  -> WalletMode
     
 }
-
-open class GlobalConfigTable:
-    GlobalConfigTableProtocol
-    {
+open class GlobalConfigTable: GlobalConfigTableProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5718,6 +5655,7 @@ open func walletMode() -> WalletMode  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5772,7 +5710,7 @@ public func FfiConverterTypeGlobalConfigTable_lower(_ value: GlobalConfigTable) 
 
 
 
-public protocol GlobalFlagTableProtocol : AnyObject {
+public protocol GlobalFlagTableProtocol: AnyObject {
     
     func get(key: GlobalFlagKey) throws  -> Bool
     
@@ -5783,10 +5721,7 @@ public protocol GlobalFlagTableProtocol : AnyObject {
     func toggleBoolConfig(key: GlobalFlagKey) throws 
     
 }
-
-open class GlobalFlagTable:
-    GlobalFlagTableProtocol
-    {
+open class GlobalFlagTable: GlobalFlagTableProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5869,6 +5804,7 @@ open func toggleBoolConfig(key: GlobalFlagKey)throws   {try rustCallWithError(Ff
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -5923,13 +5859,10 @@ public func FfiConverterTypeGlobalFlagTable_lower(_ value: GlobalFlagTable) -> U
 
 
 
-public protocol HardwareExportProtocol : AnyObject {
+public protocol HardwareExportProtocol: AnyObject {
     
 }
-
-open class HardwareExport:
-    HardwareExportProtocol
-    {
+open class HardwareExport: HardwareExportProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -5980,6 +5913,7 @@ open class HardwareExport:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -6035,7 +5969,7 @@ public func FfiConverterTypeHardwareExport_lower(_ value: HardwareExport) -> Uns
 
 
 
-public protocol HeaderIconPresenterProtocol : AnyObject {
+public protocol HeaderIconPresenterProtocol: AnyObject {
     
     func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32)  -> FfiColor
     
@@ -6044,10 +5978,7 @@ public protocol HeaderIconPresenterProtocol : AnyObject {
     func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int32, ringNumber: Int32)  -> FfiColor
     
 }
-
-open class HeaderIconPresenter:
-    HeaderIconPresenterProtocol
-    {
+open class HeaderIconPresenter: HeaderIconPresenterProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -6140,6 +6071,7 @@ open func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direct
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6194,13 +6126,10 @@ public func FfiConverterTypeHeaderIconPresenter_lower(_ value: HeaderIconPresent
 
 
 
-public protocol InputOutputDetailsProtocol : AnyObject {
+public protocol InputOutputDetailsProtocol: AnyObject {
     
 }
-
-open class InputOutputDetails:
-    InputOutputDetailsProtocol
-    {
+open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -6251,6 +6180,7 @@ open class InputOutputDetails:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -6306,13 +6236,10 @@ public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails
 
 
 
-public protocol KeychainProtocol : AnyObject {
+public protocol KeychainProtocol: AnyObject {
     
 }
-
-open class Keychain:
-    KeychainProtocol
-    {
+open class Keychain: KeychainProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -6372,6 +6299,7 @@ public convenience init(keychain: KeychainAccess) {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6426,17 +6354,279 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
 
 
 
-public protocol MnemonicProtocol : AnyObject {
+public protocol LabelManagerProtocol: AnyObject {
+    
+    func export() throws  -> String
+    
+    func exportDefaultFileName(name: String)  -> String
+    
+    func hasLabels()  -> Bool
+    
+    func `import`(labels: String) throws 
+    
+}
+open class LabelManager: LabelManagerProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_labelmanager(self.pointer, $0) }
+    }
+public convenience init(id: WalletId) {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_labelmanager_new(
+        FfiConverterTypeWalletId_lower(id),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_labelmanager(pointer, $0) }
+    }
+
+    
+
+    
+open func export()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_export(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func exportDefaultFileName(name: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_labelmanager_export_default_file_name(self.uniffiClonePointer(),
+        FfiConverterString.lower(name),$0
+    )
+})
+}
+    
+open func hasLabels() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_labelmanager_has_labels(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func `import`(labels: String)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_import(self.uniffiClonePointer(),
+        FfiConverterString.lower(labels),$0
+    )
+}
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLabelManager: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = LabelManager
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> LabelManager {
+        return LabelManager(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: LabelManager) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LabelManager {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: LabelManager, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> LabelManager {
+    return try FfiConverterTypeLabelManager.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelManager_lower(_ value: LabelManager) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeLabelManager.lower(value)
+}
+
+
+
+
+
+
+public protocol LabelsTableProtocol: AnyObject {
+    
+}
+open class LabelsTable: LabelsTableProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_labelstable(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_labelstable(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLabelsTable: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = LabelsTable
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> LabelsTable {
+        return LabelsTable(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: LabelsTable) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LabelsTable {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: LabelsTable, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelsTable_lift(_ pointer: UnsafeMutableRawPointer) throws -> LabelsTable {
+    return try FfiConverterTypeLabelsTable.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelsTable_lower(_ value: LabelsTable) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeLabelsTable.lower(value)
+}
+
+
+
+
+
+
+public protocol MnemonicProtocol: AnyObject {
     
     func allWords()  -> [GroupedWord]
     
     func words()  -> [String]
     
 }
-
-open class Mnemonic:
-    MnemonicProtocol
-    {
+open class Mnemonic: MnemonicProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -6518,6 +6708,7 @@ open func words() -> [String]  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6572,7 +6763,7 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UnsafeMutableRa
 
 
 
-public protocol MultiQrProtocol : AnyObject {
+public protocol MultiQrProtocol: AnyObject {
     
     func addPart(qr: String) throws  -> BbqrJoinResult
     
@@ -6587,10 +6778,7 @@ public protocol MultiQrProtocol : AnyObject {
     func totalParts()  -> UInt32
     
 }
-
-open class MultiQr:
-    MultiQrProtocol
-    {
+open class MultiQr: MultiQrProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -6712,6 +6900,7 @@ open func totalParts() -> UInt32  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6766,17 +6955,14 @@ public func FfiConverterTypeMultiQr_lower(_ value: MultiQr) -> UnsafeMutableRawP
 
 
 
-public protocol NdefRecordReaderProtocol : AnyObject {
+public protocol NdefRecordReaderProtocol: AnyObject {
     
     func id()  -> String?
     
     func type()  -> String?
     
 }
-
-open class NdefRecordReader:
-    NdefRecordReaderProtocol
-    {
+open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -6850,6 +7036,7 @@ open func type() -> String?  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -6904,7 +7091,7 @@ public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) ->
 
 
 
-public protocol NfcConstProtocol : AnyObject {
+public protocol NfcConstProtocol: AnyObject {
     
     func bytesPerBlock()  -> UInt16
     
@@ -6913,10 +7100,7 @@ public protocol NfcConstProtocol : AnyObject {
     func totalBytesPerChunk()  -> UInt16
     
 }
-
-open class NfcConst:
-    NfcConstProtocol
-    {
+open class NfcConst: NfcConstProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -6996,6 +7180,7 @@ open func totalBytesPerChunk() -> UInt16  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7050,7 +7235,7 @@ public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UnsafeMutableRa
 
 
 
-public protocol NodeSelectorProtocol : AnyObject {
+public protocol NodeSelectorProtocol: AnyObject {
     
     /**
      * Check the node url and set it as selected node if it is valid
@@ -7071,10 +7256,7 @@ public protocol NodeSelectorProtocol : AnyObject {
     func selectedNode()  -> NodeSelection
     
 }
-
-open class NodeSelector:
-    NodeSelectorProtocol
-    {
+open class NodeSelector: NodeSelectorProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -7205,6 +7387,7 @@ open func selectedNode() -> NodeSelection  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7259,13 +7442,10 @@ public func FfiConverterTypeNodeSelector_lower(_ value: NodeSelector) -> UnsafeM
 
 
 
-public protocol OutPointProtocol : AnyObject {
+public protocol OutPointProtocol: AnyObject {
     
 }
-
-open class OutPoint:
-    OutPointProtocol
-    {
+open class OutPoint: OutPointProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -7316,6 +7496,7 @@ open class OutPoint:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -7371,13 +7552,10 @@ public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UnsafeMutableRa
 
 
 
-public protocol PendingWalletProtocol : AnyObject {
+public protocol PendingWalletProtocol: AnyObject {
     
 }
-
-open class PendingWallet:
-    PendingWalletProtocol
-    {
+open class PendingWallet: PendingWalletProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -7428,6 +7606,7 @@ open class PendingWallet:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -7483,17 +7662,14 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
 
 
 
-public protocol PriceResponseProtocol : AnyObject {
+public protocol PriceResponseProtocol: AnyObject {
     
     func get()  -> UInt64
     
     func getForCurrency(currency: FiatCurrency)  -> UInt64
     
 }
-
-open class PriceResponse:
-    PriceResponseProtocol
-    {
+open class PriceResponse: PriceResponseProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -7560,6 +7736,7 @@ open func getForCurrency(currency: FiatCurrency) -> UInt64  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7614,7 +7791,7 @@ public func FfiConverterTypePriceResponse_lower(_ value: PriceResponse) -> Unsaf
 
 
 
-public protocol PsbtProtocol : AnyObject {
+public protocol PsbtProtocol: AnyObject {
     
     /**
      * Total fee in sats.
@@ -7637,10 +7814,7 @@ public protocol PsbtProtocol : AnyObject {
     func weight()  -> UInt64
     
 }
-
-open class Psbt:
-    PsbtProtocol
-    {
+open class Psbt: PsbtProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -7740,6 +7914,7 @@ open func weight() -> UInt64  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -7794,13 +7969,10 @@ public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UnsafeMutableRawPointer
 
 
 
-public protocol PushTxProtocol : AnyObject {
+public protocol PushTxProtocol: AnyObject {
     
 }
-
-open class PushTx:
-    PushTxProtocol
-    {
+open class PushTx: PushTxProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -7851,6 +8023,7 @@ open class PushTx:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -7906,7 +8079,7 @@ public func FfiConverterTypePushTx_lower(_ value: PushTx) -> UnsafeMutableRawPoi
 
 
 
-public protocol RouteFactoryProtocol : AnyObject {
+public protocol RouteFactoryProtocol: AnyObject {
     
     func coldWalletImport(route: ColdWalletRoute)  -> Route
     
@@ -7947,10 +8120,7 @@ public protocol RouteFactoryProtocol : AnyObject {
     func walletSettings(id: WalletId, route: WalletSettingsRoute)  -> Route
     
 }
-
-open class RouteFactory:
-    RouteFactoryProtocol
-    {
+open class RouteFactory: RouteFactoryProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -8166,6 +8336,7 @@ open func walletSettings(id: WalletId, route: WalletSettingsRoute) -> Route  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -8220,7 +8391,7 @@ public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeM
 
 
 
-public protocol RustAuthManagerProtocol : AnyObject {
+public protocol RustAuthManagerProtocol: AnyObject {
     
     /**
      * Get the auth type for the app
@@ -8299,10 +8470,7 @@ public protocol RustAuthManagerProtocol : AnyObject {
     func validatePinSettings(pin: String) throws 
     
 }
-
-open class RustAuthManager:
-    RustAuthManagerProtocol
-    {
+open class RustAuthManager: RustAuthManagerProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -8520,6 +8688,7 @@ open func validatePinSettings(pin: String)throws   {try rustCallWithError(FfiCon
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -8574,7 +8743,7 @@ public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> U
 
 
 
-public protocol RustImportWalletManagerProtocol : AnyObject {
+public protocol RustImportWalletManagerProtocol: AnyObject {
     
     /**
      * Action from the frontend to change the state of the view model
@@ -8589,10 +8758,7 @@ public protocol RustImportWalletManagerProtocol : AnyObject {
     func listenForUpdates(reconciler: ImportWalletManagerReconciler) 
     
 }
-
-open class RustImportWalletManager:
-    RustImportWalletManagerProtocol
-    {
+open class RustImportWalletManager: RustImportWalletManagerProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -8679,6 +8845,7 @@ open func listenForUpdates(reconciler: ImportWalletManagerReconciler)  {try! rus
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -8733,7 +8900,7 @@ public func FfiConverterTypeRustImportWalletManager_lower(_ value: RustImportWal
 
 
 
-public protocol RustPendingWalletManagerProtocol : AnyObject {
+public protocol RustPendingWalletManagerProtocol: AnyObject {
     
     func bip39Words()  -> [String]
     
@@ -8755,10 +8922,7 @@ public protocol RustPendingWalletManagerProtocol : AnyObject {
     func saveWallet() throws  -> WalletMetadata
     
 }
-
-open class RustPendingWalletManager:
-    RustPendingWalletManagerProtocol
-    {
+open class RustPendingWalletManager: RustPendingWalletManagerProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -8877,6 +9041,7 @@ open func saveWallet()throws  -> WalletMetadata  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -8931,7 +9096,7 @@ public func FfiConverterTypeRustPendingWalletManager_lower(_ value: RustPendingW
 
 
 
-public protocol RustWalletManagerProtocol : AnyObject {
+public protocol RustWalletManagerProtocol: AnyObject {
     
     /**
      * Get address at the given index
@@ -9035,10 +9200,7 @@ public protocol RustWalletManagerProtocol : AnyObject {
     func wordValidator() throws  -> WordValidator
     
 }
-
-open class RustWalletManager:
-    RustWalletManagerProtocol
-    {
+open class RustWalletManager: RustWalletManagerProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -9714,6 +9876,7 @@ open func wordValidator()throws  -> WordValidator  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9768,17 +9931,14 @@ public func FfiConverterTypeRustWalletManager_lower(_ value: RustWalletManager) 
 
 
 
-public protocol SeedQrProtocol : AnyObject {
+public protocol SeedQrProtocol: AnyObject {
     
     func getWords()  -> [String]
     
     func groupedPlainWords()  -> [[String]]
     
 }
-
-open class SeedQr:
-    SeedQrProtocol
-    {
+open class SeedQr: SeedQrProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -9860,6 +10020,7 @@ open func groupedPlainWords() -> [[String]]  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -9914,7 +10075,7 @@ public func FfiConverterTypeSeedQr_lower(_ value: SeedQr) -> UnsafeMutableRawPoi
 
 
 
-public protocol SentAndReceivedProtocol : AnyObject {
+public protocol SentAndReceivedProtocol: AnyObject {
     
     func amount()  -> Amount
     
@@ -9931,10 +10092,7 @@ public protocol SentAndReceivedProtocol : AnyObject {
     func sent()  -> Amount
     
 }
-
-open class SentAndReceived:
-    SentAndReceivedProtocol
-    {
+open class SentAndReceived: SentAndReceivedProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -10036,6 +10194,7 @@ open func sent() -> Amount  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10090,7 +10249,7 @@ public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> U
 
 
 
-public protocol TransactionDetailsProtocol : AnyObject {
+public protocol TransactionDetailsProtocol: AnyObject {
     
     func address()  -> Address
     
@@ -10127,10 +10286,7 @@ public protocol TransactionDetailsProtocol : AnyObject {
     func transactionUrl()  -> String
     
 }
-
-open class TransactionDetails:
-    TransactionDetailsProtocol
-    {
+open class TransactionDetails: TransactionDetailsProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -10379,6 +10535,7 @@ open func transactionUrl() -> String  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10433,17 +10590,14 @@ public func FfiConverterTypeTransactionDetails_lower(_ value: TransactionDetails
 
 
 
-public protocol TxIdProtocol : AnyObject {
+public protocol TxIdProtocol: AnyObject {
     
     func asHashString()  -> String
     
     func isEqual(other: TxId)  -> Bool
     
 }
-
-open class TxId:
-    TxIdProtocol
-    {
+open class TxId: TxIdProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -10510,6 +10664,7 @@ open func isEqual(other: TxId) -> Bool  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10564,13 +10719,10 @@ public func FfiConverterTypeTxId_lower(_ value: TxId) -> UnsafeMutableRawPointer
 
 
 
-public protocol TxInProtocol : AnyObject {
+public protocol TxInProtocol: AnyObject {
     
 }
-
-open class TxIn:
-    TxInProtocol
-    {
+open class TxIn: TxInProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -10621,6 +10773,7 @@ open class TxIn:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10676,13 +10829,10 @@ public func FfiConverterTypeTxIn_lower(_ value: TxIn) -> UnsafeMutableRawPointer
 
 
 
-public protocol TxOutProtocol : AnyObject {
+public protocol TxOutProtocol: AnyObject {
     
 }
-
-open class TxOut:
-    TxOutProtocol
-    {
+open class TxOut: TxOutProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -10733,6 +10883,7 @@ open class TxOut:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -10788,7 +10939,7 @@ public func FfiConverterTypeTxOut_lower(_ value: TxOut) -> UnsafeMutableRawPoint
 
 
 
-public protocol UnconfirmedTransactionProtocol : AnyObject {
+public protocol UnconfirmedTransactionProtocol: AnyObject {
     
     func fiatAmount()  -> FiatAmount?
     
@@ -10801,10 +10952,7 @@ public protocol UnconfirmedTransactionProtocol : AnyObject {
     func sentAndReceived()  -> SentAndReceived
     
 }
-
-open class UnconfirmedTransaction:
-    UnconfirmedTransactionProtocol
-    {
+open class UnconfirmedTransaction: UnconfirmedTransactionProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -10891,6 +11039,7 @@ open func sentAndReceived() -> SentAndReceived  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -10945,7 +11094,7 @@ public func FfiConverterTypeUnconfirmedTransaction_lower(_ value: UnconfirmedTra
 
 
 
-public protocol UnsignedTransactionProtocol : AnyObject {
+public protocol UnsignedTransactionProtocol: AnyObject {
     
     func details()  -> ConfirmDetails
     
@@ -10958,10 +11107,7 @@ public protocol UnsignedTransactionProtocol : AnyObject {
     func spendingAmount()  -> Amount
     
 }
-
-open class UnsignedTransaction:
-    UnsignedTransactionProtocol
-    {
+open class UnsignedTransaction: UnsignedTransactionProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -11055,6 +11201,7 @@ open func spendingAmount() -> Amount  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -11109,7 +11256,7 @@ public func FfiConverterTypeUnsignedTransaction_lower(_ value: UnsignedTransacti
 
 
 
-public protocol UnsignedTransactionRecordProtocol : AnyObject {
+public protocol UnsignedTransactionRecordProtocol: AnyObject {
     
     func confirmDetails()  -> ConfirmDetails
     
@@ -11120,10 +11267,7 @@ public protocol UnsignedTransactionRecordProtocol : AnyObject {
     func walletId()  -> WalletId
     
 }
-
-open class UnsignedTransactionRecord:
-    UnsignedTransactionRecordProtocol
-    {
+open class UnsignedTransactionRecord: UnsignedTransactionRecordProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -11203,6 +11347,7 @@ open func walletId() -> WalletId  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -11257,17 +11402,14 @@ public func FfiConverterTypeUnsignedTransactionRecord_lower(_ value: UnsignedTra
 
 
 
-public protocol UnsignedTransactionsTableProtocol : AnyObject {
+public protocol UnsignedTransactionsTableProtocol: AnyObject {
     
     func getTx(txId: TxId)  -> UnsignedTransactionRecord?
     
     func getTxThrow(txId: TxId) throws  -> UnsignedTransactionRecord
     
 }
-
-open class UnsignedTransactionsTable:
-    UnsignedTransactionsTableProtocol
-    {
+open class UnsignedTransactionsTable: UnsignedTransactionsTableProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -11335,6 +11477,7 @@ open func getTxThrow(txId: TxId)throws  -> UnsignedTransactionRecord  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -11389,15 +11532,12 @@ public func FfiConverterTypeUnsignedTransactionsTable_lower(_ value: UnsignedTra
 
 
 
-public protocol WalletProtocol : AnyObject {
+public protocol WalletProtocol: AnyObject {
     
     func id()  -> WalletId
     
 }
-
-open class Wallet:
-    WalletProtocol
-    {
+open class Wallet: WalletProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -11479,6 +11619,7 @@ open func id() -> WalletId  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -11533,13 +11674,10 @@ public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPoi
 
 
 
-public protocol WalletDataDbProtocol : AnyObject {
+public protocol WalletDataDbProtocol: AnyObject {
     
 }
-
-open class WalletDataDb:
-    WalletDataDbProtocol
-    {
+open class WalletDataDb: WalletDataDbProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -11590,6 +11728,7 @@ open class WalletDataDb:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11645,13 +11784,10 @@ public func FfiConverterTypeWalletDataDb_lower(_ value: WalletDataDb) -> UnsafeM
 
 
 
-public protocol WalletKeyProtocol : AnyObject {
+public protocol WalletKeyProtocol: AnyObject {
     
 }
-
-open class WalletKey:
-    WalletKeyProtocol
-    {
+open class WalletKey: WalletKeyProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -11702,6 +11838,7 @@ open class WalletKey:
     
 
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -11757,7 +11894,7 @@ public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UnsafeMutable
 
 
 
-public protocol WalletsTableProtocol : AnyObject {
+public protocol WalletsTableProtocol: AnyObject {
     
     func all() throws  -> [WalletMetadata]
     
@@ -11768,10 +11905,7 @@ public protocol WalletsTableProtocol : AnyObject {
     func len(network: Network, mode: WalletMode) throws  -> UInt16
     
 }
-
-open class WalletsTable:
-    WalletsTableProtocol
-    {
+open class WalletsTable: WalletsTableProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -11853,6 +11987,7 @@ open func len(network: Network, mode: WalletMode)throws  -> UInt16  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -11907,7 +12042,7 @@ public func FfiConverterTypeWalletsTable_lower(_ value: WalletsTable) -> UnsafeM
 
 
 
-public protocol WordValidatorProtocol : AnyObject {
+public protocol WordValidatorProtocol: AnyObject {
     
     func isComplete(wordNumber: UInt8)  -> Bool
     
@@ -11916,10 +12051,7 @@ public protocol WordValidatorProtocol : AnyObject {
     func possibleWords(`for`: UInt8)  -> [String]
     
 }
-
-open class WordValidator:
-    WordValidatorProtocol
-    {
+open class WordValidator: WordValidatorProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -12005,6 +12137,7 @@ open func possibleWords(`for`: UInt8) -> [String]  {
 
 }
 
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -12069,6 +12202,10 @@ public struct AddressAndAmount {
     }
 }
 
+#if compiler(>=6)
+extension AddressAndAmount: Sendable {}
+#endif
+
 
 
 #if swift(>=5.8)
@@ -12117,6 +12254,9 @@ public struct AddressIndex {
     }
 }
 
+#if compiler(>=6)
+extension AddressIndex: Sendable {}
+#endif
 
 
 extension AddressIndex: Equatable, Hashable {
@@ -12135,6 +12275,7 @@ extension AddressIndex: Equatable, Hashable {
         hasher.combine(addressListHash)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12181,6 +12322,10 @@ public struct AppState {
     }
 }
 
+#if compiler(>=6)
+extension AppState: Sendable {}
+#endif
+
 
 
 #if swift(>=5.8)
@@ -12223,6 +12368,9 @@ public struct AuthManagerState {
     }
 }
 
+#if compiler(>=6)
+extension AuthManagerState: Sendable {}
+#endif
 
 
 extension AuthManagerState: Equatable, Hashable {
@@ -12233,6 +12381,7 @@ extension AuthManagerState: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12276,6 +12425,9 @@ public struct BlockSizeLast {
     }
 }
 
+#if compiler(>=6)
+extension BlockSizeLast: Sendable {}
+#endif
 
 
 extension BlockSizeLast: Equatable, Hashable {
@@ -12294,6 +12446,7 @@ extension BlockSizeLast: Equatable, Hashable {
         hasher.combine(lastSeen)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12342,6 +12495,9 @@ public struct ConfirmedDetails {
     }
 }
 
+#if compiler(>=6)
+extension ConfirmedDetails: Sendable {}
+#endif
 
 
 extension ConfirmedDetails: Equatable, Hashable {
@@ -12360,6 +12516,7 @@ extension ConfirmedDetails: Equatable, Hashable {
         hasher.combine(confirmationTime)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12414,6 +12571,9 @@ public struct FeeResponse {
     }
 }
 
+#if compiler(>=6)
+extension FeeResponse: Sendable {}
+#endif
 
 
 extension FeeResponse: Equatable, Hashable {
@@ -12444,6 +12604,7 @@ extension FeeResponse: Equatable, Hashable {
         hasher.combine(minimumFee)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12498,6 +12659,9 @@ public struct FiatAmount {
     }
 }
 
+#if compiler(>=6)
+extension FiatAmount: Sendable {}
+#endif
 
 
 extension FiatAmount: Equatable, Hashable {
@@ -12516,6 +12680,7 @@ extension FiatAmount: Equatable, Hashable {
         hasher.combine(currency)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12564,6 +12729,9 @@ public struct FoundAddress {
     }
 }
 
+#if compiler(>=6)
+extension FoundAddress: Sendable {}
+#endif
 
 
 extension FoundAddress: Equatable, Hashable {
@@ -12582,6 +12750,7 @@ extension FoundAddress: Equatable, Hashable {
         hasher.combine(firstAddress)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12630,6 +12799,9 @@ public struct GroupedWord {
     }
 }
 
+#if compiler(>=6)
+extension GroupedWord: Sendable {}
+#endif
 
 
 extension GroupedWord: Equatable, Hashable {
@@ -12648,6 +12820,7 @@ extension GroupedWord: Equatable, Hashable {
         hasher.combine(word)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12692,6 +12865,9 @@ public struct ImportWalletManagerState {
     }
 }
 
+#if compiler(>=6)
+extension ImportWalletManagerState: Sendable {}
+#endif
 
 
 extension ImportWalletManagerState: Equatable, Hashable {
@@ -12702,6 +12878,7 @@ extension ImportWalletManagerState: Equatable, Hashable {
     public func hash(into hasher: inout Hasher) {
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12747,6 +12924,9 @@ public struct InternalOnlyMetadata {
     }
 }
 
+#if compiler(>=6)
+extension InternalOnlyMetadata: Sendable {}
+#endif
 
 
 extension InternalOnlyMetadata: Equatable, Hashable {
@@ -12769,6 +12949,7 @@ extension InternalOnlyMetadata: Equatable, Hashable {
         hasher.combine(lastHeightFetched)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12833,6 +13014,9 @@ public struct MessageInfo {
     }
 }
 
+#if compiler(>=6)
+extension MessageInfo: Sendable {}
+#endif
 
 
 extension MessageInfo: Equatable, Hashable {
@@ -12851,6 +13035,7 @@ extension MessageInfo: Equatable, Hashable {
         hasher.combine(payloadLength)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -12913,6 +13098,9 @@ public struct NdefHeader {
     }
 }
 
+#if compiler(>=6)
+extension NdefHeader: Sendable {}
+#endif
 
 
 extension NdefHeader: Equatable, Hashable {
@@ -12959,6 +13147,7 @@ extension NdefHeader: Equatable, Hashable {
         hasher.combine(idLength)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13025,6 +13214,9 @@ public struct NdefRecord {
     }
 }
 
+#if compiler(>=6)
+extension NdefRecord: Sendable {}
+#endif
 
 
 extension NdefRecord: Equatable, Hashable {
@@ -13051,6 +13243,7 @@ extension NdefRecord: Equatable, Hashable {
         hasher.combine(payload)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13107,6 +13300,9 @@ public struct Node {
     }
 }
 
+#if compiler(>=6)
+extension Node: Sendable {}
+#endif
 
 
 extension Node: Equatable, Hashable {
@@ -13133,6 +13329,7 @@ extension Node: Equatable, Hashable {
         hasher.combine(url)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13187,6 +13384,9 @@ public struct ParsingContext {
     }
 }
 
+#if compiler(>=6)
+extension ParsingContext: Sendable {}
+#endif
 
 
 extension ParsingContext: Equatable, Hashable {
@@ -13209,6 +13409,7 @@ extension ParsingContext: Equatable, Hashable {
         hasher.combine(firstBlockHash)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13259,6 +13460,9 @@ public struct ParsingMessage {
     }
 }
 
+#if compiler(>=6)
+extension ParsingMessage: Sendable {}
+#endif
 
 
 extension ParsingMessage: Equatable, Hashable {
@@ -13277,6 +13481,7 @@ extension ParsingMessage: Equatable, Hashable {
         hasher.combine(leftOverBytes)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13323,6 +13528,9 @@ public struct PendingDetails {
     }
 }
 
+#if compiler(>=6)
+extension PendingDetails: Sendable {}
+#endif
 
 
 extension PendingDetails: Equatable, Hashable {
@@ -13337,6 +13545,7 @@ extension PendingDetails: Equatable, Hashable {
         hasher.combine(lastSeen)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13382,6 +13591,10 @@ public struct PendingWalletManagerState {
         self.wallet = wallet
     }
 }
+
+#if compiler(>=6)
+extension PendingWalletManagerState: Sendable {}
+#endif
 
 
 
@@ -13433,6 +13646,9 @@ public struct Rgb {
     }
 }
 
+#if compiler(>=6)
+extension Rgb: Sendable {}
+#endif
 
 
 extension Rgb: Equatable, Hashable {
@@ -13455,6 +13671,7 @@ extension Rgb: Equatable, Hashable {
         hasher.combine(b)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13507,6 +13724,10 @@ public struct Router {
     }
 }
 
+#if compiler(>=6)
+extension Router: Sendable {}
+#endif
+
 
 
 #if swift(>=5.8)
@@ -13557,6 +13778,9 @@ public struct ScanningInfo {
     }
 }
 
+#if compiler(>=6)
+extension ScanningInfo: Sendable {}
+#endif
 
 
 extension ScanningInfo: Equatable, Hashable {
@@ -13575,6 +13799,7 @@ extension ScanningInfo: Equatable, Hashable {
         hasher.combine(count)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13622,6 +13847,10 @@ public struct SplitOutput {
         self.`internal` = `internal`
     }
 }
+
+#if compiler(>=6)
+extension SplitOutput: Sendable {}
+#endif
 
 
 
@@ -13673,6 +13902,9 @@ public struct TextPayload {
     }
 }
 
+#if compiler(>=6)
+extension TextPayload: Sendable {}
+#endif
 
 
 extension TextPayload: Equatable, Hashable {
@@ -13695,6 +13927,7 @@ extension TextPayload: Equatable, Hashable {
         hasher.combine(text)
     }
 }
+
 
 
 #if swift(>=5.8)
@@ -13772,6 +14005,10 @@ public struct WalletMetadata {
         self.`internal` = `internal`
     }
 }
+
+#if compiler(>=6)
+extension WalletMetadata: Sendable {}
+#endif
 
 
 
@@ -13954,6 +14191,10 @@ public enum ApiType {
 }
 
 
+#if compiler(>=6)
+extension ApiType: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -14009,7 +14250,6 @@ public func FfiConverterTypeApiType_lower(_ value: ApiType) -> RustBuffer {
 }
 
 
-
 extension ApiType: Equatable, Hashable {}
 
 
@@ -14033,6 +14273,10 @@ public enum AppAction {
     case updateFees
 }
 
+
+#if compiler(>=6)
+extension AppAction: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -14234,6 +14478,10 @@ public enum AppStateReconcileMessage {
     )
 }
 
+
+#if compiler(>=6)
+extension AppStateReconcileMessage: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -14483,6 +14731,10 @@ public enum AuthManagerAction {
 }
 
 
+#if compiler(>=6)
+extension AuthManagerAction: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -14564,7 +14816,6 @@ public func FfiConverterTypeAuthManagerAction_lift(_ buf: RustBuffer) throws -> 
 public func FfiConverterTypeAuthManagerAction_lower(_ value: AuthManagerAction) -> RustBuffer {
     return FfiConverterTypeAuthManagerAction.lower(value)
 }
-
 
 
 extension AuthManagerAction: Equatable, Hashable {}
@@ -14676,6 +14927,10 @@ public enum AuthManagerReconcileMessage {
 }
 
 
+#if compiler(>=6)
+extension AuthManagerReconcileMessage: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -14733,7 +14988,6 @@ public func FfiConverterTypeAuthManagerReconcileMessage_lower(_ value: AuthManag
 }
 
 
-
 extension AuthManagerReconcileMessage: Equatable, Hashable {}
 
 
@@ -14749,6 +15003,10 @@ public enum AuthType {
     case none
 }
 
+
+#if compiler(>=6)
+extension AuthType: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -14809,7 +15067,6 @@ public func FfiConverterTypeAuthType_lift(_ buf: RustBuffer) throws -> AuthType 
 public func FfiConverterTypeAuthType_lower(_ value: AuthType) -> RustBuffer {
     return FfiConverterTypeAuthType.lower(value)
 }
-
 
 
 extension AuthType: Equatable, Hashable {}
@@ -15013,6 +15270,10 @@ public enum ColdWalletRoute {
 }
 
 
+#if compiler(>=6)
+extension ColdWalletRoute: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -15056,7 +15317,6 @@ public func FfiConverterTypeColdWalletRoute_lower(_ value: ColdWalletRoute) -> R
 }
 
 
-
 extension ColdWalletRoute: Equatable, Hashable {}
 
 
@@ -15071,6 +15331,10 @@ public enum ColorSchemeSelection {
     case system
 }
 
+
+#if compiler(>=6)
+extension ColorSchemeSelection: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15125,7 +15389,6 @@ public func FfiConverterTypeColorSchemeSelection_lift(_ buf: RustBuffer) throws 
 public func FfiConverterTypeColorSchemeSelection_lower(_ value: ColorSchemeSelection) -> RustBuffer {
     return FfiConverterTypeColorSchemeSelection.lower(value)
 }
-
 
 
 extension ColorSchemeSelection: Equatable, Hashable {}
@@ -15600,6 +15863,10 @@ public enum DiscoveryState {
 }
 
 
+#if compiler(>=6)
+extension DiscoveryState: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -15701,6 +15968,10 @@ public enum FeeSpeed {
 }
 
 
+#if compiler(>=6)
+extension FeeSpeed: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -15764,7 +16035,6 @@ public func FfiConverterTypeFeeSpeed_lower(_ value: FeeSpeed) -> RustBuffer {
 }
 
 
-
 extension FeeSpeed: Equatable, Hashable {}
 
 
@@ -15800,6 +16070,10 @@ public enum FfiColor {
     )
 }
 
+
+#if compiler(>=6)
+extension FfiColor: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15935,7 +16209,6 @@ public func FfiConverterTypeFfiColor_lower(_ value: FfiColor) -> RustBuffer {
 }
 
 
-
 extension FfiColor: Equatable, Hashable {}
 
 
@@ -15949,6 +16222,10 @@ public enum FfiColorScheme {
     case dark
 }
 
+
+#if compiler(>=6)
+extension FfiColorScheme: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -15997,7 +16274,6 @@ public func FfiConverterTypeFfiColorScheme_lift(_ buf: RustBuffer) throws -> Ffi
 public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> RustBuffer {
     return FfiConverterTypeFfiColorScheme.lower(value)
 }
-
 
 
 extension FfiColorScheme: Equatable, Hashable {}
@@ -16095,6 +16371,10 @@ public enum FiatCurrency {
 }
 
 
+#if compiler(>=6)
+extension FiatCurrency: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -16174,7 +16454,6 @@ public func FfiConverterTypeFiatCurrency_lower(_ value: FiatCurrency) -> RustBuf
 }
 
 
-
 extension FiatCurrency: Equatable, Hashable {}
 
 
@@ -16188,6 +16467,10 @@ public enum FiatOrBtc {
     case fiat
 }
 
+
+#if compiler(>=6)
+extension FiatOrBtc: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -16236,7 +16519,6 @@ public func FfiConverterTypeFiatOrBtc_lift(_ buf: RustBuffer) throws -> FiatOrBt
 public func FfiConverterTypeFiatOrBtc_lower(_ value: FiatOrBtc) -> RustBuffer {
     return FfiConverterTypeFiatOrBtc.lower(value)
 }
-
 
 
 extension FiatOrBtc: Equatable, Hashable {}
@@ -16515,6 +16797,10 @@ public enum GlobalConfigKey {
 }
 
 
+#if compiler(>=6)
+extension GlobalConfigKey: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -16626,7 +16912,6 @@ public func FfiConverterTypeGlobalConfigKey_lower(_ value: GlobalConfigKey) -> R
 }
 
 
-
 extension GlobalConfigKey: Equatable, Hashable {}
 
 
@@ -16729,6 +17014,10 @@ public enum GlobalFlagKey {
 }
 
 
+#if compiler(>=6)
+extension GlobalFlagKey: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -16770,7 +17059,6 @@ public func FfiConverterTypeGlobalFlagKey_lift(_ buf: RustBuffer) throws -> Glob
 public func FfiConverterTypeGlobalFlagKey_lower(_ value: GlobalFlagKey) -> RustBuffer {
     return FfiConverterTypeGlobalFlagKey.lower(value)
 }
-
 
 
 extension GlobalFlagKey: Equatable, Hashable {}
@@ -16875,6 +17163,10 @@ public enum HotWalletRoute {
 }
 
 
+#if compiler(>=6)
+extension HotWalletRoute: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -16943,7 +17235,6 @@ public func FfiConverterTypeHotWalletRoute_lower(_ value: HotWalletRoute) -> Rus
 }
 
 
-
 extension HotWalletRoute: Equatable, Hashable {}
 
 
@@ -16958,6 +17249,10 @@ public enum ImportType {
     case qr
 }
 
+
+#if compiler(>=6)
+extension ImportType: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17012,7 +17307,6 @@ public func FfiConverterTypeImportType_lift(_ buf: RustBuffer) throws -> ImportT
 public func FfiConverterTypeImportType_lower(_ value: ImportType) -> RustBuffer {
     return FfiConverterTypeImportType.lower(value)
 }
-
 
 
 extension ImportType: Equatable, Hashable {}
@@ -17151,6 +17445,10 @@ public enum ImportWalletManagerAction {
 }
 
 
+#if compiler(>=6)
+extension ImportWalletManagerAction: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -17194,7 +17492,6 @@ public func FfiConverterTypeImportWalletManagerAction_lower(_ value: ImportWalle
 }
 
 
-
 extension ImportWalletManagerAction: Equatable, Hashable {}
 
 
@@ -17207,6 +17504,10 @@ public enum ImportWalletManagerReconcileMessage {
     case noOp
 }
 
+
+#if compiler(>=6)
+extension ImportWalletManagerReconcileMessage: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17249,7 +17550,6 @@ public func FfiConverterTypeImportWalletManagerReconcileMessage_lift(_ buf: Rust
 public func FfiConverterTypeImportWalletManagerReconcileMessage_lower(_ value: ImportWalletManagerReconcileMessage) -> RustBuffer {
     return FfiConverterTypeImportWalletManagerReconcileMessage.lower(value)
 }
-
 
 
 extension ImportWalletManagerReconcileMessage: Equatable, Hashable {}
@@ -17355,6 +17655,109 @@ extension KeychainError: Equatable, Hashable {}
 
 
 extension KeychainError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+
+public enum LabelManagerError {
+
+    
+    
+    case Parse(String
+    )
+    case Save(String
+    )
+    case Get(String
+    )
+    case Export(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
+    typealias SwiftType = LabelManagerError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LabelManagerError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .Parse(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .Save(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .Get(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .Export(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LabelManagerError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .Parse(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Save(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Get(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Export(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelManagerError_lift(_ buf: RustBuffer) throws -> LabelManagerError {
+    return try FfiConverterTypeLabelManagerError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelManagerError_lower(_ value: LabelManagerError) -> RustBuffer {
+    return FfiConverterTypeLabelManagerError.lower(value)
+}
+
+
+extension LabelManagerError: Equatable, Hashable {}
+
+
+
+extension LabelManagerError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -17534,6 +17937,10 @@ public enum MultiFormat {
     )
 }
 
+
+#if compiler(>=6)
+extension MultiFormat: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -17846,6 +18253,10 @@ public enum MultiQrScanResult {
 }
 
 
+#if compiler(>=6)
+extension MultiQrScanResult: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -17929,6 +18340,10 @@ public enum NdefPayload {
 }
 
 
+#if compiler(>=6)
+extension NdefPayload: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -17982,7 +18397,6 @@ public func FfiConverterTypeNdefPayload_lower(_ value: NdefPayload) -> RustBuffe
 }
 
 
-
 extension NdefPayload: Equatable, Hashable {}
 
 
@@ -18002,6 +18416,10 @@ public enum NdefType {
     case reserved
 }
 
+
+#if compiler(>=6)
+extension NdefType: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18088,7 +18506,6 @@ public func FfiConverterTypeNdefType_lower(_ value: NdefType) -> RustBuffer {
 }
 
 
-
 extension NdefType: Equatable, Hashable {}
 
 
@@ -18103,6 +18520,10 @@ public enum Network {
     case signet
 }
 
+
+#if compiler(>=6)
+extension Network: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18159,7 +18580,6 @@ public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
 }
 
 
-
 extension Network: Equatable, Hashable {}
 
 
@@ -18176,6 +18596,10 @@ public enum NewWalletRoute {
     )
 }
 
+
+#if compiler(>=6)
+extension NewWalletRoute: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18234,7 +18658,6 @@ public func FfiConverterTypeNewWalletRoute_lift(_ buf: RustBuffer) throws -> New
 public func FfiConverterTypeNewWalletRoute_lower(_ value: NewWalletRoute) -> RustBuffer {
     return FfiConverterTypeNewWalletRoute.lower(value)
 }
-
 
 
 extension NewWalletRoute: Equatable, Hashable {}
@@ -18338,6 +18761,10 @@ public enum NodeSelection {
 }
 
 
+#if compiler(>=6)
+extension NodeSelection: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -18389,7 +18816,6 @@ public func FfiConverterTypeNodeSelection_lift(_ buf: RustBuffer) throws -> Node
 public func FfiConverterTypeNodeSelection_lower(_ value: NodeSelection) -> RustBuffer {
     return FfiConverterTypeNodeSelection.lower(value)
 }
-
 
 
 extension NodeSelection: Equatable, Hashable {}
@@ -18509,6 +18935,10 @@ public enum NumberOfBip39Words {
 }
 
 
+#if compiler(>=6)
+extension NumberOfBip39Words: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -18558,7 +18988,6 @@ public func FfiConverterTypeNumberOfBip39Words_lower(_ value: NumberOfBip39Words
 }
 
 
-
 extension NumberOfBip39Words: Equatable, Hashable {}
 
 
@@ -18580,6 +19009,10 @@ public enum ParseResult {
     )
 }
 
+
+#if compiler(>=6)
+extension ParseResult: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18635,7 +19068,6 @@ public func FfiConverterTypeParseResult_lower(_ value: ParseResult) -> RustBuffe
 }
 
 
-
 extension ParseResult: Equatable, Hashable {}
 
 
@@ -18651,6 +19083,10 @@ public enum ParserState {
     case complete
 }
 
+
+#if compiler(>=6)
+extension ParserState: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18709,7 +19145,6 @@ public func FfiConverterTypeParserState_lower(_ value: ParserState) -> RustBuffe
 }
 
 
-
 extension ParserState: Equatable, Hashable {}
 
 
@@ -18725,6 +19160,10 @@ public enum PendingOrConfirmed {
     )
 }
 
+
+#if compiler(>=6)
+extension PendingOrConfirmed: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18779,7 +19218,6 @@ public func FfiConverterTypePendingOrConfirmed_lower(_ value: PendingOrConfirmed
 }
 
 
-
 extension PendingOrConfirmed: Equatable, Hashable {}
 
 
@@ -18793,6 +19231,10 @@ public enum PendingWalletManagerAction {
     )
 }
 
+
+#if compiler(>=6)
+extension PendingWalletManagerAction: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -18837,7 +19279,6 @@ public func FfiConverterTypePendingWalletManagerAction_lift(_ buf: RustBuffer) t
 public func FfiConverterTypePendingWalletManagerAction_lower(_ value: PendingWalletManagerAction) -> RustBuffer {
     return FfiConverterTypePendingWalletManagerAction.lower(value)
 }
-
 
 
 extension PendingWalletManagerAction: Equatable, Hashable {}
@@ -18937,6 +19378,10 @@ public enum PendingWalletManagerReconcileMessage {
 }
 
 
+#if compiler(>=6)
+extension PendingWalletManagerReconcileMessage: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -18980,7 +19425,6 @@ public func FfiConverterTypePendingWalletManagerReconcileMessage_lift(_ buf: Rus
 public func FfiConverterTypePendingWalletManagerReconcileMessage_lower(_ value: PendingWalletManagerReconcileMessage) -> RustBuffer {
     return FfiConverterTypePendingWalletManagerReconcileMessage.lower(value)
 }
-
 
 
 extension PendingWalletManagerReconcileMessage: Equatable, Hashable {}
@@ -19213,6 +19657,10 @@ public enum Route {
 }
 
 
+#if compiler(>=6)
+extension Route: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -19328,6 +19776,10 @@ public enum ScanState {
 }
 
 
+#if compiler(>=6)
+extension ScanState: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -19385,7 +19837,6 @@ public func FfiConverterTypeScanState_lower(_ value: ScanState) -> RustBuffer {
 }
 
 
-
 extension ScanState: Equatable, Hashable {}
 
 
@@ -19400,6 +19851,10 @@ public enum ScannerResponse {
     case noneFound
 }
 
+
+#if compiler(>=6)
+extension ScannerResponse: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -19450,7 +19905,6 @@ public func FfiConverterTypeScannerResponse_lift(_ buf: RustBuffer) throws -> Sc
 public func FfiConverterTypeScannerResponse_lower(_ value: ScannerResponse) -> RustBuffer {
     return FfiConverterTypeScannerResponse.lower(value)
 }
-
 
 
 extension ScannerResponse: Equatable, Hashable {}
@@ -19568,6 +20022,10 @@ public enum SendFlowErrorAlert {
 }
 
 
+#if compiler(>=6)
+extension SendFlowErrorAlert: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -19621,7 +20079,6 @@ public func FfiConverterTypeSendFlowErrorAlert_lower(_ value: SendFlowErrorAlert
 }
 
 
-
 extension SendFlowErrorAlert: Equatable, Hashable {}
 
 
@@ -19639,6 +20096,10 @@ public enum SendRoute {
     )
 }
 
+
+#if compiler(>=6)
+extension SendRoute: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -19807,6 +20268,10 @@ public enum SettingsRoute {
 }
 
 
+#if compiler(>=6)
+extension SettingsRoute: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -19887,7 +20352,6 @@ public func FfiConverterTypeSettingsRoute_lift(_ buf: RustBuffer) throws -> Sett
 public func FfiConverterTypeSettingsRoute_lower(_ value: SettingsRoute) -> RustBuffer {
     return FfiConverterTypeSettingsRoute.lower(value)
 }
-
 
 
 extension SettingsRoute: Equatable, Hashable {}
@@ -20005,6 +20469,10 @@ public enum StringOrData {
 }
 
 
+#if compiler(>=6)
+extension StringOrData: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -20058,7 +20526,6 @@ public func FfiConverterTypeStringOrData_lower(_ value: StringOrData) -> RustBuf
 }
 
 
-
 extension StringOrData: Equatable, Hashable {}
 
 
@@ -20072,6 +20539,10 @@ public enum TextPayloadFormat {
     case utf16
 }
 
+
+#if compiler(>=6)
+extension TextPayloadFormat: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -20122,7 +20593,6 @@ public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) 
 }
 
 
-
 extension TextPayloadFormat: Equatable, Hashable {}
 
 
@@ -20138,6 +20608,10 @@ public enum Transaction {
     )
 }
 
+
+#if compiler(>=6)
+extension Transaction: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -20307,6 +20781,10 @@ public enum TransactionDirection {
 }
 
 
+#if compiler(>=6)
+extension TransactionDirection: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -20356,7 +20834,6 @@ public func FfiConverterTypeTransactionDirection_lower(_ value: TransactionDirec
 }
 
 
-
 extension TransactionDirection: Equatable, Hashable {}
 
 
@@ -20370,6 +20847,10 @@ public enum TransactionState {
     case confirmed
 }
 
+
+#if compiler(>=6)
+extension TransactionState: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -20420,7 +20901,6 @@ public func FfiConverterTypeTransactionState_lower(_ value: TransactionState) ->
 }
 
 
-
 extension TransactionState: Equatable, Hashable {}
 
 
@@ -20434,6 +20914,10 @@ public enum Unit {
     case sat
 }
 
+
+#if compiler(>=6)
+extension Unit: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -20482,7 +20966,6 @@ public func FfiConverterTypeUnit_lift(_ buf: RustBuffer) throws -> Unit {
 public func FfiConverterTypeUnit_lower(_ value: Unit) -> RustBuffer {
     return FfiConverterTypeUnit.lower(value)
 }
-
 
 
 extension Unit: Equatable, Hashable {}
@@ -20589,6 +21072,10 @@ public enum WalletAddressType {
 }
 
 
+#if compiler(>=6)
+extension WalletAddressType: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -20644,7 +21131,6 @@ public func FfiConverterTypeWalletAddressType_lower(_ value: WalletAddressType) 
 }
 
 
-
 extension WalletAddressType: Equatable, Hashable {}
 
 
@@ -20676,6 +21162,10 @@ public enum WalletColor {
     case wLightPastelYellow
 }
 
+
+#if compiler(>=6)
+extension WalletColor: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -20830,7 +21320,6 @@ public func FfiConverterTypeWalletColor_lift(_ buf: RustBuffer) throws -> Wallet
 public func FfiConverterTypeWalletColor_lower(_ value: WalletColor) -> RustBuffer {
     return FfiConverterTypeWalletColor.lower(value)
 }
-
 
 
 extension WalletColor: Equatable, Hashable {}
@@ -21077,6 +21566,10 @@ public enum WalletDataKey {
 }
 
 
+#if compiler(>=6)
+extension WalletDataKey: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -21120,7 +21613,6 @@ public func FfiConverterTypeWalletDataKey_lift(_ buf: RustBuffer) throws -> Wall
 public func FfiConverterTypeWalletDataKey_lower(_ value: WalletDataKey) -> RustBuffer {
     return FfiConverterTypeWalletDataKey.lower(value)
 }
-
 
 
 extension WalletDataKey: Equatable, Hashable {}
@@ -21303,6 +21795,10 @@ public enum WalletErrorAlert {
 }
 
 
+#if compiler(>=6)
+extension WalletErrorAlert: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -21354,7 +21850,6 @@ public func FfiConverterTypeWalletErrorAlert_lower(_ value: WalletErrorAlert) ->
 }
 
 
-
 extension WalletErrorAlert: Equatable, Hashable {}
 
 
@@ -21371,6 +21866,10 @@ public enum WalletLoadState {
     )
 }
 
+
+#if compiler(>=6)
+extension WalletLoadState: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21455,6 +21954,10 @@ public enum WalletManagerAction {
     )
 }
 
+
+#if compiler(>=6)
+extension WalletManagerAction: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -21561,7 +22064,6 @@ public func FfiConverterTypeWalletManagerAction_lift(_ buf: RustBuffer) throws -
 public func FfiConverterTypeWalletManagerAction_lower(_ value: WalletManagerAction) -> RustBuffer {
     return FfiConverterTypeWalletManagerAction.lower(value)
 }
-
 
 
 extension WalletManagerAction: Equatable, Hashable {}
@@ -21869,6 +22371,10 @@ public enum WalletManagerReconcileMessage {
 }
 
 
+#if compiler(>=6)
+extension WalletManagerReconcileMessage: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -22002,6 +22508,10 @@ public enum WalletMode {
 }
 
 
+#if compiler(>=6)
+extension WalletMode: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -22049,7 +22559,6 @@ public func FfiConverterTypeWalletMode_lift(_ buf: RustBuffer) throws -> WalletM
 public func FfiConverterTypeWalletMode_lower(_ value: WalletMode) -> RustBuffer {
     return FfiConverterTypeWalletMode.lower(value)
 }
-
 
 
 extension WalletMode: Equatable, Hashable {}
@@ -22155,6 +22664,10 @@ public enum WalletSettingsRoute {
 }
 
 
+#if compiler(>=6)
+extension WalletSettingsRoute: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -22202,7 +22715,6 @@ public func FfiConverterTypeWalletSettingsRoute_lift(_ buf: RustBuffer) throws -
 public func FfiConverterTypeWalletSettingsRoute_lower(_ value: WalletSettingsRoute) -> RustBuffer {
     return FfiConverterTypeWalletSettingsRoute.lower(value)
 }
-
 
 
 extension WalletSettingsRoute: Equatable, Hashable {}
@@ -22308,6 +22820,10 @@ public enum WalletType {
 }
 
 
+#if compiler(>=6)
+extension WalletType: Sendable {}
+#endif
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -22355,7 +22871,6 @@ public func FfiConverterTypeWalletType_lift(_ buf: RustBuffer) throws -> WalletT
 public func FfiConverterTypeWalletType_lower(_ value: WalletType) -> RustBuffer {
     return FfiConverterTypeWalletType.lower(value)
 }
-
 
 
 extension WalletType: Equatable, Hashable {}
@@ -22470,7 +22985,7 @@ extension XpubError: Foundation.LocalizedError {
 
 
 
-public protocol AuthManagerReconciler : AnyObject {
+public protocol AuthManagerReconciler: AnyObject {
     
     /**
      * Tells the frontend to reconcile the manager changes
@@ -22478,7 +22993,6 @@ public protocol AuthManagerReconciler : AnyObject {
     func reconcile(message: AuthManagerReconcileMessage) 
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -22590,12 +23104,11 @@ public func FfiConverterCallbackInterfaceAuthManagerReconciler_lower(_ v: AuthMa
 
 
 
-public protocol DeviceAccess : AnyObject {
+public protocol DeviceAccess: AnyObject {
     
     func timezone()  -> String
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -22705,7 +23218,7 @@ public func FfiConverterCallbackInterfaceDeviceAccess_lower(_ v: DeviceAccess) -
 
 
 
-public protocol FfiReconcile : AnyObject {
+public protocol FfiReconcile: AnyObject {
     
     /**
      * Essentially a callback to the frontend
@@ -22713,7 +23226,6 @@ public protocol FfiReconcile : AnyObject {
     func reconcile(message: AppStateReconcileMessage) 
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -22825,7 +23337,7 @@ public func FfiConverterCallbackInterfaceFfiReconcile_lower(_ v: FfiReconcile) -
 
 
 
-public protocol ImportWalletManagerReconciler : AnyObject {
+public protocol ImportWalletManagerReconciler: AnyObject {
     
     /**
      * Tells the frontend to reconcile the view model changes
@@ -22833,7 +23345,6 @@ public protocol ImportWalletManagerReconciler : AnyObject {
     func reconcile(message: ImportWalletManagerReconcileMessage) 
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -22945,7 +23456,7 @@ public func FfiConverterCallbackInterfaceImportWalletManagerReconciler_lower(_ v
 
 
 
-public protocol KeychainAccess : AnyObject {
+public protocol KeychainAccess: AnyObject {
     
     func save(key: String, value: String) throws 
     
@@ -22954,7 +23465,6 @@ public protocol KeychainAccess : AnyObject {
     func delete(key: String)  -> Bool
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -23117,7 +23627,7 @@ public func FfiConverterCallbackInterfaceKeychainAccess_lower(_ v: KeychainAcces
 
 
 
-public protocol PendingWalletManagerReconciler : AnyObject {
+public protocol PendingWalletManagerReconciler: AnyObject {
     
     /**
      * Tells the frontend to reconcile the view model changes
@@ -23125,7 +23635,6 @@ public protocol PendingWalletManagerReconciler : AnyObject {
     func reconcile(message: PendingWalletManagerReconcileMessage) 
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -23237,7 +23746,7 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 
 
 
-public protocol WalletManagerReconciler : AnyObject {
+public protocol WalletManagerReconciler: AnyObject {
     
     /**
      * Tells the frontend to reconcile the view model changes
@@ -23245,7 +23754,6 @@ public protocol WalletManagerReconciler : AnyObject {
     func reconcile(message: WalletManagerReconcileMessage) 
     
 }
-
 
 
 // Put the implementation in a struct so we don't pollute the top-level namespace
@@ -25380,6 +25888,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_headericonpresenter_ring_color() != 23010) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_labelmanager_export() != 53996) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_labelmanager_export_default_file_name() != 49133) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_labelmanager_has_labels() != 1029) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_labelmanager_import() != 65510) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 45039) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25975,6 +26495,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_keychain_new() != 34449) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_labelmanager_new() != 3085) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_mnemonic_new() != 56597) {

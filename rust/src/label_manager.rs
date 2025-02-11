@@ -1,6 +1,5 @@
-use bip329::Labels;
-
 use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletId};
+use bip329::Labels;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {
@@ -31,11 +30,24 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 impl LabelManager {
     #[uniffi::constructor]
     pub fn new(id: WalletId) -> Self {
+        tracing::debug!("creating label manager for wallet: {id}");
         let db = WalletDataDb::new_or_existing(id.clone());
         Self { id, db }
     }
 
-    pub fn import_labels(&self, labels: &str) -> Result<(), LabelManagerError> {
+    pub fn export_default_file_name(&self, name: String) -> String {
+        let name = name
+            .replace(" ", "_")
+            .replace(|c: char| !c.is_alphanumeric() || c == '_', "");
+
+        format!("{name}-bip329-labels.jsonl")
+    }
+
+    pub fn has_labels(&self) -> bool {
+        self.db.labels.number_of_labels().unwrap_or(0) > 0
+    }
+
+    pub fn import(&self, labels: &str) -> Result<(), LabelManagerError> {
         let labels =
             Labels::try_from_str(labels).map_err(|e| LabelManagerError::Parse(e.to_string()))?;
 
@@ -47,7 +59,7 @@ impl LabelManager {
         Ok(())
     }
 
-    pub fn export_labels(&self) -> Result<String, LabelManagerError> {
+    pub fn export(&self) -> Result<String, LabelManagerError> {
         let labels = self
             .db
             .labels

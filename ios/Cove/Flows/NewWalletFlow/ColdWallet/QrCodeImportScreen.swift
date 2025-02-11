@@ -160,7 +160,7 @@ struct QrCodeImportScreen: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("? Help") {
+                Button("?") {
                     showingHelp = true
                 }
                 .buttonStyle(.plain)

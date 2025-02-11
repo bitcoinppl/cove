@@ -2,7 +2,7 @@ use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 use bitcoin::{address::NetworkUnchecked, Address};
-use redb::{ReadOnlyTable, ReadableTable as _, TableDefinition};
+use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
@@ -48,6 +48,20 @@ impl LabelsTable {
             .expect("failed to create output table");
 
         Self { db }
+    }
+
+    pub fn number_of_labels(&self) -> Result<u64, Error> {
+        let txn_table = self.read_table(TXN_TABLE)?;
+        let input_table = self.read_table(INPUT_TABLE)?;
+        let output_table = self.read_table(OUTPUT_TABLE)?;
+        let address_table = self.read_table(ADDRESS_TABLE)?;
+
+        let txns = txn_table.len()?;
+        let inputs = input_table.len()?;
+        let outputs = output_table.len()?;
+        let addresses = address_table.len()?;
+
+        Ok(txns + inputs + outputs + addresses)
     }
 
     pub fn all_labels(&self) -> Result<Labels, Error> {
