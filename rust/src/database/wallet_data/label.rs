@@ -58,19 +58,13 @@ impl LabelsTable {
         drop(table);
 
         let Some(txn) = txn else { return Ok(vec![]) };
-        let inputs = self.txn_inputs(txid)?;
-        let outputs = self.txn_ouputs(txid)?;
+        let inputs = self.txn_inputs_iter(txid)?;
+        let outputs = self.txn_outputs_iter(txid)?;
 
-        let mut labels = Vec::with_capacity(inputs.len() + outputs.len() + 1);
-        labels.push(Label::Transaction(txn));
-
-        for input in inputs {
-            labels.push(Label::Input(input));
-        }
-
-        for output in outputs {
-            labels.push(Label::Output(output));
-        }
+        let labels = std::iter::once(Label::Transaction(txn))
+            .chain(inputs.map(Label::Input))
+            .chain(outputs.map(Label::Output))
+            .collect::<Vec<Label>>();
 
         Ok(labels)
     }
@@ -86,7 +80,10 @@ impl LabelsTable {
         Ok(txns)
     }
 
-    pub fn txn_inputs(&self, txid: impl AsRef<[u8; 32]>) -> Result<Vec<InputRecord>, Error> {
+    pub fn txn_inputs_iter(
+        &self,
+        txid: impl AsRef<[u8; 32]>,
+    ) -> Result<impl Iterator<Item = InputRecord>, Error> {
         let table = self.read_table(INPUT_TABLE)?;
 
         let start_inout_id = InOutId {
@@ -97,13 +94,15 @@ impl LabelsTable {
         let inputs = table
             .range(start_inout_id..)?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value())
-            .collect::<Vec<InputRecord>>();
+            .map(|(_key, record)| record.value());
 
         Ok(inputs)
     }
 
-    pub fn txn_ouputs(&self, txid: impl AsRef<[u8; 32]>) -> Result<Vec<OutputRecord>, Error> {
+    pub fn txn_outputs_iter(
+        &self,
+        txid: impl AsRef<[u8; 32]>,
+    ) -> Result<impl Iterator<Item = OutputRecord>, Error> {
         let table = self.read_table(OUTPUT_TABLE)?;
 
         let start_inout_id = InOutId {
@@ -114,8 +113,7 @@ impl LabelsTable {
         let outputs = table
             .range(start_inout_id..)?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value())
-            .collect::<Vec<OutputRecord>>();
+            .map(|(_key, record)| record.value());
 
         Ok(outputs)
     }
