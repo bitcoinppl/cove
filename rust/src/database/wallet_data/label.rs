@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 
-use bip329::{AddressRecord, InputRecord, Label, OutputRecord, TransactionRecord};
+use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 use bitcoin::{address::NetworkUnchecked, Address};
 use redb::{ReadOnlyTable, ReadableTable as _, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
@@ -48,6 +48,46 @@ impl LabelsTable {
             .expect("failed to create output table");
 
         Self { db }
+    }
+
+    pub fn all_labels(&self) -> Result<Labels, Error> {
+        let txn_table = self.read_table(TXN_TABLE)?;
+        let input_table = self.read_table(INPUT_TABLE)?;
+        let output_table = self.read_table(OUTPUT_TABLE)?;
+        let address_table = self.read_table(ADDRESS_TABLE)?;
+
+        let txns = txn_table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| record.value())
+            .map(Label::Transaction);
+
+        let inputs = input_table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| record.value())
+            .map(Label::Input);
+
+        let outputs = output_table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| record.value())
+            .map(Label::Output);
+
+        let addresses = address_table
+            .iter()?
+            .filter_map(Result::ok)
+            .map(|(_key, record)| record.value())
+            .map(Label::Address);
+
+        let labels = txns
+            .chain(inputs)
+            .chain(outputs)
+            .chain(addresses)
+            .collect::<Vec<_>>()
+            .into();
+
+        Ok(labels)
     }
 
     pub fn all_labels_for_txn(
@@ -130,6 +170,21 @@ impl LabelsTable {
         labels
             .into_iter()
             .try_for_each(|l| self.insert_label_with_write_txn(l, &write_txn))?;
+
+        write_txn
+            .commit()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn insert_label(&self, label: Label) -> Result<(), Error> {
+        let write_txn = self
+            .db
+            .begin_write()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        self.insert_label_with_write_txn(label, &write_txn)?;
 
         write_txn
             .commit()
