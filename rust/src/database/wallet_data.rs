@@ -86,7 +86,8 @@ pub type Error = WalletDataError;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl WalletDataDb {
-    pub fn new(id: WalletId) -> Self {
+    /// Gets an existing database or creates a new one
+    pub fn new_or_existing(id: WalletId) -> Self {
         Self::new_with_db_location(id, &WALLET_DATA_DIR)
     }
 
@@ -198,6 +199,7 @@ impl WalletDataDb {
     }
 }
 
+/// Get an existing database or create a new one
 pub fn get_or_create_database(id: &WalletId, location: &Path) -> Arc<redb::Database> {
     let database_location = database_location(id, location);
 

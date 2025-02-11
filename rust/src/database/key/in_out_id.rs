@@ -23,6 +23,7 @@ impl InOutIdKey {
         }
     }
 
+    #[allow(dead_code)]
     pub fn id(&self) -> bitcoin::Txid {
         bitcoin::Txid::from_slice_delegated(&self.id).expect("id is 32 bytes")
     }

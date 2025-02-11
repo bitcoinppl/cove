@@ -16,12 +16,16 @@ use bdk_wallet::bitcoin::{
     OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
-use bip329::Label;
+use bip329::Labels;
 use bitcoin::hashes::{sha256d::Hash, Hash as _};
 use rand::Rng as _;
 use std::{borrow::Borrow, cmp::Ordering, sync::Arc};
 
-use crate::{database::Database, fiat::FiatAmount, wallet::Wallet};
+use crate::{
+    database::{wallet_data::WalletDataDb, Database},
+    fiat::FiatAmount,
+    wallet::Wallet,
+};
 
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
@@ -62,7 +66,7 @@ pub struct ConfirmedTransaction {
     pub confirmed_at: jiff::Timestamp,
     pub sent_and_received: SentAndReceived,
     pub fiat: Option<FiatAmount>,
-    pub labels: Vec<Label>,
+    pub labels: Labels,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
@@ -71,7 +75,7 @@ pub struct UnconfirmedTransaction {
     pub sent_and_received: SentAndReceived,
     pub last_seen: u64,
     pub fiat: Option<FiatAmount>,
-    pub labels: Vec<Label>,
+    pub labels: Labels,
 }
 
 #[derive(
@@ -142,6 +146,13 @@ impl Transaction {
         let sent_and_received = wallet.sent_and_received(&tx.tx_node.tx).into();
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
+        let label_db = WalletDataDb::new_or_existing(wallet.id.clone());
+        let labels = label_db
+            .labels
+            .all_labels_for_txn(&tx.tx_node.txid)
+            .unwrap_or_default()
+            .into();
+
         match tx.chain_position {
             BdkChainPosition::Unconfirmed { last_seen } => {
                 let unconfirmed = UnconfirmedTransaction {
@@ -149,7 +160,7 @@ impl Transaction {
                     sent_and_received,
                     last_seen: last_seen.unwrap_or_default(),
                     fiat,
-                    labels: vec![],
+                    labels,
                 };
 
                 Self::Unconfirmed(Arc::new(unconfirmed))
@@ -167,7 +178,7 @@ impl Transaction {
                     confirmed_at,
                     sent_and_received,
                     fiat,
-                    labels: vec![],
+                    labels,
                 };
 
                 Self::Confirmed(Arc::new(confirmed))

@@ -210,7 +210,7 @@ impl WalletScanner {
                 wallet_type,
                 started_at: Instant::now(),
                 state: WorkerState::Created,
-                db: WalletDataDb::new(id.clone()),
+                db: WalletDataDb::new_or_existing(id.clone()),
             });
 
             started_workers += 1;
@@ -411,7 +411,7 @@ impl WalletScanWorker {
         client_builder: NodeClientBuilder,
     ) -> Self {
         debug!("creating wallet scanner for {id}, type: {wallet_type}");
-        let db = WalletDataDb::new(id.clone());
+        let db = WalletDataDb::new_or_existing(id.clone());
 
         let scan_info = db
             .get_scan_state(wallet_type)

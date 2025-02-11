@@ -254,7 +254,7 @@ fn transaction_preview_confirmed_new() -> Transaction {
         confirmed_at: jiff::Timestamp::now(),
         sent_and_received: SentAndReceived::preview_new(),
         fiat: Some(FiatAmount::preview_new()),
-        labels: vec![],
+        labels: Default::default(),
     };
 
     Transaction::Confirmed(Arc::new(txn))
@@ -320,6 +320,6 @@ fn transaction_preview_unconfirmed_new() -> Transaction {
         sent_and_received: SentAndReceived::preview_new(),
         last_seen,
         fiat: None,
-        labels: vec![],
+        labels: Default::default(),
     }))
 }
