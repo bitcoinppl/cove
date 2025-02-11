@@ -84,6 +84,7 @@ pub struct UnconfirmedTransaction {
     PartialOrd,
     Ord,
     derive_more::AsRef,
+    derive_more::Deref,
     uniffi::Object,
     serde::Serialize,
     serde::Deserialize,
@@ -305,17 +306,7 @@ impl Borrow<BdkTxid> for TxId {
     }
 }
 
-impl Borrow<TxId> for &BdkTxid {
-    fn borrow(&self) -> &TxId {
-        // SAFETY: Valid because:
-        // 1. TxId is #[repr(transparent)] around BdkTxid
-        // 2. We're casting from &BdkTxid to &TxId
-        unsafe { &*((*self) as *const BdkTxid as *const TxId) }
-    }
-}
-
 // MARK: redb serd/de impls
-
 impl redb::Key for TxId {
     fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
         data1.cmp(data2)

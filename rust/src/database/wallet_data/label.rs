@@ -1,12 +1,12 @@
-use std::{borrow::Borrow, fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 use bip329::{AddressRecord, InputRecord, Label, OutputRecord, TransactionRecord};
-use bitcoin::{address::NetworkUnchecked, Address, Txid};
+use bitcoin::{address::NetworkUnchecked, Address};
 use redb::{ReadOnlyTable, ReadableTable as _, TableDefinition};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    database::{cbor::Postcard, in_out_id::InOutId},
+    database::{cbor::Postcard, key::InOutIdKey},
     transaction::TxId,
 };
 
@@ -17,10 +17,10 @@ const TXN_TABLE: TableDefinition<TxId, Postcard<TransactionRecord>> =
 const ADDRESS_TABLE: TableDefinition<Postcard<Address<NetworkUnchecked>>, Postcard<AddressRecord>> =
     TableDefinition::new("address_labels.cbor");
 
-const INPUT_TABLE: TableDefinition<InOutId, Postcard<InputRecord>> =
+const INPUT_TABLE: TableDefinition<InOutIdKey, Postcard<InputRecord>> =
     TableDefinition::new("input_records.cbor");
 
-const OUTPUT_TABLE: TableDefinition<InOutId, Postcard<OutputRecord>> =
+const OUTPUT_TABLE: TableDefinition<InOutIdKey, Postcard<OutputRecord>> =
     TableDefinition::new("output_records.cbor");
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -50,16 +50,15 @@ impl LabelsTable {
         Self { db }
     }
 
-    pub fn all_labels_for_txn(&self, txid: impl Borrow<Txid>) -> Result<Vec<Label>, Error> {
-        let txid = txid.borrow();
-
+    pub fn all_labels_for_txn(&self, txid: &TxId) -> Result<Vec<Label>, Error> {
+        let txid = *txid;
         let table = self.read_table(TXN_TABLE)?;
         let txn = table.get(txid)?.map(|record| record.value());
         drop(table);
 
         let Some(txn) = txn else { return Ok(vec![]) };
-        let inputs = self.txn_inputs_iter(txid)?;
-        let outputs = self.txn_outputs_iter(txid)?;
+        let inputs = self.txn_inputs_iter(txid.as_ref())?;
+        let outputs = self.txn_outputs_iter(txid.as_ref())?;
 
         let labels = std::iter::once(Label::Transaction(txn))
             .chain(inputs.map(Label::Input))
@@ -86,7 +85,7 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = InputRecord>, Error> {
         let table = self.read_table(INPUT_TABLE)?;
 
-        let start_inout_id = InOutId {
+        let start_inout_id = InOutIdKey {
             id: *txid.as_ref(),
             index: 0,
         };
@@ -105,7 +104,7 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = OutputRecord>, Error> {
         let table = self.read_table(OUTPUT_TABLE)?;
 
-        let start_inout_id = InOutId {
+        let start_inout_id = InOutIdKey {
             id: *txid.as_ref(),
             index: 0,
         };
@@ -126,7 +125,7 @@ impl LabelsTable {
 
         labels
             .into_iter()
-            .try_for_each(|l| self.insert_label_with_write(l, &write_txn))?;
+            .try_for_each(|l| self.insert_label_with_write_txn(l, &write_txn))?;
 
         write_txn
             .commit()
@@ -135,7 +134,7 @@ impl LabelsTable {
         Ok(())
     }
 
-    pub fn insert_label_with_write(
+    pub fn insert_label_with_write_txn(
         &self,
         label: Label,
         write_txn: &redb::WriteTransaction,
@@ -143,16 +142,17 @@ impl LabelsTable {
         match label {
             Label::Transaction(txn) => {
                 let mut table = write_txn.open_table(TXN_TABLE)?;
-                table.insert(&txn.ref_.clone(), txn)?;
+                let key: TxId = txn.ref_.into();
+                table.insert(key, txn)?;
             }
             Label::Input(input) => {
                 let mut table = write_txn.open_table(INPUT_TABLE)?;
-                let key = InOutId::from(&input.ref_);
+                let key = InOutIdKey::from(&input.ref_);
                 table.insert(key, input)?;
             }
             Label::Output(output) => {
                 let mut table = write_txn.open_table(OUTPUT_TABLE)?;
-                let key = InOutId::from(&output.ref_);
+                let key = InOutIdKey::from(&output.ref_);
                 table.insert(key, output)?;
             }
             Label::Address(address) => {
