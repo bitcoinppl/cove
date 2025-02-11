@@ -21,6 +21,7 @@ mod hardware_export;
 mod header_icon_presenter;
 mod keychain;
 mod keys;
+pub mod label_manager;
 mod manager;
 mod mnemonic;
 mod multi_format;
