@@ -125,9 +125,7 @@ impl LabelsTable {
             .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         labels
-            .into_iter()
-            .map(|l| self.insert_label_with_write(l, &write_txn))
-            .collect::<Result<(), Error>>()?;
+            .into_iter().try_for_each(|l| self.insert_label_with_write(l, &write_txn))?;
 
         write_txn
             .commit()
@@ -223,7 +221,7 @@ mod tests {
         assert_eq!(txn.len(), 1);
 
         let labels = db
-            .all_labels_for_txn(txn[0].ref_.clone())
+            .all_labels_for_txn(txn[0].ref_)
             .expect("failed to get labels");
 
         println!("{labels:?}");

@@ -1,3 +1,4 @@
+use bitcoin::hashes::serde_macros::serde_details::SerdeHash;
 use std::cmp::Ordering;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -6,6 +7,25 @@ use zerocopy::{FromBytes, Immutable, IntoBytes};
 pub struct InOutId {
     pub id: [u8; 32],
     pub index: u32,
+}
+
+impl From<&bip329::InOutId> for InOutId {
+    fn from(id: &bip329::InOutId) -> Self {
+        Self::new(id.txid, id.index)
+    }
+}
+
+impl InOutId {
+    pub fn new(id: impl AsRef<[u8; 32]>, index: u32) -> Self {
+        Self {
+            id: *id.as_ref(),
+            index,
+        }
+    }
+
+    pub fn id(&self) -> bitcoin::Txid {
+        bitcoin::Txid::from_slice_delegated(&self.id).expect("id is 32 bytes")
+    }
 }
 
 impl redb::Key for InOutId {
@@ -49,5 +69,31 @@ impl redb::Value for InOutId {
 
     fn type_name() -> redb::TypeName {
         redb::TypeName::new("InOutId::bip329::InOutId")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+
+    use super::*;
+
+    #[test]
+    fn test_in_out_id() {
+        let id = InOutId::new(
+            bitcoin::Txid::from_str(
+                "d9f76c1c2338eb2010255c16e7cbdf72c1263e81c08a465b5d1d76a36d9980dc",
+            )
+            .unwrap(),
+            0,
+        );
+
+        assert_eq!(
+            id.id(),
+            bitcoin::Txid::from_str(
+                "d9f76c1c2338eb2010255c16e7cbdf72c1263e81c08a465b5d1d76a36d9980dc"
+            )
+            .unwrap()
+        );
     }
 }

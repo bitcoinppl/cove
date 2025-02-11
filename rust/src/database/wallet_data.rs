@@ -1,6 +1,9 @@
 pub mod label;
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use label::LabelsTable;
 use once_cell::sync::Lazy;
@@ -20,8 +23,8 @@ use ahash::AHashMap as HashMap;
 pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Database>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-fn database_location(id: &WalletId) -> PathBuf {
-    let dir = WALLET_DATA_DIR.join(id.as_str());
+fn database_location(id: &WalletId, location: &Path) -> PathBuf {
+    let dir = location.join(id.as_str());
 
     if !dir.exists() {
         std::fs::create_dir_all(&dir).expect("always work to create dir");
@@ -84,13 +87,27 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 impl WalletDataDb {
     pub fn new(id: WalletId) -> Self {
-        let db = get_or_create_database(&id);
+        Self::new_with_db_location(id, &WALLET_DATA_DIR)
+    }
+
+    #[cfg(test)]
+    pub fn new_test(id: WalletId) -> Self {
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        Self::new_with_db_location(id, tmp.path())
+    }
+
+    fn new_with_db_location(id: WalletId, db_location: &Path) -> Self {
+        let db = get_or_create_database(&id, db_location);
         let write_txn = db.begin_write().expect("failed to begin write transaction");
 
         // create table if it doesn't exist
         write_txn.open_table(TABLE).expect("failed to create table");
-
         let labels = LabelsTable::new(db.clone(), &write_txn);
+
+        // commit the write transaction
+        write_txn
+            .commit()
+            .expect("failed to commit write transaction");
 
         Self { id, db, labels }
     }
@@ -181,8 +198,8 @@ impl WalletDataDb {
     }
 }
 
-pub fn get_or_create_database(id: &WalletId) -> Arc<redb::Database> {
-    let database_location = database_location(id);
+pub fn get_or_create_database(id: &WalletId, location: &Path) -> Arc<redb::Database> {
+    let database_location = database_location(id, location);
 
     // check if we already have a database connection for this id and return it
     {
@@ -222,12 +239,16 @@ pub fn get_or_create_database(id: &WalletId) -> Arc<redb::Database> {
 }
 
 pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
+    delete_database_at_location(id, &WALLET_DATA_DIR)
+}
+
+fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std::io::Error> {
     {
         let mut db_connections = DATABASE_CONNECTIONS.write();
         db_connections.remove(id);
     }
 
-    std::fs::remove_file(database_location(id))
+    std::fs::remove_file(database_location(id, location))
 }
 
 impl WalletDataKey {
