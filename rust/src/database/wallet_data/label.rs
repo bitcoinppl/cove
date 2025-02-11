@@ -125,7 +125,8 @@ impl LabelsTable {
             .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         labels
-            .into_iter().try_for_each(|l| self.insert_label_with_write(l, &write_txn))?;
+            .into_iter()
+            .try_for_each(|l| self.insert_label_with_write(l, &write_txn))?;
 
         write_txn
             .commit()
@@ -197,16 +198,10 @@ mod tests {
         let jsonl = r#"
             {"type":"tx","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290","label":"last txn received","origin":"pkh([73c5da0a/44h/0h/0h])"}
             {"type":"input","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0","label":"last txn received 1 (input)"}
-            {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:1","label":"last txn received 2 (received)", "spendable": true}
+            {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0","label":"last txn received 2 (received)"}
+            {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:1","label":"last txn received 3 (received)"}
+            {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:2","label":"last txn received 4 (received)"}
         "#;
-
-        // let jsonl = r#"
-        //     {"type":"tx","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290","label":"last txn received","origin":"pkh([73c5da0a/44h/0h/0h])"}
-        //     {"type":"input","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0","label":"last txn received 1 (input)"}
-        //     {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:0","label":"last txn received 2 (received)"}
-        //     {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:1","label":"last txn received 3 (received)"}
-        //     {"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:2","label":"last txn received 4 (received)"}
-        // "#;
 
         let labels = Labels::try_from_str(jsonl).expect("failed to parse labels");
         let wallet_db = WalletDataDb::new_test(WalletId::preview_new());
@@ -224,8 +219,6 @@ mod tests {
             .all_labels_for_txn(txn[0].ref_)
             .expect("failed to get labels");
 
-        println!("{labels:?}");
-
-        // assert_eq!(labels.len(), 4);
+        assert_eq!(labels.len(), 5);
     }
 }
