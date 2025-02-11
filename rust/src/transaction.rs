@@ -297,12 +297,19 @@ impl Borrow<[u8]> for TxId {
     }
 }
 
-// MARK: TxId impls
-
 // Implement Borrow in both directions
 impl Borrow<BdkTxid> for TxId {
     fn borrow(&self) -> &BdkTxid {
         &self.0
+    }
+}
+
+impl Borrow<TxId> for &BdkTxid {
+    fn borrow(&self) -> &TxId {
+        // SAFETY: Valid because:
+        // 1. TxId is #[repr(transparent)] around BdkTxid
+        // 2. We're casting from &BdkTxid to &TxId
+        unsafe { &*((*self) as *const BdkTxid as *const TxId) }
     }
 }
 

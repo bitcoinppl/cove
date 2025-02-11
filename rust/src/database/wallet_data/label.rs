@@ -1,4 +1,4 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 
 use bip329::{AddressRecord, InputRecord, Label, OutputRecord, TransactionRecord};
 use bitcoin::{address::NetworkUnchecked, Address};
@@ -50,15 +50,19 @@ impl LabelsTable {
         Self { db }
     }
 
-    pub fn all_labels_for_txn(&self, txid: &TxId) -> Result<Vec<Label>, Error> {
-        let txid = *txid;
+    pub fn all_labels_for_txn(
+        &self,
+        txid: impl Borrow<bitcoin::Txid>,
+    ) -> Result<Vec<Label>, Error> {
+        let txid = txid.borrow();
+
         let table = self.read_table(TXN_TABLE)?;
         let txn = table.get(txid)?.map(|record| record.value());
         drop(table);
 
         let Some(txn) = txn else { return Ok(vec![]) };
-        let inputs = self.txn_inputs_iter(txid.as_ref())?;
-        let outputs = self.txn_outputs_iter(txid.as_ref())?;
+        let inputs = self.txn_inputs_iter(txid)?;
+        let outputs = self.txn_outputs_iter(txid)?;
 
         let labels = std::iter::once(Label::Transaction(txn))
             .chain(inputs.map(Label::Input))
@@ -117,7 +121,7 @@ impl LabelsTable {
         Ok(outputs)
     }
 
-    pub fn insert_labels(&self, labels: Vec<Label>) -> Result<(), Error> {
+    pub fn insert_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
         let write_txn = self
             .db
             .begin_write()
@@ -207,16 +211,13 @@ mod tests {
         let wallet_db = WalletDataDb::new_test(WalletId::preview_new());
         let db = &wallet_db.labels;
 
-        println!("{labels:?}");
-
-        db.insert_labels(labels.into())
-            .expect("failed to insert labels");
+        db.insert_labels(labels).expect("failed to insert labels");
 
         let txn = db.all_txns().expect("failed to get all txns");
         assert_eq!(txn.len(), 1);
 
         let labels = db
-            .all_labels_for_txn(txn[0].ref_)
+            .all_labels_for_txn(&txn[0].ref_)
             .expect("failed to get labels");
 
         assert_eq!(labels.len(), 5);
