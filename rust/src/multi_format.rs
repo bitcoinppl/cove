@@ -21,6 +21,7 @@ pub enum MultiFormat {
     HardwareExport(Arc<HardwareExport>),
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
+    Bip329Labels(Arc<Bip329Labels>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -100,6 +101,11 @@ impl MultiFormat {
             return Err(MultiFormatError::UrFormatNotSupported);
         }
 
+        // try and parse bip329 labels
+        if let Ok(labels) = bip329::Labels::try_from_str(string) {
+            return Ok(Self::Bip329Labels(Arc::new(labels.into())));
+        }
+
         warn!("could not parse string as MultiFormat: {string}");
         Err(MultiFormatError::UnrecognizedFormat)
     }
@@ -137,3 +143,16 @@ fn string_or_data_try_into_multi_format(
 fn display_multi_format_error(error: MultiFormatError) -> String {
     error.to_string()
 }
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    uniffi::Object,
+    derive_more::Into,
+    derive_more::From,
+    derive_more::Deref,
+    derive_more::AsRef,
+)]
+pub struct Bip329Labels(pub bip329::Labels);
