@@ -1983,6 +1983,116 @@ public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UnsafeMutab
 
 
 
+public protocol Bip329LabelsProtocol: AnyObject {
+    
+}
+open class Bip329Labels: Bip329LabelsProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_bip329labels(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_bip329labels(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBip329Labels: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Bip329Labels
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Bip329Labels {
+        return Bip329Labels(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Bip329Labels) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bip329Labels {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Bip329Labels, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBip329Labels_lift(_ pointer: UnsafeMutableRawPointer) throws -> Bip329Labels {
+    return try FfiConverterTypeBip329Labels.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBip329Labels_lower(_ value: Bip329Labels) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeBip329Labels.lower(value)
+}
+
+
+
+
+
+
 public protocol Bip39AutoCompleteProtocol: AnyObject {
     
     func autocomplete(word: String)  -> [String]
@@ -17935,6 +18045,8 @@ public enum MultiFormat {
     )
     case transaction(BitcoinTransaction
     )
+    case bip329Labels(Bip329Labels
+    )
 }
 
 
@@ -17964,6 +18076,9 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 4: return .transaction(try FfiConverterTypeBitcoinTransaction.read(from: &buf)
         )
         
+        case 5: return .bip329Labels(try FfiConverterTypeBip329Labels.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -17990,6 +18105,11 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case let .transaction(v1):
             writeInt(&buf, Int32(4))
             FfiConverterTypeBitcoinTransaction.write(v1, into: &buf)
+            
+        
+        case let .bip329Labels(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeBip329Labels.write(v1, into: &buf)
             
         }
     }

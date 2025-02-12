@@ -300,6 +300,8 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(txn):
                 handleTransaction(txn)
+            case .bip329Labels:
+                app.alertState = TaggedItem(.invalidFileFormat("Currently BIP329 labels must be imported through the wallet actions"))
             }
         } catch {
             switch error {
@@ -336,6 +338,8 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(transaction):
                 handleTransaction(transaction)
+            case .bip329Labels:
+                app.alertState = TaggedItem(.invalidFileFormat("Currently BIP329 labels must be imported through the wallet actions"))
             }
         } catch {
             switch error {

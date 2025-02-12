@@ -115,8 +115,9 @@ pub struct RustWalletManager {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletManagerReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
+
     #[allow(dead_code)]
-    pub scanner: Option<Addr<WalletScanner>>,
+    scanner: Option<Addr<WalletScanner>>,
 }
 
 pub type Error = WalletManagerError;

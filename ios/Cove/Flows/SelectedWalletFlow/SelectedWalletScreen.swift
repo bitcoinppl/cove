@@ -32,6 +32,7 @@ struct SelectedWalletScreen: View {
 
     // public
     var manager: WalletManager
+    var labelManager: LabelManager
 
     // private
 
@@ -49,13 +50,10 @@ struct SelectedWalletScreen: View {
     // import / export
     @State private var isExportingLabels = false
     @State private var isImportingLabels = false
+    @State private var scannedLabels: TaggedString? = nil
 
     var metadata: WalletMetadata {
         manager.walletMetadata
-    }
-
-    var labelManager: LabelManager {
-        LabelManager(id: metadata.id)
     }
 
     func updater(_ action: WalletManagerAction) {
@@ -138,7 +136,7 @@ struct SelectedWalletScreen: View {
         case .qrLabelsExport:
             EmptyView()
         case .qrLabelsImport:
-            EmptyView()
+            QrCodeLabelImportView(scannedCode: $scannedLabels)
         }
     }
 
@@ -276,6 +274,15 @@ struct SelectedWalletScreen: View {
             actions: { MyAlert($0).actions },
             message: { MyAlert($0).message }
         )
+        .onChange(of: scannedLabels) { _, labels in
+            guard let labels else { return }
+            do {
+                try labelManager.import(labels: labels)
+                alertState = .init(.importSuccess)
+            } else {
+                alertState = .init(.unableToImportLabels("Invalid QR code \(error.localizedDescription)"))
+            }
+        }
     }
 
     func exportLabelContent() -> String {
@@ -416,8 +423,10 @@ struct VerifyReminder: View {
 #Preview {
     AsyncPreview {
         NavigationStack {
-            SelectedWalletScreen(manager: WalletManager(preview: "preview_only"))
-                .environment(AppManager.shared)
+            SelectedWalletScreen(
+                manager: WalletManager(preview: "preview_only"),
+                labelManager: LabelManager(id: WalletManager(preview: "preview_only").walletMetadata.id)
+            ).environment(AppManager.shared)
         }
     }
 }
