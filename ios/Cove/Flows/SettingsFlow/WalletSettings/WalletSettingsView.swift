@@ -95,6 +95,17 @@ struct WalletSettingsView: View {
                     }
                 }
                 .padding(.vertical, 8)
+
+                HStack {
+                    Toggle(isOn: Binding(
+                        get: { manager.walletMetadata.showLabels },
+                        set: { _ in manager.dispatch(action: .toggleShowLabels) }
+                    )) {
+                        Text("Show transaction labels")
+                            .font(.subheadline)
+                    }
+                }
+                .padding(.vertical, 1)
             }
 
             Section(header: Text("Danger Zone")) {
@@ -154,5 +165,6 @@ struct WalletSettingsView: View {
             .environment(\.navigate) { _ in
                 ()
             }
+            .background(Color(UIColor.systemGroupedBackground))
     }
 }

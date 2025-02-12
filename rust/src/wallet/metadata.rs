@@ -66,6 +66,11 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub fiat_or_btc: FiatOrBtc,
 
+    /// Show labels for transactions i the transaction list
+    /// If false, we only show either `Sent` or `Received` labels
+    #[serde(default = "default_true")]
+    pub show_labels: bool,
+
     // internal only metadata, don't use in the UI
     // note: maybe better to use a separate table for this
     #[serde(default)]
@@ -175,6 +180,7 @@ impl WalletMetadata {
             address_type: WalletAddressType::default(),
             wallet_type: WalletType::Hot,
             wallet_mode,
+            show_labels: true,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
         }
@@ -231,6 +237,7 @@ impl WalletMetadata {
             details_expanded: false,
             wallet_type: WalletType::Hot,
             wallet_mode: WalletMode::Main,
+            show_labels: true,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
         }

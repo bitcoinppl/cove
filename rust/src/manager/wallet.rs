@@ -75,6 +75,7 @@ pub enum WalletManagerAction {
     ToggleDetailsExpanded,
     ToggleFiatOrBtc,
     ToggleFiatBtcPrimarySecondary,
+    ToggleShowLabels,
     SelectCurrentWalletAddressType,
     SelectDifferentWalletAddressType(WalletAddressType),
 }
@@ -1083,22 +1084,14 @@ impl RustWalletManager {
             }
 
             WalletManagerAction::SelectDifferentWalletAddressType(wallet_address_type) => {
-                {
-                    let mut metadata = self.metadata.write();
-                    metadata.address_type = wallet_address_type;
-                    metadata.discovery_state = DiscoveryState::ChoseAdressType;
+                let mut metadata = self.metadata.write();
+                metadata.address_type = wallet_address_type;
+                metadata.discovery_state = DiscoveryState::ChoseAdressType;
+            }
 
-                    self.reconciler
-                        .send(WalletManagerReconcileMessage::WalletMetadataChanged(
-                            metadata.clone(),
-                        ))
-                        .unwrap();
-
-                    // update wallet_metadata in the database
-                    let _ = Database::global()
-                        .wallets
-                        .update_wallet_metadata(metadata.clone());
-                }
+            WalletManagerAction::ToggleShowLabels => {
+                let mut metadata = self.metadata.write();
+                metadata.show_labels = !metadata.show_labels;
             }
         }
 

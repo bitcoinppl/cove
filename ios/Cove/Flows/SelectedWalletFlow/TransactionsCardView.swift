@@ -148,21 +148,32 @@ struct ConfirmedTransactionView: View {
         }
     }
 
+    var label: String {
+        if metadata.showLabels { return txn.label() }
+        return txn.sentAndReceived().label()
+    }
+
     var body: some View {
         HStack {
             TxnIcon(direction: txn.sentAndReceived().direction())
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(txn.label())
+                Text(label)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.primary.opacity(0.65))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.90)
+                    .padding(.trailing, 10)
 
                 Text(privateShow(txn.confirmedAtFmt()))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
             Spacer()
+
             VStack(alignment: .trailing) {
                 Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()))

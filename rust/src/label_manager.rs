@@ -34,7 +34,6 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 impl LabelManager {
     #[uniffi::constructor]
     pub fn new(id: WalletId) -> Self {
-        tracing::debug!("creating label manager for wallet: {id}");
         let db = WalletDataDb::new_or_existing(id.clone());
         Self { id, db }
     }

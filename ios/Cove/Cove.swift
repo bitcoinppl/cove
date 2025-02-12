@@ -14101,11 +14101,20 @@ public struct WalletMetadata {
     public var discoveryState: DiscoveryState
     public var addressType: WalletAddressType
     public var fiatOrBtc: FiatOrBtc
+    /**
+     * Show labels for transactions i the transaction list
+     * If false, we only show either `Sent` or `Received` labels
+     */
+    public var showLabels: Bool
     public var `internal`: InternalOnlyMetadata
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, `internal`: InternalOnlyMetadata) {
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, 
+        /**
+         * Show labels for transactions i the transaction list
+         * If false, we only show either `Sent` or `Received` labels
+         */showLabels: Bool, `internal`: InternalOnlyMetadata) {
         self.id = id
         self.name = name
         self.color = color
@@ -14121,6 +14130,7 @@ public struct WalletMetadata {
         self.discoveryState = discoveryState
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
+        self.showLabels = showLabels
         self.`internal` = `internal`
     }
 }
@@ -14153,6 +14163,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf), 
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
+                showLabels: FfiConverterBool.read(from: &buf), 
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
         )
     }
@@ -14173,6 +14184,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
+        FfiConverterBool.write(value.showLabels, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, into: &buf)
     }
 }
@@ -22078,6 +22090,7 @@ public enum WalletManagerAction {
     case toggleDetailsExpanded
     case toggleFiatOrBtc
     case toggleFiatBtcPrimarySecondary
+    case toggleShowLabels
     case selectCurrentWalletAddressType
     case selectDifferentWalletAddressType(WalletAddressType
     )
@@ -22118,9 +22131,11 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
         
         case 8: return .toggleFiatBtcPrimarySecondary
         
-        case 9: return .selectCurrentWalletAddressType
+        case 9: return .toggleShowLabels
         
-        case 10: return .selectDifferentWalletAddressType(try FfiConverterTypeWalletAddressType.read(from: &buf)
+        case 10: return .selectCurrentWalletAddressType
+        
+        case 11: return .selectDifferentWalletAddressType(try FfiConverterTypeWalletAddressType.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22167,12 +22182,16 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(8))
         
         
-        case .selectCurrentWalletAddressType:
+        case .toggleShowLabels:
             writeInt(&buf, Int32(9))
         
         
-        case let .selectDifferentWalletAddressType(v1):
+        case .selectCurrentWalletAddressType:
             writeInt(&buf, Int32(10))
+        
+        
+        case let .selectDifferentWalletAddressType(v1):
+            writeInt(&buf, Int32(11))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
             
         }
