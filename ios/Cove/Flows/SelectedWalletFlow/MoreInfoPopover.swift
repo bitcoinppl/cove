@@ -15,7 +15,7 @@ struct MoreInfoPopover: View {
     let labelManager: LabelManager
 
     // confirmation dialogs
-    @Binding var showingExportOptions: Bool
+    @Binding var isExportingLabels: Bool
     @Binding var showingImportOptions: Bool
 
     private var hasLabels: Bool {
@@ -31,7 +31,7 @@ struct MoreInfoPopover: View {
     }
 
     func exportLabels() {
-        showingExportOptions = true
+        isExportingLabels = true
     }
 
     var defaultFileName: String {
@@ -50,7 +50,7 @@ struct MoreInfoPopover: View {
 
             if hasLabels {
                 Button(action: exportLabels) {
-                    Label("Export Labels", systemImage: "square.and.arrow.")
+                    Label("Export Labels", systemImage: "square.and.arrow.up")
                 }
             }
         }
@@ -61,8 +61,9 @@ struct MoreInfoPopover: View {
     AsyncPreview {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
-            labelManager: LabelManager(id: WalletManager(preview: "preview_only").walletMetadata.id),
-            showingExportOptions: Binding.constant(false),
+            labelManager: LabelManager(
+                id: WalletManager(preview: "preview_only").walletMetadata.id),
+            isExportingLabels: Binding.constant(false),
             showingImportOptions: Binding.constant(false)
         )
         .environment(AppManager.shared)

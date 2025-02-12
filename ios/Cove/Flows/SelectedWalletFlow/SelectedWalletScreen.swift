@@ -41,7 +41,6 @@ struct SelectedWalletScreen: View {
     @State private var alertState: TaggedItem<AlertState>? = nil
 
     // confirmation dialogs
-    @State private var showingExportOptions = false
     @State private var showingImportOptions = false
 
     @State private var showingCopiedPopup = true
@@ -156,6 +155,59 @@ struct SelectedWalletScreen: View {
         sheetState = TaggedItem(.receive)
     }
 
+    @ToolbarContentBuilder
+    var MainToolBar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 10) {
+                if metadata.walletType == .cold {
+                    BitcoinShieldIcon(width: 13, color: .white)
+                }
+
+                Text(metadata.name)
+                    .foregroundStyle(.white)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+            }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 28)
+            .contentShape(Rectangle())
+            .contentShape(
+                .contextMenuPreview,
+                RoundedRectangle(cornerRadius: 8)
+            )
+            .contextMenu {
+                Button("Settings") {
+                    app.pushRoutes(RouteFactory().nestedWalletSettings(id: metadata.id))
+                }
+            }
+        }
+
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            HStack(spacing: 5) {
+                Button(action: {
+                    app.sheetState = .init(.qr)
+                }) {
+                    Image(systemName: "qrcode")
+                        .foregroundStyle(.white)
+                        .font(.callout)
+                }
+
+                Menu {
+                    MoreInfoPopover(
+                        manager: manager,
+                        labelManager: labelManager,
+                        isExportingLabels: $isExportingLabels,
+                        showingImportOptions: $showingImportOptions
+                    )
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(.white)
+                        .font(.callout)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     var MainContent: some View {
         VStack(spacing: 0) {
@@ -175,70 +227,14 @@ struct SelectedWalletScreen: View {
             Transactions
                 .environment(manager)
         }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 10) {
-                    if metadata.walletType == .cold {
-                        BitcoinShieldIcon(width: 13, color: .white)
-                    }
-
-                    Text(metadata.name)
-                        .foregroundStyle(.white)
-                        .font(.callout)
-                        .fontWeight(.semibold)
-                }
-                .padding(.vertical, 20)
-                .padding(.horizontal, 28)
-                .contentShape(Rectangle())
-                .contentShape(
-                    .contextMenuPreview,
-                    RoundedRectangle(cornerRadius: 8)
-                )
-                .contextMenu {
-                    Button("Settings") {
-                        app.pushRoutes(RouteFactory().nestedWalletSettings(id: metadata.id))
-                    }
-                }
-            }
-
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                HStack(spacing: 5) {
-                    Button(action: {
-                        app.sheetState = .init(.qr)
-                    }) {
-                        Image(systemName: "qrcode")
-                            .foregroundStyle(.white)
-                            .font(.callout)
-                    }
-
-                    Menu {
-                        MoreInfoPopover(
-                            manager: manager,
-                            labelManager: labelManager,
-                            showingExportOptions: $showingExportOptions,
-                            showingImportOptions: $showingImportOptions
-                        )
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundStyle(.white)
-                            .font(.callout)
-                    }
-                }
-            }
-        }
+        .toolbar { MainToolBar }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(Color.midnightBlue.opacity(0.9), for: .navigationBar)
         .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
         .sheet(item: $sheetState, content: SheetContent)
-        .confirmationDialog("Export Lables", isPresented: $showingExportOptions) {
-            Button("File") { isExportingLabels = true }
-            Button("QR") {}
-        } message: {
-            Text("How do you want to export your labels in BIP329 format?")
-        }
         .confirmationDialog("Import Lables", isPresented: $showingImportOptions) {
             Button("File") { isImportingLabels = true }
-            Button("QR") {}
+            Button("QR") { sheetState = .init(.qrLabelsImport) }
         } message: {
             Text("How do you want to import your labels in BIP329 format?")
         }
@@ -262,7 +258,8 @@ struct SelectedWalletScreen: View {
             do {
                 let file = try result.get()
                 let fileContents = try FileReader(for: file).read()
-                try labelManager.import(labels: fileContents)
+                try labelManager.import(jsonl: fileContents)
+                alertState = .init(.importSuccess)
             } catch {
                 alertState = .init(.unableToImportLabels(error.localizedDescription))
             }
@@ -274,14 +271,16 @@ struct SelectedWalletScreen: View {
             actions: { MyAlert($0).actions },
             message: { MyAlert($0).message }
         )
-        .onChange(of: scannedLabels) { _, labels in
-            guard let labels else { return }
-            do {
-                try labelManager.import(labels: labels)
-                alertState = .init(.importSuccess)
-            } else {
-                alertState = .init(.unableToImportLabels("Invalid QR code \(error.localizedDescription)"))
-            }
+        .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
+    }
+
+    func onChangeOfScannedLabels(_ old: TaggedString?, _ labels: TaggedString?) {
+        guard let labels else { return }
+        do {
+            try labelManager.import(jsonl: labels.item)
+            alertState = .init(.importSuccess)
+        } catch {
+            alertState = .init(.unableToImportLabels("Invalid QR code \(error.localizedDescription)"))
         }
     }
 

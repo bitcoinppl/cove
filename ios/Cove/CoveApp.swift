@@ -300,7 +300,11 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(txn):
                 handleTransaction(txn)
-            case .bip329Labels:
+            case let .bip329Labels(labels):
+                if let selectedWallet = Database().globalConfig().selectedWallet() {
+                    return try LabelManager(id: selectedWallet).import(labels: labels)
+                }
+
                 app.alertState = TaggedItem(.invalidFileFormat("Currently BIP329 labels must be imported through the wallet actions"))
             }
         } catch {
@@ -338,7 +342,10 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(transaction):
                 handleTransaction(transaction)
-            case .bip329Labels:
+            case let .bip329Labels(labels):
+                if let selectedWallet = Database().globalConfig().selectedWallet() {
+                    return try LabelManager(id: selectedWallet).import(labels: labels)
+                }
                 app.alertState = TaggedItem(.invalidFileFormat("Currently BIP329 labels must be imported through the wallet actions"))
             }
         } catch {

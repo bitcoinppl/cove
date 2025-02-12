@@ -6472,7 +6472,9 @@ public protocol LabelManagerProtocol: AnyObject {
     
     func hasLabels()  -> Bool
     
-    func `import`(labels: String) throws 
+    func `import`(jsonl: String) throws 
+    
+    func importLabels(labels: Bip329Labels) throws 
     
 }
 open class LabelManager: LabelManagerProtocol, @unchecked Sendable {
@@ -6554,9 +6556,16 @@ open func hasLabels() -> Bool  {
 })
 }
     
-open func `import`(labels: String)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+open func `import`(jsonl: String)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
     uniffi_cove_fn_method_labelmanager_import(self.uniffiClonePointer(),
-        FfiConverterString.lower(labels),$0
+        FfiConverterString.lower(jsonl),$0
+    )
+}
+}
+    
+open func importLabels(labels: Bip329Labels)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_importlabels(self.uniffiClonePointer(),
+        FfiConverterTypeBip329Labels_lower(labels),$0
     )
 }
 }
@@ -26017,7 +26026,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_labelmanager_has_labels() != 1029) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_import() != 65510) {
+    if (uniffi_cove_checksum_method_labelmanager_import() != 22916) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_labelmanager_importlabels() != 51697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 45039) {
