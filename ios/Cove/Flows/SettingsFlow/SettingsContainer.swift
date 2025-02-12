@@ -34,7 +34,7 @@ struct SettingsContainer: View {
     }
 
     @ViewBuilder
-    var AppearencePicker: some View {
+    var AppearancePicker: some View {
         SettingsPicker(selection:
             Binding(
                 get: { app.colorSchemeSelection },
@@ -43,7 +43,7 @@ struct SettingsContainer: View {
                 }
             )
         )
-        .navigationTitle("Appearence")
+        .navigationTitle("Appearance")
     }
 
     var body: some View {
@@ -54,7 +54,7 @@ struct SettingsContainer: View {
             case .network:
                 SettingsPicker(selection: selectedNetwork)
             case .appearance:
-                AppearencePicker
+                AppearancePicker
             case .node:
                 NodeSelectionView()
             case .fiatCurrency:
