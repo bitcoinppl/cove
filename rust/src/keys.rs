@@ -1,15 +1,20 @@
+#![allow(dead_code)]
 use std::str::FromStr as _;
 
+use bdk_chain::miniscript::descriptor::DescriptorType;
 use bdk_wallet::bitcoin::bip32::{DerivationPath, Fingerprint};
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use bdk_wallet::keys::bip39::Mnemonic;
 use bdk_wallet::keys::{
     DerivableKey as _, DescriptorSecretKey as BdkDescriptorSecretKey, ExtendedKey,
 };
-use bdk_wallet::keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap};
-use bdk_wallet::miniscript::descriptor::{DescriptorXKey, Wildcard};
-use bdk_wallet::template::{Bip44, Bip49, Bip84, Bip84Public, DescriptorTemplate as _};
+use bdk_wallet::{
+    keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap},
+    miniscript::descriptor::{DescriptorXKey, Wildcard},
+    template::{Bip44, Bip49, Bip84, Bip84Public, DescriptorTemplate as _},
+};
 use bdk_wallet::{CreateParams, KeychainKind};
+use bitcoin::secp256k1;
 
 use crate::network::Network;
 
@@ -17,6 +22,23 @@ pub type Seed = [u8; 64];
 
 #[derive(Debug, Clone, derive_more::Display, derive_more::From, derive_more::FromStr)]
 pub struct DescriptorSecretKey(pub(crate) BdkDescriptorSecretKey);
+
+pub type Error = DescriptorKeyParseError;
+
+#[derive(Debug, thiserror::Error)]
+pub enum DescriptorKeyParseError {
+    #[error("invalid descriptor: {0:?}")]
+    InvalidDescriptor(#[from] bdk_wallet::miniscript::Error),
+
+    #[error("unsupported descriptor: {0}")]
+    UnsupportedDescriptor(String),
+
+    #[error("unsupported descriptor type: {0:?}")]
+    UnsupportedDescriptorType(DescriptorType),
+
+    #[error("no origin found")]
+    NoOrigin,
+}
 
 #[derive(Debug)]
 pub struct Descriptors {
@@ -26,7 +48,7 @@ pub struct Descriptors {
     pub internal: Descriptor,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Descriptor {
     pub extended_descriptor: ExtendedDescriptor,
     pub key_map: KeyMap,
@@ -39,6 +61,78 @@ impl Descriptors {
 }
 
 impl Descriptor {
+    /// Parse a descriptor string into a `Descriptor` struct.
+    pub fn parse_public_descriptor(descriptor: &str) -> Result<Self, Error> {
+        let secp = &secp256k1::Secp256k1::signing_only();
+        let (descriptor, key_map) =
+            bdk_wallet::miniscript::Descriptor::<BdkDescriptorPublicKey>::parse_descriptor(
+                secp, descriptor,
+            )?;
+
+        Ok(Self {
+            extended_descriptor: descriptor,
+            key_map,
+        })
+    }
+
+    pub fn descriptor_public_key(&self) -> Result<&BdkDescriptorPublicKey, Error> {
+        use bdk_wallet::miniscript::descriptor::ShInner;
+        use bdk_wallet::miniscript::Descriptor as D;
+
+        let key = match &self.extended_descriptor {
+            D::Pkh(pk) => pk.as_inner(),
+            D::Wpkh(pk) => pk.as_inner(),
+            D::Tr(pk) => pk.internal_key(),
+            D::Sh(pk) => match pk.as_inner() {
+                ShInner::Wpkh(pk) => pk.as_inner(),
+                _ => {
+                    return Err(Error::UnsupportedDescriptor(
+                        "unsupported wallet bare descriptor not wpkh".to_string(),
+                    ))
+                }
+            },
+
+            // not sure
+            D::Bare(_pk) => {
+                return Err(Error::UnsupportedDescriptor(
+                    "unsupported wallet bare descriptor not wpkh".to_string(),
+                ))
+            }
+
+            // multi-sig
+            D::Wsh(_pk) => {
+                return Err(Error::UnsupportedDescriptor(
+                    "unsupported wallet, multisig".to_string(),
+                ))
+            }
+        };
+
+        Ok(key)
+    }
+
+    pub fn origin(&self) -> Result<String, Error> {
+        let public_key = self.descriptor_public_key()?;
+
+        let origin = match &public_key {
+            BdkDescriptorPublicKey::Single(pk) => &pk.origin,
+            BdkDescriptorPublicKey::XPub(pk) => &pk.origin,
+            BdkDescriptorPublicKey::MultiXPub(pk) => &pk.origin,
+        };
+
+        let desc_type = self.extended_descriptor.desc_type();
+        let desc_type_str = match desc_type {
+            DescriptorType::Pkh => "pkh",
+            DescriptorType::Wpkh => "wpkh",
+            DescriptorType::Tr => "tr",
+            DescriptorType::Sh => "sh",
+            other => Err(Error::UnsupportedDescriptorType(other))?,
+        };
+
+        let (fingerprint, path) = origin.as_ref().ok_or(Error::NoOrigin)?;
+        let origin = format!("{}([{}/{}])", desc_type_str, fingerprint, path);
+        Ok(origin)
+    }
+
     /// BIP84 for P2WPKH (Segwit)
     pub(crate) fn new_bip84(
         secret_key: &DescriptorSecretKey,
@@ -196,5 +290,42 @@ impl From<pubport::descriptor::Descriptors> for Descriptors {
         let internal = descriptors.internal.into();
 
         Self { external, internal }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_descriptor_parse() {
+        let desc =   "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
+        let descriptor = Descriptor::parse_public_descriptor(desc);
+        assert!(descriptor.is_ok());
+    }
+
+    #[test]
+    fn test_descriptor_into_descriptor_public_key() {
+        let desc =   "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
+        let descriptor = Descriptor::parse_public_descriptor(desc);
+        assert!(descriptor.is_ok());
+        let descriptor = descriptor.unwrap();
+
+        let public_key = descriptor.descriptor_public_key();
+        assert!(public_key.is_ok());
+    }
+
+    #[test]
+    fn test_descriptor_into_origin() {
+        let desc =   "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
+        let descriptor = Descriptor::parse_public_descriptor(desc);
+        assert!(descriptor.is_ok());
+        let descriptor = descriptor.unwrap();
+
+        let origin = descriptor.origin();
+        assert!(origin.is_ok());
+
+        let origin = origin.unwrap();
+        assert_eq!(origin, "wpkh([817e7be0/84'/0'/0'])");
     }
 }

@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    database::wallet_data::WalletDataDb, multi_format::Bip329Labels, wallet::metadata::WalletId,
+    database::wallet_data::WalletDataDb, multi_format::Bip329Labels, transaction::TxId,
+    wallet::metadata::WalletId,
 };
-use bip329::Labels;
+use bip329::{Labels, TransactionRecord};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {
@@ -49,6 +50,54 @@ impl LabelManager {
 
     pub fn has_labels(&self) -> bool {
         self.db.labels.number_of_labels().unwrap_or(0) > 0
+    }
+
+    pub fn transaction_label(&self, tx_id: Arc<TxId>) -> Option<String> {
+        let label = self
+            .db
+            .labels
+            .get_txn_label_record(tx_id.0)
+            .unwrap_or(None)?;
+
+        let label_str = label.item.label.as_ref()?;
+        Some(label_str.to_string())
+    }
+
+    pub fn insert_or_update_transaction_label(
+        &self,
+        tx_id: Arc<TxId>,
+        label: String,
+        origin: Option<String>,
+    ) -> Result<()> {
+        let current = self.db.labels.get_txn_label_record(tx_id.0).unwrap_or(None);
+
+        // update the label
+        if let Some(current) = current {
+            let mut updated = current.item;
+            let mut timestamps = current.timestamps;
+
+            updated.label = Some(label);
+            timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+
+            self.db
+                .labels
+                .insert_label_with_timestamps(updated, timestamps)
+                .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+
+            return Ok(());
+        };
+
+        // new label,insert new record
+        self.db
+            .labels
+            .insert_label(TransactionRecord {
+                ref_: tx_id.0,
+                label: Some(label),
+                origin,
+            })
+            .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+
+        Ok(())
     }
 
     #[uniffi::method(name = "importLabels")]

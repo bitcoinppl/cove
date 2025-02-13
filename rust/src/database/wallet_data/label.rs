@@ -1,6 +1,6 @@
 use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 
-use crate::database::Record as DbRecord;
+use crate::database::{error::DatabaseError, record::Timestamps, Record as DbRecord};
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 use bitcoin::{address::NetworkUnchecked, Address};
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
@@ -12,8 +12,17 @@ use crate::{
 };
 
 type Record<T> = Postcard<DbRecord<T>>;
+pub type Error = LabelDbError;
 
-pub type Error = crate::database::error::DatabaseError;
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum LabelDbError {
+    #[error(transparent)]
+    Database(#[from] DatabaseError),
+
+    #[error("unsupported label type for saving {0}")]
+    UnsupportedLabelType(String),
+}
+
 const TXN_TABLE: TableDefinition<TxId, Record<TransactionRecord>> =
     TableDefinition::new("transaction_labels.cbor");
 
@@ -67,6 +76,8 @@ impl LabelsTable {
         Ok(txns + inputs + outputs + addresses)
     }
 
+    // MARK: LIST
+
     pub fn all_labels(&self) -> Result<Labels, Error> {
         let txn_table = self.read_table(TXN_TABLE)?;
         let input_table = self.read_table(INPUT_TABLE)?;
@@ -113,7 +124,7 @@ impl LabelsTable {
     ) -> Result<Vec<Label>, Error> {
         let txid = txid.borrow();
 
-        let txn = self.txn_label(txid)?;
+        let txn = self.get_txn_label_record(txid)?.map(|record| record.item);
 
         let Some(txn) = txn else { return Ok(vec![]) };
         let inputs = self.txn_inputs_iter(txid)?;
@@ -138,17 +149,58 @@ impl LabelsTable {
         Ok(txns)
     }
 
-    pub fn txn_label(
+    // MARK: GET
+
+    fn get_label_record(&self, label: Label) -> Result<Option<DbRecord<Label>>, Error> {
+        match label {
+            Label::Transaction(txn) => {
+                let record = self.get_txn_label_record(txn.ref_)?;
+                Ok(record.map(|record| record.into()))
+            }
+
+            Label::Address(address_record) => {
+                let table = self.read_table(ADDRESS_TABLE)?;
+                let record = table.get(address_record.ref_)?.map(|record| record.value());
+                Ok(record.map(|record| record.into()))
+            }
+
+            Label::Input(input_record) => {
+                let table = self.read_table(INPUT_TABLE)?;
+                let key: InOutIdKey = input_record.ref_.into();
+
+                let record = table.get(key)?.map(|record| record.value());
+                Ok(record.map(|record| record.into()))
+            }
+
+            Label::Output(output_record) => {
+                let table = self.read_table(OUTPUT_TABLE)?;
+                let key: InOutIdKey = output_record.ref_.into();
+
+                let record = table.get(key)?.map(|record| record.value());
+                Ok(record.map(|record| record.into()))
+            }
+
+            // unsupported label types
+            Label::ExtendedPublicKey(_) => Err(Error::UnsupportedLabelType(
+                "extended public key".to_string(),
+            )),
+
+            Label::PublicKey(_) => Err(Error::UnsupportedLabelType("public key".to_string())),
+        }
+    }
+
+    pub fn get_txn_label_record(
         &self,
         txid: impl Borrow<bitcoin::Txid>,
-    ) -> Result<Option<TransactionRecord>, Error> {
+    ) -> Result<Option<DbRecord<TransactionRecord>>, Error> {
         let txid = txid.borrow();
         let table = self.read_table(TXN_TABLE)?;
-        let label = table.get(txid)?.map(|record| record.value().item);
+        let label = table.get(txid)?.map(|record| record.value());
+
         Ok(label)
     }
 
-    pub fn txn_inputs_iter(
+    fn txn_inputs_iter(
         &self,
         txid: impl AsRef<[u8; 32]>,
     ) -> Result<impl Iterator<Item = InputRecord>, Error> {
@@ -167,7 +219,7 @@ impl LabelsTable {
         Ok(inputs)
     }
 
-    pub fn txn_outputs_iter(
+    fn txn_outputs_iter(
         &self,
         txid: impl AsRef<[u8; 32]>,
     ) -> Result<impl Iterator<Item = OutputRecord>, Error> {
@@ -186,69 +238,98 @@ impl LabelsTable {
         Ok(outputs)
     }
 
+    // MARK: INSERT
+
     pub fn insert_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
         let write_txn = self
             .db
             .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         labels
             .into_iter()
-            .try_for_each(|l| self.insert_label_with_write_txn(l, &write_txn))?;
+            .try_for_each(|l| self.insert_label_with_write_txn(l, Timestamps::now(), &write_txn))?;
 
         write_txn
             .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
 
-    pub fn insert_label(&self, label: Label) -> Result<(), Error> {
+    pub fn insert_or_update_txn_label(&self, label: TransactionRecord) -> Result<(), Error> {
+        let current = self.get_txn_label_record(label.ref_).unwrap_or(None);
+        let label: Label = label.into();
+
+        if let Some(current) = current {
+            let mut updated = current;
+            updated.timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+            let timestamps = updated.timestamps;
+
+            self.insert_label_with_timestamps(label, timestamps)?;
+            return Ok(());
+        }
+
+        self.insert_label(label)
+    }
+
+    pub fn insert_label(&self, label: impl Into<Label>) -> Result<(), Error> {
+        self.insert_label_with_timestamps(label.into(), Timestamps::now())
+    }
+
+    pub fn insert_label_with_timestamps(
+        &self,
+        label: impl Into<Label>,
+        timestamps: Timestamps,
+    ) -> Result<(), Error> {
+        let label: Label = label.into();
         let write_txn = self
             .db
             .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
-        self.insert_label_with_write_txn(label, &write_txn)?;
+        self.insert_label_with_write_txn(label, timestamps, &write_txn)?;
 
         write_txn
             .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
 
-    pub fn insert_label_with_write_txn(
+    fn insert_label_with_write_txn(
         &self,
         label: Label,
+        timestamps: Timestamps,
         write_txn: &redb::WriteTransaction,
     ) -> Result<(), Error> {
         match label {
             Label::Transaction(txn) => {
                 let mut table = write_txn.open_table(TXN_TABLE)?;
                 let key: TxId = txn.ref_.into();
-                let value: DbRecord<TransactionRecord> = txn.into();
+                let value: DbRecord<TransactionRecord> = DbRecord::with_timestamps(txn, timestamps);
 
                 table.insert(key, value)?;
             }
             Label::Input(input) => {
                 let mut table = write_txn.open_table(INPUT_TABLE)?;
                 let key = InOutIdKey::from(&input.ref_);
-                let value: DbRecord<InputRecord> = input.into();
+                let value: DbRecord<InputRecord> = DbRecord::with_timestamps(input, timestamps);
 
                 table.insert(key, value)?;
             }
             Label::Output(output) => {
                 let mut table = write_txn.open_table(OUTPUT_TABLE)?;
                 let key = InOutIdKey::from(&output.ref_);
-                let output: DbRecord<OutputRecord> = output.into();
+                let output: DbRecord<OutputRecord> = DbRecord::with_timestamps(output, timestamps);
 
                 table.insert(key, output)?;
             }
             Label::Address(address) => {
                 let mut table = write_txn.open_table(ADDRESS_TABLE)?;
                 let key = address.ref_.clone();
-                let address: DbRecord<AddressRecord> = address.into();
+                let address: DbRecord<AddressRecord> =
+                    DbRecord::with_timestamps(address, timestamps);
 
                 table.insert(key, address)?;
             }
@@ -271,16 +352,15 @@ impl LabelsTable {
         let read_txn = self
             .db
             .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         let table = read_txn
             .open_table(table)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+            .map_err(|error| DatabaseError::TableAccess(error.to_string()))?;
 
         Ok(table)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletId};
@@ -310,5 +390,23 @@ mod tests {
             .expect("failed to get labels");
 
         assert_eq!(labels.len(), 5);
+    }
+}
+
+impl From<redb::TransactionError> for Error {
+    fn from(error: redb::TransactionError) -> Self {
+        Self::Database(error.into())
+    }
+}
+
+impl From<redb::TableError> for Error {
+    fn from(error: redb::TableError) -> Self {
+        Self::Database(error.into())
+    }
+}
+
+impl From<redb::StorageError> for Error {
+    fn from(error: redb::StorageError) -> Self {
+        Self::Database(error.into())
     }
 }

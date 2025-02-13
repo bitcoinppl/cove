@@ -15,6 +15,12 @@ impl From<&bip329::InOutId> for InOutIdKey {
     }
 }
 
+impl From<bip329::InOutId> for InOutIdKey {
+    fn from(id: bip329::InOutId) -> Self {
+        Self::from(&id)
+    }
+}
+
 impl InOutIdKey {
     pub fn new(id: impl AsRef<[u8; 32]>, index: u32) -> Self {
         Self {
