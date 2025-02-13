@@ -126,14 +126,19 @@ impl RustPendingWalletManager {
             .fingerprint()
             .into();
 
-        let wallet_metadata = WalletMetadata::new(name, fingerprint);
+        let mut wallet_metadata = WalletMetadata::new(name, fingerprint);
 
         // create, persist and select the wallet
-        Wallet::try_new_persisted_and_selected(
+        let wallet = Wallet::try_new_persisted_and_selected(
             wallet_metadata.clone(),
             self.state.read().wallet.mnemonic.clone(),
             None,
         )?;
+
+        let descriptor = wallet.public_descriptor();
+
+        // set the origin
+        wallet_metadata.origin = descriptor.origin().ok();
 
         Ok(wallet_metadata)
     }

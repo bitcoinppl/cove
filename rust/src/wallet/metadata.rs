@@ -65,6 +65,8 @@ pub struct WalletMetadata {
     pub address_type: WalletAddressType,
     #[serde(default)]
     pub fiat_or_btc: FiatOrBtc,
+    #[serde(default)]
+    pub origin: Option<String>,
 
     /// Show labels for transactions i the transaction list
     /// If false, we only show either `Sent` or `Received` labels
@@ -170,6 +172,7 @@ impl WalletMetadata {
             name: name.into(),
             color: WalletColor::random(),
             master_fingerprint: Some(fingerprint.into()),
+            origin: None,
             verified: false,
             network,
             performed_full_scan: false,
@@ -226,6 +229,7 @@ impl WalletMetadata {
             id: WalletId::preview_new_random(),
             name: "Test Wallet".to_string(),
             master_fingerprint: Some(Arc::new(Fingerprint::default())),
+            origin: None,
             color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,

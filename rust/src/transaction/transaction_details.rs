@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bdk_chain::{tx_graph::CanonicalTx, ChainPosition as BdkChainPosition, ConfirmationBlockTime};
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bdk_wallet::Wallet as BdkWallet;
+use bip329::Labels;
 use jiff::Timestamp;
 use numfmt::{Formatter, Precision};
 
@@ -45,6 +46,7 @@ pub struct TransactionDetails {
     pub fee: Option<Amount>,
     pub fee_rate: Option<FeeRate>,
     pub pending_or_confirmed: PendingOrConfirmed,
+    pub labels: Labels,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -57,6 +59,7 @@ impl TransactionDetails {
     pub fn try_new(
         wallet: &BdkWallet,
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
+        labels: Labels,
     ) -> Result<Self, Error> {
         let txid = tx.tx_node.txid;
         let sent_and_received = wallet.sent_and_received(&tx.tx_node.tx).into();
@@ -76,6 +79,7 @@ impl TransactionDetails {
             fee,
             pending_or_confirmed,
             fee_rate,
+            labels,
         };
 
         Ok(me)
@@ -257,6 +261,12 @@ impl TransactionDetails {
     }
 
     #[uniffi::method]
+    pub fn transaction_label(&self) -> Option<String> {
+        let label = self.labels.transaction_label()?;
+        Some(label.to_string())
+    }
+
+    #[uniffi::method]
     pub fn block_number(&self) -> Option<u32> {
         match &self.pending_or_confirmed {
             PendingOrConfirmed::Pending(_) => None,
@@ -295,6 +305,7 @@ impl TransactionDetails {
                 block_number: 840_000,
                 confirmation_time: 1677721600,
             }),
+            labels: Default::default(),
         }
     }
     #[uniffi::constructor(name = "preview_confirmed_received")]

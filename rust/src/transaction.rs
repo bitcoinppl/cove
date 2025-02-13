@@ -31,8 +31,8 @@ pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
 pub type Unit = unit::Unit;
 pub type TransactionDetails = transaction_details::TransactionDetails;
-pub type FeeRate = fees::FeeRate;
 
+pub type FeeRate = fees::FeeRate;
 pub type BdkAmount = bitcoin::Amount;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -149,7 +149,7 @@ impl Transaction {
         let label_db = WalletDataDb::new_or_existing(wallet.id.clone());
         let labels = label_db
             .labels
-            .all_labels_for_txn(&tx.tx_node.txid)
+            .all_labels_for_txn(tx.tx_node.txid)
             .unwrap_or_default()
             .into();
 

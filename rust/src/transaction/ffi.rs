@@ -146,12 +146,7 @@ impl ConfirmedTransaction {
     #[uniffi::method]
     pub fn label(&self) -> String {
         // check if we have a label for this transaction
-        if let Some(label) = self
-            .labels
-            .transaction_label()
-            .map(|l| l.label.as_ref())
-            .flatten()
-        {
+        if let Some(label) = self.labels.transaction_label() {
             return label.to_string();
         }
 

@@ -433,6 +433,13 @@ impl Wallet {
         self.bdk.balance().into()
     }
 
+    pub fn public_descriptor(&self) -> crate::keys::Descriptor {
+        let extended_descriptor: ExtendedDescriptor =
+            self.bdk.public_descriptor(KeychainKind::External).clone();
+
+        crate::keys::Descriptor::from(extended_descriptor)
+    }
+
     pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {
         use bdk_wallet::miniscript::descriptor::ShInner;
         use bdk_wallet::miniscript::Descriptor;
