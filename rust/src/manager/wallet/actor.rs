@@ -651,7 +651,7 @@ impl WalletActor {
             .ok()??;
         metadata.internal_mut().last_scan_finished = Some(now);
 
-        wallets.create_wallet(metadata).ok()
+        wallets.save_new_wallet_metadata(metadata).ok()
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -697,7 +697,7 @@ impl WalletActor {
             last_seen: now,
         });
 
-        wallets.create_wallet(metadata).ok()
+        wallets.save_new_wallet_metadata(metadata).ok()
     }
 }
 

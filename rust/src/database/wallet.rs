@@ -191,7 +191,7 @@ impl WalletsTable {
         Ok(())
     }
 
-    pub fn create_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
+    pub fn save_new_wallet_metadata(&self, wallet: WalletMetadata) -> Result<(), Error> {
         let network = wallet.network;
         let mode = wallet.wallet_mode;
 

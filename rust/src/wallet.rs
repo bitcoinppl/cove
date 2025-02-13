@@ -133,7 +133,9 @@ impl Wallet {
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
             // save wallet_metadata to database
-            database.wallets.create_wallet(me.metadata.clone())?;
+            database
+                .wallets
+                .save_new_wallet_metadata(me.metadata.clone())?;
 
             // set this wallet as the selected wallet
             database.global_config.select_wallet(me.id.clone())?;
@@ -292,6 +294,7 @@ impl Wallet {
         };
 
         let descriptors: Descriptors = descriptors.into();
+        let origin = descriptors.origin().ok();
 
         let wallet = descriptors
             .into_create_params()
@@ -303,7 +306,11 @@ impl Wallet {
         keychain.save_wallet_xpub(&id, xpub)?;
 
         // save wallet_metadata to database
-        database.wallets.create_wallet(metadata.clone())?;
+        metadata.origin = origin;
+
+        database
+            .wallets
+            .save_new_wallet_metadata(metadata.clone())?;
 
         Ok(Self {
             id,
@@ -398,7 +405,7 @@ impl Wallet {
     }
 
     fn try_new_persisted_from_mnemonic(
-        metadata: WalletMetadata,
+        mut metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
         address_type: WalletAddressType,
@@ -413,6 +420,8 @@ impl Wallet {
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
+        let origin = descriptors.origin().ok();
+        metadata.origin = origin;
 
         let wallet = descriptors
             .into_create_params()

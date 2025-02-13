@@ -58,6 +58,10 @@ impl Descriptors {
     pub fn into_create_params(self) -> CreateParams {
         bdk_wallet::Wallet::create(self.external.into_tuple(), self.internal.into_tuple())
     }
+
+    pub fn origin(&self) -> Result<String, Error> {
+        self.external.origin()
+    }
 }
 
 impl Descriptor {
