@@ -1,5 +1,5 @@
 use crate::{
-    database::Database,
+    database::{wallet_data::WalletDataDb, Database},
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::client::NodeClient,
@@ -39,6 +39,7 @@ pub struct WalletActor {
     last_scan_finished_: Option<Duration>,
     last_height_fetched_: Option<(Duration, usize)>,
 
+    pub db: WalletDataDb,
     pub state: ActorState,
 }
 
@@ -97,6 +98,8 @@ impl Actor for WalletActor {
 
 impl WalletActor {
     pub fn new(wallet: Wallet, reconciler: Sender<WalletManagerReconcileMessage>) -> Self {
+        let db = WalletDataDb::new_or_existing(wallet.id.clone());
+
         Self {
             addr: Default::default(),
             reconciler,
@@ -105,6 +108,7 @@ impl WalletActor {
             last_scan_finished_: None,
             last_height_fetched_: None,
             state: ActorState::Initial,
+            db,
         }
     }
 
@@ -471,7 +475,8 @@ impl WalletActor {
                 "transaction not found".to_string(),
             ))?;
 
-        let details = TransactionDetails::try_new(&self.wallet, tx)
+        let labels = self.db.labels.all_labels_for_txn(tx.tx_node.txid)?;
+        let details = TransactionDetails::try_new(&self.wallet, tx, labels.into())
             .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
 
         Produces::ok(details)

@@ -18,6 +18,7 @@ use arc_swap::ArcSwap;
 use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
+use serde::{Deserialize, Serialize};
 use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
@@ -38,6 +39,25 @@ pub struct Database {
     pub global_cache: GlobalCacheTable,
     pub wallets: WalletsTable,
     pub unsigned_transactions: UnsignedTransactionsTable,
+}
+
+/// A record in in the database with a timestamp
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Record<T> {
+    pub item: T,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+impl<T> From<T> for crate::database::Record<T> {
+    fn from(item: T) -> Self {
+        let now = jiff::Timestamp::now().as_second() as u64;
+        Self {
+            item,
+            created_at: now,
+            updated_at: now,
+        }
+    }
 }
 
 #[uniffi::export]

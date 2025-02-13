@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 
+use crate::database::Record as DbRecord;
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 use bitcoin::{address::NetworkUnchecked, Address};
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
@@ -10,17 +11,19 @@ use crate::{
     transaction::TxId,
 };
 
+type Record<T> = Postcard<DbRecord<T>>;
+
 pub type Error = crate::database::error::DatabaseError;
-const TXN_TABLE: TableDefinition<TxId, Postcard<TransactionRecord>> =
+const TXN_TABLE: TableDefinition<TxId, Record<TransactionRecord>> =
     TableDefinition::new("transaction_labels.cbor");
 
-const ADDRESS_TABLE: TableDefinition<Postcard<Address<NetworkUnchecked>>, Postcard<AddressRecord>> =
+const ADDRESS_TABLE: TableDefinition<Postcard<Address<NetworkUnchecked>>, Record<AddressRecord>> =
     TableDefinition::new("address_labels.cbor");
 
-const INPUT_TABLE: TableDefinition<InOutIdKey, Postcard<InputRecord>> =
+const INPUT_TABLE: TableDefinition<InOutIdKey, Record<InputRecord>> =
     TableDefinition::new("input_records.cbor");
 
-const OUTPUT_TABLE: TableDefinition<InOutIdKey, Postcard<OutputRecord>> =
+const OUTPUT_TABLE: TableDefinition<InOutIdKey, Record<OutputRecord>> =
     TableDefinition::new("output_records.cbor");
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -73,25 +76,25 @@ impl LabelsTable {
         let txns = txn_table
             .iter()?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value())
+            .map(|(_key, record)| record.value().item)
             .map(Label::Transaction);
 
         let inputs = input_table
             .iter()?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value())
+            .map(|(_key, record)| record.value().item)
             .map(Label::Input);
 
         let outputs = output_table
             .iter()?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value())
+            .map(|(_key, record)| record.value().item)
             .map(Label::Output);
 
         let addresses = address_table
             .iter()?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value())
+            .map(|(_key, record)| record.value().item)
             .map(Label::Address);
 
         let labels = txns
@@ -110,9 +113,7 @@ impl LabelsTable {
     ) -> Result<Vec<Label>, Error> {
         let txid = txid.borrow();
 
-        let table = self.read_table(TXN_TABLE)?;
-        let txn = table.get(txid)?.map(|record| record.value());
-        drop(table);
+        let txn = self.txn_label(txid)?;
 
         let Some(txn) = txn else { return Ok(vec![]) };
         let inputs = self.txn_inputs_iter(txid)?;
@@ -131,10 +132,20 @@ impl LabelsTable {
         let txns = table
             .iter()?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value())
+            .map(|(_key, record)| record.value().item)
             .collect();
 
         Ok(txns)
+    }
+
+    pub fn txn_label(
+        &self,
+        txid: impl Borrow<bitcoin::Txid>,
+    ) -> Result<Option<TransactionRecord>, Error> {
+        let txid = txid.borrow();
+        let table = self.read_table(TXN_TABLE)?;
+        let label = table.get(txid)?.map(|record| record.value().item);
+        Ok(label)
     }
 
     pub fn txn_inputs_iter(
@@ -151,7 +162,7 @@ impl LabelsTable {
         let inputs = table
             .range(start_inout_id..)?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value());
+            .map(|(_key, record)| record.value().item);
 
         Ok(inputs)
     }
@@ -170,7 +181,7 @@ impl LabelsTable {
         let outputs = table
             .range(start_inout_id..)?
             .filter_map(Result::ok)
-            .map(|(_key, record)| record.value());
+            .map(|(_key, record)| record.value().item);
 
         Ok(outputs)
     }
@@ -216,21 +227,30 @@ impl LabelsTable {
             Label::Transaction(txn) => {
                 let mut table = write_txn.open_table(TXN_TABLE)?;
                 let key: TxId = txn.ref_.into();
-                table.insert(key, txn)?;
+                let value: DbRecord<TransactionRecord> = txn.into();
+
+                table.insert(key, value)?;
             }
             Label::Input(input) => {
                 let mut table = write_txn.open_table(INPUT_TABLE)?;
                 let key = InOutIdKey::from(&input.ref_);
-                table.insert(key, input)?;
+                let value: DbRecord<InputRecord> = input.into();
+
+                table.insert(key, value)?;
             }
             Label::Output(output) => {
                 let mut table = write_txn.open_table(OUTPUT_TABLE)?;
                 let key = InOutIdKey::from(&output.ref_);
+                let output: DbRecord<OutputRecord> = output.into();
+
                 table.insert(key, output)?;
             }
             Label::Address(address) => {
                 let mut table = write_txn.open_table(ADDRESS_TABLE)?;
-                table.insert(&address.ref_.clone(), address)?;
+                let key = address.ref_.clone();
+                let address: DbRecord<AddressRecord> = address.into();
+
+                table.insert(key, address)?;
             }
             _ => {
                 tracing::warn!("unsupported label type for saving {label:?}");
@@ -286,7 +306,7 @@ mod tests {
         assert_eq!(txn.len(), 1);
 
         let labels = db
-            .all_labels_for_txn(&txn[0].ref_)
+            .all_labels_for_txn(txn[0].ref_)
             .expect("failed to get labels");
 
         assert_eq!(labels.len(), 5);
