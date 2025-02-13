@@ -96,7 +96,7 @@ struct WalletSettingsView: View {
                 }
                 .padding(.vertical, 8)
 
-                HStack {
+                VStack {
                     Toggle(isOn: Binding(
                         get: { manager.walletMetadata.showLabels },
                         set: { _ in manager.dispatch(action: .toggleShowLabels) }

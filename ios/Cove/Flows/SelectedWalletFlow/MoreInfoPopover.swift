@@ -53,6 +53,10 @@ struct MoreInfoPopover: View {
                     Label("Export Labels", systemImage: "square.and.arrow.up")
                 }
             }
+
+            Button(action: { app.pushRoute(.settings(.wallet(id: metadata.id, route: .main))) }) {
+                Label("Wallet Settings", systemImage: "gear")
+            }
         }
     }
 }

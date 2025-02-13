@@ -41,10 +41,15 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     var ReceivedDetails: some View {
-        Text(transactionDetails.isConfirmed() ? "Transaction Received" : "Transaction Pending")
-            .font(.title)
-            .fontWeight(.semibold)
-            .padding(.top, 8)
+        VStack(spacing: 2) {
+            Text(transactionDetails.isConfirmed() ? "Transaction Received" : "Transaction Pending")
+                .font(.title)
+                .fontWeight(.semibold)
+                .padding(.top, 8)
+
+            // add, edit, remove label
+            LabelView(label: transactionDetails.transactionLabel())
+        }
 
         // confirmed
         if transactionDetails.isConfirmed() {
@@ -113,10 +118,15 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     var SentDetails: some View {
-        Text(transactionDetails.isConfirmed() ? "Transaction Sent" : "Transaction Pending")
-            .font(.title)
-            .fontWeight(.semibold)
-            .padding(.top, 6)
+        VStack(spacing: 2) {
+            Text(transactionDetails.isConfirmed() ? "Transaction Sent" : "Transaction Pending")
+                .font(.title)
+                .fontWeight(.semibold)
+                .padding(.top, 6)
+
+            // add, edit, remove label
+            LabelView(label: transactionDetails.transactionLabel())
+        }
 
         // confirmed
         if transactionDetails.isConfirmed() {

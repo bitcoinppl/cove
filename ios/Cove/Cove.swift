@@ -10402,6 +10402,8 @@ public protocol TransactionDetailsProtocol: AnyObject {
     
     func sentSansFeeFmt(unit: Unit)  -> String?
     
+    func transactionLabel()  -> String?
+    
     func transactionUrl()  -> String
     
 }
@@ -10640,6 +10642,13 @@ open func sentSansFeeFmt(unit: Unit) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(self.uniffiClonePointer(),
         FfiConverterTypeUnit_lower(unit),$0
+    )
+})
+}
+    
+open func transactionLabel() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_transactiondetails_transaction_label(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -26478,6 +26487,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 54855) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetails_transaction_label() != 1186) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_transaction_url() != 12235) {
