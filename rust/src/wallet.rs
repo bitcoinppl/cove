@@ -16,7 +16,7 @@ use crate::{
     consts::ROOT_DATA_DIR,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    keys::Descriptors,
+    keys::{Descriptor, Descriptors},
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
     network::Network,
@@ -185,11 +185,29 @@ impl Wallet {
             .map_err(|error| WalletError::LoadError(error.to_string()))?
             .ok_or(WalletError::WalletNotFound)?;
 
-        let metadata = Database::global()
+        let mut metadata = Database::global()
             .wallets
             .get(&id, network, mode)
             .map_err(WalletError::DatabaseError)?
             .ok_or(WalletError::WalletNotFound)?;
+
+        // set and save the origin if not set
+        // we should be able to remove this because we should always have the origin
+        if metadata.origin.is_none() {
+            warn!("no origin found, setting using descriptor");
+            let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
+            let descriptor = Descriptor::from(extended_descriptor.clone());
+            let origin = descriptor.origin().ok();
+
+            metadata.origin = origin;
+
+            if let Err(error) = Database::global()
+                .wallets
+                .save_new_wallet_metadata(metadata.clone())
+            {
+                warn!("failed to save wallet origin into metadata: {error}");
+            }
+        }
 
         Ok(Self {
             id,
