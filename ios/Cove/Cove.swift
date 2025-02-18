@@ -9309,6 +9309,11 @@ public protocol RustWalletManagerProtocol: AnyObject {
     
     func getFeeOptions() async throws  -> FeeRateOptions
     
+    /**
+     * gets the transactions for the wallet that are currently available
+     */
+    func getTransactions() async 
+    
     func getUnsignedTransactions() throws  -> [UnsignedTransaction]
     
     func labelManager()  -> LabelManager
@@ -9804,6 +9809,27 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeFeeRateOptions_lift,
             errorHandler: FfiConverterTypeWalletManagerError.lift
+        )
+}
+    
+    /**
+     * gets the transactions for the wallet that are currently available
+     */
+open func getTransactions()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_get_transactions(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
         )
 }
     
@@ -10445,6 +10471,8 @@ public protocol TransactionDetailsProtocol: AnyObject {
     
     func transactionUrl()  -> String
     
+    func txId()  -> TxId
+    
 }
 open class TransactionDetails: TransactionDetailsProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -10510,6 +10538,14 @@ public static func previewConfirmedSent() -> TransactionDetails  {
 public static func previewNewConfirmed() -> TransactionDetails  {
     return try!  FfiConverterTypeTransactionDetails_lift(try! rustCall() {
     uniffi_cove_fn_constructor_transactiondetails_preview_new_confirmed($0
+    )
+})
+}
+    
+public static func previewNewWithLabel(label: String = "bike payment") -> TransactionDetails  {
+    return try!  FfiConverterTypeTransactionDetails_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_transactiondetails_preview_new_with_label(
+        FfiConverterString.lower(label),$0
     )
 })
 }
@@ -10695,6 +10731,13 @@ open func transactionLabel() -> String?  {
 open func transactionUrl() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_transactiondetails_transaction_url(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txId() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+    uniffi_cove_fn_method_transactiondetails_tx_id(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -22759,6 +22802,8 @@ public enum WalletManagerReconcileMessage {
     )
     case scanComplete([Transaction]
     )
+    case updatedTransactions([Transaction]
+    )
     case nodeConnectionFailed(String
     )
     case walletMetadataChanged(WalletMetadata
@@ -22799,27 +22844,30 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         case 3: return .scanComplete(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
         
-        case 4: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
+        case 4: return .updatedTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
         
-        case 5: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
+        case 5: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
         )
         
-        case 6: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
+        case 6: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
         
-        case 7: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
+        case 7: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
         )
         
-        case 8: return .unknownError(try FfiConverterString.read(from: &buf)
+        case 8: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
         )
         
-        case 9: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
+        case 9: return .unknownError(try FfiConverterString.read(from: &buf)
         )
         
-        case 10: return .unsignedTransactionsChanged
+        case 10: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
+        )
         
-        case 11: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
+        case 11: return .unsignedTransactionsChanged
+        
+        case 12: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22844,42 +22892,47 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
             FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
             
         
-        case let .nodeConnectionFailed(v1):
+        case let .updatedTransactions(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
+            
+        
+        case let .nodeConnectionFailed(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
             
         
         case let .walletMetadataChanged(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeWalletMetadata.write(v1, into: &buf)
             
         
         case let .walletBalanceChanged(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeBalance.write(v1, into: &buf)
             
         
         case let .walletError(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
             
         
         case let .unknownError(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(v1, into: &buf)
             
         
         case let .walletScannerResponse(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterTypeScannerResponse.write(v1, into: &buf)
             
         
         case .unsignedTransactionsChanged:
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
         
         
         case let .sendFlowError(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeSendFlowErrorAlert.write(v1, into: &buf)
             
         }
@@ -26662,6 +26715,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 9964) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 31100) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 63072) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26798,6 +26854,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_transaction_url() != 12235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_transactiondetails_tx_id() != 50606) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_txid_as_hash_string() != 50846) {
@@ -27032,6 +27091,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_transactiondetails_preview_new_confirmed() != 2385) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_transactiondetails_preview_new_with_label() != 22136) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_transactiondetails_preview_pending_received() != 1731) {

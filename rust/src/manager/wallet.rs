@@ -51,6 +51,7 @@ pub enum WalletManagerReconcileMessage {
     StartedWalletScan,
     AvailableTransactions(Vec<Transaction>),
     ScanComplete(Vec<Transaction>),
+    UpdatedTransactions(Vec<Transaction>),
 
     NodeConnectionFailed(String),
     WalletMetadataChanged(WalletMetadata),
@@ -361,6 +362,16 @@ impl RustWalletManager {
             .collect::<Vec<Arc<UnsignedTransaction>>>();
 
         Ok(txns)
+    }
+
+    #[uniffi::method]
+    /// gets the transactions for the wallet that are currently available
+    pub async fn get_transactions(&self) {
+        let Ok(txns) = call!(self.actor.transactions()).await else { return };
+
+        self.reconciler
+            .send(WalletManagerReconcileMessage::UpdatedTransactions(txns))
+            .expect("failed to send update");
     }
 
     #[uniffi::method]

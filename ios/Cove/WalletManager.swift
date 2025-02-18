@@ -119,6 +119,14 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
                         self.loadState = .scanning(txns)
                     }
 
+                case let .updatedTransactions(txns):
+                    switch self.loadState {
+                    case .scanning, .loading:
+                        self.loadState = .scanning(txns)
+                    case .loaded:
+                        self.loadState = .loaded(txns)
+                    }
+
                 case let .scanComplete(txns):
                     self.loadState = .loaded(txns)
 

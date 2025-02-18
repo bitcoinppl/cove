@@ -64,6 +64,7 @@ struct SelectedWalletContainer: View {
             if let manager {
                 do {
                     try? await Task.sleep(for: .milliseconds(400))
+                    await manager.rust.getTransactions()
                     try await manager.rust.startWalletScan()
                 } catch {
                     Log.error("Wallet Scan Failed \(error.localizedDescription)")

@@ -20,7 +20,7 @@ struct TransactionDetailsView: View {
 
     // public
     let id: WalletId
-    let transactionDetails: TransactionDetails
+    @State var transactionDetails: TransactionDetails
     var manager: WalletManager
 
     var headerIcon: HeaderIcon {
@@ -48,7 +48,7 @@ struct TransactionDetailsView: View {
                 .padding(.top, 8)
 
             // add, edit, remove label
-            LabelView(label: transactionDetails.transactionLabel(), manager: manager)
+            LabelView(details: transactionDetails, manager: manager)
         }
 
         // confirmed
@@ -125,7 +125,7 @@ struct TransactionDetailsView: View {
                 .padding(.top, 6)
 
             // add, edit, remove label
-            LabelView(label: transactionDetails.transactionLabel(), manager: manager)
+            LabelView(details: transactionDetails, manager: manager)
         }
 
         // confirmed
