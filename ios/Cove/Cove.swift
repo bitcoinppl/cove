@@ -6476,9 +6476,9 @@ public protocol LabelManagerProtocol: AnyObject {
     
     func importLabels(labels: Bip329Labels) throws 
     
-    func insertOrUpdateTransactionLabel(txId: TxId, label: String, origin: String?) throws 
-    
     func transactionLabel(txId: TxId)  -> String?
+    
+    func updateLabelsForTxn(details: TransactionDetails, label: String, origin: String?) throws 
     
 }
 open class LabelManager: LabelManagerProtocol, @unchecked Sendable {
@@ -6574,21 +6574,21 @@ open func importLabels(labels: Bip329Labels)throws   {try rustCallWithError(FfiC
 }
 }
     
-open func insertOrUpdateTransactionLabel(txId: TxId, label: String, origin: String?)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
-    uniffi_cove_fn_method_labelmanager_insert_or_update_transaction_label(self.uniffiClonePointer(),
-        FfiConverterTypeTxId_lower(txId),
-        FfiConverterString.lower(label),
-        FfiConverterOptionString.lower(origin),$0
-    )
-}
-}
-    
 open func transactionLabel(txId: TxId) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_labelmanager_transaction_label(self.uniffiClonePointer(),
         FfiConverterTypeTxId_lower(txId),$0
     )
 })
+}
+    
+open func updateLabelsForTxn(details: TransactionDetails, label: String, origin: String?)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_update_labels_for_txn(self.uniffiClonePointer(),
+        FfiConverterTypeTransactionDetails_lower(details),
+        FfiConverterString.lower(label),
+        FfiConverterOptionString.lower(origin),$0
+    )
+}
 }
     
 
@@ -17721,6 +17721,76 @@ extension ImportWalletManagerReconcileMessage: Equatable, Hashable {}
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum InsertOrUpdate {
+    
+    case insert
+    case update(LastUpdatedAt
+    )
+}
+
+
+#if compiler(>=6)
+extension InsertOrUpdate: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeInsertOrUpdate: FfiConverterRustBuffer {
+    typealias SwiftType = InsertOrUpdate
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InsertOrUpdate {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .insert
+        
+        case 2: return .update(try FfiConverterTypeLastUpdatedAt.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: InsertOrUpdate, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .insert:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .update(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeLastUpdatedAt.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInsertOrUpdate_lift(_ buf: RustBuffer) throws -> InsertOrUpdate {
+    return try FfiConverterTypeInsertOrUpdate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInsertOrUpdate_lower(_ value: InsertOrUpdate) -> RustBuffer {
+    return FfiConverterTypeInsertOrUpdate.lower(value)
+}
+
+
+extension InsertOrUpdate: Equatable, Hashable {}
+
+
+
 
 public enum KeychainError {
 
@@ -17922,6 +17992,14 @@ public enum LabelManagerError {
     )
     case Export(String
     )
+    case GetInputRecords(String
+    )
+    case GetOutputRecords(String
+    )
+    case SaveInputLabels(String
+    )
+    case SaveOutputLabels(String
+    )
 }
 
 
@@ -17948,6 +18026,18 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 4: return .Export(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 5: return .GetInputRecords(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .GetOutputRecords(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .SaveInputLabels(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 8: return .SaveOutputLabels(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -17979,6 +18069,26 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
         
         case let .Export(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .GetInputRecords(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .GetOutputRecords(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .SaveInputLabels(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .SaveOutputLabels(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -25155,6 +25265,50 @@ public func FfiConverterTypeFfiOpacity_lower(_ value: FfiOpacity) -> UInt8 {
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
+public typealias LastUpdatedAt = UInt64
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLastUpdatedAt: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LastUpdatedAt {
+        return try FfiConverterUInt64.read(from: &buf)
+    }
+
+    public static func write(_ value: LastUpdatedAt, into buf: inout [UInt8]) {
+        return FfiConverterUInt64.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: UInt64) throws -> LastUpdatedAt {
+        return try FfiConverterUInt64.lift(value)
+    }
+
+    public static func lower(_ value: LastUpdatedAt) -> UInt64 {
+        return FfiConverterUInt64.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLastUpdatedAt_lift(_ value: UInt64) throws -> LastUpdatedAt {
+    return try FfiConverterTypeLastUpdatedAt.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLastUpdatedAt_lower(_ value: LastUpdatedAt) -> UInt64 {
+    return FfiConverterTypeLastUpdatedAt.lower(value)
+}
+
+
+
+/**
+ * Typealias from the type name used in the UDL file to the builtin type.  This
+ * is needed because the UDL type name is used in function/method signatures.
+ */
 public typealias WalletId = String
 
 #if swift(>=5.8)
@@ -26168,10 +26322,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_labelmanager_importlabels() != 51697) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_insert_or_update_transaction_label() != 28074) {
+    if (uniffi_cove_checksum_method_labelmanager_transaction_label() != 59898) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_transaction_label() != 59898) {
+    if (uniffi_cove_checksum_method_labelmanager_update_labels_for_txn() != 45789) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 45039) {

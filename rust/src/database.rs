@@ -164,10 +164,10 @@ pub fn delete_database() {
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum InsertOrUpdate {
-    Insert,
-    Update(LastUpdatedAt),
+    Insert(Timestamp),
+    Update(Timestamp),
 }
 
 #[derive(Debug, Clone, Copy, derive_more::From, derive_more::AsRef, derive_more::Into)]
-pub struct LastUpdatedAt(u64);
-custom_newtype!(LastUpdatedAt, u64);
+pub struct Timestamp(u64);
+custom_newtype!(Timestamp, u64);

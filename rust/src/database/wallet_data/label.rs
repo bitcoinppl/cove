@@ -260,6 +260,14 @@ impl LabelsTable {
     // MARK: INSERT
 
     pub fn insert_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
+        self.insert_labels_with_timestamps(labels, Timestamps::now())
+    }
+
+    pub fn insert_labels_with_timestamps(
+        &self,
+        labels: impl IntoIterator<Item = Label>,
+        timestamp: Timestamps,
+    ) -> Result<(), Error> {
         let write_txn = self
             .db
             .begin_write()
@@ -267,7 +275,7 @@ impl LabelsTable {
 
         labels
             .into_iter()
-            .try_for_each(|l| self.insert_label_with_write_txn(l, Timestamps::now(), &write_txn))?;
+            .try_for_each(|l| self.insert_label_with_write_txn(l, timestamp, &write_txn))?;
 
         write_txn
             .commit()

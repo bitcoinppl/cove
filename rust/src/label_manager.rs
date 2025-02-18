@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    database::{wallet_data::WalletDataDb, InsertOrUpdate, Record},
+    database::{record::Timestamps, wallet_data::WalletDataDb, InsertOrUpdate, Record},
     multi_format::Bip329Labels,
     transaction::{TransactionDetails, TransactionDirection, TxId},
     wallet::metadata::WalletId,
@@ -107,18 +107,19 @@ impl LabelManager {
             .into_iter();
 
         // if it's a new transaction, we need to insert input and output labels for each
-        if matches!(insert_or_update, InsertOrUpdate::Insert) {
+        if let InsertOrUpdate::Insert(now) = insert_or_update {
             let input_labels = input_records_iter.map(Into::into).collect::<Vec<Label>>();
             let output_labels = output_records_iter.map(Into::into).collect::<Vec<Label>>();
+            let timestamps = Timestamps::new(now.into(), now.into());
 
             self.db
                 .labels
-                .insert_labels(input_labels)
+                .insert_labels_with_timestamps(input_labels, timestamps)
                 .map_err(|e| LabelManagerError::SaveInputLabels(e.to_string()))?;
 
             self.db
                 .labels
-                .insert_labels(output_labels)
+                .insert_labels_with_timestamps(output_labels, timestamps)
                 .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
 
             return Ok(());
@@ -248,16 +249,19 @@ impl LabelManager {
         };
 
         // new label,insert new record
+        let now = jiff::Timestamp::now().as_second() as u64;
+        let label = TransactionRecord {
+            ref_: tx_id.0,
+            label: Some(label),
+            origin,
+        };
+
         self.db
             .labels
-            .insert_label(TransactionRecord {
-                ref_: tx_id.0,
-                label: Some(label),
-                origin,
-            })
+            .insert_label_with_timestamps(label, Timestamps::new(now, now))
             .map_err(|e| LabelManagerError::Save(e.to_string()))?;
 
-        Ok(InsertOrUpdate::Insert)
+        Ok(InsertOrUpdate::Insert(now.into()))
     }
 
     // create input labels for a transaction to match sparrow auto-generated input labels
