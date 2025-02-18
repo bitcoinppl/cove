@@ -87,6 +87,11 @@ impl LabelManager {
         label: String,
         origin: Option<String>,
     ) -> Result<()> {
+        // if the label is empty, don't do anything
+        if label.is_empty() {
+            return Ok(());
+        }
+
         let tx_id = details.tx_id;
         let insert_or_update =
             self.insert_or_update_transaction_label(&tx_id, label.clone(), origin)?;
@@ -219,6 +224,7 @@ impl LabelManager {
 impl LabelManager {
     pub fn import_labels(&self, labels: impl Into<Labels>) -> Result<(), LabelManagerError> {
         let labels = labels.into();
+
         self.db
             .labels
             .insert_labels(labels)

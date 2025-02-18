@@ -213,6 +213,10 @@ impl UnconfirmedTransaction {
 
     #[uniffi::method]
     pub fn label(&self) -> String {
+        if let Some(label) = self.labels.transaction_label() {
+            return label.to_string();
+        }
+
         match &self.sent_and_received.direction {
             TransactionDirection::Incoming => "Receiving",
             TransactionDirection::Outgoing => "Sending",

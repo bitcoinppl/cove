@@ -1,6 +1,5 @@
 use crate::{
     database::{wallet_data::WalletDataDb, Database},
-    keys::Descriptor,
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::client::NodeClient,
@@ -481,14 +480,6 @@ impl WalletActor {
             .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
 
         Produces::ok(details)
-    }
-
-    pub async fn origin(&mut self) -> ActorResult<Option<String>> {
-        let extended_descriptor = self.wallet.bdk.public_descriptor(KeychainKind::External);
-        let descriptor = Descriptor::from(extended_descriptor.clone());
-        let origin = descriptor.origin()?;
-
-        Produces::ok(Some(origin))
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {

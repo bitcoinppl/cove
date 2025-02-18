@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bdk_chain::{tx_graph::CanonicalTx, ChainPosition as BdkChainPosition, ConfirmationBlockTime};
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bdk_wallet::Wallet as BdkWallet;
-use bip329::Labels;
+use bip329::{Label, Labels, TransactionRecord};
 use jiff::Timestamp;
 use numfmt::{Formatter, Precision};
 
@@ -155,6 +155,11 @@ impl PendingOrConfirmed {
 #[uniffi::export]
 impl TransactionDetails {
     #[uniffi::method]
+    pub fn tx_id(&self) -> TxId {
+        self.tx_id.clone()
+    }
+
+    #[uniffi::method]
     pub fn address(&self) -> Address {
         self.address.clone()
     }
@@ -284,6 +289,10 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn transaction_label(&self) -> Option<String> {
         let label = self.labels.transaction_label()?;
+        if label.is_empty() {
+            return None;
+        }
+
         Some(label.to_string())
     }
 
@@ -314,7 +323,7 @@ impl TransactionDetails {
 
 #[uniffi::export]
 impl TransactionDetails {
-    #[uniffi::constructor(name = "preview_new_confirmed")]
+    #[uniffi::constructor]
     pub fn preview_new_confirmed() -> Self {
         Self {
             tx_id: TxId::preview_new(),
@@ -331,21 +340,22 @@ impl TransactionDetails {
             output_indexes: vec![],
         }
     }
-    #[uniffi::constructor(name = "preview_confirmed_received")]
+
+    #[uniffi::constructor]
     pub fn preview_confirmed_received() -> Self {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_incoming();
         me
     }
 
-    #[uniffi::constructor(name = "preview_confirmed_sent")]
+    #[uniffi::constructor]
     pub fn preview_confirmed_sent() -> Self {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_outgoing();
         me
     }
 
-    #[uniffi::constructor(name = "preview_pending_received")]
+    #[uniffi::constructor]
     pub fn preview_pending_received() -> Self {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_incoming();
@@ -356,13 +366,26 @@ impl TransactionDetails {
         me
     }
 
-    #[uniffi::constructor(name = "preview_pending_sent")]
+    #[uniffi::constructor]
     pub fn preview_pending_sent() -> Self {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_outgoing();
         me.pending_or_confirmed = PendingOrConfirmed::Pending(PendingDetails {
             last_seen: 1677721600,
         });
+
+        me
+    }
+
+    #[uniffi::constructor(default(label = "bike payment"))]
+    pub fn preview_new_with_label(label: String) -> Self {
+        let mut me = Self::preview_new_confirmed();
+        me.labels = vec![Label::from(TransactionRecord {
+            ref_: *TxId::preview_new(),
+            label: Some(label),
+            origin: None,
+        })]
+        .into();
 
         me
     }
