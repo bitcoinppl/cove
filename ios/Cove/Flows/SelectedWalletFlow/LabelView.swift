@@ -9,9 +9,9 @@ import SwiftUI
 
 struct LabelView: View {
     @Environment(AppManager.self) private var app
-    @Environment(WalletManager.self) private var manager
 
     var label: String? = nil
+    let manager: WalletManager
 
     var body: some View {
         Group {
@@ -37,16 +37,14 @@ struct LabelView: View {
 
 #Preview("No Label") {
     AsyncPreview {
-        LabelView()
+        LabelView(manager: WalletManager(preview: "preview_only"))
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
     }
 }
 
 #Preview("With Label") {
     AsyncPreview {
-        LabelView(label: "Sent money for bike")
+        LabelView(label: "Sent money for bike", manager: WalletManager(preview: "preview_only"))
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
     }
 }

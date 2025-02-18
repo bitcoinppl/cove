@@ -6476,6 +6476,10 @@ public protocol LabelManagerProtocol: AnyObject {
     
     func importLabels(labels: Bip329Labels) throws 
     
+    func insertOrUpdateTransactionLabel(txId: TxId, label: String, origin: String?) throws 
+    
+    func transactionLabel(txId: TxId)  -> String?
+    
 }
 open class LabelManager: LabelManagerProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -6568,6 +6572,23 @@ open func importLabels(labels: Bip329Labels)throws   {try rustCallWithError(FfiC
         FfiConverterTypeBip329Labels_lower(labels),$0
     )
 }
+}
+    
+open func insertOrUpdateTransactionLabel(txId: TxId, label: String, origin: String?)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_insert_or_update_transaction_label(self.uniffiClonePointer(),
+        FfiConverterTypeTxId_lower(txId),
+        FfiConverterString.lower(label),
+        FfiConverterOptionString.lower(origin),$0
+    )
+}
+}
+    
+open func transactionLabel(txId: TxId) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_labelmanager_transaction_label(self.uniffiClonePointer(),
+        FfiConverterTypeTxId_lower(txId),$0
+    )
+})
 }
     
 
@@ -14110,6 +14131,7 @@ public struct WalletMetadata {
     public var discoveryState: DiscoveryState
     public var addressType: WalletAddressType
     public var fiatOrBtc: FiatOrBtc
+    public var origin: String?
     /**
      * Show labels for transactions i the transaction list
      * If false, we only show either `Sent` or `Received` labels
@@ -14119,7 +14141,7 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, 
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
         /**
          * Show labels for transactions i the transaction list
          * If false, we only show either `Sent` or `Received` labels
@@ -14139,6 +14161,7 @@ public struct WalletMetadata {
         self.discoveryState = discoveryState
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
+        self.origin = origin
         self.showLabels = showLabels
         self.`internal` = `internal`
     }
@@ -14172,6 +14195,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 discoveryState: FfiConverterTypeDiscoveryState.read(from: &buf), 
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
+                origin: FfiConverterOptionString.read(from: &buf), 
                 showLabels: FfiConverterBool.read(from: &buf), 
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
         )
@@ -14193,6 +14217,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeDiscoveryState.write(value.discoveryState, into: &buf)
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
+        FfiConverterOptionString.write(value.origin, into: &buf)
         FfiConverterBool.write(value.showLabels, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, into: &buf)
     }
@@ -17795,6 +17820,89 @@ extension KeychainError: Equatable, Hashable {}
 
 
 extension KeychainError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+
+public enum LabelDbError {
+
+    
+    
+    case Database(DatabaseError
+    )
+    case UnsupportedLabelType(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLabelDbError: FfiConverterRustBuffer {
+    typealias SwiftType = LabelDbError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LabelDbError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .Database(
+            try FfiConverterTypeDatabaseError.read(from: &buf)
+            )
+        case 2: return .UnsupportedLabelType(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: LabelDbError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .Database(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeDatabaseError.write(v1, into: &buf)
+            
+        
+        case let .UnsupportedLabelType(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelDbError_lift(_ buf: RustBuffer) throws -> LabelDbError {
+    return try FfiConverterTypeLabelDbError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLabelDbError_lower(_ value: LabelDbError) -> RustBuffer {
+    return FfiConverterTypeLabelDbError.lower(value)
+}
+
+
+extension LabelDbError: Equatable, Hashable {}
+
+
+
+extension LabelDbError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -26058,6 +26166,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_importlabels() != 51697) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_labelmanager_insert_or_update_transaction_label() != 28074) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_labelmanager_transaction_label() != 59898) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 45039) {

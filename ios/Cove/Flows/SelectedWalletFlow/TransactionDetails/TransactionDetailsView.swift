@@ -48,7 +48,7 @@ struct TransactionDetailsView: View {
                 .padding(.top, 8)
 
             // add, edit, remove label
-            LabelView(label: transactionDetails.transactionLabel())
+            LabelView(label: transactionDetails.transactionLabel(), manager: manager)
         }
 
         // confirmed
@@ -125,7 +125,7 @@ struct TransactionDetailsView: View {
                 .padding(.top, 6)
 
             // add, edit, remove label
-            LabelView(label: transactionDetails.transactionLabel())
+            LabelView(label: transactionDetails.transactionLabel(), manager: manager)
         }
 
         // confirmed

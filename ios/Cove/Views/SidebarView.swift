@@ -165,14 +165,16 @@ struct SidebarView: View {
         Task {
             try? await Task.sleep(for: .milliseconds(300))
 
-            if case let Route.selectedWallet(id: id) = route {
-                let selected: ()? = try? app.rust.selectWallet(id: id)
-                if selected == nil { app.loadAndReset(to: route) }
-                return
-            }
+            do {
+                if case let Route.selectedWallet(id: id) = route {
+                    return try app.rust.selectWallet(id: id)
+                }
 
-            if !app.hasWallets, route == Route.newWallet(.select) {
-                return app.resetRoute(to: [RouteFactory().newWalletSelect()])
+                if !app.hasWallets, route == Route.newWallet(.select) {
+                    return app.resetRoute(to: [RouteFactory().newWalletSelect()])
+                }
+            } catch {
+                Log.error("Failed to select wallet \(error)")
             }
 
             navigate(route)
