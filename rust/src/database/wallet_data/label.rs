@@ -387,6 +387,58 @@ impl LabelsTable {
         Ok(())
     }
 
+    // MARK: DELETE
+    pub fn delete_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
+        let write_txn = self
+            .db
+            .begin_write()
+            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+
+        labels
+            .into_iter()
+            .try_for_each(|l| self.delete_label_with_write_txn(l, &write_txn))?;
+
+        write_txn
+            .commit()
+            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+
+        Ok(())
+    }
+
+    fn delete_label_with_write_txn(
+        &self,
+        label: Label,
+        write_txn: &redb::WriteTransaction,
+    ) -> Result<(), Error> {
+        match label {
+            Label::Transaction(txn) => {
+                let key: TxId = txn.ref_.into();
+                let mut table = write_txn.open_table(TXN_TABLE)?;
+                table.remove(key)?;
+            }
+            Label::Input(input) => {
+                let key = InOutIdKey::from(&input.ref_);
+                let mut table = write_txn.open_table(INPUT_TABLE)?;
+                table.remove(key)?;
+            }
+            Label::Output(output) => {
+                let key = InOutIdKey::from(&output.ref_);
+                let mut table = write_txn.open_table(OUTPUT_TABLE)?;
+                table.remove(key)?;
+            }
+            Label::Address(address) => {
+                let key = address.ref_.clone();
+                let mut table = write_txn.open_table(ADDRESS_TABLE)?;
+                table.remove(key)?;
+            }
+            _ => {
+                tracing::warn!("unsupported label type for deleting {label:?}");
+            }
+        }
+
+        Ok(())
+    }
+
     fn read_table<K, V>(
         &self,
         table: TableDefinition<K, Postcard<V>>,

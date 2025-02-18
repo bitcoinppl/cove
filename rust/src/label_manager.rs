@@ -41,6 +41,9 @@ pub enum LabelManagerError {
 
     #[error("Unable to create output labels: {0}")]
     SaveOutputLabels(String),
+
+    #[error("Unable to delete labels: {0}")]
+    DeleteLabels(String),
 }
 
 pub type Error = LabelManagerError;
@@ -179,6 +182,59 @@ impl LabelManager {
             .labels
             .insert_records(output_records)
             .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn delete_labels_for_txn(&self, tx_id: Arc<TxId>) -> Result<(), LabelManagerError> {
+        let Some(txn_label) = self
+            .db
+            .labels
+            .get_txn_label_record(tx_id.0)
+            .map_err(|e| LabelManagerError::Get(e.to_string()))?
+        else {
+            return Ok(());
+        };
+
+        let txn_label_created_at = txn_label.timestamps.created_at;
+
+        let input_records = self
+            .db
+            .labels
+            .txn_input_records_iter(tx_id.0)
+            .map_err(|e| LabelManagerError::GetInputRecords(e.to_string()))?;
+
+        let output_records = self
+            .db
+            .labels
+            .txn_output_records_iter(tx_id.0)
+            .map_err(|e| LabelManagerError::GetOutputRecords(e.to_string()))?;
+
+        // create list of labels to delete
+        let mut labels_to_delete = vec![Label::from(txn_label.item)];
+
+        // only delete the input record if it hasn't changed since being created with the txn label
+        for record in input_records {
+            if txn_label_created_at == record.timestamps.created_at
+                && txn_label_created_at == record.timestamps.updated_at
+            {
+                labels_to_delete.push(Label::from(record.item));
+            }
+        }
+
+        // only delete the output record if it hasn't changed since being created with the txn label
+        for record in output_records {
+            if txn_label_created_at == record.timestamps.created_at
+                && txn_label_created_at == record.timestamps.updated_at
+            {
+                labels_to_delete.push(Label::from(record.item));
+            }
+        }
+
+        self.db
+            .labels
+            .delete_labels(labels_to_delete)
+            .map_err(|e| LabelManagerError::DeleteLabels(e.to_string()))?;
 
         Ok(())
     }
