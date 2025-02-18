@@ -460,6 +460,24 @@ impl LabelsTable {
     }
 }
 
+impl From<redb::TransactionError> for Error {
+    fn from(error: redb::TransactionError) -> Self {
+        Self::Database(error.into())
+    }
+}
+
+impl From<redb::TableError> for Error {
+    fn from(error: redb::TableError) -> Self {
+        Self::Database(error.into())
+    }
+}
+
+impl From<redb::StorageError> for Error {
+    fn from(error: redb::StorageError) -> Self {
+        Self::Database(error.into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletId};
@@ -489,23 +507,5 @@ mod tests {
             .expect("failed to get labels");
 
         assert_eq!(labels.len(), 5);
-    }
-}
-
-impl From<redb::TransactionError> for Error {
-    fn from(error: redb::TransactionError) -> Self {
-        Self::Database(error.into())
-    }
-}
-
-impl From<redb::TableError> for Error {
-    fn from(error: redb::TableError) -> Self {
-        Self::Database(error.into())
-    }
-}
-
-impl From<redb::StorageError> for Error {
-    fn from(error: redb::StorageError) -> Self {
-        Self::Database(error.into())
     }
 }

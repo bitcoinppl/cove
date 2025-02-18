@@ -338,7 +338,7 @@ impl LabelManager {
         let input_label = format!("{label} (input)");
 
         indexs
-            .into_iter()
+            .iter()
             .map(|index| InputRecord {
                 ref_: InOutId::new(tx_id.0, *index),
                 label: Some(input_label.clone()),
@@ -364,7 +364,7 @@ impl LabelManager {
         let output_label = format!("{label} {output_label_suffix}");
 
         indexs
-            .into_iter()
+            .iter()
             .map(|index| OutputRecord {
                 ref_: InOutId::new(tx_id.0, *index),
                 label: Some(output_label.clone()),
