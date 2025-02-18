@@ -92,9 +92,10 @@ impl LabelManager {
             return Ok(());
         }
 
+        let label = label.trim();
         let tx_id = details.tx_id;
         let insert_or_update =
-            self.insert_or_update_transaction_label(&tx_id, label.clone(), origin)?;
+            self.insert_or_update_transaction_label(&tx_id, label.to_string(), origin)?;
 
         let input_records_iter = self
             .create_input_records(
