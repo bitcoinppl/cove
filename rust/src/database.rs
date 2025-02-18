@@ -19,6 +19,7 @@ use arc_swap::ArcSwap;
 use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
+use uniffi::custom_newtype;
 use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
@@ -160,3 +161,13 @@ pub fn delete_database() {
     let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("test"));
     let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("wallet_data"));
 }
+
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum InsertOrUpdate {
+    Insert,
+    Update(LastUpdatedAt),
+}
+
+#[derive(Debug, Clone, Copy, derive_more::From, derive_more::AsRef, derive_more::Into)]
+pub struct LastUpdatedAt(u64);
+custom_newtype!(LastUpdatedAt, u64);

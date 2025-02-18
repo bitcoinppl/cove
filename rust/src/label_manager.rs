@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    database::wallet_data::WalletDataDb, multi_format::Bip329Labels, transaction::TxId,
+    database::{wallet_data::WalletDataDb, InsertOrUpdate, Record},
+    multi_format::Bip329Labels,
+    transaction::{TransactionDetails, TransactionDirection, TxId},
     wallet::metadata::WalletId,
 };
-use bip329::{Labels, TransactionRecord};
+use ahash::AHashMap as HashMap;
+use bip329::{InOutId, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {
@@ -26,6 +29,18 @@ pub enum LabelManagerError {
 
     #[error("Failed to export labels: {0}")]
     Export(String),
+
+    #[error("Unable to get input records for txn: {0}")]
+    GetInputRecords(String),
+
+    #[error("Unable to get output records for txn: {0}")]
+    GetOutputRecords(String),
+
+    #[error("Unable to create input labels: {0}")]
+    SaveInputLabels(String),
+
+    #[error("Unable to create output labels: {0}")]
+    SaveOutputLabels(String),
 }
 
 pub type Error = LabelManagerError;
@@ -63,39 +78,106 @@ impl LabelManager {
         Some(label_str.to_string())
     }
 
-    pub fn insert_or_update_transaction_label(
+    pub fn update_labels_for_txn(
         &self,
-        tx_id: Arc<TxId>,
+        details: Arc<TransactionDetails>,
         label: String,
         origin: Option<String>,
     ) -> Result<()> {
-        let current = self.db.labels.get_txn_label_record(tx_id.0).unwrap_or(None);
+        let tx_id = details.tx_id;
+        let insert_or_update =
+            self.insert_or_update_transaction_label(&tx_id, label.clone(), origin)?;
 
-        // update the label
-        if let Some(current) = current {
-            let mut updated = current.item;
-            let mut timestamps = current.timestamps;
+        let input_records_iter = self
+            .create_input_records(
+                &tx_id,
+                &label,
+                &details.input_indexes,
+                details.sent_and_received.direction,
+            )
+            .into_iter();
 
-            updated.label = Some(label);
-            timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+        let output_records_iter = self
+            .create_output_records(
+                &tx_id,
+                &label,
+                &details.output_indexes,
+                details.sent_and_received.direction,
+            )
+            .into_iter();
+
+        // if it's a new transaction, we need to insert input and output labels for each
+        if matches!(insert_or_update, InsertOrUpdate::Insert) {
+            let input_labels = input_records_iter.map(Into::into).collect::<Vec<Label>>();
+            let output_labels = output_records_iter.map(Into::into).collect::<Vec<Label>>();
 
             self.db
                 .labels
-                .insert_label_with_timestamps(updated, timestamps)
-                .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+                .insert_labels(input_labels)
+                .map_err(|e| LabelManagerError::SaveInputLabels(e.to_string()))?;
+
+            self.db
+                .labels
+                .insert_labels(output_labels)
+                .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
 
             return Ok(());
-        };
+        }
 
-        // new label,insert new record
+        // not a new transaction, so we need to update the existing labels
+        let mut current_input_records = self
+            .db
+            .labels
+            .txn_input_records_iter(tx_id.as_ref())
+            .map_err(|e| LabelManagerError::GetInputRecords(e.to_string()))?
+            .map(|record| (record.item.ref_.index, record))
+            .collect::<HashMap<u32, Record<InputRecord>>>();
+
+        let mut current_output_records = self
+            .db
+            .labels
+            .txn_output_records_iter(tx_id.as_ref())
+            .map_err(|e| LabelManagerError::GetOutputRecords(e.to_string()))?
+            .map(|record| (record.item.ref_.index, record))
+            .collect::<HashMap<u32, Record<OutputRecord>>>();
+
+        let input_records = input_records_iter.into_iter().map(|record| {
+            let index = record.ref_.index;
+            let label: Label = record.into();
+
+            match current_input_records.remove(&index) {
+                Some(current) => {
+                    let mut timestamps = current.timestamps;
+                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                    Record::with_timestamps(label, timestamps)
+                }
+                None => Record::new(label),
+            }
+        });
+
+        let output_records = output_records_iter.into_iter().map(|record| {
+            let index = record.ref_.index;
+            let label: Label = record.into();
+
+            match current_output_records.remove(&index) {
+                Some(current) => {
+                    let mut timestamps = current.timestamps;
+                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                    Record::with_timestamps(label, timestamps)
+                }
+                None => Record::new(label),
+            }
+        });
+
         self.db
             .labels
-            .insert_label(TransactionRecord {
-                ref_: tx_id.0,
-                label: Some(label),
-                origin,
-            })
-            .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+            .insert_records(input_records)
+            .map_err(|e| LabelManagerError::SaveInputLabels(e.to_string()))?;
+
+        self.db
+            .labels
+            .insert_records(output_records)
+            .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
 
         Ok(())
     }
@@ -137,5 +219,97 @@ impl LabelManager {
             .map_err(|e| LabelManagerError::Save(e.to_string()))?;
 
         Ok(())
+    }
+
+    fn insert_or_update_transaction_label(
+        &self,
+        tx_id: &TxId,
+        label: String,
+        origin: Option<String>,
+    ) -> Result<InsertOrUpdate> {
+        let current = self.db.labels.get_txn_label_record(tx_id.0).unwrap_or(None);
+
+        // update the label
+        if let Some(current) = current {
+            let last_updated_at = current.timestamps.updated_at;
+
+            let mut updated = current.item;
+            let mut timestamps = current.timestamps;
+
+            updated.label = Some(label);
+            timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+
+            self.db
+                .labels
+                .insert_label_with_timestamps(updated, timestamps)
+                .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+
+            return Ok(InsertOrUpdate::Update(last_updated_at.into()));
+        };
+
+        // new label,insert new record
+        self.db
+            .labels
+            .insert_label(TransactionRecord {
+                ref_: tx_id.0,
+                label: Some(label),
+                origin,
+            })
+            .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+
+        Ok(InsertOrUpdate::Insert)
+    }
+
+    // create input labels for a transaction to match sparrow auto-generated input labels
+    fn create_input_records(
+        &self,
+        tx_id: &TxId,
+        label: &str,
+        indexs: &[u32],
+        direction: TransactionDirection,
+    ) -> Vec<InputRecord> {
+        // no input lables on incoming transactions
+        // the inputs are outputs on someone else's wallet / txn
+        if direction == TransactionDirection::Incoming {
+            return vec![];
+        }
+
+        // input labels only for outgoing transactions, so all inputs are marked at `input`
+        let input_label = format!("{label} (input)");
+
+        indexs
+            .into_iter()
+            .map(|index| InputRecord {
+                ref_: InOutId::new(tx_id.0, *index),
+                label: Some(input_label.clone()),
+            })
+            .collect()
+    }
+
+    // create output labels for a transaction to match sparrow auto-generated ouput labels
+    fn create_output_records(
+        &self,
+        tx_id: &TxId,
+        label: &str,
+        indexs: &[u32],
+        direction: TransactionDirection,
+    ) -> Vec<OutputRecord> {
+        // the outputs for a incoming transaction are received
+        // the outputs for an outgoing transaction are change
+        let output_label_suffix = match direction {
+            TransactionDirection::Incoming => "received",
+            TransactionDirection::Outgoing => "change",
+        };
+
+        let output_label = format!("{label} {output_label_suffix}");
+
+        indexs
+            .into_iter()
+            .map(|index| OutputRecord {
+                ref_: InOutId::new(tx_id.0, *index),
+                label: Some(output_label.clone()),
+                spendable: true,
+            })
+            .collect()
     }
 }

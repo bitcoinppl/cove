@@ -47,6 +47,8 @@ pub struct TransactionDetails {
     pub fee_rate: Option<FeeRate>,
     pub pending_or_confirmed: PendingOrConfirmed,
     pub labels: Labels,
+    pub input_indexes: Vec<u32>,
+    pub output_indexes: Vec<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -72,6 +74,23 @@ impl TransactionDetails {
         let address = Address::try_new(&tx, wallet)?;
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
 
+        let input_indexes = tx
+            .tx_node
+            .tx
+            .input
+            .iter()
+            .map(|input| input.previous_output.vout)
+            .collect();
+
+        let output_indexes = tx
+            .tx_node
+            .tx
+            .output
+            .iter()
+            .enumerate()
+            .map(|(index, _output)| index as u32)
+            .collect();
+
         let me = Self {
             tx_id: txid.into(),
             address,
@@ -80,6 +99,8 @@ impl TransactionDetails {
             pending_or_confirmed,
             fee_rate,
             labels,
+            input_indexes,
+            output_indexes,
         };
 
         Ok(me)
@@ -306,6 +327,8 @@ impl TransactionDetails {
                 confirmation_time: 1677721600,
             }),
             labels: Default::default(),
+            input_indexes: vec![],
+            output_indexes: vec![],
         }
     }
     #[uniffi::constructor(name = "preview_confirmed_received")]
