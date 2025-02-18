@@ -12,7 +12,6 @@ struct MoreInfoPopover: View {
 
     // args
     let manager: WalletManager
-    let labelManager: LabelManager
 
     // confirmation dialogs
     @Binding var isExportingLabels: Bool
@@ -20,6 +19,10 @@ struct MoreInfoPopover: View {
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
+    }
+
+    var labelManager: LabelManager {
+        manager.rust.labelManager()
     }
 
     var metadata: WalletMetadata {
@@ -65,8 +68,6 @@ struct MoreInfoPopover: View {
     AsyncPreview {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
-            labelManager: LabelManager(
-                id: WalletManager(preview: "preview_only").walletMetadata.id),
             isExportingLabels: Binding.constant(false),
             showingImportOptions: Binding.constant(false)
         )

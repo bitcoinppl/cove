@@ -30,7 +30,7 @@ struct SelectedWalletContainer: View {
     var body: some View {
         Group {
             if let manager {
-                SelectedWalletScreen(manager: manager, labelManager: LabelManager(id: id))
+                SelectedWalletScreen(manager: manager)
                     .background(
                         manager.loadState == .loading
                             ? LinearGradient(

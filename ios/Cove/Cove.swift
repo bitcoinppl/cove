@@ -6466,6 +6466,8 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
 
 public protocol LabelManagerProtocol: AnyObject {
     
+    func deleteLabelsForTxn(txId: TxId) throws 
+    
     func export() throws  -> String
     
     func exportDefaultFileName(name: String)  -> String
@@ -6476,9 +6478,9 @@ public protocol LabelManagerProtocol: AnyObject {
     
     func importLabels(labels: Bip329Labels) throws 
     
-    func transactionLabel(txId: TxId)  -> String?
+    func insertOrUpdateLabelsForTxn(details: TransactionDetails, label: String, origin: String?) throws 
     
-    func updateLabelsForTxn(details: TransactionDetails, label: String, origin: String?) throws 
+    func transactionLabel(txId: TxId)  -> String?
     
 }
 open class LabelManager: LabelManagerProtocol, @unchecked Sendable {
@@ -6538,6 +6540,13 @@ public convenience init(id: WalletId) {
     
 
     
+open func deleteLabelsForTxn(txId: TxId)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(self.uniffiClonePointer(),
+        FfiConverterTypeTxId_lower(txId),$0
+    )
+}
+}
+    
 open func export()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
     uniffi_cove_fn_method_labelmanager_export(self.uniffiClonePointer(),$0
@@ -6574,21 +6583,21 @@ open func importLabels(labels: Bip329Labels)throws   {try rustCallWithError(FfiC
 }
 }
     
+open func insertOrUpdateLabelsForTxn(details: TransactionDetails, label: String, origin: String?)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
+    uniffi_cove_fn_method_labelmanager_insert_or_update_labels_for_txn(self.uniffiClonePointer(),
+        FfiConverterTypeTransactionDetails_lower(details),
+        FfiConverterString.lower(label),
+        FfiConverterOptionString.lower(origin),$0
+    )
+}
+}
+    
 open func transactionLabel(txId: TxId) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_labelmanager_transaction_label(self.uniffiClonePointer(),
         FfiConverterTypeTxId_lower(txId),$0
     )
 })
-}
-    
-open func updateLabelsForTxn(details: TransactionDetails, label: String, origin: String?)throws   {try rustCallWithError(FfiConverterTypeLabelManagerError_lift) {
-    uniffi_cove_fn_method_labelmanager_update_labels_for_txn(self.uniffiClonePointer(),
-        FfiConverterTypeTransactionDetails_lower(details),
-        FfiConverterString.lower(label),
-        FfiConverterOptionString.lower(origin),$0
-    )
-}
 }
     
 
@@ -9302,6 +9311,8 @@ public protocol RustWalletManagerProtocol: AnyObject {
     
     func getUnsignedTransactions() throws  -> [UnsignedTransaction]
     
+    func labelManager()  -> LabelManager
+    
     func listenForUpdates(reconciler: WalletManagerReconciler) 
     
     func markWalletAsVerified() throws 
@@ -9799,6 +9810,13 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
 open func getUnsignedTransactions()throws  -> [UnsignedTransaction]  {
     return try  FfiConverterSequenceTypeUnsignedTransaction.lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_method_rustwalletmanager_get_unsigned_transactions(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func labelManager() -> LabelManager  {
+    return try!  FfiConverterTypeLabelManager_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_label_manager(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -17726,8 +17744,9 @@ extension ImportWalletManagerReconcileMessage: Equatable, Hashable {}
 
 public enum InsertOrUpdate {
     
-    case insert
-    case update(LastUpdatedAt
+    case insert(Timestamp
+    )
+    case update(Timestamp
     )
 }
 
@@ -17746,9 +17765,10 @@ public struct FfiConverterTypeInsertOrUpdate: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .insert
+        case 1: return .insert(try FfiConverterTypeTimestamp.read(from: &buf)
+        )
         
-        case 2: return .update(try FfiConverterTypeLastUpdatedAt.read(from: &buf)
+        case 2: return .update(try FfiConverterTypeTimestamp.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -17759,13 +17779,14 @@ public struct FfiConverterTypeInsertOrUpdate: FfiConverterRustBuffer {
         switch value {
         
         
-        case .insert:
+        case let .insert(v1):
             writeInt(&buf, Int32(1))
-        
+            FfiConverterTypeTimestamp.write(v1, into: &buf)
+            
         
         case let .update(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeLastUpdatedAt.write(v1, into: &buf)
+            FfiConverterTypeTimestamp.write(v1, into: &buf)
             
         }
     }
@@ -18000,6 +18021,8 @@ public enum LabelManagerError {
     )
     case SaveOutputLabels(String
     )
+    case DeleteLabels(String
+    )
 }
 
 
@@ -18038,6 +18061,9 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 8: return .SaveOutputLabels(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 9: return .DeleteLabels(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -18089,6 +18115,11 @@ public struct FfiConverterTypeLabelManagerError: FfiConverterRustBuffer {
         
         case let .SaveOutputLabels(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .DeleteLabels(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -25265,25 +25296,25 @@ public func FfiConverterTypeFfiOpacity_lower(_ value: FfiOpacity) -> UInt8 {
  * Typealias from the type name used in the UDL file to the builtin type.  This
  * is needed because the UDL type name is used in function/method signatures.
  */
-public typealias LastUpdatedAt = UInt64
+public typealias Timestamp = UInt64
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeLastUpdatedAt: FfiConverter {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LastUpdatedAt {
+public struct FfiConverterTypeTimestamp: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Timestamp {
         return try FfiConverterUInt64.read(from: &buf)
     }
 
-    public static func write(_ value: LastUpdatedAt, into buf: inout [UInt8]) {
+    public static func write(_ value: Timestamp, into buf: inout [UInt8]) {
         return FfiConverterUInt64.write(value, into: &buf)
     }
 
-    public static func lift(_ value: UInt64) throws -> LastUpdatedAt {
+    public static func lift(_ value: UInt64) throws -> Timestamp {
         return try FfiConverterUInt64.lift(value)
     }
 
-    public static func lower(_ value: LastUpdatedAt) -> UInt64 {
+    public static func lower(_ value: Timestamp) -> UInt64 {
         return FfiConverterUInt64.lower(value)
     }
 }
@@ -25292,15 +25323,15 @@ public struct FfiConverterTypeLastUpdatedAt: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLastUpdatedAt_lift(_ value: UInt64) throws -> LastUpdatedAt {
-    return try FfiConverterTypeLastUpdatedAt.lift(value)
+public func FfiConverterTypeTimestamp_lift(_ value: UInt64) throws -> Timestamp {
+    return try FfiConverterTypeTimestamp.lift(value)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeLastUpdatedAt_lower(_ value: LastUpdatedAt) -> UInt64 {
-    return FfiConverterTypeLastUpdatedAt.lower(value)
+public func FfiConverterTypeTimestamp_lower(_ value: Timestamp) -> UInt64 {
+    return FfiConverterTypeTimestamp.lower(value)
 }
 
 
@@ -26307,6 +26338,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_headericonpresenter_ring_color() != 23010) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 27140) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_labelmanager_export() != 53996) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26322,10 +26356,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_labelmanager_importlabels() != 51697) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_transaction_label() != 59898) {
+    if (uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn() != 19492) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_labelmanager_update_labels_for_txn() != 45789) {
+    if (uniffi_cove_checksum_method_labelmanager_transaction_label() != 59898) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 45039) {
@@ -26629,6 +26663,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 63072) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 20510) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 14977) {

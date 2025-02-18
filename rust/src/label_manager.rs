@@ -81,7 +81,7 @@ impl LabelManager {
         Some(label_str.to_string())
     }
 
-    pub fn update_labels_for_txn(
+    pub fn insert_or_update_labels_for_txn(
         &self,
         details: Arc<TransactionDetails>,
         label: String,
@@ -109,6 +109,7 @@ impl LabelManager {
             )
             .into_iter();
 
+        // INSERT
         // if it's a new transaction, we need to insert input and output labels for each
         if let InsertOrUpdate::Insert(now) = insert_or_update {
             let input_labels = input_records_iter.map(Into::into).collect::<Vec<Label>>();
@@ -128,60 +129,8 @@ impl LabelManager {
             return Ok(());
         }
 
-        // not a new transaction, so we need to update the existing labels
-        let mut current_input_records = self
-            .db
-            .labels
-            .txn_input_records_iter(tx_id.as_ref())
-            .map_err(|e| LabelManagerError::GetInputRecords(e.to_string()))?
-            .map(|record| (record.item.ref_.index, record))
-            .collect::<HashMap<u32, Record<InputRecord>>>();
-
-        let mut current_output_records = self
-            .db
-            .labels
-            .txn_output_records_iter(tx_id.as_ref())
-            .map_err(|e| LabelManagerError::GetOutputRecords(e.to_string()))?
-            .map(|record| (record.item.ref_.index, record))
-            .collect::<HashMap<u32, Record<OutputRecord>>>();
-
-        let input_records = input_records_iter.into_iter().map(|record| {
-            let index = record.ref_.index;
-            let label: Label = record.into();
-
-            match current_input_records.remove(&index) {
-                Some(current) => {
-                    let mut timestamps = current.timestamps;
-                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
-                    Record::with_timestamps(label, timestamps)
-                }
-                None => Record::new(label),
-            }
-        });
-
-        let output_records = output_records_iter.into_iter().map(|record| {
-            let index = record.ref_.index;
-            let label: Label = record.into();
-
-            match current_output_records.remove(&index) {
-                Some(current) => {
-                    let mut timestamps = current.timestamps;
-                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
-                    Record::with_timestamps(label, timestamps)
-                }
-                None => Record::new(label),
-            }
-        });
-
-        self.db
-            .labels
-            .insert_records(input_records)
-            .map_err(|e| LabelManagerError::SaveInputLabels(e.to_string()))?;
-
-        self.db
-            .labels
-            .insert_records(output_records)
-            .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
+        // UPDATE
+        self.update_labels_for_txn(&tx_id, input_records_iter, output_records_iter)?;
 
         Ok(())
     }
@@ -274,6 +223,69 @@ impl LabelManager {
             .labels
             .insert_labels(labels)
             .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn update_labels_for_txn(
+        &self,
+        tx_id: &TxId,
+        new_input_records_iter: impl Iterator<Item = InputRecord>,
+        new_output_records_iter: impl Iterator<Item = OutputRecord>,
+    ) -> Result<(), LabelManagerError> {
+        let mut current_input_records = self
+            .db
+            .labels
+            .txn_input_records_iter(tx_id.as_ref())
+            .map_err(|e| LabelManagerError::GetInputRecords(e.to_string()))?
+            .map(|record| (record.item.ref_.index, record))
+            .collect::<HashMap<u32, Record<InputRecord>>>();
+
+        let mut current_output_records = self
+            .db
+            .labels
+            .txn_output_records_iter(tx_id.as_ref())
+            .map_err(|e| LabelManagerError::GetOutputRecords(e.to_string()))?
+            .map(|record| (record.item.ref_.index, record))
+            .collect::<HashMap<u32, Record<OutputRecord>>>();
+
+        let input_records = new_input_records_iter.into_iter().map(|record| {
+            let index = record.ref_.index;
+            let label: Label = record.into();
+
+            match current_input_records.remove(&index) {
+                Some(current) => {
+                    let mut timestamps = current.timestamps;
+                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                    Record::with_timestamps(label, timestamps)
+                }
+                None => Record::new(label),
+            }
+        });
+
+        let output_records = new_output_records_iter.into_iter().map(|record| {
+            let index = record.ref_.index;
+            let label: Label = record.into();
+
+            match current_output_records.remove(&index) {
+                Some(current) => {
+                    let mut timestamps = current.timestamps;
+                    timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
+                    Record::with_timestamps(label, timestamps)
+                }
+                None => Record::new(label),
+            }
+        });
+
+        self.db
+            .labels
+            .insert_records(input_records)
+            .map_err(|e| LabelManagerError::SaveInputLabels(e.to_string()))?;
+
+        self.db
+            .labels
+            .insert_records(output_records)
+            .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
 
         Ok(())
     }

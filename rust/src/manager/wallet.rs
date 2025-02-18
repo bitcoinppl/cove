@@ -22,6 +22,7 @@ use crate::{
     },
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
+    label_manager::LabelManager,
     psbt::Psbt,
     router::Route,
     task::{self, spawn_actor},
@@ -116,6 +117,8 @@ pub struct RustWalletManager {
     pub metadata: Arc<RwLock<WalletMetadata>>,
     pub reconciler: Sender<WalletManagerReconcileMessage>,
     pub reconcile_receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
+
+    label_manager: Arc<LabelManager>,
 
     #[allow(dead_code)]
     scanner: Option<Addr<WalletScanner>>,
@@ -215,14 +218,22 @@ impl RustWalletManager {
             .ok()
             .map(spawn_actor);
 
+        let label_manager = LabelManager::new(id.clone()).into();
+
         Ok(Self {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
+            label_manager,
             scanner,
         })
+    }
+
+    #[uniffi::method]
+    pub fn label_manager(&self) -> Arc<LabelManager> {
+        self.label_manager.clone()
     }
 
     #[uniffi::method]
@@ -259,6 +270,7 @@ impl RustWalletManager {
             .map(spawn_actor);
 
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let label_manager = LabelManager::new(id.clone()).into();
 
         Ok(Self {
             id,
@@ -266,6 +278,7 @@ impl RustWalletManager {
             metadata: Arc::new(RwLock::new(metadata)),
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
+            label_manager,
             scanner,
         })
     }
@@ -1124,6 +1137,7 @@ impl RustWalletManager {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         let wallet = Wallet::preview_new_wallet();
+        let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         Self {
@@ -1133,6 +1147,7 @@ impl RustWalletManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
             scanner: None,
+            label_manager,
         }
     }
 }

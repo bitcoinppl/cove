@@ -13,6 +13,10 @@ struct LabelView: View {
     var label: String? = nil
     let manager: WalletManager
 
+    var labelManager: LabelManager {
+        manager.rust.labelManager()
+    }
+
     var body: some View {
         Group {
             if let label {
@@ -37,14 +41,19 @@ struct LabelView: View {
 
 #Preview("No Label") {
     AsyncPreview {
-        LabelView(manager: WalletManager(preview: "preview_only"))
-            .environment(AppManager.shared)
+        LabelView(
+            manager: WalletManager(preview: "preview_only")
+        )
+        .environment(AppManager.shared)
     }
 }
 
 #Preview("With Label") {
     AsyncPreview {
-        LabelView(label: "Sent money for bike", manager: WalletManager(preview: "preview_only"))
-            .environment(AppManager.shared)
+        LabelView(
+            label: "Sent money for bike",
+            manager: WalletManager(preview: "preview_only")
+        )
+        .environment(AppManager.shared)
     }
 }

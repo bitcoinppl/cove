@@ -32,7 +32,6 @@ struct SelectedWalletScreen: View {
 
     // public
     var manager: WalletManager
-    var labelManager: LabelManager
 
     // private
 
@@ -57,6 +56,10 @@ struct SelectedWalletScreen: View {
 
     func updater(_ action: WalletManagerAction) {
         manager.dispatch(action: action)
+    }
+
+    var labelManager: LabelManager {
+        manager.rust.labelManager()
     }
 
     @ViewBuilder
@@ -195,7 +198,6 @@ struct SelectedWalletScreen: View {
                 Menu {
                     MoreInfoPopover(
                         manager: manager,
-                        labelManager: labelManager,
                         isExportingLabels: $isExportingLabels,
                         showingImportOptions: $showingImportOptions
                     )
@@ -423,8 +425,7 @@ struct VerifyReminder: View {
     AsyncPreview {
         NavigationStack {
             SelectedWalletScreen(
-                manager: WalletManager(preview: "preview_only"),
-                labelManager: LabelManager(id: WalletManager(preview: "preview_only").walletMetadata.id)
+                manager: WalletManager(preview: "preview_only")
             ).environment(AppManager.shared)
         }
     }
