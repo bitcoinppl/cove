@@ -177,6 +177,8 @@ struct ConfirmedTransactionView: View {
             VStack(alignment: .trailing) {
                 Text(amount)
                     .foregroundStyle(amountColor(txn.sentAndReceived().direction()))
+                    .contentTransition(.numericText())
+
                 Text(privateShow(txn.blockHeightFmt()))
                     .font(.caption)
                     .foregroundColor(.secondary)

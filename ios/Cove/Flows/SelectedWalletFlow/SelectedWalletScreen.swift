@@ -176,8 +176,8 @@ struct SelectedWalletScreen: View {
                 RoundedRectangle(cornerRadius: 8)
             )
             .contextMenu {
-                Button("Settings") {
-                    app.pushRoutes(RouteFactory().nestedWalletSettings(id: metadata.id))
+                Button("Change Name") {
+                    app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
                 }
             }
         }
