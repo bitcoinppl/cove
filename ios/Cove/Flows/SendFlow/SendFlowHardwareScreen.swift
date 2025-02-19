@@ -237,6 +237,23 @@ struct SendFlowHardwareScreen: View {
                 if total > 3 { inputOutputDetailsPresentationSize = .height(400) }
                 if total > 5 { inputOutputDetailsPresentationSize = .height(500) }
             }
+            .toolbar { Toolbar }
+        }
+    }
+
+    @ToolbarContentBuilder
+    var Toolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            Button("Delete", systemImage: "trash") {
+                do {
+                    try manager.rust.deleteUnsignedTransaction(txId: details.id())
+                    app.popRoute()
+                } catch {
+                    Log.error("Unable to delete transaction \(details.id()): \(error)")
+                }
+            }
+            .contentShape(Rectangle())
+            .foregroundStyle(.white)
         }
     }
 
