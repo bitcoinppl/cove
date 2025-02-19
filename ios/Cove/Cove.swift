@@ -14182,7 +14182,7 @@ public struct WalletMetadata {
     public var color: WalletColor
     public var verified: Bool
     public var network: Network
-    public var performedFullScan: Bool
+    public var performedFullScanAt: UInt64?
     public var masterFingerprint: Fingerprint?
     public var selectedUnit: Unit
     public var sensitiveVisible: Bool
@@ -14202,7 +14202,7 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScan: Bool, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScanAt: UInt64?, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
         /**
          * Show labels for transactions i the transaction list
          * If false, we only show either `Sent` or `Received` labels
@@ -14212,7 +14212,7 @@ public struct WalletMetadata {
         self.color = color
         self.verified = verified
         self.network = network
-        self.performedFullScan = performedFullScan
+        self.performedFullScanAt = performedFullScanAt
         self.masterFingerprint = masterFingerprint
         self.selectedUnit = selectedUnit
         self.sensitiveVisible = sensitiveVisible
@@ -14246,7 +14246,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 color: FfiConverterTypeWalletColor.read(from: &buf), 
                 verified: FfiConverterBool.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
-                performedFullScan: FfiConverterBool.read(from: &buf), 
+                performedFullScanAt: FfiConverterOptionUInt64.read(from: &buf), 
                 masterFingerprint: FfiConverterOptionTypeFingerprint.read(from: &buf), 
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf), 
                 sensitiveVisible: FfiConverterBool.read(from: &buf), 
@@ -14268,7 +14268,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletColor.write(value.color, into: &buf)
         FfiConverterBool.write(value.verified, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
-        FfiConverterBool.write(value.performedFullScan, into: &buf)
+        FfiConverterOptionUInt64.write(value.performedFullScanAt, into: &buf)
         FfiConverterOptionTypeFingerprint.write(value.masterFingerprint, into: &buf)
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
@@ -24364,6 +24364,30 @@ fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = UInt64?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt64.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt64.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

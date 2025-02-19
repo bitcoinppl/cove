@@ -11,7 +11,6 @@ use crate::{
     database::Database,
     fiat::{client::FIAT_CLIENT, FiatCurrency},
     format::NumberFormatter as _,
-    label_manager::LabelManager,
     task,
     transaction::{TransactionDirection, Unit},
 };
