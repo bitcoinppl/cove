@@ -267,7 +267,7 @@ struct SelectedWalletScreen: View {
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
     }
 
-    func onChangeOfScannedLabels(_ old: TaggedString?, _ labels: TaggedString?) {
+    func onChangeOfScannedLabels(_: TaggedString?, _ labels: TaggedString?) {
         guard let labels else { return }
         do {
             try labelManager.import(jsonl: labels.item)

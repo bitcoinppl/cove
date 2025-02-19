@@ -17,7 +17,7 @@ struct SendFlowDetailsView: View {
     @State var prices: PriceResponse?
 
     // private
-    @State private var sheetIsOpen = false
+    @State private var presentingInputOutputDetails = false
     @State private var presentationSize: PresentationDetent = .medium
 
     var metadata: WalletMetadata { manager.walletMetadata }
@@ -67,7 +67,7 @@ struct SendFlowDetailsView: View {
                 .lineLimit(3)
             }
             .padding(.top, 6)
-            .onTapGesture { sheetIsOpen = true }
+            .onTapGesture { presentingInputOutputDetails = true }
 
             Group {
                 // Network Fee Section
@@ -110,8 +110,8 @@ struct SendFlowDetailsView: View {
             guard let prices = newPrices else { return }
             self.prices = prices
         }
-        .sheet(isPresented: $sheetIsOpen) {
-            MoreDetails(manager: manager, details: details)
+        .sheet(isPresented: $presentingInputOutputDetails) {
+            InputAndOutputDetailsView(manager: manager, details: details)
                 .presentationDetents(
                     [.height(300), .height(400), .height(500), .large], selection: $presentationSize
                 )
@@ -127,7 +127,7 @@ struct SendFlowDetailsView: View {
 }
 
 extension SendFlowDetailsView {
-    struct MoreDetails: View {
+    struct InputAndOutputDetailsView: View {
         @Environment(AppManager.self) private var app
         @Environment(SendFlowPresenter.self) private var presenter
         @Environment(\.dismiss) private var dismiss
@@ -324,9 +324,9 @@ extension SendFlowDetailsView {
     }
 }
 
-#Preview("MoreDetails") {
+#Preview("InputAndOutputDetailsView") {
     AsyncPreview {
-        SendFlowDetailsView.MoreDetails(
+        SendFlowDetailsView.InputAndOutputDetailsView(
             manager: WalletManager(preview: "preview_only"),
             details: ConfirmDetails.previewNew()
         )

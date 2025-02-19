@@ -1,5 +1,5 @@
 //
-//  QRCodeLabelImportView.swift
+//  QrCodeLabelImportView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 2/12/25.
