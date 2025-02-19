@@ -55,11 +55,11 @@ struct SendFlowCustomFeeRateView: View {
     }
 
     var feeSpeed: FeeSpeed {
-        let feeRate = Double(feeRate) ?? 20.0
+        let feeRate = Float(feeRate) ?? 20.0
         return feeOptions.calculateCustomFeeSpeed(feeRate: Float(feeRate))
     }
 
-    func getTotalSatsDeduped(for feeRate: Double) {
+    func getTotalSatsDeduped(for feeRate: Float) {
         guard let address = presenter.address else { return }
         guard let amount = presenter.amount else { return }
         let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
@@ -89,7 +89,17 @@ struct SendFlowCustomFeeRateView: View {
     }
 
     func addCustomFeeOption() {
-        guard let feeRate = Double(feeRate) else { return }
+        guard let feeRate = Float(feeRate) else { return }
+
+        // if the fee rate is the same as the selected option, remove custom fee option
+        if feeRate == selectedOption.feeRate().satPerVb() {
+            let feeOptions = feeOptions.removeCustomFee()
+            self.feeOptions = feeOptions
+            selectedOption = feeOptions.getFeeRateWith(feeRate: feeRate) ?? feeOptions.medium()
+
+            presenter.sheetState = .none
+            return
+        }
 
         let feeOptions = feeOptions.addCustomFee(feeRate: Float(feeRate))
         self.feeOptions = feeOptions
@@ -104,7 +114,7 @@ struct SendFlowCustomFeeRateView: View {
 
     func feeRateChanged(_: String?, newFeeRate: String?) {
         guard let newFeeRate else { return }
-        guard let feeRate = Double(newFeeRate) else { return }
+        guard let feeRate = Float(newFeeRate) else { return }
         getTotalSatsDeduped(for: feeRate)
     }
 
@@ -186,6 +196,9 @@ struct SendFlowCustomFeeRateView: View {
         .onAppear {
             feeRate = String(selectedOption.feeRate().satPerVb())
             withAnimation { loaded = true }
+        }
+        .onDisappear {
+            addCustomFeeOption()
         }
         .navigationBarBackButtonHidden()
         .opacity(loaded ? 1 : 0)

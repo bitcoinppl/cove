@@ -4303,7 +4303,11 @@ public protocol FeeRateOptionsWithTotalFeeProtocol: AnyObject {
     
     func feeRateOptions()  -> FeeRateOptions
     
+    func getFeeRateWith(feeRate: Float)  -> FeeRateOptionWithTotalFee?
+    
     func medium()  -> FeeRateOptionWithTotalFee
+    
+    func removeCustomFee()  -> FeeRateOptionsWithTotalFee
     
     func slow()  -> FeeRateOptionWithTotalFee
     
@@ -4411,9 +4415,24 @@ open func feeRateOptions() -> FeeRateOptions  {
 })
 }
     
+open func getFeeRateWith(feeRate: Float) -> FeeRateOptionWithTotalFee?  {
+    return try!  FfiConverterOptionTypeFeeRateOptionWithTotalFee.lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_get_fee_rate_with(self.uniffiClonePointer(),
+        FfiConverterFloat.lower(feeRate),$0
+    )
+})
+}
+    
 open func medium() -> FeeRateOptionWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionWithTotalFee_lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoptionswithtotalfee_medium(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func removeCustomFee() -> FeeRateOptionsWithTotalFee  {
+    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionswithtotalfee_remove_custom_fee(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -26278,7 +26297,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_fee_rate_options() != 7503) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_get_fee_rate_with() != 30293) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_medium() != 444) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_remove_custom_fee() != 41094) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptionswithtotalfee_slow() != 1762) {
