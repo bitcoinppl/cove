@@ -15,7 +15,7 @@ struct MoreInfoPopover: View {
 
     // confirmation dialogs
     @Binding var isExportingLabels: Bool
-    @Binding var showingImportOptions: Bool
+    @Binding var isImportingLabels: Bool
 
     private var hasLabels: Bool {
         labelManager.hasLabels()
@@ -30,7 +30,7 @@ struct MoreInfoPopover: View {
     }
 
     func importLabels() {
-        showingImportOptions = true
+        isImportingLabels = true
     }
 
     func exportLabels() {
@@ -69,7 +69,7 @@ struct MoreInfoPopover: View {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
             isExportingLabels: Binding.constant(false),
-            showingImportOptions: Binding.constant(false)
+            isImportingLabels: Binding.constant(false)
         )
         .environment(AppManager.shared)
     }

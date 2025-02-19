@@ -10,7 +10,7 @@ import SwiftUI
 struct LabelView: View {
     @Environment(AppManager.self) private var app
 
-    let details: TransactionDetails
+    @State var details: TransactionDetails
     let manager: WalletManager
 
     @State var isEditing = false
@@ -39,6 +39,21 @@ struct LabelView: View {
         }
     }
 
+    /// get updated details and full transaction list that has the new label
+    func updateDetailsAndTxns() {
+        Task { await manager.rust.getTransactions() }
+
+        Task {
+            do {
+                let details = try await manager.rust.transactionDetails(txId: txId)
+                await MainActor.run { self.details = details }
+            } catch {
+                await manager.rust.getTransactions()
+                Log.error("Error getting updated label: \(error)")
+            }
+        }
+    }
+
     func saveLabel() {
         do {
             try labelManager.insertOrUpdateLabelsForTxn(
@@ -47,8 +62,7 @@ struct LabelView: View {
                 origin: manager.walletMetadata.origin
             )
 
-            // get updated transactions that has the new label
-            Task { await manager.rust.getTransactions() }
+            updateDetailsAndTxns()
 
             withAnimation {
                 isEditing = false
@@ -62,6 +76,10 @@ struct LabelView: View {
     func deleteLabel() {
         do {
             try labelManager.deleteLabelsForTxn(txId: txId)
+            isEditing = false
+            editingLabel = ""
+
+            updateDetailsAndTxns()
         } catch {
             Log.error("Unable to delete label: \(error)")
         }

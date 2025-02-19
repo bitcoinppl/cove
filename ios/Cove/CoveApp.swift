@@ -68,6 +68,8 @@ struct CoveApp: App {
                 "Error Importing Wallet"
             case .importedSuccessfully:
                 "Wallet Imported Successfully"
+            case .importedLabelsSuccessfully:
+                "Labels Imported Successfully"
             case .unableToSelectWallet:
                 "Unable to select wallet, please try again"
             case let .errorImportingHardwareWallet(error):
@@ -329,6 +331,10 @@ struct CoveApp: App {
         }
     }
 
+    func setInvalidlabels() {
+        return app.alertState = TaggedItem(.invalidFileFormat("Currently BIP329 labels must be imported through the wallet actions"))
+    }
+
     @MainActor
     func handleScannedCode(_ stringOrData: StringOrData) {
         do {
@@ -343,10 +349,14 @@ struct CoveApp: App {
             case let .transaction(transaction):
                 handleTransaction(transaction)
             case let .bip329Labels(labels):
-                if let selectedWallet = Database().globalConfig().selectedWallet() {
-                    return try LabelManager(id: selectedWallet).import(labels: labels)
-                }
-                app.alertState = TaggedItem(.invalidFileFormat("Currently BIP329 labels must be imported through the wallet actions"))
+                guard let manager = app.walletManager else { return setInvalidlabels() }
+                guard let selectedWallet = Database().globalConfig().selectedWallet() else { return setInvalidlabels() }
+
+                // import the labels
+                try LabelManager(id: selectedWallet).import(labels: labels)
+
+                // when labels are imported, we need to get the transactions again with the updated labels
+                Task { await manager.rust.getTransactions() }
             }
         } catch {
             switch error {

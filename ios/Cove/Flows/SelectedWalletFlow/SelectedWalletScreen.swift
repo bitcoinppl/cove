@@ -39,9 +39,6 @@ struct SelectedWalletScreen: View {
     @State private var sheetState: TaggedItem<SheetState>? = nil
     @State private var alertState: TaggedItem<AlertState>? = nil
 
-    // confirmation dialogs
-    @State private var showingImportOptions = false
-
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
 
@@ -199,7 +196,7 @@ struct SelectedWalletScreen: View {
                     MoreInfoPopover(
                         manager: manager,
                         isExportingLabels: $isExportingLabels,
-                        showingImportOptions: $showingImportOptions
+                        isImportingLabels: $isImportingLabels
                     )
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -234,12 +231,6 @@ struct SelectedWalletScreen: View {
         .toolbarBackground(Color.midnightBlue.opacity(0.9), for: .navigationBar)
         .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
         .sheet(item: $sheetState, content: SheetContent)
-        .confirmationDialog("Import Lables", isPresented: $showingImportOptions) {
-            Button("File") { isImportingLabels = true }
-            Button("QR") { sheetState = .init(.qrLabelsImport) }
-        } message: {
-            Text("How do you want to import your labels in BIP329 format?")
-        }
         .fileExporter(
             isPresented: $isExportingLabels,
             document: JSONLDocument(text: exportLabelContent()),

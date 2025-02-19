@@ -6,21 +6,27 @@
 //
 
 public enum AppAlertState: Equatable {
-    case invalidWordGroup
-    case duplicateWallet(WalletId)
-    case errorImportingHotWallet(String)
+    // success
     case importedSuccessfully
+    case importedLabelsSuccessfully
+
+    // warn
+    case duplicateWallet(WalletId)
+
+    // errors
+    case invalidWordGroup
+    case errorImportingHotWallet(String)
+    case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network)
+    case foundAddress(Address, Amount?)
     case unableToSelectWallet
     case errorImportingHardwareWallet(String)
     case invalidFileFormat(String)
-    case invalidFormat(String)
-    case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network)
     case noWalletSelected(Address)
-    case foundAddress(Address, Amount?)
-    case noCameraPermission
-    case failedToScanQr(error: String)
+    case invalidFormat(String)
     case noUnsignedTransactionFound(TxId)
     case unableToGetAddress(error: String)
+    case noCameraPermission
+    case failedToScanQr(error: String)
 
     func title() -> String {
         switch self {
@@ -30,7 +36,7 @@ public enum AppAlertState: Equatable {
             "Duplicate Wallet"
         case .errorImportingHotWallet:
             "Error"
-        case .importedSuccessfully:
+        case .importedSuccessfully, .importedLabelsSuccessfully:
             "Success"
         case .unableToSelectWallet:
             "Error"
