@@ -10,7 +10,7 @@ use pubport::formats::Json;
 use tracing::{debug, error, info, warn};
 
 /// Default number of addresses to scan
-const DEFAULT_SCAN_LIMIT: u32 = 125;
+const DEFAULT_SCAN_LIMIT: u32 = 150;
 
 use crate::{
     database::{
@@ -173,10 +173,7 @@ impl WalletScanner {
         }
 
         let node = db.global_config().selected_node();
-        let options = NodeClientOptions {
-            batch_size: 1,
-            stop_gap: 50,
-        };
+        let options = NodeClientOptions { batch_size: 1 };
 
         let client_builder = NodeClientBuilder { node, options };
         Ok(Self::new(

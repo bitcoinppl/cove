@@ -46,7 +46,10 @@ pub struct WalletMetadata {
     pub color: WalletColor,
     pub verified: bool,
     pub network: Network,
-    pub performed_full_scan: bool,
+
+    #[serde(default)]
+    pub performed_full_scan_at: Option<u64>,
+
     #[serde(default)]
     pub master_fingerprint: Option<Arc<Fingerprint>>,
     #[serde(default)]
@@ -175,7 +178,7 @@ impl WalletMetadata {
             origin: None,
             verified: false,
             network,
-            performed_full_scan: false,
+            performed_full_scan_at: None,
             fiat_or_btc: FiatOrBtc::Btc,
             selected_unit: Unit::default(),
             sensitive_visible: true,
@@ -233,7 +236,7 @@ impl WalletMetadata {
             color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,
-            performed_full_scan: false,
+            performed_full_scan_at: None,
             fiat_or_btc: FiatOrBtc::Btc,
             address_type: WalletAddressType::default(),
             selected_unit: Unit::default(),

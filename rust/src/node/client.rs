@@ -21,7 +21,6 @@ use crate::node::Node;
 
 use super::ApiType;
 
-const STOP_GAP: usize = 25;
 const ELECTRUM_BATCH_SIZE: usize = 10;
 const ESPLORA_BATCH_SIZE: usize = 1;
 
@@ -76,7 +75,6 @@ pub enum Error {
 #[derive(Debug, Clone, Copy)]
 pub struct NodeClientOptions {
     pub batch_size: usize,
-    pub stop_gap: usize,
 }
 
 impl NodeClient {
@@ -150,16 +148,19 @@ impl NodeClient {
         &self,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
         full_scan_request: FullScanRequest<KeychainKind>,
+        stop_gap: usize,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
         let full_scan_result = match self {
             NodeClient::Esplora(client) => {
                 debug!("starting esplora full scan");
-                client.full_scan(full_scan_request).await?
+                client.full_scan(full_scan_request, stop_gap).await?
             }
 
             NodeClient::Electrum(client) => {
                 debug!("starting electrum full scan");
-                client.full_scan(full_scan_request, tx_graph).await?
+                client
+                    .full_scan(full_scan_request, tx_graph, stop_gap)
+                    .await?
             }
         };
 

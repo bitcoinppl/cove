@@ -399,10 +399,10 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        if self.wallet.metadata.performed_full_scan {
+        if self.wallet.metadata.performed_full_scan_at.is_some() {
             send!(addr.perform_incremental_scan());
         } else {
-            send!(addr.perform_full_scan());
+            send!(addr.perform_initial_full_scan());
         }
 
         Produces::ok(())
@@ -482,10 +482,53 @@ impl WalletActor {
         Produces::ok(details)
     }
 
+    // perform full scan in 2 steps:
+    // 1. do a full scan of the first 20 addresses, return results
+    // 2. do a full scan of the next 150 addresses, return results
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
-        debug!("starting full scan");
+        if self.wallet.metadata.performed_full_scan_at.is_some() {
+            return Produces::ok(());
+        }
 
+        let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        self.perform_initial_full_scan().await?;
+        let end = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        debug!("initial full scan done in {}s", end - start);
+
+        let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        self.perform_expanded_full_scan().await?;
+        let end = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        debug!("expanded full scan done in {}s", end - start);
+
+        Produces::ok(())
+    }
+
+    // when a wallet is first opened, we need to scan for its addresses, but we want the
+    // initial scan to be fast, so we can have transactions show up in the UI quickly
+    // so we do a full scan of only the first 20 addresses, initially
+    async fn perform_initial_full_scan(&mut self) -> ActorResult<()> {
+        debug!("starting initial full scan");
         self.state = ActorState::PerformingFullScan;
+
+        const INITIAL_STOP_GAP: usize = 20;
+        self.do_perform_full_scan(INITIAL_STOP_GAP).await?;
+
+        Produces::ok(())
+    }
+
+    // after the initial full scan is complete, do a much for comprehensive scan of the wallet
+    // this is slower, but we want to be able to see all transactions in the UI, so scan the next
+    // 150 addresses
+    async fn perform_expanded_full_scan(&mut self) -> ActorResult<()> {
+        debug!("starting expanded full scan");
+
+        const EXPANDED_STOP_GAP: usize = 150;
+        self.do_perform_full_scan(EXPANDED_STOP_GAP).await?;
+
+        Produces::ok(())
+    }
+
+    async fn do_perform_full_scan(&mut self, stop_gap: usize) -> ActorResult<()> {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
         let full_scan_request = self.wallet.start_full_scan().build();
@@ -501,11 +544,11 @@ impl WalletActor {
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
             let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request)
+                .start_wallet_scan(&graph, full_scan_request, stop_gap)
                 .await;
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("done full scan in {}s", now - start);
+            debug!("done {stop_gap} full scan in {}s", now - start);
 
             // update wallet state
             send!(addr.handle_full_scan_complete(full_scan_result));
@@ -553,7 +596,9 @@ impl WalletActor {
         self.wallet.persist()?;
         self.set_last_scan_finished();
 
-        self.wallet.metadata.performed_full_scan = true;
+        let now = jiff::Timestamp::now().as_second() as u64;
+        self.wallet.metadata.performed_full_scan_at = Some(now);
+
         Database::global()
             .wallets
             .update_wallet_metadata(self.wallet.metadata.clone())?;
