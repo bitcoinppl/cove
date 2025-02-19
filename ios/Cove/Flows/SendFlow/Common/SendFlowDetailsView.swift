@@ -339,7 +339,7 @@ extension SendFlowDetailsView {
                         }
                     }
                 }
-            }  // </ScrollView>
+            } // </ScrollView>
             .onTapGesture { manager.dispatch(action: .toggleFiatOrBtc) }
             .padding()
             .task {
@@ -359,6 +359,10 @@ extension SendFlowDetailsView {
         )
         .padding()
         .environment(AppManager.shared)
+        .environment(
+            SendFlowPresenter(
+                app: AppManager.shared, manager: WalletManager(preview: "preview_only")
+            ))
     }
 }
 

@@ -9,8 +9,6 @@ import Foundation
 import SwiftUI
 
 struct SendFlowSelectFeeRateView: View {
-    enum Screen { case select, custom }
-
     let manager: WalletManager
 
     @Binding var feeOptions: FeeRateOptionsWithTotalFee
@@ -18,7 +16,7 @@ struct SendFlowSelectFeeRateView: View {
     @Binding var selectedPresentationDetent: PresentationDetent
 
     // private
-    @State private var route: [Screen] = []
+    @State private var isPresentingCustomFeeSelection: Bool = false
 
     @ViewBuilder
     var SelectView: some View {
@@ -54,9 +52,7 @@ struct SendFlowSelectFeeRateView: View {
                 )
             }
 
-            Button(action: {
-                route = [.custom]
-            }) {
+            Button(action: { isPresentingCustomFeeSelection = true }) {
                 Text("Customize Fee")
                     .font(.subheadline)
                     .fontWeight(.semibold)
@@ -74,23 +70,15 @@ struct SendFlowSelectFeeRateView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $route) {
-            SelectView
-                .navigationDestination(
-                    for: Screen.self,
-                    destination: { route in
-                        switch route {
-                        case .custom:
-                            SendFlowCustomFeeRateView(
-                                feeOptions: $feeOptions,
-                                selectedOption: $selectedOption,
-                                selectedPresentationDetent: $selectedPresentationDetent
-                            )
-                        case .select: SelectView
-                        }
-                    }
+        SelectView
+            .sheet(isPresented: $isPresentingCustomFeeSelection) {
+                SendFlowCustomFeeRateView(
+                    feeOptions: $feeOptions,
+                    selectedOption: $selectedOption,
+                    selectedPresentationDetent: $selectedPresentationDetent
                 )
-        }
+                .presentationDetents([.height(350)])
+            }
     }
 }
 
