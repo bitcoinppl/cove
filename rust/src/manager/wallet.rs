@@ -792,22 +792,28 @@ impl RustWalletManager {
         let mut options = Arc::unwrap_or_clone(fee_rate_options);
 
         let fast_fee_rate = options.fast.fee_rate;
-        let fast_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), fast_fee_rate))
-            .await
-            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-            .into();
+        let fast_psbt: Psbt = call!(self
+            .actor
+            .build_ephemeral_drain_tx(address.clone(), fast_fee_rate))
+        .await
+        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+        .into();
 
         let medium_fee_rate = options.medium.fee_rate;
-        let medium_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), medium_fee_rate))
-            .await
-            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-            .into();
+        let medium_psbt: Psbt = call!(self
+            .actor
+            .build_ephemeral_drain_tx(address.clone(), medium_fee_rate))
+        .await
+        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+        .into();
 
         let slow_fee_rate = options.slow.fee_rate;
-        let slow_psbt: Psbt = call!(self.actor.build_drain_tx(address.clone(), slow_fee_rate))
-            .await
-            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-            .into();
+        let slow_psbt: Psbt = call!(self
+            .actor
+            .build_ephemeral_drain_tx(address.clone(), slow_fee_rate))
+        .await
+        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+        .into();
 
         options.fast.total_fee = fast_psbt
             .fee()
@@ -823,10 +829,12 @@ impl RustWalletManager {
 
         if let Some(mut custom) = options.custom {
             let custom_fee_rate = custom.fee_rate;
-            let custom_psbt: Psbt = call!(self.actor.build_drain_tx(address, custom_fee_rate))
-                .await
-                .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-                .into();
+            let custom_psbt: Psbt = call!(self
+                .actor
+                .build_ephemeral_drain_tx(address, custom_fee_rate))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
+            .into();
 
             custom.total_fee = custom_psbt
                 .fee()
@@ -854,17 +862,24 @@ impl RustWalletManager {
         let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
         let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
 
-        let fast_psbt = call!(self.actor.build_tx(amount, address.clone(), fast_fee_rate))
+        let fast_psbt =
+            call!(self
+                .actor
+                .build_ephemeral_tx(amount, address.clone(), fast_fee_rate))
             .await
             .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
-        let medium_psbt = call!(self
-            .actor
-            .build_tx(amount, address.clone(), medium_fee_rate))
-        .await
-        .map_err(|error| Error::BuildTxError(error.to_string()))?;
+        let medium_psbt =
+            call!(self
+                .actor
+                .build_ephemeral_tx(amount, address.clone(), medium_fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
-        let slow_psbt = call!(self.actor.build_tx(amount, address.clone(), slow_fee_rate))
+        let slow_psbt =
+            call!(self
+                .actor
+                .build_ephemeral_tx(amount, address.clone(), slow_fee_rate))
             .await
             .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
@@ -901,7 +916,7 @@ impl RustWalletManager {
         let address = Arc::unwrap_or_clone(address);
         let fee = Arc::unwrap_or_clone(fee);
 
-        let psbt: Psbt = call!(self.actor.build_drain_tx(address, fee))
+        let psbt: Psbt = call!(self.actor.build_ephemeral_drain_tx(address, fee))
             .await
             .map_err(|_| Error::UnknownError("failed to get max send psbt".to_string()))?
             .into();
@@ -935,24 +950,29 @@ impl RustWalletManager {
         let address = Arc::unwrap_or_clone(address);
         let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
 
-        let psbt = call!(actor.build_tx(amount, address, fee_rate))
+        let psbt = call!(actor.build_ephemeral_tx(amount, address, fee_rate))
             .await
             .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
         Ok(psbt.into())
     }
 
-    pub async fn get_confirm_details(
+    pub async fn confirm_txn(
         &self,
         amount: Arc<Amount>,
         address: Arc<Address>,
         fee_rate: Arc<FeeRate>,
     ) -> Result<ConfirmDetails, Error> {
-        let psbt = self
-            .build_transaction_with_fee_rate(amount, address, fee_rate.clone())
-            .await?;
+        let actor = self.actor.clone();
 
-        let fee_rate: FeeRate = Arc::unwrap_or_clone(fee_rate);
+        let amount = Arc::unwrap_or_clone(amount).into();
+        let address = Arc::unwrap_or_clone(address);
+        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
+
+        let psbt = call!(actor.build_tx(amount, address, fee_rate))
+            .await
+            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+
         let details = call!(self.actor.get_confirm_details(psbt.into(), fee_rate.into()))
             .await
             .map_err(|_| {

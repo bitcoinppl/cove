@@ -145,7 +145,12 @@ impl WalletActor {
         Produces::ok(balance)
     }
 
-    pub async fn build_drain_tx(&mut self, address: Address, fee: FeeRate) -> ActorResult<Psbt> {
+    // Build a transaction but don't advance the change address index
+    pub async fn build_ephemeral_drain_tx(
+        &mut self,
+        address: Address,
+        fee: FeeRate,
+    ) -> ActorResult<Psbt> {
         let script_pubkey = address.script_pubkey();
         let mut tx_builder = self.wallet.build_tx();
 
@@ -155,6 +160,8 @@ impl WalletActor {
             .fee_rate(fee.into());
 
         let psbt = tx_builder.finish()?;
+        self.wallet.cancel_tx(&psbt.unsigned_tx);
+
         Produces::ok(psbt)
     }
 
@@ -173,6 +180,18 @@ impl WalletActor {
 
         let psbt = tx_builder.finish()?;
 
+        Produces::ok(psbt)
+    }
+
+    // Build a transaction but don't advance the change address index
+    pub async fn build_ephemeral_tx(
+        &mut self,
+        amount: Amount,
+        address: Address,
+        fee: BdkFeeRate,
+    ) -> ActorResult<Psbt> {
+        let psbt = self.build_tx(amount, address, fee).await?.await?;
+        self.wallet.cancel_tx(&psbt.unsigned_tx);
         Produces::ok(psbt)
     }
 
