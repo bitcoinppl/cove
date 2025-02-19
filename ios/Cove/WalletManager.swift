@@ -139,7 +139,6 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
                     self.loadState = .loaded(txns)
 
                 case let .walletBalanceChanged(balance):
-                    Log.debug("walletBalanceChanged: \(balance.total().btcString()) -- \(balance.spendable().satsString())")
                     withAnimation { self.balance = balance }
 
                 case .unsignedTransactionsChanged:

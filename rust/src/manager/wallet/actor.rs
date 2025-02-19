@@ -66,7 +66,7 @@ pub enum FullScanType {
 impl FullScanType {
     fn stop_gap(&self) -> usize {
         match self {
-            FullScanType::Initial => 35,
+            FullScanType::Initial => 20,
             FullScanType::Expanded => 150,
         }
     }
@@ -713,6 +713,9 @@ impl WalletActor {
     async fn notify_scan_complete(&mut self) -> ActorResult<()> {
         use WalletManagerReconcileMessage as Msg;
 
+        // reload the wallet from the file storage
+        self.reload_wallet();
+
         // get and send wallet balance
         let balance = self
             .balance()
@@ -733,6 +736,16 @@ impl WalletActor {
         self.send(Msg::ScanComplete(transactions));
 
         Produces::ok(())
+    }
+
+    // reload the persisted wallet from the local file storage, for some reason
+    // the balance is not updated after the second full scan if I don't reload
+    // the wallet from the file storage
+    fn reload_wallet(&mut self) {
+        match Wallet::try_load_persisted(self.wallet.id.clone()) {
+            Ok(wallet) => self.wallet = wallet,
+            Err(error) => error!("failed to reload wallet: {error:?}"),
+        }
     }
 
     fn last_scan_finished(&mut self) -> Option<Duration> {
