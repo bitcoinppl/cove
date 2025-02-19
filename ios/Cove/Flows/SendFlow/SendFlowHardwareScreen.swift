@@ -243,17 +243,20 @@ struct SendFlowHardwareScreen: View {
 
     @ToolbarContentBuilder
     var Toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
-            Button("Delete", systemImage: "trash") {
-                do {
-                    try manager.rust.deleteUnsignedTransaction(txId: details.id())
-                    app.popRoute()
-                } catch {
-                    Log.error("Unable to delete transaction \(details.id()): \(error)")
+        ToolbarItem(placement: .navigationBarTrailing) {
+            HStack {
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    do {
+                        try manager.rust.deleteUnsignedTransaction(txId: details.id())
+                        app.popRoute()
+                    } catch {
+                        Log.error("Unable to delete transaction \(details.id()): \(error)")
+                    }
                 }
+                .contentShape(Rectangle())
+                    .tint(.white)
+                .foregroundStyle(.white)
             }
-            .contentShape(Rectangle())
-            .foregroundStyle(.white)
         }
     }
 
