@@ -53,46 +53,29 @@ pub enum ActorState {
     PerformingIncrementalScan,
 
     ExpandedFullScanComplete,
-    InitialScanComplete,
+    InitialFullScanComplete,
     IncrementalScanComplete,
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct InitialFullScan;
-#[derive(Debug, Copy, Clone)]
-pub struct ExpandedFullScan;
-
-trait FullScanType
-where
-    Self: std::fmt::Debug + Copy + Clone + Send + Sync + 'static,
-{
-    fn stop_gap(&self) -> usize;
-    fn complete_state(&self) -> ActorState;
-    fn next_scan(&self) -> Option<ExpandedFullScan> {
-        None
-    }
+pub enum FullScanType {
+    Initial,
+    Expanded,
 }
 
-impl FullScanType for InitialFullScan {
+impl FullScanType {
     fn stop_gap(&self) -> usize {
-        20
+        match self {
+            FullScanType::Initial => 20,
+            FullScanType::Expanded => 150,
+        }
     }
 
     fn complete_state(&self) -> ActorState {
-        ActorState::InitialScanComplete
-    }
-
-    fn next_scan(&self) -> Option<ExpandedFullScan> {
-        Some(ExpandedFullScan)
-    }
-}
-impl FullScanType for ExpandedFullScan {
-    fn stop_gap(&self) -> usize {
-        150
-    }
-
-    fn complete_state(&self) -> ActorState {
-        ActorState::ExpandedFullScanComplete
+        match self {
+            FullScanType::Initial => ActorState::InitialFullScanComplete,
+            FullScanType::Expanded => ActorState::ExpandedFullScanComplete,
+        }
     }
 }
 
@@ -579,7 +562,7 @@ impl WalletActor {
 
     async fn do_perform_initial_full_scan(&mut self) -> ActorResult<()> {
         debug!("starting initial full scan");
-        static FULL_SCAN_TYPE: InitialFullScan = InitialFullScan;
+        static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
 
@@ -606,7 +589,7 @@ impl WalletActor {
 
     async fn do_perform_expanded_full_scan(&mut self) -> ActorResult<()> {
         debug!("starting expanded full scan");
-        static FULL_SCAN_TYPE: ExpandedFullScan = ExpandedFullScan;
+        static FULL_SCAN_TYPE: FullScanType = FullScanType::Expanded;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
 
@@ -677,7 +660,7 @@ impl WalletActor {
     async fn handle_full_scan_complete(
         &mut self,
         full_scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
-        full_scan_type: impl FullScanType,
+        full_scan_type: FullScanType,
     ) -> ActorResult<()> {
         debug!("applying full scan result for {full_scan_type:?}");
 
