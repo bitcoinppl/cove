@@ -510,12 +510,14 @@ struct SendFlowSetAmountScreen: View {
             sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
             return
         }
-        var newValue = newValue
 
+        var newValue = newValue
         // no decimals when entering sats
         if metadata.selectedUnit == .sat {
             newValue = newValue.replacingOccurrences(of: ".", with: "")
         }
+
+        if newValue == "." { newValue = "0." }
 
         let value =
             newValue
