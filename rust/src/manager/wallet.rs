@@ -380,7 +380,11 @@ impl RustWalletManager {
     pub fn delete_unsigned_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
         debug!("deleting unsigned transaction: {tx_id:?}");
         let db = Database::global();
-        db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
+
+        let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
+        send!(self
+            .actor
+            .cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
         self.reconciler
             .send(WalletManagerReconcileMessage::UnsignedTransactionsChanged)

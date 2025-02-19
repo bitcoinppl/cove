@@ -9266,6 +9266,8 @@ public protocol RustWalletManagerProtocol: AnyObject {
     
     func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> Psbt
     
+    func confirmTxn(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> ConfirmDetails
+    
     func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool)  -> String
     
     func convertFiatStringToBtc(fiatAmount: String, prices: PriceResponse) throws  -> Amount
@@ -9304,8 +9306,6 @@ public protocol RustWalletManagerProtocol: AnyObject {
     func forceUpdateHeight() async throws  -> UInt32
     
     func forceWalletScan() async 
-    
-    func getConfirmDetails(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> ConfirmDetails
     
     func getFeeOptions() async throws  -> FeeRateOptions
     
@@ -9576,6 +9576,23 @@ open func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate:
         )
 }
     
+open func confirmTxn(amount: Amount, address: Address, feeRate: FeeRate)async throws  -> ConfirmDetails  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_confirm_txn(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeAmount_lower(amount),FfiConverterTypeAddress_lower(address),FfiConverterTypeFeeRate_lower(feeRate)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeConfirmDetails_lift,
+            errorHandler: FfiConverterTypeWalletManagerError.lift
+        )
+}
+    
 open func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool = true) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_convert_and_display_fiat(self.uniffiClonePointer(),
@@ -9775,23 +9792,6 @@ open func forceWalletScan()async   {
             liftFunc: { $0 },
             errorHandler: nil
             
-        )
-}
-    
-open func getConfirmDetails(amount: Amount, address: Address, feeRate: FeeRate)async throws  -> ConfirmDetails  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_get_confirm_details(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeAmount_lower(amount),FfiConverterTypeAddress_lower(address),FfiConverterTypeFeeRate_lower(feeRate)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_pointer,
-            completeFunc: ffi_cove_rust_future_complete_pointer,
-            freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeConfirmDetails_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
         )
 }
     
@@ -26689,6 +26689,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_build_transaction_with_fee_rate() != 2979) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustwalletmanager_confirm_txn() != 50750) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 45939) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26741,9 +26744,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_force_wallet_scan() != 44725) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_get_confirm_details() != 38134) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 9964) {

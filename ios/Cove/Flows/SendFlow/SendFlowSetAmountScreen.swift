@@ -206,7 +206,7 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             do {
-                let confirmDetails = try await manager.rust.getConfirmDetails(
+                let confirmDetails = try await manager.rust.confirmTxn(
                     amount: amount,
                     address: address,
                     feeRate: feeRate.feeRate()

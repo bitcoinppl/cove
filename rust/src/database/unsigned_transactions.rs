@@ -81,7 +81,7 @@ impl UnsignedTransactionsTable {
         Ok(())
     }
 
-    pub fn delete_tx(&self, tx_id: &TxId) -> Result<(), Error> {
+    pub fn delete_tx(&self, tx_id: &TxId) -> Result<UnsignedTransactionRecord, Error> {
         let record = self
             .get(tx_id)?
             .ok_or(UnsignedTransactionsTableError::NoRecordFound)?;
@@ -97,7 +97,7 @@ impl UnsignedTransactionsTable {
         // delete the actual tx id
         self.delete_tx_id(tx_id)?;
 
-        Ok(())
+        Ok(record)
     }
 
     pub fn get_by_wallet_id(

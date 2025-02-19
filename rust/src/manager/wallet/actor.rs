@@ -195,6 +195,11 @@ impl WalletActor {
         Produces::ok(psbt)
     }
 
+    // cancel a transaction, reset the address & change address index
+    pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
+        self.wallet.cancel_tx(&txn)
+    }
+
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
         let zero = Amount::ZERO.into();
         let mut transactions = self
