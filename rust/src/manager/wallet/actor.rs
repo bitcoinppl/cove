@@ -66,7 +66,7 @@ pub enum FullScanType {
 impl FullScanType {
     fn stop_gap(&self) -> usize {
         match self {
-            FullScanType::Initial => 20,
+            FullScanType::Initial => 35,
             FullScanType::Expanded => 150,
         }
     }
@@ -401,8 +401,6 @@ impl WalletActor {
             }
         }
 
-        self.reconciler.send(Msg::StartedWalletScan).unwrap();
-
         let node = Database::global().global_config.selected_node();
         let reconciler = self.reconciler.clone();
 
@@ -532,6 +530,9 @@ impl WalletActor {
         }
 
         debug!("starting initial full scan");
+        self.reconciler
+            .send(WalletManagerReconcileMessage::StartedInitialFullScan)
+            .unwrap();
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingInitialScan;
@@ -547,11 +548,20 @@ impl WalletActor {
         if self.state == ActorState::ExpandedFullScanComplete
             || self.state == ActorState::IncrementalScanComplete
         {
-            debug!("already scanned skipping ({:?})", self.state);
+            debug!(
+                "already scanned skipping expanded full scan ({:?})",
+                self.state
+            );
             return Produces::ok(());
         }
 
         debug!("starting expanded full scan");
+
+        let txns = self.transactions().await?.await?;
+
+        self.reconciler
+            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns))
+            .unwrap();
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingExpandedFullScan;
@@ -561,7 +571,7 @@ impl WalletActor {
     }
 
     async fn do_perform_initial_full_scan(&mut self) -> ActorResult<()> {
-        debug!("starting initial full scan");
+        debug!("do_perform_initial_full_scan");
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
@@ -575,7 +585,7 @@ impl WalletActor {
                 .await;
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("done expanded full scan in {}s", now - start);
+            debug!("[initial] done initial full scan in {}s", now - start);
 
             // update wallet state
             let _ = call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE)).await;
@@ -588,7 +598,7 @@ impl WalletActor {
     }
 
     async fn do_perform_expanded_full_scan(&mut self) -> ActorResult<()> {
-        debug!("starting expanded full scan");
+        debug!("do_perform_expanded_full_scan");
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Expanded;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
@@ -602,7 +612,7 @@ impl WalletActor {
                 .await;
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("done {FULL_SCAN_TYPE:?} full scan in {}s", now - start);
+            debug!("[expanded] done expanded full scan in {}s", now - start);
 
             // update wallet state
             send!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE));
@@ -664,9 +674,7 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("applying full scan result for {full_scan_type:?}");
 
-        let full_scan_result = full_scan_result?;
-
-        self.wallet.apply_update(full_scan_result)?;
+        self.wallet.apply_update(full_scan_result?)?;
         self.wallet.persist()?;
         self.set_last_scan_finished();
 
@@ -712,6 +720,7 @@ impl WalletActor {
             .await
             .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
 
+        debug!("sending wallet balance: {balance:?}");
         self.send(Msg::WalletBalanceChanged(balance.into()));
 
         // get and send transactions

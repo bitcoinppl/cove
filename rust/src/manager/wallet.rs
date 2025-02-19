@@ -48,7 +48,9 @@ use crate::{
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
-    StartedWalletScan,
+    StartedInitialFullScan,
+    StartedExpandedFullScan(Vec<Transaction>),
+
     AvailableTransactions(Vec<Transaction>),
     ScanComplete(Vec<Transaction>),
     UpdatedTransactions(Vec<Transaction>),

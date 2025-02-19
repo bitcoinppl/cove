@@ -99,6 +99,11 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
+    func updateWalletBalance() async {
+        let balance = await rust.balance()
+        await MainActor.run { self.balance = balance }
+    }
+
     func reconcile(message: WalletManagerReconcileMessage) {
         Task { [weak self] in
             guard let self else {
@@ -111,8 +116,11 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
             await MainActor.run {
                 switch message {
-                case .startedWalletScan:
+                case .startedInitialFullScan:
                     self.loadState = .loading
+
+                case let .startedExpandedFullScan(txns):
+                    self.loadState = .scanning(txns)
 
                 case let .availableTransactions(txns):
                     if self.loadState == .loading {
@@ -130,13 +138,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
                 case let .scanComplete(txns):
                     self.loadState = .loaded(txns)
 
-                case .walletBalanceChanged:
-                    Task {
-                        let balance = await rust.balance()
-                        await MainActor.run {
-                            self.balance = balance
-                        }
-                    }
+                case let .walletBalanceChanged(balance):
+                    Log.debug("walletBalanceChanged: \(balance.total().btcString()) -- \(balance.spendable().satsString())")
+                    withAnimation { self.balance = balance }
 
                 case .unsignedTransactionsChanged:
                     self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []

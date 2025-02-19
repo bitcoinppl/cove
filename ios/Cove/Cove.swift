@@ -22797,7 +22797,9 @@ extension WalletManagerError: Foundation.LocalizedError {
 
 public enum WalletManagerReconcileMessage {
     
-    case startedWalletScan
+    case startedInitialFullScan
+    case startedExpandedFullScan([Transaction]
+    )
     case availableTransactions([Transaction]
     )
     case scanComplete([Transaction]
@@ -22836,38 +22838,41 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .startedWalletScan
+        case 1: return .startedInitialFullScan
         
-        case 2: return .availableTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
+        case 2: return .startedExpandedFullScan(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
         
-        case 3: return .scanComplete(try FfiConverterSequenceTypeTransaction.read(from: &buf)
+        case 3: return .availableTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
         
-        case 4: return .updatedTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
+        case 4: return .scanComplete(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
         
-        case 5: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
+        case 5: return .updatedTransactions(try FfiConverterSequenceTypeTransaction.read(from: &buf)
         )
         
-        case 6: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
+        case 6: return .nodeConnectionFailed(try FfiConverterString.read(from: &buf)
         )
         
-        case 7: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
+        case 7: return .walletMetadataChanged(try FfiConverterTypeWalletMetadata.read(from: &buf)
         )
         
-        case 8: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
+        case 8: return .walletBalanceChanged(try FfiConverterTypeBalance.read(from: &buf)
         )
         
-        case 9: return .unknownError(try FfiConverterString.read(from: &buf)
+        case 9: return .walletError(try FfiConverterTypeWalletManagerError.read(from: &buf)
         )
         
-        case 10: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
+        case 10: return .unknownError(try FfiConverterString.read(from: &buf)
         )
         
-        case 11: return .unsignedTransactionsChanged
+        case 11: return .walletScannerResponse(try FfiConverterTypeScannerResponse.read(from: &buf)
+        )
         
-        case 12: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
+        case 12: return .unsignedTransactionsChanged
+        
+        case 13: return .sendFlowError(try FfiConverterTypeSendFlowErrorAlert.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22878,61 +22883,66 @@ public struct FfiConverterTypeWalletManagerReconcileMessage: FfiConverterRustBuf
         switch value {
         
         
-        case .startedWalletScan:
+        case .startedInitialFullScan:
             writeInt(&buf, Int32(1))
         
         
-        case let .availableTransactions(v1):
+        case let .startedExpandedFullScan(v1):
             writeInt(&buf, Int32(2))
             FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
             
         
-        case let .scanComplete(v1):
+        case let .availableTransactions(v1):
             writeInt(&buf, Int32(3))
             FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
             
         
-        case let .updatedTransactions(v1):
+        case let .scanComplete(v1):
             writeInt(&buf, Int32(4))
             FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
             
         
-        case let .nodeConnectionFailed(v1):
+        case let .updatedTransactions(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeTransaction.write(v1, into: &buf)
+            
+        
+        case let .nodeConnectionFailed(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
             
         
         case let .walletMetadataChanged(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeWalletMetadata.write(v1, into: &buf)
             
         
         case let .walletBalanceChanged(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeBalance.write(v1, into: &buf)
             
         
         case let .walletError(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
             
         
         case let .unknownError(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
             
         
         case let .walletScannerResponse(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeScannerResponse.write(v1, into: &buf)
             
         
         case .unsignedTransactionsChanged:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
         
         
         case let .sendFlowError(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeSendFlowErrorAlert.write(v1, into: &buf)
             
         }

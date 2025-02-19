@@ -82,6 +82,7 @@ struct WalletBalanceHeaderView: View {
                         .foregroundColor(.white.opacity(0.75))
                         .font(.footnote)
                         .padding(.leading, 2)
+                        .contentTransition(.numericText())
 
                     Spacer()
                 }
@@ -90,14 +91,13 @@ struct WalletBalanceHeaderView: View {
                     Text(primaryBalanceString)
                         .foregroundStyle(.white)
                         .font(.system(size: fontSize, weight: .bold))
+                        .contentTransition(.numericText())
 
                     Spacer()
 
                     Image(systemName: eyeIcon)
                         .foregroundColor(.gray)
-                        .onTapGesture {
-                            updater(.toggleSensitiveVisibility)
-                        }
+                        .onTapGesture { updater(.toggleSensitiveVisibility) }
                 }
             }
             .contentShape(
