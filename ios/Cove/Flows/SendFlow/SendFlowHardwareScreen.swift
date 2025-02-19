@@ -169,7 +169,20 @@ struct SendFlowHardwareScreen: View {
                         .lineLimit(4, reservesSpace: false)
                         .font(.system(.footnote, design: .none))
                         .fontWeight(.semibold)
-                        .padding(.leading, 60)
+                        // padding just for the context
+                        .padding(16)
+                        .contentShape(
+                            .contextMenuPreview,
+                            RoundedRectangle(cornerRadius: 8)
+                        )
+                        .contextMenu {
+                            Button("Copy", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = details.sendingTo().unformatted()
+                            }
+                        }
+                        // remove padding after context
+                        .padding(-16)
+                        .padding(.leading, 50)
                     }
                     .padding(.vertical, 8)
                     .onTapGesture { sheetState = .init(.inputOutputDetails) }

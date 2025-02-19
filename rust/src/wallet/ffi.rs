@@ -38,6 +38,16 @@ impl Address {
     pub fn spaced_out(&self) -> String {
         address_string_spaced_out(self.to_string())
     }
+
+    #[uniffi::method]
+    pub fn unformatted(&self) -> String {
+        self.to_string()
+    }
+
+    #[uniffi::method(name = "toString")]
+    pub fn ffi_to_string(&self) -> String {
+        self.to_string()
+    }
 }
 
 #[uniffi::export]

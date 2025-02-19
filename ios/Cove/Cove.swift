@@ -629,6 +629,10 @@ public protocol AddressProtocol: AnyObject {
     
     func string()  -> String
     
+    func toString()  -> String
+    
+    func unformatted()  -> String
+    
 }
 open class Address: AddressProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -704,6 +708,20 @@ open func spacedOut() -> String  {
 open func string() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_address_string(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func toString() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_address_tostring(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func unformatted() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_address_unformatted(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -25997,6 +26015,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_address_string() != 10597) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_address_tostring() != 54776) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_address_unformatted() != 26318) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_addressinfo_address() != 59376) {
