@@ -7,7 +7,7 @@ use once_cell::sync::OnceCell;
 
 use crate::{
     color_scheme::ColorSchemeSelection,
-    fiat::{client::PriceResponse, FiatCurrency},
+    fiat::{FiatCurrency, client::PriceResponse},
     network::Network,
     node::Node,
     router::Route,

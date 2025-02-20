@@ -1,6 +1,6 @@
 use crate::transaction::SentAndReceived;
 
-use super::{client::PRICES, FiatCurrency};
+use super::{FiatCurrency, client::PRICES};
 
 #[derive(Debug, thiserror::Error, derive_more::Display, uniffi::Error)]
 pub enum FiatAmountError {

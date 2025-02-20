@@ -1,26 +1,26 @@
 use crate::{
-    database::{wallet_data::WalletDataDb, Database},
+    database::{Database, wallet_data::WalletDataDb},
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::client::NodeClient,
-    transaction::{fees::BdkFeeRate, FeeRate, Transaction, TransactionDetails, TxId},
+    transaction::{FeeRate, Transaction, TransactionDetails, TxId, fees::BdkFeeRate},
     wallet::{
+        Address, AddressInfo, Wallet, WalletAddressType,
         balance::Balance,
         confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
         metadata::BlockSizeLast,
-        Address, AddressInfo, Wallet, WalletAddressType,
     },
 };
 use act_zero::*;
 use bdk_chain::{
+    TxGraph,
     bitcoin::Psbt,
     spk_client::{FullScanResponse, SyncResponse},
-    TxGraph,
 };
 use bdk_core::spk_client::FullScanRequest;
 use bdk_wallet::{KeychainKind, TxOrdering};
 use bitcoin::Amount;
-use bitcoin::{params::Params, Transaction as BdkTransaction};
+use bitcoin::{Transaction as BdkTransaction, params::Params};
 use crossbeam::channel::Sender;
 use eyre::Context as _;
 use std::time::{Duration, UNIX_EPOCH};

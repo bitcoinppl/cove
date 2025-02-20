@@ -1,10 +1,10 @@
 use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 
-use crate::database::{error::DatabaseError, record::Timestamps, Record};
+use crate::database::{Record, error::DatabaseError, record::Timestamps};
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
-use bitcoin::{address::NetworkUnchecked, Address};
+use bitcoin::{Address, address::NetworkUnchecked};
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
     database::{cbor::Postcard, key::InOutIdKey},

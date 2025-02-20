@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    database::{record::Timestamps, wallet_data::WalletDataDb, InsertOrUpdate, Record},
+    database::{InsertOrUpdate, Record, record::Timestamps, wallet_data::WalletDataDb},
     multi_format::Bip329Labels,
     transaction::{TransactionDetails, TransactionDirection, TxId},
     wallet::metadata::WalletId,

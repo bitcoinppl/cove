@@ -25,8 +25,8 @@ use crate::{
 use balance::Balance;
 use bdk_file_store::Store;
 use bdk_wallet::{
-    bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
-    keys::DescriptorPublicKey, KeychainKind,
+    KeychainKind, bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
+    keys::DescriptorPublicKey,
 };
 use bip39::Mnemonic;
 use fingerprint::Fingerprint;
@@ -468,8 +468,8 @@ impl Wallet {
     }
 
     pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {
-        use bdk_wallet::miniscript::descriptor::ShInner;
         use bdk_wallet::miniscript::Descriptor;
+        use bdk_wallet::miniscript::descriptor::ShInner;
 
         let extended_descriptor: ExtendedDescriptor =
             self.bdk.public_descriptor(KeychainKind::External).clone();
@@ -483,7 +483,7 @@ impl Wallet {
                 _ => {
                     return Err(WalletError::UnsupportedWallet(
                         "unsupported wallet bare descriptor not wpkh".to_string(),
-                    ))
+                    ));
                 }
             },
             // not sure
@@ -492,7 +492,7 @@ impl Wallet {
             Descriptor::Wsh(_pk) => {
                 return Err(WalletError::UnsupportedWallet(
                     "unsupported wallet, multisig".to_string(),
-                ))
+                ));
             }
         };
 

@@ -10,7 +10,7 @@ use crate::{
     mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
     multi_format::MultiFormatError,
     pending_wallet::PendingWallet,
-    wallet::{fingerprint::Fingerprint, metadata::WalletMetadata, Wallet},
+    wallet::{Wallet, fingerprint::Fingerprint, metadata::WalletMetadata},
 };
 
 type Error = PendingWalletManagerError;

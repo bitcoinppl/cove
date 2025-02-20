@@ -6,7 +6,7 @@ use crate::{
     hardware_export::HardwareExport,
     mnemonic::ParseMnemonic as _,
     transaction::ffi::BitcoinTransaction,
-    wallet::{address::AddressError, AddressWithNetwork},
+    wallet::{AddressWithNetwork, address::AddressError},
 };
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -69,7 +69,7 @@ impl MultiFormat {
             Ok(address) => return Ok(Self::Address(address.into())),
 
             Err(AddressError::UnsupportedNetwork) => {
-                return Err(MultiFormatError::UnsupportedNetworkAddress)
+                return Err(MultiFormatError::UnsupportedNetworkAddress);
             }
 
             _ => {}

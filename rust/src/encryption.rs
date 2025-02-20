@@ -1,7 +1,7 @@
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine as _;
+use base64::prelude::BASE64_STANDARD;
 use chacha20poly1305::aead::OsRng;
-use chacha20poly1305::{aead::Aead as _, AeadCore as _, ChaCha20Poly1305, KeyInit as _};
+use chacha20poly1305::{AeadCore as _, ChaCha20Poly1305, KeyInit as _, aead::Aead as _};
 use chacha20poly1305::{Key, Nonce};
 
 use macros::impl_default_for;

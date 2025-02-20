@@ -8,11 +8,11 @@ use bdk_chain::{
 use bdk_electrum::electrum_client;
 use bdk_esplora::esplora_client;
 use bdk_wallet::{
-    chain::{
-        spk_client::{FullScanRequest, FullScanResponse},
-        ConfirmationBlockTime, TxGraph,
-    },
     KeychainKind,
+    chain::{
+        ConfirmationBlockTime, TxGraph,
+        spk_client::{FullScanRequest, FullScanResponse},
+    },
 };
 use bitcoin::{Transaction, Txid};
 use tracing::debug;

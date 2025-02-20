@@ -9,9 +9,9 @@ use crate::{
     keychain::KeychainError,
     mnemonic::MnemonicExt as _,
     wallet::{
+        Wallet,
         fingerprint::Fingerprint,
         metadata::{WalletId, WalletMetadata},
-        Wallet,
     },
 };
 

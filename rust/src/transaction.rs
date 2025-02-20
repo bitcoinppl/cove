@@ -8,21 +8,21 @@ pub mod transaction_details;
 pub mod unsigned_transaction;
 
 use bdk_chain::{
+    ChainPosition as BdkChainPosition, ConfirmationBlockTime,
     bitcoin::{Sequence, Witness},
     tx_graph::CanonicalTx,
-    ChainPosition as BdkChainPosition, ConfirmationBlockTime,
 };
 use bdk_wallet::bitcoin::{
     OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
 use bip329::Labels;
-use bitcoin::hashes::{sha256d::Hash, Hash as _};
+use bitcoin::hashes::{Hash as _, sha256d::Hash};
 use rand::Rng as _;
 use std::{borrow::Borrow, cmp::Ordering, sync::Arc};
 
 use crate::{
-    database::{wallet_data::WalletDataDb, Database},
+    database::{Database, wallet_data::WalletDataDb},
     fiat::FiatAmount,
     wallet::Wallet,
 };

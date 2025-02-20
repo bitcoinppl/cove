@@ -14,7 +14,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMode},
 };
 
-use super::{error::SerdeError, Error};
+use super::{Error, error::SerdeError};
 use crate::string_config_accessor;
 
 pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("global_config");

@@ -8,12 +8,12 @@ use bdk_wallet::keys::bip39::Mnemonic;
 use bdk_wallet::keys::{
     DerivableKey as _, DescriptorSecretKey as BdkDescriptorSecretKey, ExtendedKey,
 };
+use bdk_wallet::{CreateParams, KeychainKind};
 use bdk_wallet::{
     keys::{DescriptorPublicKey as BdkDescriptorPublicKey, KeyMap},
     miniscript::descriptor::{DescriptorXKey, Wildcard},
     template::{Bip44, Bip49, Bip84, Bip84Public, DescriptorTemplate as _},
 };
-use bdk_wallet::{CreateParams, KeychainKind};
 use bitcoin::secp256k1;
 
 use crate::network::Network;
@@ -80,8 +80,8 @@ impl Descriptor {
     }
 
     pub fn descriptor_public_key(&self) -> Result<&BdkDescriptorPublicKey, Error> {
-        use bdk_wallet::miniscript::descriptor::ShInner;
         use bdk_wallet::miniscript::Descriptor as D;
+        use bdk_wallet::miniscript::descriptor::ShInner;
 
         let key = match &self.extended_descriptor {
             D::Pkh(pk) => pk.as_inner(),
@@ -92,7 +92,7 @@ impl Descriptor {
                 _ => {
                     return Err(Error::UnsupportedDescriptor(
                         "unsupported wallet bare descriptor not wpkh".to_string(),
-                    ))
+                    ));
                 }
             },
 
@@ -100,14 +100,14 @@ impl Descriptor {
             D::Bare(_pk) => {
                 return Err(Error::UnsupportedDescriptor(
                     "unsupported wallet bare descriptor not wpkh".to_string(),
-                ))
+                ));
             }
 
             // multi-sig
             D::Wsh(_pk) => {
                 return Err(Error::UnsupportedDescriptor(
                     "unsupported wallet, multisig".to_string(),
-                ))
+                ));
             }
         };
 
@@ -303,14 +303,14 @@ mod tests {
 
     #[test]
     fn test_descriptor_parse() {
-        let desc =   "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
+        let desc = "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
         let descriptor = Descriptor::parse_public_descriptor(desc);
         assert!(descriptor.is_ok());
     }
 
     #[test]
     fn test_descriptor_into_descriptor_public_key() {
-        let desc =   "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
+        let desc = "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
         let descriptor = Descriptor::parse_public_descriptor(desc);
         assert!(descriptor.is_ok());
         let descriptor = descriptor.unwrap();
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_descriptor_into_origin() {
-        let desc =   "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
+        let desc = "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
         let descriptor = Descriptor::parse_public_descriptor(desc);
         assert!(descriptor.is_ok());
         let descriptor = descriptor.unwrap();

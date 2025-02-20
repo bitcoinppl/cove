@@ -1,6 +1,6 @@
 use derive_more::{
-    derive::{From, Into},
     AsRef, Deref,
+    derive::{From, Into},
 };
 use jiff::ToSpan as _;
 use numfmt::Formatter;

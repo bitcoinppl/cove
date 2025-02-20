@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::hardware_export::HardwareExport;
 
 use super::{
-    metadata::{DiscoveryState, FoundAddress},
     Address, Wallet, WalletAddressType, WalletError,
+    metadata::{DiscoveryState, FoundAddress},
 };
 
 #[uniffi::export]

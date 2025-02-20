@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use bdk_chain::{bitcoin::Address, ConfirmationBlockTime, TxGraph};
+use bdk_chain::{ConfirmationBlockTime, TxGraph, bitcoin::Address};
 use bdk_core::spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse};
 use bdk_electrum::{
-    electrum_client::{Client, ElectrumApi as _},
     BdkElectrumClient,
+    electrum_client::{Client, ElectrumApi as _},
 };
 use bdk_wallet::KeychainKind;
 use bitcoin::{Transaction, Txid};
 use tap::TapFallible as _;
 use tracing::debug;
 
-use super::{Error, NodeClientOptions, ELECTRUM_BATCH_SIZE};
+use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
 use crate::node::Node;
 
 type ElectrumClientInner = BdkElectrumClient<Client>;

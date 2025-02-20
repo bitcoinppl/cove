@@ -5,8 +5,8 @@ use bdk_chain::{
     spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
 };
 use bdk_esplora::{
-    esplora_client::{self, r#async::AsyncClient},
     EsploraAsyncExt as _,
+    esplora_client::{self, r#async::AsyncClient},
 };
 use bdk_wallet::KeychainKind;
 use bitcoin::Txid;
@@ -15,7 +15,7 @@ use tracing::debug;
 
 use crate::node::Node;
 
-use super::{Error, NodeClientOptions, ESPLORA_BATCH_SIZE};
+use super::{ESPLORA_BATCH_SIZE, Error, NodeClientOptions};
 
 #[derive(Debug, Clone)]
 pub struct EsploraClient {

@@ -4,7 +4,9 @@ use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
-    #[error("can only generate the last word, must pass in 11,14,17,20 or 23 words, passed in {0} words")]
+    #[error(
+        "can only generate the last word, must pass in 11,14,17,20 or 23 words, passed in {0} words"
+    )]
     InvalidNumberOfWords(usize),
 }
 

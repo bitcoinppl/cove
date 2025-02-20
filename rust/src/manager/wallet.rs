@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use act_zero::{call, send, Addr};
+use act_zero::{Addr, call, send};
 use actor::WalletActor;
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::RwLock;
@@ -14,11 +14,11 @@ use tracing::{debug, error, warn};
 
 use crate::{
     app::FfiApp,
-    converter::{ConverterError, CONVERTER},
-    database::{error::DatabaseError, Database},
+    converter::{CONVERTER, ConverterError},
+    database::{Database, error::DatabaseError},
     fiat::{
-        client::{PriceResponse, FIAT_CLIENT},
         FiatCurrency,
+        client::{FIAT_CLIENT, PriceResponse},
     },
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
@@ -27,20 +27,20 @@ use crate::{
     router::Route,
     task::{self, spawn_actor},
     transaction::{
+        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
         fees::{
-            client::{FeeResponse, FEES, FEE_CLIENT},
             FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
+            client::{FEE_CLIENT, FEES, FeeResponse},
         },
         ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
-        Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
     },
     wallet::{
+        Address, AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
         confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
-        Address, AddressInfo, Wallet, WalletAddressType, WalletError,
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
@@ -382,9 +382,10 @@ impl RustWalletManager {
         let db = Database::global();
 
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
-        send!(self
-            .actor
-            .cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
+        send!(
+            self.actor
+                .cancel_txn(txn.confirm_details.psbt.0.unsigned_tx)
+        );
 
         self.reconciler
             .send(WalletManagerReconcileMessage::UnsignedTransactionsChanged)
@@ -796,25 +797,28 @@ impl RustWalletManager {
         let mut options = Arc::unwrap_or_clone(fee_rate_options);
 
         let fast_fee_rate = options.fast.fee_rate;
-        let fast_psbt: Psbt = call!(self
-            .actor
-            .build_ephemeral_drain_tx(address.clone(), fast_fee_rate))
+        let fast_psbt: Psbt = call!(
+            self.actor
+                .build_ephemeral_drain_tx(address.clone(), fast_fee_rate)
+        )
         .await
         .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
         .into();
 
         let medium_fee_rate = options.medium.fee_rate;
-        let medium_psbt: Psbt = call!(self
-            .actor
-            .build_ephemeral_drain_tx(address.clone(), medium_fee_rate))
+        let medium_psbt: Psbt = call!(
+            self.actor
+                .build_ephemeral_drain_tx(address.clone(), medium_fee_rate)
+        )
         .await
         .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
         .into();
 
         let slow_fee_rate = options.slow.fee_rate;
-        let slow_psbt: Psbt = call!(self
-            .actor
-            .build_ephemeral_drain_tx(address.clone(), slow_fee_rate))
+        let slow_psbt: Psbt = call!(
+            self.actor
+                .build_ephemeral_drain_tx(address.clone(), slow_fee_rate)
+        )
         .await
         .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
         .into();
@@ -833,9 +837,10 @@ impl RustWalletManager {
 
         if let Some(mut custom) = options.custom {
             let custom_fee_rate = custom.fee_rate;
-            let custom_psbt: Psbt = call!(self
-                .actor
-                .build_ephemeral_drain_tx(address, custom_fee_rate))
+            let custom_psbt: Psbt = call!(
+                self.actor
+                    .build_ephemeral_drain_tx(address, custom_fee_rate)
+            )
             .await
             .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
             .into();
@@ -866,26 +871,29 @@ impl RustWalletManager {
         let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
         let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
 
-        let fast_psbt =
-            call!(self
-                .actor
-                .build_ephemeral_tx(amount, address.clone(), fast_fee_rate))
-            .await
-            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+        let fast_psbt = call!(self.actor.build_ephemeral_tx(
+            amount,
+            address.clone(),
+            fast_fee_rate
+        ))
+        .await
+        .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
-        let medium_psbt =
-            call!(self
-                .actor
-                .build_ephemeral_tx(amount, address.clone(), medium_fee_rate))
-            .await
-            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+        let medium_psbt = call!(self.actor.build_ephemeral_tx(
+            amount,
+            address.clone(),
+            medium_fee_rate
+        ))
+        .await
+        .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
-        let slow_psbt =
-            call!(self
-                .actor
-                .build_ephemeral_tx(amount, address.clone(), slow_fee_rate))
-            .await
-            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+        let slow_psbt = call!(self.actor.build_ephemeral_tx(
+            amount,
+            address.clone(),
+            slow_fee_rate
+        ))
+        .await
+        .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
         let options = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
@@ -1022,12 +1030,11 @@ impl RustWalletManager {
 
                 let id = self.id.clone();
                 let actor = self.actor.clone();
-                call!(actor.switch_descriptor_to_new_address_type(
-                            descriptors,
-                            wallet_address_type
-                        ))
-                        .await
-                        .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
+                call!(
+                    actor.switch_descriptor_to_new_address_type(descriptors, wallet_address_type)
+                )
+                .await
+                .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
 
                 // reset route so it reloads the wallet with new txns
                 FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));

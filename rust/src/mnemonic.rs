@@ -9,11 +9,11 @@ use crate::{
     keychain::{Keychain, KeychainError},
     keys::Descriptors,
     seed_qr::SeedQr,
-    wallet::{metadata::WalletId, WalletAddressType},
+    wallet::{WalletAddressType, metadata::WalletId},
 };
 use derive_more::{AsRef, Deref, From, Into};
 
-use bdk_chain::bitcoin::{bip32::Xpub, Network};
+use bdk_chain::bitcoin::{Network, bip32::Xpub};
 
 pub type NumberOfBip39Words = number_of_bip39_words::NumberOfBip39Words;
 pub type GroupedWord = grouped_word::GroupedWord;

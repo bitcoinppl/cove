@@ -2,7 +2,7 @@ use std::{cmp::Ordering, fmt::Debug};
 
 use derive_more::Display;
 use redb::{Key, TypeName, Value};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// Wrapper type to handle keys and values using bincode serialization
 #[derive(Debug, Display, Clone, Eq, PartialEq, Ord, PartialOrd)]

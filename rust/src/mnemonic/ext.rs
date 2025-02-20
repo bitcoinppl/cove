@@ -1,5 +1,5 @@
 use bdk_wallet::{
-    bitcoin::{bip32::Xpub, key::Secp256k1, Network},
+    bitcoin::{Network, bip32::Xpub, key::Secp256k1},
     keys::{DerivableKey as _, ExtendedKey},
 };
 

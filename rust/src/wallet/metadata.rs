@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, network::Network};
 
-use super::{fingerprint::Fingerprint, AddressInfo, WalletAddressType};
+use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
 
 new_type!(WalletId, String);
 impl_default_for!(WalletId);

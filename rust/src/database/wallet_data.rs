@@ -15,7 +15,7 @@ use tracing::{debug, error, info};
 use crate::{
     consts::WALLET_DATA_DIR,
     redb::Json,
-    wallet::{metadata::WalletId, WalletAddressType},
+    wallet::{WalletAddressType, metadata::WalletId},
 };
 
 use ahash::AHashMap as HashMap;

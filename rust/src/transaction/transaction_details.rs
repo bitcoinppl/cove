@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
-use bdk_chain::{tx_graph::CanonicalTx, ChainPosition as BdkChainPosition, ConfirmationBlockTime};
-use bdk_wallet::bitcoin::Transaction as BdkTransaction;
+use bdk_chain::{ChainPosition as BdkChainPosition, ConfirmationBlockTime, tx_graph::CanonicalTx};
 use bdk_wallet::Wallet as BdkWallet;
+use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bip329::{Label, Labels, TransactionRecord};
 use jiff::Timestamp;
 use numfmt::{Formatter, Precision};
 
 use crate::{
     database::Database,
-    fiat::{client::FIAT_CLIENT, FiatCurrency},
+    fiat::{FiatCurrency, client::FIAT_CLIENT},
     format::NumberFormatter as _,
     task,
     transaction::{TransactionDirection, Unit},
@@ -17,7 +17,7 @@ use crate::{
 
 use crate::{
     device::Device,
-    wallet::{address, Address},
+    wallet::{Address, address},
 };
 
 use super::{Amount, FeeRate, SentAndReceived, TxId};

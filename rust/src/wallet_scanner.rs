@@ -14,20 +14,20 @@ const DEFAULT_SCAN_LIMIT: u32 = 150;
 
 use crate::{
     database::{
-        wallet_data::{ScanState, ScanningInfo, WalletDataDb},
         Database,
+        wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
     keychain::Keychain,
     manager::wallet::WalletManagerReconcileMessage,
     mnemonic::MnemonicExt,
     node::{
-        client::{NodeClient, NodeClientOptions},
         Node,
+        client::{NodeClient, NodeClientOptions},
     },
     task::spawn_actor,
     wallet::{
-        metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
         WalletAddressType, WalletError,
+        metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
     },
 };
 
@@ -164,7 +164,7 @@ impl WalletScanner {
             | DiscoveryState::ChoseAdressType
             | DiscoveryState::FoundAddressesFromJson(_, _)
             | DiscoveryState::FoundAddressesFromMnemonic(_) => {
-                return Err(WalletScannerError::NoAddressTypes)
+                return Err(WalletScannerError::NoAddressTypes);
             }
         };
 
