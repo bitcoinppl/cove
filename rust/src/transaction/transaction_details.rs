@@ -111,6 +111,7 @@ impl TransactionDetails {
             .tx
             .input
             .iter()
+            .filter(|input| wallet.is_mine(input.script_sig.clone()))
             .map(|input| input.previous_output.vout)
             .collect();
 
@@ -120,6 +121,7 @@ impl TransactionDetails {
             .output
             .iter()
             .enumerate()
+            .filter(|(_index, output)| wallet.is_mine(output.script_pubkey.clone()))
             .map(|(index, _output)| index as u32)
             .collect();
 
