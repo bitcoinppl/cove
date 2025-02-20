@@ -320,6 +320,13 @@ struct SelectedWalletScreen: View {
             setSheetState(newValue)
         }
         .onAppear { setSheetState(manager.walletMetadata.discoveryState) }
+        .onAppear {
+            // make sure the wallet is marked as selected
+            if Database().globalConfig().selectedWallet() != metadata.id {
+                Log.warn("Wallet was not selected, but when to selected wallet screen, updating database")
+                try? Database().globalConfig().selectWallet(id: metadata.id)
+            }
+        }
         .onAppear(perform: manager.validateMetadata)
         .alert(
             item: Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
