@@ -257,6 +257,17 @@ impl LabelsTable {
         Ok(label)
     }
 
+    pub fn get_address_record(
+        &self,
+        address: impl Borrow<Address<NetworkUnchecked>>,
+    ) -> Result<Option<Record<AddressRecord>>, Error> {
+        let address = address.borrow();
+        let table = self.read_table(ADDRESS_TABLE)?;
+        let label = table.get(address)?.map(|record| record.value());
+
+        Ok(label)
+    }
+
     // MARK: INSERT
 
     pub fn insert_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {

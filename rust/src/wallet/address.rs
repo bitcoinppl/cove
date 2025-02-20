@@ -124,6 +124,10 @@ impl Address {
 
         Ok(Self::new(address))
     }
+
+    pub fn into_unchecked(self) -> BdkAddress<NetworkUnchecked> {
+        self.0.into_unchecked()
+    }
 }
 
 impl AddressWithNetwork {

@@ -4,6 +4,7 @@ use bdk_chain::{ChainPosition as BdkChainPosition, ConfirmationBlockTime, tx_gra
 use bdk_wallet::Wallet as BdkWallet;
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bip329::{Label, Labels, TransactionRecord};
+use bitcoin::params::Params;
 use jiff::Timestamp;
 use numfmt::{Formatter, Precision};
 
@@ -35,6 +36,9 @@ pub enum TransactionDetailError {
 
     #[error("Unable to get fiat amount: {0}")]
     FiatAmount(String),
+
+    #[error("Unable to get change address: {0}")]
+    ChangeAddress(String),
 }
 
 type Error = TransactionDetailError;
@@ -49,6 +53,8 @@ pub struct TransactionDetails {
     pub labels: Labels,
     pub input_indexes: Vec<u32>,
     pub output_indexes: Vec<u32>,
+    // for outgoing transactions we might have a change address
+    pub change_address: Option<Address>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -64,7 +70,7 @@ impl TransactionDetails {
         labels: Labels,
     ) -> Result<Self, Error> {
         let txid = tx.tx_node.txid;
-        let sent_and_received = wallet.sent_and_received(&tx.tx_node.tx).into();
+        let sent_and_received: SentAndReceived = wallet.sent_and_received(&tx.tx_node.tx).into();
         let chain_postition = &tx.chain_position;
         let tx_details = wallet.get_tx(txid).expect("transaction").tx_node.tx;
 
@@ -73,6 +79,32 @@ impl TransactionDetails {
 
         let address = Address::try_new(&tx, wallet)?;
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
+
+        let change_address = match sent_and_received.direction {
+            TransactionDirection::Incoming => None,
+            TransactionDirection::Outgoing => {
+                let outputs = tx.tx_node.tx.output.iter();
+                let script = outputs.map(|o| o.script_pubkey.clone()).find_map(|pubkey| {
+                    if wallet.is_mine(pubkey.clone()) {
+                        Some(pubkey.into_boxed_script())
+                    } else {
+                        None
+                    }
+                });
+
+                match script {
+                    Some(script) => {
+                        let network = wallet.network();
+                        let address = bitcoin::Address::from_script(&script, Params::from(network))
+                            .map_err(|e| Error::ChangeAddress(e.to_string()))?;
+
+                        Some(address)
+                    }
+                    None => None,
+                }
+            }
+        }
+        .map(Address::new);
 
         let input_indexes = tx
             .tx_node
@@ -101,6 +133,7 @@ impl TransactionDetails {
             labels,
             input_indexes,
             output_indexes,
+            change_address,
         };
 
         Ok(me)
@@ -338,6 +371,7 @@ impl TransactionDetails {
             labels: Default::default(),
             input_indexes: vec![],
             output_indexes: vec![],
+            change_address: None,
         }
     }
 

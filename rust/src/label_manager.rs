@@ -4,10 +4,10 @@ use crate::{
     database::{InsertOrUpdate, Record, record::Timestamps, wallet_data::WalletDataDb},
     multi_format::Bip329Labels,
     transaction::{TransactionDetails, TransactionDirection, TxId},
-    wallet::metadata::WalletId,
+    wallet::{Address, metadata::WalletId},
 };
 use ahash::AHashMap as HashMap;
-use bip329::{InOutId, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
+use bip329::{AddressRecord, InOutId, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {
@@ -44,10 +44,39 @@ pub enum LabelManagerError {
 
     #[error("Unable to delete labels: {0}")]
     DeleteLabels(String),
+
+    #[error("Unable to save address labels: {0}")]
+    SaveAddressLabels(String),
 }
 
 pub type Error = LabelManagerError;
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[derive(Debug, Clone, uniffi::Object)]
+pub struct AddressArgs {
+    pub address: Address,
+    pub change_address: Option<Address>,
+    pub direction: TransactionDirection,
+}
+
+#[uniffi::export]
+impl AddressArgs {
+    #[uniffi::constructor]
+    pub fn new(
+        address: Arc<Address>,
+        change_address: Option<Arc<Address>>,
+        direction: TransactionDirection,
+    ) -> Self {
+        let address = Arc::unwrap_or_clone(address);
+        let change_address = change_address.map(Arc::unwrap_or_clone);
+
+        Self {
+            address,
+            change_address,
+            direction,
+        }
+    }
+}
 
 #[uniffi::export]
 impl LabelManager {
@@ -114,6 +143,14 @@ impl LabelManager {
                 details.sent_and_received.direction,
             )
             .into_iter();
+
+        let address_args = AddressArgs {
+            address: details.address.clone(),
+            change_address: details.change_address.clone(),
+            direction: details.sent_and_received.direction,
+        };
+
+        self.insert_or_update_address_records(label, address_args)?;
 
         // INSERT
         // if it's a new transaction, we need to insert input and output labels for each
@@ -295,6 +332,57 @@ impl LabelManager {
             .map_err(|e| LabelManagerError::SaveOutputLabels(e.to_string()))?;
 
         Ok(())
+    }
+
+    fn insert_or_update_address_records(
+        &self,
+        label: &str,
+        args: AddressArgs,
+    ) -> Result<Option<()>> {
+        let now = jiff::Timestamp::now().as_second() as u64;
+        let timestamps = Timestamps {
+            created_at: now,
+            updated_at: now,
+        };
+
+        // incoming use address
+        let address_record = match args.direction {
+            TransactionDirection::Incoming => {
+                let address = args.address.into_unchecked();
+                Some(AddressRecord {
+                    ref_: address.clone(),
+                    label: Some(label.to_string()),
+                })
+            }
+            TransactionDirection::Outgoing => {
+                let Some(address) = args.change_address else { return Ok(None) };
+                Some(AddressRecord {
+                    ref_: address.into_unchecked(),
+                    label: Some(label.to_string()),
+                })
+            }
+        };
+
+        let Some(address_record) = address_record else { return Ok(None) };
+
+        let current = self
+            .db
+            .labels
+            .get_address_record(&address_record.ref_)
+            .unwrap_or(None);
+
+        let mut timestamps = current
+            .map(|current| current.timestamps)
+            .unwrap_or(timestamps);
+
+        timestamps.updated_at = now;
+
+        self.db
+            .labels
+            .insert_label_with_timestamps(address_record, timestamps)
+            .map_err(|e| LabelManagerError::SaveAddressLabels(e.to_string()))?;
+
+        Ok(Some(()))
     }
 
     fn insert_or_update_transaction_label(
