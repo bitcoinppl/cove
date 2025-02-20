@@ -468,7 +468,7 @@ impl LabelManager {
             TransactionDirection::Outgoing => "change",
         };
 
-        let output_label = format!("{label} {output_label_suffix}");
+        let output_label = format!("{label} ({output_label_suffix})");
 
         indexs
             .iter()
