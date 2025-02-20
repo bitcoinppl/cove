@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bitcoin::{params::Params, Network, TxOut};
+use bitcoin::{Network, TxOut, params::Params};
 
 use crate::{
     psbt::Psbt,

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, network::Network};
 
-use super::{fingerprint::Fingerprint, AddressInfo, WalletAddressType};
+use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
 
 new_type!(WalletId, String);
 impl_default_for!(WalletId);
@@ -46,7 +46,10 @@ pub struct WalletMetadata {
     pub color: WalletColor,
     pub verified: bool,
     pub network: Network,
-    pub performed_full_scan: bool,
+
+    #[serde(default)]
+    pub performed_full_scan_at: Option<u64>,
+
     #[serde(default)]
     pub master_fingerprint: Option<Arc<Fingerprint>>,
     #[serde(default)]
@@ -65,6 +68,13 @@ pub struct WalletMetadata {
     pub address_type: WalletAddressType,
     #[serde(default)]
     pub fiat_or_btc: FiatOrBtc,
+    #[serde(default)]
+    pub origin: Option<String>,
+
+    /// Show labels for transactions i the transaction list
+    /// If false, we only show either `Sent` or `Received` labels
+    #[serde(default = "default_true")]
+    pub show_labels: bool,
 
     // internal only metadata, don't use in the UI
     // note: maybe better to use a separate table for this
@@ -165,9 +175,10 @@ impl WalletMetadata {
             name: name.into(),
             color: WalletColor::random(),
             master_fingerprint: Some(fingerprint.into()),
+            origin: None,
             verified: false,
             network,
-            performed_full_scan: false,
+            performed_full_scan_at: None,
             fiat_or_btc: FiatOrBtc::Btc,
             selected_unit: Unit::default(),
             sensitive_visible: true,
@@ -175,6 +186,7 @@ impl WalletMetadata {
             address_type: WalletAddressType::default(),
             wallet_type: WalletType::Hot,
             wallet_mode,
+            show_labels: true,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
         }
@@ -187,9 +199,7 @@ impl WalletMetadata {
     ) -> Self {
         let me = Self::new(
             name,
-            fingerprint
-                .map(Into::into)
-                .unwrap_or_else(|| Arc::new(Fingerprint::default())),
+            fingerprint.unwrap_or_else(|| Arc::new(Fingerprint::default())),
         );
 
         Self {
@@ -220,10 +230,11 @@ impl WalletMetadata {
             id: WalletId::preview_new_random(),
             name: "Test Wallet".to_string(),
             master_fingerprint: Some(Arc::new(Fingerprint::default())),
+            origin: None,
             color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,
-            performed_full_scan: false,
+            performed_full_scan_at: None,
             fiat_or_btc: FiatOrBtc::Btc,
             address_type: WalletAddressType::default(),
             selected_unit: Unit::default(),
@@ -231,6 +242,7 @@ impl WalletMetadata {
             details_expanded: false,
             wallet_type: WalletType::Hot,
             wallet_mode: WalletMode::Main,
+            show_labels: true,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
         }

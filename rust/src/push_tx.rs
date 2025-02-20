@@ -1,7 +1,7 @@
-use bitcoin::base64::{prelude::BASE64_URL_SAFE, Engine as _};
+use bitcoin::base64::{Engine as _, prelude::BASE64_URL_SAFE};
 use winnow::{
-    token::{take_until, take_while},
     Parser as _, Result as WinnowResult,
+    token::{take_until, take_while},
 };
 
 use crate::transaction::ffi::BitcoinTransaction;

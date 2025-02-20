@@ -1,11 +1,14 @@
 //! Module for interacting with redb database, to store high level state, and non sensitive data.
 //! That will be available across the app, and will be persisted across app launches.
 
+pub mod cbor;
 pub mod error;
 pub mod global_cache;
 pub mod global_config;
 pub mod global_flag;
+pub mod key;
 pub mod macros;
+pub mod record;
 pub mod unsigned_transactions;
 pub mod wallet;
 pub mod wallet_data;
@@ -16,6 +19,7 @@ use arc_swap::ArcSwap;
 use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
+use uniffi::custom_newtype;
 use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
 
@@ -27,6 +31,7 @@ use crate::consts::ROOT_DATA_DIR;
 pub static DATABASE: OnceCell<ArcSwap<Database>> = OnceCell::new();
 
 pub type Error = error::DatabaseError;
+pub type Record<T> = record::Record<T>;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Database {
@@ -156,3 +161,13 @@ pub fn delete_database() {
     let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("test"));
     let _ = std::fs::remove_dir(ROOT_DATA_DIR.join("wallet_data"));
 }
+
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum InsertOrUpdate {
+    Insert(Timestamp),
+    Update(Timestamp),
+}
+
+#[derive(Debug, Clone, Copy, derive_more::From, derive_more::AsRef, derive_more::Into)]
+pub struct Timestamp(u64);
+custom_newtype!(Timestamp, u64);

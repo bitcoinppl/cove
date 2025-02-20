@@ -5,8 +5,8 @@ use bdk_chain::{
     spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
 };
 use bdk_esplora::{
-    esplora_client::{self, r#async::AsyncClient},
     EsploraAsyncExt as _,
+    esplora_client::{self, r#async::AsyncClient},
 };
 use bdk_wallet::KeychainKind;
 use bitcoin::Txid;
@@ -15,7 +15,7 @@ use tracing::debug;
 
 use crate::node::Node;
 
-use super::{Error, NodeClientOptions, ESPLORA_BATCH_SIZE, STOP_GAP};
+use super::{ESPLORA_BATCH_SIZE, Error, NodeClientOptions};
 
 #[derive(Debug, Clone)]
 pub struct EsploraClient {
@@ -29,7 +29,6 @@ impl EsploraClient {
             client,
             options: NodeClientOptions {
                 batch_size: ESPLORA_BATCH_SIZE,
-                stop_gap: STOP_GAP,
             },
         }
     }
@@ -70,9 +69,10 @@ impl EsploraClient {
     pub async fn full_scan(
         &self,
         request: FullScanRequest<KeychainKind>,
+        stop_gap: usize,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
         self.client
-            .full_scan(request, self.options.stop_gap, self.options.batch_size)
+            .full_scan(request, stop_gap, self.options.batch_size)
             .await
             .map_err(Error::EsploraScan)
     }

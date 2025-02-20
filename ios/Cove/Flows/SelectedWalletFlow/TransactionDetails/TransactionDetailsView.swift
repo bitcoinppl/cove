@@ -20,7 +20,7 @@ struct TransactionDetailsView: View {
 
     // public
     let id: WalletId
-    let transactionDetails: TransactionDetails
+    @State var transactionDetails: TransactionDetails
     var manager: WalletManager
 
     var headerIcon: HeaderIcon {
@@ -41,10 +41,19 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     var ReceivedDetails: some View {
-        Text(transactionDetails.isConfirmed() ? "Transaction Received" : "Transaction Pending")
-            .font(.title)
-            .fontWeight(.semibold)
-            .padding(.top, 8)
+        VStack {
+            headerIcon
+
+            VStack(spacing: 4) {
+                Text(transactionDetails.isConfirmed() ? "Transaction Received" : "Transaction Pending")
+                    .font(.title)
+                    .fontWeight(.semibold)
+                    .padding(.top, 8)
+
+                // add, edit, remove label
+                TransactionDetailsLabelView(details: transactionDetails, manager: manager)
+            }
+        }
 
         // confirmed
         if transactionDetails.isConfirmed() {
@@ -71,13 +80,15 @@ struct TransactionDetailsView: View {
             .multilineTextAlignment(.center)
         }
 
-        Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
-            .font(.largeTitle)
-            .fontWeight(.bold)
-            .padding(.top, 12)
+        VStack(spacing: 8) {
+            Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .padding(.top, 12)
 
-        AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
-            Text(amount).foregroundStyle(.primary.opacity(0.8))
+            AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
+                Text(amount).foregroundStyle(.primary.opacity(0.8))
+            }
         }
 
         Group {
@@ -113,10 +124,19 @@ struct TransactionDetailsView: View {
 
     @ViewBuilder
     var SentDetails: some View {
-        Text(transactionDetails.isConfirmed() ? "Transaction Sent" : "Transaction Pending")
-            .font(.title)
-            .fontWeight(.semibold)
-            .padding(.top, 6)
+        VStack {
+            headerIcon
+
+            VStack(spacing: 4) {
+                Text(transactionDetails.isConfirmed() ? "Transaction Sent" : "Transaction Pending")
+                    .font(.title)
+                    .fontWeight(.semibold)
+                    .padding(.top, 6)
+
+                // add, edit, remove label
+                TransactionDetailsLabelView(details: transactionDetails, manager: manager)
+            }
+        }
 
         // confirmed
         if transactionDetails.isConfirmed() {
@@ -143,13 +163,15 @@ struct TransactionDetailsView: View {
             .multilineTextAlignment(.center)
         }
 
-        Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
-            .font(.largeTitle)
-            .fontWeight(.bold)
-            .padding(.top, 12)
+        VStack(spacing: 8) {
+            Text(manager.rust.displayAmount(amount: transactionDetails.amount()))
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .padding(.top, 12)
 
-        AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
-            Text(amount).foregroundStyle(.primary.opacity(0.8))
+            AsyncView(operation: transactionDetails.amountFiatFmt) { amount in
+                Text(amount).foregroundStyle(.primary.opacity(0.8))
+            }
         }
 
         Group {
@@ -205,10 +227,8 @@ struct TransactionDetailsView: View {
 
     var body: some View {
         ScrollOrContent {
-            VStack(spacing: 12) {
+            VStack(spacing: 24) {
                 Spacer()
-                headerIcon
-
                 Group {
                     if transactionDetails.isReceived() {
                         ReceivedDetails

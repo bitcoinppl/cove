@@ -10,7 +10,13 @@ import SwiftUI
 
 private enum SheetState: Equatable {
     case details
+    case inputOutputDetails
     case exportQr([String])
+}
+
+private enum DetailsSheetState: Equatable {
+    case main
+    case inputOutputDetails
 }
 
 private enum ConfirmationState: Equatable {
@@ -41,6 +47,7 @@ struct SendFlowHardwareScreen: View {
     @State private var alertState: TaggedItem<AlertState>? = .none
     @State private var sheetState: TaggedItem<SheetState>? = .none
     @State private var confirmationState: TaggedItem<ConfirmationState>? = .none
+    @State private var inputOutputDetailsPresentationSize: PresentationDetent = .height(300)
 
     // file import
     @State private var isPresentingFilePicker = false
@@ -162,9 +169,23 @@ struct SendFlowHardwareScreen: View {
                         .lineLimit(4, reservesSpace: false)
                         .font(.system(.footnote, design: .none))
                         .fontWeight(.semibold)
-                        .padding(.leading, 60)
+                        // padding just for the context
+                        .padding(16)
+                        .contentShape(
+                            .contextMenuPreview,
+                            RoundedRectangle(cornerRadius: 8)
+                        )
+                        .contextMenu {
+                            Button("Copy", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = details.sendingTo().unformatted()
+                            }
+                        }
+                        // remove padding after context
+                        .padding(-16)
+                        .padding(.leading, 50)
                     }
                     .padding(.vertical, 8)
+                    .onTapGesture { sheetState = .init(.inputOutputDetails) }
 
                     Divider()
 
@@ -210,6 +231,32 @@ struct SendFlowHardwareScreen: View {
                 allowedContentTypes: [.plainText, .psbt, .txn],
                 onCompletion: handleFileImport
             )
+            .onAppear {
+                let total = details.outputs().count + details.inputs().count
+                if total == 3 { inputOutputDetailsPresentationSize = .height(300) }
+                if total > 3 { inputOutputDetailsPresentationSize = .height(400) }
+                if total > 5 { inputOutputDetailsPresentationSize = .height(500) }
+            }
+            .toolbar { Toolbar }
+        }
+    }
+
+    @ToolbarContentBuilder
+    var Toolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            HStack {
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    do {
+                        try manager.rust.deleteUnsignedTransaction(txId: details.id())
+                        app.popRoute()
+                    } catch {
+                        Log.error("Unable to delete transaction \(details.id()): \(error)")
+                    }
+                }
+                .contentShape(Rectangle())
+                .tint(.white)
+                .foregroundStyle(.white)
+            }
         }
     }
 
@@ -234,14 +281,26 @@ struct SendFlowHardwareScreen: View {
     }
 
     func handleScannedString(_ txn: String?) {
-        guard let txn else { return alertState = .init(.nfcError("No transaction found")) }
-        if txn.isEmpty { return alertState = .init(.nfcError("No transaction found, empty string")) }
+        guard let txn else {
+            alertState = .init(.nfcError("No transaction found"))
+            return
+        }
+        if txn.isEmpty {
+            alertState = .init(.nfcError("No transaction found, empty string"))
+            return
+        }
         handleScanned(.string(txn))
     }
 
     func handleScannedData(_ txn: Data?) {
-        guard let txn else { return alertState = .init(.nfcError("No transaction found")) }
-        if txn.isEmpty { return alertState = .init(.nfcError("No transaction found, empty string")) }
+        guard let txn else {
+            alertState = .init(.nfcError("No transaction found"))
+            return
+        }
+        if txn.isEmpty {
+            alertState = .init(.nfcError("No transaction found, empty string"))
+            return
+        }
         handleScanned(.data(txn))
     }
 
@@ -442,6 +501,13 @@ struct SendFlowHardwareScreen: View {
             SendFlowDetailsSheetView(manager: manager, details: details)
                 .presentationDetents([.height(425), .height(600), .large])
                 .padding()
+        case .inputOutputDetails:
+            SendFlowDetailsView.InputAndOutputDetailsView(manager: manager, details: details)
+                .presentationDetents(
+                    [.height(300), .height(400), .height(500), .large],
+                    selection: $inputOutputDetailsPresentationSize
+                )
+                .padding(.horizontal)
         case let .exportQr(qrs):
             SendFlowBbqrExport(qrs: qrs.map { QrCodeView(text: $0) })
                 .presentationDetents([.height(425), .height(600), .large])

@@ -136,7 +136,7 @@ impl MultiQr {
 
             // errors
             (Self::Bbqr(_, _), StringOrData::Data(_vec)) => {
-                return Err(MultiQrError::CannotAddBinaryDataToBbqr)
+                return Err(MultiQrError::CannotAddBinaryDataToBbqr);
             }
 
             (Self::Single(_), R::Data(_)) => return Err(MultiQrError::CannotAddPartToSingleQr),

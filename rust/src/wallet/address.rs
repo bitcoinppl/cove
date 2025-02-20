@@ -2,12 +2,12 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::sync::Arc;
 
+use bdk_chain::ConfirmationBlockTime;
+use bdk_chain::bitcoin::Address as BdkAddress;
 use bdk_chain::bitcoin::address::NetworkUnchecked;
 use bdk_chain::bitcoin::params::Params;
-use bdk_chain::bitcoin::Address as BdkAddress;
 use bdk_chain::tx_graph::CanonicalTx;
-use bdk_chain::ConfirmationBlockTime;
-use bdk_wallet::{bitcoin::Transaction as BdkTransaction, AddressInfo as BdkAddressInfo};
+use bdk_wallet::{AddressInfo as BdkAddressInfo, bitcoin::Transaction as BdkTransaction};
 use serde::Deserialize;
 
 use crate::network::Network;
@@ -123,6 +123,10 @@ impl Address {
             .map_err(|e| Error::ScriptError(e.to_string()))?;
 
         Ok(Self::new(address))
+    }
+
+    pub fn into_unchecked(self) -> BdkAddress<NetworkUnchecked> {
+        self.0.into_unchecked()
     }
 }
 

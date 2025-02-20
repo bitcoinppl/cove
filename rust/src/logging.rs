@@ -4,7 +4,7 @@ pub fn init() {
     use tracing_subscriber::{fmt, prelude::*};
 
     if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "cove=debug,info");
+        unsafe { std::env::set_var("RUST_LOG", "cove=debug,info") }
     }
 
     tracing_subscriber::registry()

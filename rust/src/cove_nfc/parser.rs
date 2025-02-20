@@ -2,14 +2,13 @@ pub mod stream;
 
 use stream::Stream;
 use winnow::{
+    ModalResult, Parser,
     binary::{
-        be_u16, be_u8,
+        Endianness, be_u8, be_u16,
         bits::{bits, bool as take_bool, take as take_bits},
-        Endianness,
     },
     error::{ContextError, ErrMode},
     token::{any, literal, take},
-    ModalResult, Parser,
 };
 
 use crate::cove_nfc::{
@@ -194,8 +193,8 @@ mod tests {
     use std::sync::LazyLock;
 
     use winnow::{
-        error::{ErrMode, Needed},
         Bytes,
+        error::{ErrMode, Needed},
     };
 
     use super::*;

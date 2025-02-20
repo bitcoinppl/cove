@@ -10,7 +10,7 @@ use crate::{
     mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
     multi_format::MultiFormatError,
     pending_wallet::PendingWallet,
-    wallet::{fingerprint::Fingerprint, metadata::WalletMetadata, Wallet},
+    wallet::{Wallet, fingerprint::Fingerprint, metadata::WalletMetadata},
 };
 
 type Error = PendingWalletManagerError;
@@ -129,13 +129,13 @@ impl RustPendingWalletManager {
         let wallet_metadata = WalletMetadata::new(name, fingerprint);
 
         // create, persist and select the wallet
-        Wallet::try_new_persisted_and_selected(
-            wallet_metadata.clone(),
+        let wallet = Wallet::try_new_persisted_and_selected(
+            wallet_metadata,
             self.state.read().wallet.mnemonic.clone(),
             None,
         )?;
 
-        Ok(wallet_metadata)
+        Ok(wallet.metadata)
     }
 
     #[uniffi::method]

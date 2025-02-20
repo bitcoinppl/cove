@@ -7,27 +7,32 @@ pub mod ffi;
 pub mod transaction_details;
 pub mod unsigned_transaction;
 
-use std::{cmp::Ordering, sync::Arc};
-
 use bdk_chain::{
+    ChainPosition as BdkChainPosition, ConfirmationBlockTime,
     bitcoin::{Sequence, Witness},
     tx_graph::CanonicalTx,
-    ChainPosition as BdkChainPosition, ConfirmationBlockTime,
 };
 use bdk_wallet::bitcoin::{
     OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
     TxOut as BdkTxOut, Txid as BdkTxid,
 };
+use bip329::Labels;
+use bitcoin::hashes::{Hash as _, sha256d::Hash};
 use rand::Rng as _;
+use std::{borrow::Borrow, cmp::Ordering, sync::Arc};
 
-use crate::{database::Database, fiat::FiatAmount, wallet::Wallet};
+use crate::{
+    database::{Database, wallet_data::WalletDataDb},
+    fiat::FiatAmount,
+    wallet::Wallet,
+};
 
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
 pub type Unit = unit::Unit;
 pub type TransactionDetails = transaction_details::TransactionDetails;
-pub type FeeRate = fees::FeeRate;
 
+pub type FeeRate = fees::FeeRate;
 pub type BdkAmount = bitcoin::Amount;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -61,6 +66,7 @@ pub struct ConfirmedTransaction {
     pub confirmed_at: jiff::Timestamp,
     pub sent_and_received: SentAndReceived,
     pub fiat: Option<FiatAmount>,
+    pub labels: Labels,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
@@ -69,6 +75,7 @@ pub struct UnconfirmedTransaction {
     pub sent_and_received: SentAndReceived,
     pub last_seen: u64,
     pub fiat: Option<FiatAmount>,
+    pub labels: Labels,
 }
 
 #[derive(
@@ -80,10 +87,13 @@ pub struct UnconfirmedTransaction {
     Hash,
     PartialOrd,
     Ord,
+    derive_more::AsRef,
+    derive_more::Deref,
     uniffi::Object,
     serde::Serialize,
     serde::Deserialize,
 )]
+#[repr(transparent)]
 pub struct TxId(pub BdkTxid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -136,6 +146,13 @@ impl Transaction {
         let sent_and_received = wallet.sent_and_received(&tx.tx_node.tx).into();
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
+        let label_db = WalletDataDb::new_or_existing(wallet.id.clone());
+        let labels = label_db
+            .labels
+            .all_labels_for_txn(tx.tx_node.txid)
+            .unwrap_or_default()
+            .into();
+
         match tx.chain_position {
             BdkChainPosition::Unconfirmed { last_seen } => {
                 let unconfirmed = UnconfirmedTransaction {
@@ -143,6 +160,7 @@ impl Transaction {
                     sent_and_received,
                     last_seen: last_seen.unwrap_or_default(),
                     fiat,
+                    labels,
                 };
 
                 Self::Unconfirmed(Arc::new(unconfirmed))
@@ -160,6 +178,7 @@ impl Transaction {
                     confirmed_at,
                     sent_and_received,
                     fiat,
+                    labels,
                 };
 
                 Self::Confirmed(Arc::new(confirmed))
@@ -258,6 +277,8 @@ impl PartialOrd for UnconfirmedTransaction {
     }
 }
 
+//  MARK: transaction impls
+
 impl Ord for Transaction {
     fn cmp(&self, other: &Self) -> Ordering {
         let sort = match (self, other) {
@@ -278,5 +299,87 @@ impl Ord for Transaction {
 impl PartialOrd for Transaction {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl Borrow<[u8]> for TxId {
+    fn borrow(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+// Implement Borrow in both directions
+impl Borrow<BdkTxid> for TxId {
+    fn borrow(&self) -> &BdkTxid {
+        &self.0
+    }
+}
+
+impl Borrow<TxId> for &BdkTxid {
+    fn borrow(&self) -> &TxId {
+        // SAFETY: Valid because:
+        // 1. TxId is #[repr(transparent)] around BdkTxid
+        // 2. We're casting from &BdkTxid to &TxId
+        unsafe { &*((*self) as *const BdkTxid as *const TxId) }
+    }
+}
+
+// MARK: redb serd/de impls
+impl redb::Key for TxId {
+    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
+        data1.cmp(data2)
+    }
+}
+
+impl redb::Value for TxId {
+    type SelfType<'a>
+        = TxId
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = &'a [u8]
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        let hash = Hash::from_slice(data).unwrap();
+        let txid = bitcoin::Txid::from_raw_hash(hash);
+
+        Self(txid)
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'a,
+        Self: 'b,
+    {
+        value.0.as_ref()
+    }
+
+    fn type_name() -> redb::TypeName {
+        redb::TypeName::new(std::any::type_name::<TxId>())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_txid_borrow() {
+        let txid = TxId::preview_new();
+        let txid_borrow: &bitcoin::Txid = txid.borrow();
+        assert_eq!(txid_borrow, &txid.0);
+
+        let txid_borrow: &TxId = txid.borrow();
+        assert_eq!(txid_borrow, &txid);
     }
 }

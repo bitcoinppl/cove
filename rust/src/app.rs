@@ -7,16 +7,16 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
-    database::{error::DatabaseError, Database},
+    database::{Database, error::DatabaseError},
     fiat::{
-        client::{PriceResponse, FIAT_CLIENT},
         FiatCurrency,
+        client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::Keychain,
     network::Network,
     node::Node,
     router::{Route, RouteFactory, Router},
-    transaction::fees::client::{FeeResponse, FEE_CLIENT},
+    transaction::fees::client::{FEE_CLIENT, FeeResponse},
     wallet::metadata::{WalletId, WalletType},
 };
 use crossbeam::channel::{Receiver, Sender};
@@ -89,19 +89,21 @@ impl App {
         #[cfg(debug_assertions)]
         {
             // Create a background thread which checks for deadlocks every 10s
-            std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                let deadlocks = parking_lot::deadlock::check_deadlock();
-                if deadlocks.is_empty() {
-                    continue;
-                }
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    let deadlocks = parking_lot::deadlock::check_deadlock();
+                    if deadlocks.is_empty() {
+                        continue;
+                    }
 
-                error!("{} deadlocks detected", deadlocks.len());
-                for (i, threads) in deadlocks.iter().enumerate() {
-                    error!("Deadlock #{}", i);
-                    for t in threads {
-                        error!("Thread Id {:#?}", t.thread_id());
-                        error!("{:#?}", t.backtrace());
+                    error!("{} deadlocks detected", deadlocks.len());
+                    for (i, threads) in deadlocks.iter().enumerate() {
+                        error!("Deadlock #{}", i);
+                        for t in threads {
+                            error!("Thread Id {:#?}", t.thread_id());
+                            error!("{:#?}", t.backtrace());
+                        }
                     }
                 }
             });
@@ -329,15 +331,10 @@ impl FfiApp {
     pub fn reset_default_route_to(&self, route: Route) {
         debug!("changing default route to: {:?}", route);
 
-        if route == Route::ListWallets {
-            // if we are going to the list wallets route, we should make sure no wallet is selected
-            let _ = Database::global().global_config.clear_selected_wallet();
-
-            if Database::global().wallets().is_empty().unwrap_or(true) {
-                // if there are no wallets, we should create a new wallet
-                self.reset_default_route_to(Route::NewWallet(Default::default()));
-                return;
-            }
+        if route == Route::ListWallets && Database::global().wallets().is_empty().unwrap_or(true) {
+            // if there are no wallets, we should go to the new wallet flow
+            self.reset_default_route_to(Route::NewWallet(Default::default()));
+            return;
         }
 
         self.inner()
@@ -481,14 +478,14 @@ fn set_env() {
     #[cfg(debug_assertions)]
     {
         if std::env::var("RUST_LOG").is_err() {
-            std::env::set_var("RUST_LOG", "cove=debug")
+            unsafe { std::env::set_var("RUST_LOG", "cove=debug") }
         }
     }
 
     #[cfg(not(debug_assertions))]
     {
         if std::env::var("RUST_LOG").is_err() {
-            std::env::set_var("RUST_LOG", "cove=info")
+            unsafe { std::env::set_var("RUST_LOG", "cove=info") }
         }
     }
 }

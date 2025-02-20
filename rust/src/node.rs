@@ -2,7 +2,7 @@ pub mod client;
 
 use crate::{
     network::Network,
-    node_connect::{NodeSelection, BITCOIN_ELECTRUM, SIGNET_ESPLORA, TESTNET_ESPLORA},
+    node_connect::{BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA},
 };
 
 use client::NodeClient;

@@ -160,7 +160,7 @@ struct QrCodeImportScreen: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("? Help") {
+                Button("?") {
                     showingHelp = true
                 }
                 .buttonStyle(.plain)
@@ -241,7 +241,7 @@ struct QrCodeImportScreen: View {
     }
 }
 
-struct HelpView: View {
+private struct HelpView: View {
     var body: some View {
         VStack(spacing: 24) {
             Text("How do get my wallet export QR code?")

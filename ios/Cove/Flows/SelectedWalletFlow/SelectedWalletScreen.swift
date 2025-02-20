@@ -11,6 +11,15 @@ import SwiftUI
 private enum SheetState: Equatable {
     case receive
     case chooseAddressType([FoundAddress])
+    case qrLabelsExport
+    case qrLabelsImport
+}
+
+private enum AlertState: Equatable {
+    case importSuccess
+    case exportSuccess
+    case unableToImportLabels(String)
+    case unableToExportLabels(String)
 }
 
 struct SelectedWalletScreen: View {
@@ -25,9 +34,18 @@ struct SelectedWalletScreen: View {
     var manager: WalletManager
 
     // private
+
+    // alerts & sheets
     @State private var sheetState: TaggedItem<SheetState>? = nil
+    @State private var alertState: TaggedItem<AlertState>? = nil
+
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
+
+    // import / export
+    @State private var isExportingLabels = false
+    @State private var isImportingLabels = false
+    @State private var scannedLabels: TaggedString? = nil
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -35,6 +53,10 @@ struct SelectedWalletScreen: View {
 
     func updater(_ action: WalletManagerAction) {
         manager.dispatch(action: action)
+    }
+
+    var labelManager: LabelManager {
+        manager.rust.labelManager()
     }
 
     @ViewBuilder
@@ -93,7 +115,7 @@ struct SelectedWalletScreen: View {
         case .loading:
             Loading
         case let .scanning(txns):
-            if !manager.walletMetadata.performedFullScan, txns.isEmpty {
+            if manager.walletMetadata.performedFullScanAt == nil, txns.isEmpty {
                 Loading
             } else {
                 transactionsCard(transactions: txns, scanComplete: false)
@@ -110,6 +132,10 @@ struct SelectedWalletScreen: View {
             ReceiveView(manager: manager)
         case let .chooseAddressType(foundAddresses):
             ChooseWalletTypeView(manager: manager, foundAddresses: foundAddresses)
+        case .qrLabelsExport:
+            EmptyView()
+        case .qrLabelsImport:
+            QrCodeLabelImportView(scannedCode: $scannedLabels)
         }
     }
 
@@ -127,6 +153,58 @@ struct SelectedWalletScreen: View {
 
     func showReceiveSheet() {
         sheetState = TaggedItem(.receive)
+    }
+
+    @ToolbarContentBuilder
+    var MainToolBar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 10) {
+                if metadata.walletType == .cold {
+                    BitcoinShieldIcon(width: 13, color: .white)
+                }
+
+                Text(metadata.name)
+                    .foregroundStyle(.white)
+                    .font(.callout)
+                    .fontWeight(.semibold)
+            }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 28)
+            .contentShape(Rectangle())
+            .contentShape(
+                .contextMenuPreview,
+                RoundedRectangle(cornerRadius: 8)
+            )
+            .contextMenu {
+                Button("Change Name") {
+                    app.pushRoute(Route.settings(.wallet(id: metadata.id, route: .changeName)))
+                }
+            }
+        }
+
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            HStack(spacing: 5) {
+                Button(action: {
+                    app.sheetState = .init(.qr)
+                }) {
+                    Image(systemName: "qrcode")
+                        .foregroundStyle(.white)
+                        .font(.callout)
+                }
+
+                Menu {
+                    MoreInfoPopover(
+                        manager: manager,
+                        isExportingLabels: $isExportingLabels,
+                        isImportingLabels: $isImportingLabels
+                    )
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(.white)
+                        .font(.callout)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -148,46 +226,64 @@ struct SelectedWalletScreen: View {
             Transactions
                 .environment(manager)
         }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 10) {
-                    if metadata.walletType == .cold {
-                        BitcoinShieldIcon(width: 13, color: .white)
-                    }
-
-                    Text(metadata.name)
-                        .foregroundStyle(.white)
-                        .font(.callout)
-                        .fontWeight(.semibold)
-                }
-                .padding(.vertical, 20)
-                .padding(.horizontal, 28)
-                .contentShape(Rectangle())
-                .contentShape(
-                    .contextMenuPreview,
-                    RoundedRectangle(cornerRadius: 8)
-                )
-                .contextMenu {
-                    Button("Settings") {
-                        app.pushRoutes(RouteFactory().nestedWalletSettings(id: metadata.id))
-                    }
-                }
-            }
-
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button(action: {
-                    app.sheetState = .init(.qr)
-                }) {
-                    Image(systemName: "qrcode")
-                        .foregroundStyle(.white)
-                        .font(.callout)
-                }
-            }
-        }
+        .toolbar { MainToolBar }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(Color.midnightBlue.opacity(0.9), for: .navigationBar)
         .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
         .sheet(item: $sheetState, content: SheetContent)
+        .fileExporter(
+            isPresented: $isExportingLabels,
+            document: JSONLDocument(text: exportLabelContent()),
+            defaultFilename:
+            labelManager.exportDefaultFileName(name: metadata.name)
+        ) { result in
+            switch result {
+            case .success:
+                alertState = .init(.exportSuccess)
+            case let .failure(error):
+                alertState = .init(.unableToExportLabels(error.localizedDescription))
+            }
+        }
+        .fileImporter(
+            isPresented: $isImportingLabels,
+            allowedContentTypes: [.plainText, .json]
+        ) { result in
+            do {
+                let file = try result.get()
+                let fileContents = try FileReader(for: file).read()
+                try labelManager.import(jsonl: fileContents)
+                alertState = .init(.importSuccess)
+            } catch {
+                alertState = .init(.unableToImportLabels(error.localizedDescription))
+            }
+        }
+        .alert(
+            alertTitle,
+            isPresented: showingAlert,
+            presenting: alertState,
+            actions: { MyAlert($0).actions },
+            message: { MyAlert($0).message }
+        )
+        .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
+    }
+
+    func onChangeOfScannedLabels(_: TaggedString?, _ labels: TaggedString?) {
+        guard let labels else { return }
+        do {
+            try labelManager.import(jsonl: labels.item)
+            alertState = .init(.importSuccess)
+        } catch {
+            alertState = .init(.unableToImportLabels("Invalid QR code \(error.localizedDescription)"))
+        }
+    }
+
+    func exportLabelContent() -> String {
+        do {
+            return try labelManager.export()
+        } catch {
+            alertState = .init(.unableToExportLabels(error.localizedDescription))
+            return ""
+        }
     }
 
     var body: some View {
@@ -209,6 +305,7 @@ struct SelectedWalletScreen: View {
             .refreshable {
                 await manager.rust.forceWalletScan()
                 let _ = try? await manager.rust.forceUpdateHeight()
+                await manager.updateWalletBalance()
             }
             .onAppear { UIRefreshControl.appearance().tintColor = UIColor.white }
             .scrollIndicators(.hidden)
@@ -223,12 +320,62 @@ struct SelectedWalletScreen: View {
             setSheetState(newValue)
         }
         .onAppear { setSheetState(manager.walletMetadata.discoveryState) }
+        .onAppear {
+            // make sure the wallet is marked as selected
+            if Database().globalConfig().selectedWallet() != metadata.id {
+                Log.warn("Wallet was not selected, but when to selected wallet screen, updating database")
+                try? Database().globalConfig().selectWallet(id: metadata.id)
+            }
+        }
         .onAppear(perform: manager.validateMetadata)
         .alert(
             item: Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
             content: DisplayErrorAlert
         )
         .environment(manager)
+    }
+
+    // MARK: Alerts
+
+    private var showingAlert: Binding<Bool> {
+        Binding(
+            get: { alertState != nil },
+            set: { if !$0 { alertState = .none } }
+        )
+    }
+
+    private var alertTitle: String {
+        guard let alert = alertState else { return "Error!" }
+        return MyAlert(alert).title
+    }
+
+    private func MyAlert(_ alert: TaggedItem<AlertState>) -> AnyAlertBuilder {
+        switch alert.item {
+        case let .unableToImportLabels(error), let .unableToExportLabels(error):
+            AlertBuilder(
+                title: "Oops something went wrong!",
+                message: error,
+                actions: okButton
+            ).eraseToAny()
+        case .importSuccess:
+            AlertBuilder(
+                title: "Success!",
+                message: "Labels have been imported successfully.",
+                actions: okButton
+            ).eraseToAny()
+        case .exportSuccess:
+            AlertBuilder(
+                title: "Success!",
+                message: "Labels have been saved successfully.",
+                actions: okButton
+            )
+            .eraseToAny()
+        }
+    }
+
+    @ViewBuilder
+    private func okButton() -> some View {
+        Button("OK", action: { alertState = .none })
     }
 }
 
@@ -276,8 +423,9 @@ struct VerifyReminder: View {
 #Preview {
     AsyncPreview {
         NavigationStack {
-            SelectedWalletScreen(manager: WalletManager(preview: "preview_only"))
-                .environment(AppManager.shared)
+            SelectedWalletScreen(
+                manager: WalletManager(preview: "preview_only")
+            ).environment(AppManager.shared)
         }
     }
 }

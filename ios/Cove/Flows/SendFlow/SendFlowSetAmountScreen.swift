@@ -206,7 +206,7 @@ struct SendFlowSetAmountScreen: View {
 
         Task {
             do {
-                let confirmDetails = try await manager.rust.getConfirmDetails(
+                let confirmDetails = try await manager.rust.confirmTxn(
                     amount: amount,
                     address: address,
                     feeRate: feeRate.feeRate()
@@ -510,12 +510,14 @@ struct SendFlowSetAmountScreen: View {
             sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
             return
         }
-        var newValue = newValue
 
+        var newValue = newValue
         // no decimals when entering sats
         if metadata.selectedUnit == .sat {
             newValue = newValue.replacingOccurrences(of: ".", with: "")
         }
+
+        if newValue == "." { newValue = "0." }
 
         let value =
             newValue

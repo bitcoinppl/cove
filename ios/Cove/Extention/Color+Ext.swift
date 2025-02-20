@@ -17,6 +17,18 @@ extension Color {
         Color(red: 0.463, green: 0.898, blue: 0.584) // #76e595
     }
 
+    static var background: Color {
+        Color(UIColor.systemBackground)
+    }
+
+    static var secondaryBackground: Color {
+        Color(UIColor.secondarySystemBackground)
+    }
+
+    static var listBackground: Color {
+        Color(UIColor.systemGroupedBackground)
+    }
+
     init(_ color: WalletColor) {
         self = color.toColor()
     }

@@ -6,7 +6,7 @@ use crate::{
     hardware_export::HardwareExport,
     mnemonic::ParseMnemonic as _,
     transaction::ffi::BitcoinTransaction,
-    wallet::{address::AddressError, AddressWithNetwork},
+    wallet::{AddressWithNetwork, address::AddressError},
 };
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -21,6 +21,7 @@ pub enum MultiFormat {
     HardwareExport(Arc<HardwareExport>),
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
+    Bip329Labels(Arc<Bip329Labels>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -68,7 +69,7 @@ impl MultiFormat {
             Ok(address) => return Ok(Self::Address(address.into())),
 
             Err(AddressError::UnsupportedNetwork) => {
-                return Err(MultiFormatError::UnsupportedNetworkAddress)
+                return Err(MultiFormatError::UnsupportedNetworkAddress);
             }
 
             _ => {}
@@ -98,6 +99,11 @@ impl MultiFormat {
 
         if string.starts_with("UR:") || string.starts_with("ur:") {
             return Err(MultiFormatError::UrFormatNotSupported);
+        }
+
+        // try and parse bip329 labels
+        if let Ok(labels) = bip329::Labels::try_from_str(string) {
+            return Ok(Self::Bip329Labels(Arc::new(labels.into())));
         }
 
         warn!("could not parse string as MultiFormat: {string}");
@@ -137,3 +143,16 @@ fn string_or_data_try_into_multi_format(
 fn display_multi_format_error(error: MultiFormatError) -> String {
     error.to_string()
 }
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    uniffi::Object,
+    derive_more::Into,
+    derive_more::From,
+    derive_more::Deref,
+    derive_more::AsRef,
+)]
+pub struct Bip329Labels(pub bip329::Labels);

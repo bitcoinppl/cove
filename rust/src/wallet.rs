@@ -16,7 +16,7 @@ use crate::{
     consts::ROOT_DATA_DIR,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    keys::Descriptors,
+    keys::{Descriptor, Descriptors},
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
     network::Network,
@@ -25,8 +25,8 @@ use crate::{
 use balance::Balance;
 use bdk_file_store::Store;
 use bdk_wallet::{
-    bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
-    keys::DescriptorPublicKey, KeychainKind,
+    KeychainKind, bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
+    keys::DescriptorPublicKey,
 };
 use bip39::Mnemonic;
 use fingerprint::Fingerprint;
@@ -133,7 +133,9 @@ impl Wallet {
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
             // save wallet_metadata to database
-            database.wallets.create_wallet(me.metadata.clone())?;
+            database
+                .wallets
+                .save_new_wallet_metadata(me.metadata.clone())?;
 
             // set this wallet as the selected wallet
             database.global_config.select_wallet(me.id.clone())?;
@@ -183,11 +185,29 @@ impl Wallet {
             .map_err(|error| WalletError::LoadError(error.to_string()))?
             .ok_or(WalletError::WalletNotFound)?;
 
-        let metadata = Database::global()
+        let mut metadata = Database::global()
             .wallets
             .get(&id, network, mode)
             .map_err(WalletError::DatabaseError)?
             .ok_or(WalletError::WalletNotFound)?;
+
+        // set and save the origin if not set
+        // we should be able to remove this because we should always have the origin
+        if metadata.origin.is_none() {
+            warn!("no origin found, setting using descriptor");
+            let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
+            let descriptor = Descriptor::from(extended_descriptor.clone());
+            let origin = descriptor.origin().ok();
+
+            metadata.origin = origin;
+
+            if let Err(error) = Database::global()
+                .wallets
+                .save_new_wallet_metadata(metadata.clone())
+            {
+                warn!("failed to save wallet origin into metadata: {error}");
+            }
+        }
 
         Ok(Self {
             id,
@@ -292,6 +312,7 @@ impl Wallet {
         };
 
         let descriptors: Descriptors = descriptors.into();
+        let origin = descriptors.origin().ok();
 
         let wallet = descriptors
             .into_create_params()
@@ -303,7 +324,11 @@ impl Wallet {
         keychain.save_wallet_xpub(&id, xpub)?;
 
         // save wallet_metadata to database
-        database.wallets.create_wallet(metadata.clone())?;
+        metadata.origin = origin;
+
+        database
+            .wallets
+            .save_new_wallet_metadata(metadata.clone())?;
 
         Ok(Self {
             id,
@@ -398,7 +423,7 @@ impl Wallet {
     }
 
     fn try_new_persisted_from_mnemonic(
-        metadata: WalletMetadata,
+        mut metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
         address_type: WalletAddressType,
@@ -413,6 +438,8 @@ impl Wallet {
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
+        let origin = descriptors.origin().ok();
+        metadata.origin = origin;
 
         let wallet = descriptors
             .into_create_params()
@@ -433,9 +460,16 @@ impl Wallet {
         self.bdk.balance().into()
     }
 
+    pub fn public_descriptor(&self) -> crate::keys::Descriptor {
+        let extended_descriptor: ExtendedDescriptor =
+            self.bdk.public_descriptor(KeychainKind::External).clone();
+
+        crate::keys::Descriptor::from(extended_descriptor)
+    }
+
     pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {
-        use bdk_wallet::miniscript::descriptor::ShInner;
         use bdk_wallet::miniscript::Descriptor;
+        use bdk_wallet::miniscript::descriptor::ShInner;
 
         let extended_descriptor: ExtendedDescriptor =
             self.bdk.public_descriptor(KeychainKind::External).clone();
@@ -449,7 +483,7 @@ impl Wallet {
                 _ => {
                     return Err(WalletError::UnsupportedWallet(
                         "unsupported wallet bare descriptor not wpkh".to_string(),
-                    ))
+                    ));
                 }
             },
             // not sure
@@ -458,7 +492,7 @@ impl Wallet {
             Descriptor::Wsh(_pk) => {
                 return Err(WalletError::UnsupportedWallet(
                     "unsupported wallet, multisig".to_string(),
-                ))
+                ));
             }
         };
 

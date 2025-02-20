@@ -10,24 +10,24 @@ use pubport::formats::Json;
 use tracing::{debug, error, info, warn};
 
 /// Default number of addresses to scan
-const DEFAULT_SCAN_LIMIT: u32 = 125;
+const DEFAULT_SCAN_LIMIT: u32 = 150;
 
 use crate::{
     database::{
-        wallet_data::{ScanState, ScanningInfo, WalletDataDb},
         Database,
+        wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
     keychain::Keychain,
     manager::wallet::WalletManagerReconcileMessage,
     mnemonic::MnemonicExt,
     node::{
-        client::{NodeClient, NodeClientOptions},
         Node,
+        client::{NodeClient, NodeClientOptions},
     },
     task::spawn_actor,
     wallet::{
-        metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
         WalletAddressType, WalletError,
+        metadata::{DiscoveryState, FoundAddress, FoundJson, WalletId, WalletMetadata},
     },
 };
 
@@ -164,7 +164,7 @@ impl WalletScanner {
             | DiscoveryState::ChoseAdressType
             | DiscoveryState::FoundAddressesFromJson(_, _)
             | DiscoveryState::FoundAddressesFromMnemonic(_) => {
-                return Err(WalletScannerError::NoAddressTypes)
+                return Err(WalletScannerError::NoAddressTypes);
             }
         };
 
@@ -173,10 +173,7 @@ impl WalletScanner {
         }
 
         let node = db.global_config().selected_node();
-        let options = NodeClientOptions {
-            batch_size: 1,
-            stop_gap: 50,
-        };
+        let options = NodeClientOptions { batch_size: 1 };
 
         let client_builder = NodeClientBuilder { node, options };
         Ok(Self::new(
@@ -210,7 +207,7 @@ impl WalletScanner {
                 wallet_type,
                 started_at: Instant::now(),
                 state: WorkerState::Created,
-                db: WalletDataDb::new(id.clone()),
+                db: WalletDataDb::new_or_existing(id.clone()),
             });
 
             started_workers += 1;
@@ -411,7 +408,7 @@ impl WalletScanWorker {
         client_builder: NodeClientBuilder,
     ) -> Self {
         debug!("creating wallet scanner for {id}, type: {wallet_type}");
-        let db = WalletDataDb::new(id.clone());
+        let db = WalletDataDb::new_or_existing(id.clone());
 
         let scan_info = db
             .get_scan_state(wallet_type)

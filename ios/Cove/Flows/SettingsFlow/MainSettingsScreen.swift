@@ -152,7 +152,7 @@ struct MainSettingsScreen: View {
     var GeneralSection: some View {
         Section(header: Text("General")) {
             SettingsRow(title: "Network", route: .network, symbol: "network")
-            SettingsRow(title: "Appearence", route: .appearance, symbol: "sun.max.fill")
+            SettingsRow(title: "Appearance", route: .appearance, symbol: "sun.max.fill")
             SettingsRow(
                 title: "Node", route: .node, symbol: "point.3.filled.connected.trianglepath.dotted"
             )

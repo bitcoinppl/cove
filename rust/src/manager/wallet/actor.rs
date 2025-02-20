@@ -1,24 +1,26 @@
 use crate::{
-    database::Database,
+    database::{Database, wallet_data::WalletDataDb},
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::client::NodeClient,
-    transaction::{fees::BdkFeeRate, FeeRate, Transaction, TransactionDetails, TxId},
+    transaction::{FeeRate, Transaction, TransactionDetails, TxId, fees::BdkFeeRate},
     wallet::{
+        Address, AddressInfo, Wallet, WalletAddressType,
         balance::Balance,
         confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
         metadata::BlockSizeLast,
-        Address, AddressInfo, Wallet, WalletAddressType,
     },
 };
 use act_zero::*;
 use bdk_chain::{
+    TxGraph,
     bitcoin::Psbt,
     spk_client::{FullScanResponse, SyncResponse},
 };
+use bdk_core::spk_client::FullScanRequest;
 use bdk_wallet::{KeychainKind, TxOrdering};
 use bitcoin::Amount;
-use bitcoin::{params::Params, Transaction as BdkTransaction};
+use bitcoin::{Transaction as BdkTransaction, params::Params};
 use crossbeam::channel::Sender;
 use eyre::Context as _;
 use std::time::{Duration, UNIX_EPOCH};
@@ -39,15 +41,42 @@ pub struct WalletActor {
     last_scan_finished_: Option<Duration>,
     last_height_fetched_: Option<(Duration, usize)>,
 
+    pub db: WalletDataDb,
     pub state: ActorState,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ActorState {
     Initial,
-    PerformingFullScan,
+    PerformingInitialScan,
+    PerformingExpandedFullScan,
     PerformingIncrementalScan,
-    ScanComplete,
+
+    ExpandedFullScanComplete,
+    InitialFullScanComplete,
+    IncrementalScanComplete,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum FullScanType {
+    Initial,
+    Expanded,
+}
+
+impl FullScanType {
+    fn stop_gap(&self) -> usize {
+        match self {
+            FullScanType::Initial => 20,
+            FullScanType::Expanded => 150,
+        }
+    }
+
+    fn complete_state(&self) -> ActorState {
+        match self {
+            FullScanType::Initial => ActorState::InitialFullScanComplete,
+            FullScanType::Expanded => ActorState::ExpandedFullScanComplete,
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -97,6 +126,8 @@ impl Actor for WalletActor {
 
 impl WalletActor {
     pub fn new(wallet: Wallet, reconciler: Sender<WalletManagerReconcileMessage>) -> Self {
+        let db = WalletDataDb::new_or_existing(wallet.id.clone());
+
         Self {
             addr: Default::default(),
             reconciler,
@@ -105,6 +136,7 @@ impl WalletActor {
             last_scan_finished_: None,
             last_height_fetched_: None,
             state: ActorState::Initial,
+            db,
         }
     }
 
@@ -113,7 +145,12 @@ impl WalletActor {
         Produces::ok(balance)
     }
 
-    pub async fn build_drain_tx(&mut self, address: Address, fee: FeeRate) -> ActorResult<Psbt> {
+    // Build a transaction but don't advance the change address index
+    pub async fn build_ephemeral_drain_tx(
+        &mut self,
+        address: Address,
+        fee: FeeRate,
+    ) -> ActorResult<Psbt> {
         let script_pubkey = address.script_pubkey();
         let mut tx_builder = self.wallet.build_tx();
 
@@ -123,6 +160,8 @@ impl WalletActor {
             .fee_rate(fee.into());
 
         let psbt = tx_builder.finish()?;
+        self.wallet.cancel_tx(&psbt.unsigned_tx);
+
         Produces::ok(psbt)
     }
 
@@ -142,6 +181,23 @@ impl WalletActor {
         let psbt = tx_builder.finish()?;
 
         Produces::ok(psbt)
+    }
+
+    // Build a transaction but don't advance the change address index
+    pub async fn build_ephemeral_tx(
+        &mut self,
+        amount: Amount,
+        address: Address,
+        fee: BdkFeeRate,
+    ) -> ActorResult<Psbt> {
+        let psbt = self.build_tx(amount, address, fee).await?.await?;
+        self.wallet.cancel_tx(&psbt.unsigned_tx);
+        Produces::ok(psbt)
+    }
+
+    // cancel a transaction, reset the address & change address index
+    pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
+        self.wallet.cancel_tx(&txn)
     }
 
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
@@ -369,8 +425,6 @@ impl WalletActor {
             }
         }
 
-        self.reconciler.send(Msg::StartedWalletScan).unwrap();
-
         let node = Database::global().global_config.selected_node();
         let reconciler = self.reconciler.clone();
 
@@ -395,7 +449,7 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        if self.wallet.metadata.performed_full_scan {
+        if self.wallet.metadata.performed_full_scan_at.is_some() {
             send!(addr.perform_incremental_scan());
         } else {
             send!(addr.perform_full_scan());
@@ -471,21 +525,133 @@ impl WalletActor {
                 "transaction not found".to_string(),
             ))?;
 
-        let details = TransactionDetails::try_new(&self.wallet, tx)
+        let labels = self.db.labels.all_labels_for_txn(tx.tx_node.txid)?;
+        let details = TransactionDetails::try_new(&self.wallet, tx, labels.into())
             .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
 
         Produces::ok(details)
     }
 
+    // perform full scan in 2 steps:
+    // 1. do a full scan of the first 20 addresses, return results
+    // 2. do a full scan of the next 150 addresses, return results
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
-        debug!("starting full scan");
+        self.perform_initial_full_scan().await?;
+        Produces::ok(())
+    }
 
-        self.state = ActorState::PerformingFullScan;
-        let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+    // when a wallet is first opened, we need to scan for its addresses, but we want the
+    // initial scan to be fast, so we can have transactions show up in the UI quickly
+    // so we do a full scan of only the first 20 addresses, initially
+    async fn perform_initial_full_scan(&mut self) -> ActorResult<()> {
+        if self.state != ActorState::Initial {
+            debug!(
+                "already performing scanning or scanned skipping ({:?})",
+                self.state
+            );
 
+            return Produces::ok(());
+        }
+
+        debug!("starting initial full scan");
+        self.reconciler
+            .send(WalletManagerReconcileMessage::StartedInitialFullScan)
+            .unwrap();
+
+        // scan happens in the background, state update afterwards
+        self.state = ActorState::PerformingInitialScan;
+        self.do_perform_initial_full_scan().await?;
+
+        Produces::ok(())
+    }
+
+    // after the initial full scan is complete, do a much for comprehensive scan of the wallet
+    // this is slower, but we want to be able to see all transactions in the UI, so scan the next
+    // 150 addresses
+    async fn perform_expanded_full_scan(&mut self) -> ActorResult<()> {
+        if self.state == ActorState::ExpandedFullScanComplete
+            || self.state == ActorState::IncrementalScanComplete
+        {
+            debug!(
+                "already scanned skipping expanded full scan ({:?})",
+                self.state
+            );
+            return Produces::ok(());
+        }
+
+        debug!("starting expanded full scan");
+
+        let txns = self.transactions().await?.await?;
+
+        self.reconciler
+            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns))
+            .unwrap();
+
+        // scan happens in the background, state update afterwards
+        self.state = ActorState::PerformingExpandedFullScan;
+        send!(self.addr.do_perform_expanded_full_scan());
+
+        Produces::ok(())
+    }
+
+    async fn do_perform_initial_full_scan(&mut self) -> ActorResult<()> {
+        debug!("do_perform_initial_full_scan");
+        static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
+
+        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
+
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+
+            let full_scan_result = node_client
+                .start_wallet_scan(&graph, full_scan_request, FULL_SCAN_TYPE.stop_gap())
+                .await;
+
+            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
+            debug!("[initial] done initial full scan in {}s", now - start);
+
+            // update wallet state
+            let _ = call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE)).await;
+
+            // perform next scan
+            send!(addr.perform_expanded_full_scan());
+        });
+
+        Produces::ok(())
+    }
+
+    async fn do_perform_expanded_full_scan(&mut self) -> ActorResult<()> {
+        debug!("do_perform_expanded_full_scan");
+        static FULL_SCAN_TYPE: FullScanType = FullScanType::Expanded;
+
+        let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
+
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+
+            let full_scan_result = node_client
+                .start_wallet_scan(&graph, full_scan_request, FULL_SCAN_TYPE.stop_gap())
+                .await;
+
+            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
+            debug!("[expanded] done expanded full scan in {}s", now - start);
+
+            // update wallet state
+            send!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE));
+        });
+
+        Produces::ok(())
+    }
+
+    async fn get_for_full_scan(
+        &self,
+    ) -> eyre::Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
         let full_scan_request = self.wallet.start_full_scan().build();
 
         let graph = self.wallet.tx_graph().clone();
+
         let node_client = self
             .node_client
             .clone()
@@ -493,20 +659,7 @@ impl WalletActor {
             .ok_or(eyre::eyre!("node client not set"))?
             .clone();
 
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
-            let full_scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request)
-                .await;
-
-            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("done full scan in {}s", now - start);
-
-            // update wallet state
-            send!(addr.handle_full_scan_complete(full_scan_result));
-        });
-
-        Produces::ok(())
+        Ok((full_scan_request, graph, node_client))
     }
 
     async fn perform_incremental_scan(&mut self) -> ActorResult<()> {
@@ -533,27 +686,33 @@ impl WalletActor {
             send!(addr.handle_incremental_scan_complete(sync_result));
         });
 
+        self.state = ActorState::IncrementalScanComplete;
+
         Produces::ok(())
     }
 
     async fn handle_full_scan_complete(
         &mut self,
         full_scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
+        full_scan_type: FullScanType,
     ) -> ActorResult<()> {
-        debug!("applying full scan result");
+        debug!("applying full scan result for {full_scan_type:?}");
 
-        let full_scan_result = full_scan_result?;
-
-        self.wallet.apply_update(full_scan_result)?;
+        self.wallet.apply_update(full_scan_result?)?;
         self.wallet.persist()?;
         self.set_last_scan_finished();
 
-        self.wallet.metadata.performed_full_scan = true;
+        let now = jiff::Timestamp::now().as_second() as u64;
+        self.wallet.metadata.performed_full_scan_at = Some(now);
+
         Database::global()
             .wallets
             .update_wallet_metadata(self.wallet.metadata.clone())?;
 
-        self.mark_and_notify_scan_complete().await?;
+        self.notify_scan_complete().await?;
+
+        // update the state
+        self.state = full_scan_type.complete_state();
 
         Produces::ok(())
     }
@@ -567,7 +726,7 @@ impl WalletActor {
         self.wallet.persist()?;
         self.set_last_scan_finished();
 
-        self.mark_and_notify_scan_complete().await?;
+        self.notify_scan_complete().await?;
 
         Produces::ok(())
     }
@@ -575,11 +734,11 @@ impl WalletActor {
     /// Mark the wallet as scanned
     /// Notify the frontend that the wallet scan is complete
     /// Ssend the wallet balance and transactions
-    async fn mark_and_notify_scan_complete(&mut self) -> ActorResult<()> {
+    async fn notify_scan_complete(&mut self) -> ActorResult<()> {
         use WalletManagerReconcileMessage as Msg;
 
-        // set the scan state to complete
-        self.state = ActorState::ScanComplete;
+        // reload the wallet from the file storage
+        self.reload_wallet();
 
         // get and send wallet balance
         let balance = self
@@ -588,6 +747,7 @@ impl WalletActor {
             .await
             .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
 
+        debug!("sending wallet balance: {balance:?}");
         self.send(Msg::WalletBalanceChanged(balance.into()));
 
         // get and send transactions
@@ -600,6 +760,16 @@ impl WalletActor {
         self.send(Msg::ScanComplete(transactions));
 
         Produces::ok(())
+    }
+
+    // reload the persisted wallet from the local file storage, for some reason
+    // the balance is not updated after the second full scan if I don't reload
+    // the wallet from the file storage
+    fn reload_wallet(&mut self) {
+        match Wallet::try_load_persisted(self.wallet.id.clone()) {
+            Ok(wallet) => self.wallet = wallet,
+            Err(error) => error!("failed to reload wallet: {error:?}"),
+        }
     }
 
     fn last_scan_finished(&mut self) -> Option<Duration> {
@@ -637,7 +807,7 @@ impl WalletActor {
             .ok()??;
         metadata.internal_mut().last_scan_finished = Some(now);
 
-        wallets.create_wallet(metadata).ok()
+        wallets.save_new_wallet_metadata(metadata).ok()
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -683,7 +853,7 @@ impl WalletActor {
             last_seen: now,
         });
 
-        wallets.create_wallet(metadata).ok()
+        wallets.save_new_wallet_metadata(metadata).ok()
     }
 }
 

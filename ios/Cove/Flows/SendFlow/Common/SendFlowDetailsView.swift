@@ -17,7 +17,7 @@ struct SendFlowDetailsView: View {
     @State var prices: PriceResponse?
 
     // private
-    @State private var sheetIsOpen = false
+    @State private var presentingInputOutputDetails = false
     @State private var presentationSize: PresentationDetent = .medium
 
     var metadata: WalletMetadata { manager.walletMetadata }
@@ -67,7 +67,7 @@ struct SendFlowDetailsView: View {
                 .lineLimit(3)
             }
             .padding(.top, 6)
-            .onTapGesture { sheetIsOpen = true }
+            .onTapGesture { presentingInputOutputDetails = true }
 
             Group {
                 // Network Fee Section
@@ -110,8 +110,8 @@ struct SendFlowDetailsView: View {
             guard let prices = newPrices else { return }
             self.prices = prices
         }
-        .sheet(isPresented: $sheetIsOpen) {
-            MoreDetails(manager: manager, details: details)
+        .sheet(isPresented: $presentingInputOutputDetails) {
+            InputAndOutputDetailsView(manager: manager, details: details)
                 .presentationDetents(
                     [.height(300), .height(400), .height(500), .large], selection: $presentationSize
                 )
@@ -127,7 +127,7 @@ struct SendFlowDetailsView: View {
 }
 
 extension SendFlowDetailsView {
-    struct MoreDetails: View {
+    struct InputAndOutputDetailsView: View {
         @Environment(AppManager.self) private var app
         @Environment(SendFlowPresenter.self) private var presenter
         @Environment(\.dismiss) private var dismiss
@@ -175,12 +175,20 @@ extension SendFlowDetailsView {
                         VStack(spacing: 8) {
                             ForEach(details.inputs(), id: \.address) { input in
                                 HStack {
-                                    Text(input.address.spacedOut())
-                                        .fontWeight(.medium)
-                                        .font(.caption)
-                                        .foregroundStyle(.primary)
-                                        .frame(maxWidth: screenWidth / 2, alignment: .leading)
-                                        .multilineTextAlignment(.leading)
+                                    Menu {
+                                        Button("Copy", systemImage: "doc.on.doc") {
+                                            UIPasteboard.general.string = input.address
+                                                .unformatted()
+                                        }
+                                    } label: {
+                                        Text(input.address.spacedOut())
+                                            .fontWeight(.medium)
+                                            .font(.caption)
+                                            .foregroundStyle(.primary)
+                                            .frame(maxWidth: screenWidth / 2, alignment: .leading)
+                                            .multilineTextAlignment(.leading)
+                                    }
+                                    .foregroundStyle(.primary)
 
                                     Spacer()
 
@@ -206,12 +214,22 @@ extension SendFlowDetailsView {
                             VStack(spacing: 8) {
                                 ForEach(details.outputs(), id: \.address) { output in
                                     HStack {
-                                        Text(output.address.spacedOut())
-                                            .fontWeight(.medium)
-                                            .font(.caption)
-                                            .foregroundStyle(.primary)
-                                            .frame(maxWidth: screenWidth / 2, alignment: .leading)
-                                            .multilineTextAlignment(.leading)
+                                        Menu {
+                                            Button("Copy", systemImage: "doc.on.doc") {
+                                                UIPasteboard.general.string = output.address
+                                                    .unformatted()
+                                            }
+                                        } label: {
+                                            Text(output.address.spacedOut())
+                                                .fontWeight(.medium)
+                                                .font(.caption)
+                                                .foregroundStyle(.primary)
+                                                .frame(
+                                                    maxWidth: screenWidth / 2, alignment: .leading
+                                                )
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                        .foregroundStyle(.primary)
 
                                         Spacer()
 
@@ -238,12 +256,22 @@ extension SendFlowDetailsView {
                             VStack(spacing: 8) {
                                 ForEach(splitOutput.external, id: \.address) { output in
                                     HStack {
-                                        Text(output.address.spacedOut())
-                                            .fontWeight(.medium)
-                                            .font(.caption)
-                                            .foregroundStyle(.primary)
-                                            .frame(maxWidth: screenWidth / 2, alignment: .leading)
-                                            .multilineTextAlignment(.leading)
+                                        Menu {
+                                            Button("Copy", systemImage: "doc.on.doc") {
+                                                UIPasteboard.general.string = output.address
+                                                    .unformatted()
+                                            }
+                                        } label: {
+                                            Text(output.address.spacedOut())
+                                                .fontWeight(.medium)
+                                                .font(.caption)
+                                                .foregroundStyle(.primary)
+                                                .frame(
+                                                    maxWidth: screenWidth / 2, alignment: .leading
+                                                )
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                        .foregroundStyle(.primary)
 
                                         Spacer()
 
@@ -268,12 +296,22 @@ extension SendFlowDetailsView {
                             VStack(spacing: 8) {
                                 ForEach(splitOutput.internal, id: \.address) { output in
                                     HStack {
-                                        Text(output.address.spacedOut())
-                                            .fontWeight(.medium)
-                                            .font(.caption)
-                                            .foregroundStyle(.primary)
-                                            .frame(maxWidth: screenWidth / 2, alignment: .leading)
-                                            .multilineTextAlignment(.leading)
+                                        Menu {
+                                            Button("Copy", systemImage: "doc.on.doc") {
+                                                UIPasteboard.general.string = output.address
+                                                    .unformatted()
+                                            }
+                                        } label: {
+                                            Text(output.address.spacedOut())
+                                                .fontWeight(.medium)
+                                                .font(.caption)
+                                                .foregroundStyle(.primary)
+                                                .frame(
+                                                    maxWidth: screenWidth / 2, alignment: .leading
+                                                )
+                                                .multilineTextAlignment(.leading)
+                                        }
+                                        .foregroundStyle(.primary)
 
                                         Spacer()
 
@@ -321,12 +359,16 @@ extension SendFlowDetailsView {
         )
         .padding()
         .environment(AppManager.shared)
+        .environment(
+            SendFlowPresenter(
+                app: AppManager.shared, manager: WalletManager(preview: "preview_only")
+            ))
     }
 }
 
-#Preview("MoreDetails") {
+#Preview("InputAndOutputDetailsView") {
     AsyncPreview {
-        SendFlowDetailsView.MoreDetails(
+        SendFlowDetailsView.InputAndOutputDetailsView(
             manager: WalletManager(preview: "preview_only"),
             details: ConfirmDetails.previewNew()
         )

@@ -4,8 +4,8 @@ use crate::{
     app::FfiApp,
     database::Database,
     mnemonic::NumberOfBip39Words,
-    transaction::{ffi::BitcoinTransaction, Amount, TransactionDetails},
-    wallet::{confirm::ConfirmDetails, metadata::WalletId, Address},
+    transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
+    wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
 };
 
 use derive_more::From;

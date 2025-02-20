@@ -1,7 +1,7 @@
 [package]
 name = "cove"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
@@ -25,9 +25,7 @@ bip39 = { version = "2.0.0", features = ["zeroize"] }
 
 # bitcoin nodes
 bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
-bdk_electrum = { version = "0.21", features = [
-    "use-rustls-ring",
-], default-features = false }
+bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # store bdk wallet data
@@ -35,10 +33,13 @@ bdk_file_store = { version = "0.18.0" }
 bdk_chain = { version = "0.21.0" }
 
 # import / export hardware wallet public keys
-pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = [
-] }
+pubport = { version = "0.2.0", git = "https://github.com/bitcoinppl/pubport.git", features = [] }
 
-bitcoin = "0.32"
+# bip329 labels
+bip329 = { version = "0.2.0", features = [] }
+
+# bitcoin
+bitcoin = { version = "0.32", features = ["serde"] }
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }
@@ -90,18 +91,21 @@ derive_more = { version = "2.0", features = [
     "deref",
     "deref_mut",
 ] }
-strum = { version = "0.26", features = ["derive"] }
+strum = { version = "0.27", features = ["derive"] }
 
 # helpers / utils / exts
 tap = "1.0.1"
 itertools = "0.14"
 
 # time 
-jiff = { version = "0.1", features = [] }
+jiff = { version = "0.2", features = [] }
 
 # ser/de
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1.0"
+cbor4ii = { version = "1.0", features = ["serde1"] }
+
+zerocopy = { version = "0.8", features = ["derive"] }
 
 # bindings
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
@@ -144,14 +148,14 @@ arc-swap = "1.7"
 # macros
 paste = "1.0"
 
+
 [build-dependencies]
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["build"] }
 
 [dev-dependencies]
 tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = [
-    "bindgen-tests",
-] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["bindgen-tests"] }
+tempfile = "3.16"
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

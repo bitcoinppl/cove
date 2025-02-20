@@ -250,7 +250,6 @@ mod tests {
             .await
             .unwrap();
 
-        let value_in_usd = value_in_usd as f64;
         assert_eq!(value_in_usd, fiat.usd as f64);
     }
 
@@ -265,7 +264,6 @@ mod tests {
             .await
             .unwrap();
 
-        let value_in_usd = value_in_usd as f64;
         assert_eq!(value_in_usd, (fiat.usd as f64) / 2.0);
     }
 }

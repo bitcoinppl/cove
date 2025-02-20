@@ -111,7 +111,7 @@ impl WalletsTable {
         Self { db }
     }
 
-    pub fn mark_wallet_as_verified(&self, id: WalletId) -> Result<(), Error> {
+    pub fn mark_wallet_as_verified(&self, id: &WalletId) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
@@ -119,7 +119,7 @@ impl WalletsTable {
 
         // update the wallet
         wallets.iter_mut().for_each(|wallet| {
-            if wallet.id == id {
+            if &wallet.id == id {
                 wallet.verified = true;
             }
         });
@@ -191,7 +191,7 @@ impl WalletsTable {
         Ok(())
     }
 
-    pub fn create_wallet(&self, wallet: WalletMetadata) -> Result<(), Error> {
+    pub fn save_new_wallet_metadata(&self, wallet: WalletMetadata) -> Result<(), Error> {
         let network = wallet.network;
         let mode = wallet.wallet_mode;
 

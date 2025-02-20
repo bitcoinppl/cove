@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use bdk_chain::{bitcoin::Address, ConfirmationBlockTime, TxGraph};
+use bdk_chain::{ConfirmationBlockTime, TxGraph, bitcoin::Address};
 use bdk_core::spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse};
 use bdk_electrum::{
-    electrum_client::{Client, ElectrumApi as _},
     BdkElectrumClient,
+    electrum_client::{Client, ElectrumApi as _},
 };
 use bdk_wallet::KeychainKind;
 use bitcoin::{Transaction, Txid};
 use tap::TapFallible as _;
 use tracing::debug;
 
-use super::{Error, NodeClientOptions, ELECTRUM_BATCH_SIZE, STOP_GAP};
+use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
 use crate::node::Node;
 
 type ElectrumClientInner = BdkElectrumClient<Client>;
@@ -65,6 +65,7 @@ impl ElectrumClient {
         &self,
         request: FullScanRequest<KeychainKind>,
         tx_graph: &TxGraph<ConfirmationBlockTime>,
+        stop_gap: usize,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
         debug!("start populate_tx_cache");
         let client = self.client.clone();
@@ -76,7 +77,6 @@ impl ElectrumClient {
         debug!("populate_tx_cache done");
 
         let client = self.client.clone();
-        let stop_gap = self.options.stop_gap;
         let batch_size = self.options.batch_size;
 
         let result = crate::unblock::run_blocking(move || {
@@ -143,7 +143,6 @@ impl ElectrumClient {
     fn default_options() -> NodeClientOptions {
         NodeClientOptions {
             batch_size: ELECTRUM_BATCH_SIZE,
-            stop_gap: STOP_GAP,
         }
     }
 }

@@ -107,3 +107,9 @@ extension FiatOrBtc {
         self == .fiat ? .btc : .fiat
     }
 }
+
+extension LabelManager {
+    func `import`(labels: Bip329Labels) throws {
+        try importLabels(labels: labels)
+    }
+}

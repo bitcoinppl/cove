@@ -1,6 +1,6 @@
 use derive_more::{
-    derive::{From, Into},
     AsRef, Deref,
+    derive::{From, Into},
 };
 use jiff::ToSpan as _;
 use numfmt::Formatter;
@@ -145,6 +145,11 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn label(&self) -> String {
+        // check if we have a label for this transaction
+        if let Some(label) = self.labels.transaction_label() {
+            return label.to_string();
+        }
+
         self.sent_and_received.label()
     }
 
@@ -208,6 +213,10 @@ impl UnconfirmedTransaction {
 
     #[uniffi::method]
     pub fn label(&self) -> String {
+        if let Some(label) = self.labels.transaction_label() {
+            return label.to_string();
+        }
+
         match &self.sent_and_received.direction {
             TransactionDirection::Incoming => "Receiving",
             TransactionDirection::Outgoing => "Sending",
@@ -254,6 +263,7 @@ fn transaction_preview_confirmed_new() -> Transaction {
         confirmed_at: jiff::Timestamp::now(),
         sent_and_received: SentAndReceived::preview_new(),
         fiat: Some(FiatAmount::preview_new()),
+        labels: Default::default(),
     };
 
     Transaction::Confirmed(Arc::new(txn))
@@ -319,5 +329,6 @@ fn transaction_preview_unconfirmed_new() -> Transaction {
         sent_and_received: SentAndReceived::preview_new(),
         last_seen,
         fiat: None,
+        labels: Default::default(),
     }))
 }
