@@ -16,7 +16,7 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Install stable toolchain with rustfmt availableA
+      - name: Install stable toolchain with rustfmt available
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Run rustfmt
