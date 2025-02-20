@@ -254,7 +254,7 @@ struct SendFlowHardwareScreen: View {
                     }
                 }
                 .contentShape(Rectangle())
-                    .tint(.white)
+                .tint(.white)
                 .foregroundStyle(.white)
             }
         }
