@@ -100,7 +100,7 @@ impl LabelManager {
         let input_records_iter = self
             .create_input_records(
                 &tx_id,
-                &label,
+                label,
                 &details.input_indexes,
                 details.sent_and_received.direction,
             )
@@ -109,7 +109,7 @@ impl LabelManager {
         let output_records_iter = self
             .create_output_records(
                 &tx_id,
-                &label,
+                label,
                 &details.output_indexes,
                 details.sent_and_received.direction,
             )

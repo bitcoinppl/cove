@@ -977,7 +977,7 @@ impl RustWalletManager {
             .await
             .map_err(|error| Error::BuildTxError(error.to_string()))?;
 
-        let details = call!(self.actor.get_confirm_details(psbt.into(), fee_rate.into()))
+        let details = call!(self.actor.get_confirm_details(psbt, fee_rate))
             .await
             .map_err(|_| {
                 Error::GetConfirmDetailsError("failed to get confirm details".to_string())

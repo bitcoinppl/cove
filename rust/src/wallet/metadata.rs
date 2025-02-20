@@ -199,9 +199,7 @@ impl WalletMetadata {
     ) -> Self {
         let me = Self::new(
             name,
-            fingerprint
-                .map(Into::into)
-                .unwrap_or_else(|| Arc::new(Fingerprint::default())),
+            fingerprint.unwrap_or_else(|| Arc::new(Fingerprint::default())),
         );
 
         Self {

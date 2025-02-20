@@ -156,7 +156,7 @@ impl PendingOrConfirmed {
 impl TransactionDetails {
     #[uniffi::method]
     pub fn tx_id(&self) -> TxId {
-        self.tx_id.clone()
+        self.tx_id
     }
 
     #[uniffi::method]
