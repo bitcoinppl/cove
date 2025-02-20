@@ -1,5 +1,5 @@
 //
-//  LabelView.swift
+//  TransactionDetailsLabelView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 2/13/25.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct LabelView: View {
+struct TransactionDetailsLabelView: View {
     @Environment(AppManager.self) private var app
 
     @State var details: TransactionDetails
@@ -153,7 +153,7 @@ struct LabelView: View {
 
 #Preview("No Label") {
     AsyncPreview {
-        LabelView(
+        TransactionDetailsLabelView(
             details: TransactionDetails.previewNewConfirmed(),
             manager: WalletManager(preview: "preview_only")
         )
@@ -163,7 +163,7 @@ struct LabelView: View {
 
 #Preview("With Label") {
     AsyncPreview {
-        LabelView(
+        TransactionDetailsLabelView(
             details: TransactionDetails.previewNewWithLabel(),
             manager: WalletManager(preview: "preview_only")
         )
@@ -173,7 +173,7 @@ struct LabelView: View {
 
 #Preview("Editing Label") {
     AsyncPreview {
-        LabelView(
+        TransactionDetailsLabelView(
             details: TransactionDetails.previewNewWithLabel(label: "Car payment"),
             manager: WalletManager(preview: "preview_only"),
             isEditing: true
