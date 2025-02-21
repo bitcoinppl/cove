@@ -309,7 +309,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Cove/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
+				INFOPLIST_KEY_CFBundleDisplayName = "Cove";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read info";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
@@ -354,7 +354,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Cove/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Cove Wallet";
+				INFOPLIST_KEY_CFBundleDisplayName = "Cove";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_NFCReaderUsageDescription = "Need access to NFC to read info";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need to scan the QR code using the camera";
