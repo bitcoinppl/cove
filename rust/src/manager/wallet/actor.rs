@@ -71,10 +71,6 @@ impl FullScanType {
             FullScanType::Expanded => 150,
         }
     }
-
-    fn complete_state(&self) -> ActorState {
-        ActorState::FullScanComplete(self.clone())
-    }
 }
 
 #[async_trait::async_trait]
@@ -720,7 +716,7 @@ impl WalletActor {
         self.notify_scan_complete().await?;
 
         // update the state
-        self.state = full_scan_type.complete_state();
+        self.state = ActorState::FullScanComplete(full_scan_type);
 
         Produces::ok(())
     }
