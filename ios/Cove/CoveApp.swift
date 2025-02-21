@@ -354,6 +354,7 @@ struct CoveApp: App {
 
                 // import the labels
                 try LabelManager(id: selectedWallet).import(labels: labels)
+                app.alertState = .init(.importedLabelsSuccessfully)
 
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
