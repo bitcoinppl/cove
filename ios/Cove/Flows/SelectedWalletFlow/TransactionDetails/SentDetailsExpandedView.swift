@@ -25,10 +25,17 @@ struct SentDetailsExpandedView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.leading)
 
-                Text(transactionDetails.addressSpacedOut())
-                    .fontWeight(.semibold)
-                    .multilineTextAlignment(.leading)
-                    .textSelection(.enabled)
+                Menu {
+                    Button("Copy", systemImage: "doc.on.doc") {
+                        UIPasteboard.general.string = transactionDetails.address().unformatted()
+                    }
+                } label: {
+                    Text(transactionDetails.addressSpacedOut())
+                        .multilineTextAlignment(.leading)
+                }
+                .fontWeight(.semibold)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
 
                 if transactionDetails.isConfirmed() {
                     HStack(spacing: 0) {
