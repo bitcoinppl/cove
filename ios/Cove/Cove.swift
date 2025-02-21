@@ -914,7 +914,7 @@ public protocol AddressInfoProtocol: AnyObject {
     
     func address()  -> Address
     
-    func adressString()  -> String
+    func addressUnformatted()  -> String
     
     func index()  -> UInt32
     
@@ -978,9 +978,9 @@ open func address() -> Address  {
 })
 }
     
-open func adressString() -> String  {
+open func addressUnformatted() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_addressinfo_adress_string(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_addressinfo_address_unformatted(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -13489,15 +13489,29 @@ public func FfiConverterTypeImportWalletManagerState_lower(_ value: ImportWallet
 
 public struct InternalOnlyMetadata {
     public var addressIndex: AddressIndex?
+    /**
+     * this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
+     */
     public var lastScanFinished: TimeInterval?
     public var lastHeightFetched: BlockSizeLast?
+    /**
+     * this is the time that a full expanded scan was completed, this should only happen once
+     */
+    public var performedFullScanAt: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(addressIndex: AddressIndex?, lastScanFinished: TimeInterval?, lastHeightFetched: BlockSizeLast?) {
+    public init(addressIndex: AddressIndex?, 
+        /**
+         * this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
+         */lastScanFinished: TimeInterval?, lastHeightFetched: BlockSizeLast?, 
+        /**
+         * this is the time that a full expanded scan was completed, this should only happen once
+         */performedFullScanAt: UInt64?) {
         self.addressIndex = addressIndex
         self.lastScanFinished = lastScanFinished
         self.lastHeightFetched = lastHeightFetched
+        self.performedFullScanAt = performedFullScanAt
     }
 }
 
@@ -13517,6 +13531,9 @@ extension InternalOnlyMetadata: Equatable, Hashable {
         if lhs.lastHeightFetched != rhs.lastHeightFetched {
             return false
         }
+        if lhs.performedFullScanAt != rhs.performedFullScanAt {
+            return false
+        }
         return true
     }
 
@@ -13524,6 +13541,7 @@ extension InternalOnlyMetadata: Equatable, Hashable {
         hasher.combine(addressIndex)
         hasher.combine(lastScanFinished)
         hasher.combine(lastHeightFetched)
+        hasher.combine(performedFullScanAt)
     }
 }
 
@@ -13538,7 +13556,8 @@ public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
             try InternalOnlyMetadata(
                 addressIndex: FfiConverterOptionTypeAddressIndex.read(from: &buf), 
                 lastScanFinished: FfiConverterOptionDuration.read(from: &buf), 
-                lastHeightFetched: FfiConverterOptionTypeBlockSizeLast.read(from: &buf)
+                lastHeightFetched: FfiConverterOptionTypeBlockSizeLast.read(from: &buf), 
+                performedFullScanAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -13546,6 +13565,7 @@ public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
         FfiConverterOptionTypeAddressIndex.write(value.addressIndex, into: &buf)
         FfiConverterOptionDuration.write(value.lastScanFinished, into: &buf)
         FfiConverterOptionTypeBlockSizeLast.write(value.lastHeightFetched, into: &buf)
+        FfiConverterOptionUInt64.write(value.performedFullScanAt, into: &buf)
     }
 }
 
@@ -14549,7 +14569,6 @@ public struct WalletMetadata {
     public var color: WalletColor
     public var verified: Bool
     public var network: Network
-    public var performedFullScanAt: UInt64?
     public var masterFingerprint: Fingerprint?
     public var selectedUnit: Unit
     public var sensitiveVisible: Bool
@@ -14569,7 +14588,7 @@ public struct WalletMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, performedFullScanAt: UInt64?, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
+    public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
         /**
          * Show labels for transactions i the transaction list
          * If false, we only show either `Sent` or `Received` labels
@@ -14579,7 +14598,6 @@ public struct WalletMetadata {
         self.color = color
         self.verified = verified
         self.network = network
-        self.performedFullScanAt = performedFullScanAt
         self.masterFingerprint = masterFingerprint
         self.selectedUnit = selectedUnit
         self.sensitiveVisible = sensitiveVisible
@@ -14613,7 +14631,6 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 color: FfiConverterTypeWalletColor.read(from: &buf), 
                 verified: FfiConverterBool.read(from: &buf), 
                 network: FfiConverterTypeNetwork.read(from: &buf), 
-                performedFullScanAt: FfiConverterOptionUInt64.read(from: &buf), 
                 masterFingerprint: FfiConverterOptionTypeFingerprint.read(from: &buf), 
                 selectedUnit: FfiConverterTypeUnit.read(from: &buf), 
                 sensitiveVisible: FfiConverterBool.read(from: &buf), 
@@ -14635,7 +14652,6 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletColor.write(value.color, into: &buf)
         FfiConverterBool.write(value.verified, into: &buf)
         FfiConverterTypeNetwork.write(value.network, into: &buf)
-        FfiConverterOptionUInt64.write(value.performedFullScanAt, into: &buf)
         FfiConverterOptionTypeFingerprint.write(value.masterFingerprint, into: &buf)
         FfiConverterTypeUnit.write(value.selectedUnit, into: &buf)
         FfiConverterBool.write(value.sensitiveVisible, into: &buf)
@@ -26395,7 +26411,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_addressinfo_address() != 59376) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_addressinfo_adress_string() != 41627) {
+    if (uniffi_cove_checksum_method_addressinfo_address_unformatted() != 38845) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_addressinfo_index() != 45529) {

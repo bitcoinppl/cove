@@ -26,7 +26,7 @@ struct ReceiveView: View {
         dismiss()
 
         if let addressInfo {
-            pasteboard.string = addressInfo.adressString()
+            pasteboard.string = addressInfo.addressUnformatted()
             FloaterPopup(text: "Address Copied")
                 .showAndStack()
                 .dismissAfter(2)
@@ -126,14 +126,14 @@ private struct AddressView: View {
             if let addressInfo {
                 GroupBox {
                     VStack {
-                        Image(uiImage: generateQRCode(from: addressInfo.adressString()))
+                        Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
                             .interpolation(.none)
                             .resizable()
                             .scaledToFit()
                             .frame(width: 250, height: 250)
                             .padding()
 
-                        Text(addressInfo.adressString())
+                        Text(addressInfo.addressUnformatted())
                             .font(.custom("Menlo", size: 18))
                             .multilineTextAlignment(.leading)
                             .minimumScaleFactor(0.01)

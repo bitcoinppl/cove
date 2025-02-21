@@ -446,7 +446,13 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        if self.wallet.metadata.performed_full_scan_at.is_some() {
+        if self
+            .wallet
+            .metadata
+            .internal()
+            .performed_full_scan_at
+            .is_some()
+        {
             send!(addr.perform_incremental_scan());
         } else {
             send!(addr.perform_full_scan());
@@ -697,7 +703,6 @@ impl WalletActor {
 
         if full_scan_result.is_err() {
             self.state = ActorState::FailedFullScan(full_scan_type);
-            return Produces::ok(());
         }
 
         self.wallet.apply_update(full_scan_result?)?;
@@ -705,11 +710,12 @@ impl WalletActor {
 
         // only mark as scan complete when the expanded full scan is complete
         if full_scan_type == FullScanType::Expanded {
-            self.set_last_scan_finished();
+            let now = jiff::Timestamp::now().as_second() as u64;
+            self.wallet.metadata.internal_mut().performed_full_scan_at = Some(now);
         }
 
-        let now = jiff::Timestamp::now().as_second() as u64;
-        self.wallet.metadata.performed_full_scan_at = Some(now);
+        // always update the last scan finished time
+        self.set_last_scan_finished();
 
         Database::global()
             .wallets
@@ -811,9 +817,9 @@ impl WalletActor {
                 self.wallet.metadata.wallet_mode,
             )
             .ok()??;
-        metadata.internal_mut().last_scan_finished = Some(now);
 
-        wallets.save_new_wallet_metadata(metadata).ok()
+        metadata.internal_mut().last_scan_finished = Some(now);
+        wallets.update_wallet_metadata(metadata).ok()
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -859,7 +865,7 @@ impl WalletActor {
             last_seen: now,
         });
 
-        wallets.save_new_wallet_metadata(metadata).ok()
+        wallets.update_wallet_metadata(metadata).ok()
     }
 }
 

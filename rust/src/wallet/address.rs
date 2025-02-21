@@ -245,7 +245,7 @@ impl Address {
 
 #[uniffi::export]
 impl AddressInfo {
-    fn adress_string(&self) -> String {
+    fn address_unformatted(&self) -> String {
         self.address.to_string()
     }
 

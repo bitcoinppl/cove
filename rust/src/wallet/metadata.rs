@@ -48,9 +48,6 @@ pub struct WalletMetadata {
     pub network: Network,
 
     #[serde(default)]
-    pub performed_full_scan_at: Option<u64>,
-
-    #[serde(default)]
     pub master_fingerprint: Option<Arc<Fingerprint>>,
     #[serde(default)]
     pub selected_unit: Unit,
@@ -85,9 +82,19 @@ pub struct WalletMetadata {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
 #[serde(default)]
 pub struct InternalOnlyMetadata {
+    #[serde(default)]
     pub address_index: Option<AddressIndex>,
+
+    #[serde(default)]
+    /// this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
     pub last_scan_finished: Option<Duration>,
+
+    #[serde(default)]
     pub last_height_fetched: Option<BlockSizeLast>,
+
+    #[serde(default)]
+    /// this is the time that a full expanded scan was completed, this should only happen once
+    pub performed_full_scan_at: Option<u64>,
 }
 
 #[derive(
@@ -178,7 +185,6 @@ impl WalletMetadata {
             origin: None,
             verified: false,
             network,
-            performed_full_scan_at: None,
             fiat_or_btc: FiatOrBtc::Btc,
             selected_unit: Unit::default(),
             sensitive_visible: true,
@@ -234,7 +240,6 @@ impl WalletMetadata {
             color: WalletColor::random(),
             verified: false,
             network: Network::Bitcoin,
-            performed_full_scan_at: None,
             fiat_or_btc: FiatOrBtc::Btc,
             address_type: WalletAddressType::default(),
             selected_unit: Unit::default(),

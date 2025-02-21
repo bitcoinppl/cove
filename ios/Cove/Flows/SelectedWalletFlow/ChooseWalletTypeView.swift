@@ -72,7 +72,7 @@ public struct ChooseWalletTypeView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.blue)
 
-                    Text(address?.adressString() ?? "bc1q")
+                    Text(address?.addressUnformatted() ?? "bc1q")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

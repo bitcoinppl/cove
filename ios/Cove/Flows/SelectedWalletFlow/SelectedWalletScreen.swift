@@ -115,7 +115,7 @@ struct SelectedWalletScreen: View {
         case .loading:
             Loading
         case let .scanning(txns):
-            if manager.walletMetadata.performedFullScanAt == nil, txns.isEmpty {
+            if manager.walletMetadata.internal.lastScanFinished == nil, txns.isEmpty {
                 Loading
             } else {
                 transactionsCard(transactions: txns, scanComplete: false)
