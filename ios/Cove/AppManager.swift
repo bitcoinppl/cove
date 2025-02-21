@@ -187,7 +187,7 @@ import SwiftUI
                     if let walletManager {
                         Task {
                             await walletManager.forceWalletScan()
-                            await walletManager.getFiatBalance()
+                            await walletManager.updateFiatBalance()
                         }
                     }
 

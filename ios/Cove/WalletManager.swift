@@ -31,7 +31,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
         Task {
-            await getFiatBalance()
+            await updateFiatBalance()
         }
     }
 
@@ -89,10 +89,12 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    func getFiatBalance() async {
+    func updateFiatBalance() async {
         do {
             let fiatBalance = try await rust.balanceInFiat()
-            await MainActor.run { self.fiatBalance = fiatBalance }
+            await MainActor.run {
+                withAnimation { self.fiatBalance = fiatBalance }
+            }
         } catch {
             Log.error("error getting fiat balance: \(error)")
             fiatBalance = 0.00
@@ -102,6 +104,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     func updateWalletBalance() async {
         let balance = await rust.balance()
         await MainActor.run { self.balance = balance }
+        await updateFiatBalance()
     }
 
     func reconcile(message: WalletManagerReconcileMessage) {
@@ -140,6 +143,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
                 case let .walletBalanceChanged(balance):
                     withAnimation { self.balance = balance }
+                    Task { await self.updateFiatBalance() }
 
                 case .unsignedTransactionsChanged:
                     self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
