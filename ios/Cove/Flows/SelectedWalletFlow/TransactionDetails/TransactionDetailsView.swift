@@ -18,6 +18,9 @@ struct TransactionDetailsView: View {
     @State private var numberOfConfirmations: Int? = nil
     @State private var scrollPosition = ScrollPosition()
 
+    @State private var initialOffset: Double? = nil
+    @State private var currentOffset: Double = 0
+
     // public
     let id: WalletId
     @State var transactionDetails: TransactionDetails
@@ -203,30 +206,28 @@ struct TransactionDetailsView: View {
     }
 
     @ViewBuilder
-    func ScrollOrContent(content: () -> some View) -> some View {
-        Group {
-            if detailsExpanded {
-                HStack(alignment: .top) {
-                    ScrollView(.vertical) {
-                        content()
-                    }
-                    .scrollIndicators(.never)
-                    .transition(.opacity)
-                    .frame(alignment: .top)
-                    .scrollPosition($scrollPosition)
-                }
-            } else {
-                VStack {
-                    content()
-                        .transition(.opacity)
-                }
-            }
+    func ContentScrollView(content: () -> some View) -> some View {
+        ScrollView(.vertical) {
+            content()
         }
-        .animation(.easeInOut(duration: 0.3), value: detailsExpanded)
+        .scrollIndicators(.never)
+        .frame(alignment: .top)
+        .scrollPosition($scrollPosition)
+        .scrollDisabled(!detailsExpanded)
+        .onScrollGeometryChange(for: Double.self) { geo in
+            geo.contentOffset.y
+        } action: { oldValue, newValue in
+            if oldValue == newValue { return }
+            if oldValue == 0 { return }
+
+            let initialOffset = initialOffset ?? oldValue
+            self.initialOffset = initialOffset
+            currentOffset = initialOffset - newValue
+        }
     }
 
     var body: some View {
-        ScrollOrContent {
+        ContentScrollView {
             VStack(spacing: 24) {
                 Spacer()
                 Group {
@@ -256,12 +257,8 @@ struct TransactionDetailsView: View {
 
                 Button(action: {
                     if detailsExpanded {
-                        withAnimation {
-                            scrollPosition.scrollTo(edge: .top)
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            manager.dispatch(action: .toggleDetailsExpanded)
-                        }
+                        withAnimation { scrollPosition.scrollTo(edge: .top) }
+                        manager.dispatch(action: .toggleDetailsExpanded)
                     } else {
                         manager.dispatch(action: .toggleDetailsExpanded)
                     }
@@ -290,7 +287,9 @@ struct TransactionDetailsView: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .ignoresSafeArea(edges: .top)
-                .opacity(colorScheme == .light ? 0.55 : 1)
+                .opacity(colorScheme == .light ? 0.40 : 1)
+                .offset(y: currentOffset > 0 ? 0 : currentOffset)
+                .opacity(max(0, 1 + (currentOffset / 275)))
         )
     }
 }
