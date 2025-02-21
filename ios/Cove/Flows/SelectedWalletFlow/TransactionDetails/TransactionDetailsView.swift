@@ -219,7 +219,6 @@ struct TransactionDetailsView: View {
         } action: { oldValue, newValue in
             if oldValue == newValue { return }
             if oldValue == 0 { return }
-
             let initialOffset = initialOffset ?? oldValue
             self.initialOffset = initialOffset
             currentOffset = initialOffset - newValue
@@ -282,15 +281,23 @@ struct TransactionDetailsView: View {
             }
         }
         .background(
-            Image(.transactionDetailsPattern)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(maxWidth: .infinity)
-                .ignoresSafeArea(edges: .top)
-                .opacity(colorScheme == .light ? 0.40 : 1)
-                .offset(y: currentOffset > 0 ? 0 : currentOffset)
-                .opacity(max(0, 1 + (currentOffset / 275)))
+            GeometryReader { geometry in
+                Image(.transactionDetailsPattern)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: geometry.size.width, alignment: .center)
+                    .ignoresSafeArea(edges: .top)
+                    .opacity(colorScheme == .light ? 0.40 : 1)
+                    .offset(y: currentOffset > 0 ? 0 : currentOffset)
+                    .opacity(max(0, 1 + (currentOffset / 275)))
+            }
         )
+    }
+
+    var backgroundImageOffset: CGFloat {
+        guard detailsExpanded else { return 0 }
+        guard currentOffset < 0 else { return 0 }
+        return currentOffset
     }
 }
 
