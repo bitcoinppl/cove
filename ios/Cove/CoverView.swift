@@ -14,7 +14,9 @@ struct CoverView: View {
             Image(.icon)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 100, height: 100)
+                .frame(width: 144, height: 144)
+                .aspectRatio(contentMode: .fit)
+                .cornerRadius(25.263)
         }
     }
 }
