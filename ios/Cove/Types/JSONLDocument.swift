@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct JSONLDocument: FileDocument {
-    static var readableContentTypes = [UTType.json, UTType.plainText]
+    static var readableContentTypes = [UTType.jsonl, UTType.json, UTType.plainText]
     var text: String
 
     init(text: String) {
@@ -25,5 +25,11 @@ struct JSONLDocument: FileDocument {
             throw CocoaError(.fileWriteInapplicableStringEncoding)
         }
         return FileWrapper(regularFileWithContents: data)
+    }
+}
+
+extension UTType {
+    static var jsonl: UTType {
+        UTType(exportedAs: "public.jsonl")
     }
 }
