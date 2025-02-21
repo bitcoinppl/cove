@@ -25,13 +25,12 @@ struct ListWalletsScreen: View {
     var body: some View {
         FullPageLoadingView()
             .onAppear {
-                do {
-                    if let wallet = wallets.first {
-                        return try app.rust.selectWallet(id: wallet.id)
-                    }
-                } catch {
-                    app.loadAndReset(to: Route.newWallet(.select))
+                guard let wallet = wallets.first else {
+                    return app.loadAndReset(to: Route.newWallet(.select))
                 }
+
+                do { return try app.rust.selectWallet(id: wallet.id)
+                } catch { app.loadAndReset(to: Route.newWallet(.select)) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

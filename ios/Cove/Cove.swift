@@ -648,6 +648,9 @@ open class Address: AddressProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -801,6 +804,9 @@ open class AddressArgs: AddressArgsProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -927,6 +933,9 @@ open class AddressInfo: AddressInfoProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -1064,6 +1073,9 @@ open class AddressWithNetwork: AddressWithNetworkProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -1217,6 +1229,9 @@ open class Amount: AmountProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -1401,6 +1416,9 @@ open class AuthPin: AuthPinProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -1530,6 +1548,9 @@ open class AutoCompleteImpl: AutoComplete, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -1741,6 +1762,9 @@ open class Balance: BalanceProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -1878,6 +1902,9 @@ open class BbqrJoinResult: BbqrJoinResultProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2013,6 +2040,9 @@ open class BbqrJoined: BbqrJoinedProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2138,6 +2168,9 @@ open class Bip329Labels: Bip329LabelsProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2257,6 +2290,9 @@ open class Bip39AutoComplete: Bip39AutoCompleteProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2412,6 +2448,9 @@ open class Bip39WordSpecificAutocomplete: Bip39WordSpecificAutocompleteProtocol,
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2572,6 +2611,9 @@ open class BitcoinTransaction: BitcoinTransactionProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2729,6 +2771,9 @@ open class BoxedRoute: BoxedRouteProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2854,6 +2899,9 @@ open class ChainPosition: ChainPositionProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -2992,6 +3040,9 @@ open class ConfirmDetails: ConfirmDetailsProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -3226,6 +3277,9 @@ open class ConfirmedTransaction: ConfirmedTransactionProtocol, @unchecked Sendab
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -3403,6 +3457,9 @@ open class Converter: ConverterProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -3544,6 +3601,9 @@ open class Database: DatabaseProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -3688,6 +3748,9 @@ open class Device: DeviceProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -3808,6 +3871,9 @@ open class FeeRate: FeeRateProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -3943,6 +4009,9 @@ open class FeeRateOption: FeeRateOptionProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -4112,6 +4181,9 @@ open class FeeRateOptionWithTotalFee: FeeRateOptionWithTotalFeeProtocol, @unchec
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -4288,6 +4360,9 @@ open class FeeRateOptions: FeeRateOptionsProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -4448,6 +4523,9 @@ open class FeeRateOptionsWithTotalFee: FeeRateOptionsWithTotalFeeProtocol, @unch
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -4728,6 +4806,9 @@ open class FfiApp: FfiAppProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5059,6 +5140,9 @@ open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5221,6 +5305,9 @@ open class FiatClient: FiatClientProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5333,6 +5420,9 @@ open class FileHandler: FileHandlerProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5462,6 +5552,9 @@ open class Fingerprint: FingerprintProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5594,6 +5687,9 @@ open class FoundJson: FoundJsonProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -5744,6 +5840,9 @@ open class GlobalConfigTable: GlobalConfigTableProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6002,6 +6101,9 @@ open class GlobalFlagTable: GlobalFlagTableProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6143,6 +6245,9 @@ open class HardwareExport: HardwareExportProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6259,6 +6364,9 @@ open class HeaderIconPresenter: HeaderIconPresenterProtocol, @unchecked Sendable
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6410,6 +6518,9 @@ open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6520,6 +6631,9 @@ open class Keychain: KeychainProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6654,6 +6768,9 @@ open class LabelManager: LabelManagerProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6832,6 +6949,9 @@ open class LabelsTable: LabelsTableProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -6946,6 +7066,9 @@ open class Mnemonic: MnemonicProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7098,6 +7221,9 @@ open class MultiQr: MultiQrProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7282,6 +7408,9 @@ open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7420,6 +7549,9 @@ open class NfcConst: NfcConstProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7576,6 +7708,9 @@ open class NodeSelector: NodeSelectorProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7765,6 +7900,9 @@ open class OutPoint: OutPointProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7875,6 +8013,9 @@ open class PendingWallet: PendingWalletProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -7989,6 +8130,9 @@ open class PriceResponse: PriceResponseProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -8134,6 +8278,9 @@ open class Psbt: PsbtProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -8292,6 +8439,9 @@ open class PushTx: PushTxProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -8440,6 +8590,9 @@ open class RouteFactory: RouteFactoryProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -8790,6 +8943,9 @@ open class RustAuthManager: RustAuthManagerProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -9078,6 +9234,9 @@ open class RustImportWalletManager: RustImportWalletManagerProtocol, @unchecked 
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -9242,6 +9401,9 @@ open class RustPendingWalletManager: RustPendingWalletManagerProtocol, @unchecke
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -9527,6 +9689,9 @@ open class RustWalletManager: RustWalletManagerProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -10293,6 +10458,9 @@ open class SeedQr: SeedQrProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -10447,6 +10615,9 @@ open class SentAndReceived: SentAndReceivedProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -10645,6 +10816,9 @@ open class TransactionDetails: TransactionDetailsProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -10978,6 +11152,9 @@ open class TxId: TxIdProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -11103,6 +11280,9 @@ open class TxIn: TxInProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -11213,6 +11393,9 @@ open class TxOut: TxOutProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -11333,6 +11516,9 @@ open class UnconfirmedTransaction: UnconfirmedTransactionProtocol, @unchecked Se
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -11488,6 +11674,9 @@ open class UnsignedTransaction: UnsignedTransactionProtocol, @unchecked Sendable
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -11648,6 +11837,9 @@ open class UnsignedTransactionRecord: UnsignedTransactionRecordProtocol, @unchec
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -11790,6 +11982,9 @@ open class UnsignedTransactionsTable: UnsignedTransactionsTableProtocol, @unchec
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -11918,6 +12113,9 @@ open class Wallet: WalletProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -12058,6 +12256,9 @@ open class WalletDataDb: WalletDataDbProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -12168,6 +12369,9 @@ open class WalletKey: WalletKeyProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -12286,6 +12490,9 @@ open class WalletsTable: WalletsTableProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -12432,6 +12639,9 @@ open class WordValidator: WordValidatorProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
     required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
@@ -14457,7 +14667,7 @@ public func FfiConverterTypeWalletMetadata_lower(_ value: WalletMetadata) -> Rus
 }
 
 
-public enum AddressError {
+public enum AddressError: Swift.Error {
 
     
     
@@ -14753,7 +14963,7 @@ public func FfiConverterTypeAppAction_lower(_ value: AppAction) -> RustBuffer {
 
 
 
-public enum AppError {
+public enum AppError: Swift.Error {
 
     
     
@@ -14985,7 +15195,7 @@ public func FfiConverterTypeAppStateReconcileMessage_lower(_ value: AppStateReco
 
 
 
-public enum AuthError {
+public enum AuthError: Swift.Error {
 
     
     
@@ -15206,7 +15416,7 @@ extension AuthManagerAction: Equatable, Hashable {}
 
 
 
-public enum AuthManagerError {
+public enum AuthManagerError: Swift.Error {
 
     
     
@@ -15457,7 +15667,7 @@ extension AuthType: Equatable, Hashable {}
 
 
 
-public enum Bip39Error {
+public enum Bip39Error: Swift.Error {
 
     
     
@@ -15562,7 +15772,7 @@ extension Bip39Error: Foundation.LocalizedError {
 
 
 
-public enum BitcoinTransactionError {
+public enum BitcoinTransactionError: Swift.Error {
 
     
     
@@ -15779,7 +15989,7 @@ extension ColorSchemeSelection: Equatable, Hashable {}
 
 
 
-public enum ConfirmDetailsError {
+public enum ConfirmDetailsError: Swift.Error {
 
     
     
@@ -15852,7 +16062,7 @@ extension ConfirmDetailsError: Foundation.LocalizedError {
 
 
 
-public enum ConverterError {
+public enum ConverterError: Swift.Error {
 
     
     
@@ -15925,7 +16135,7 @@ extension ConverterError: Foundation.LocalizedError {
 
 
 
-public enum DatabaseError {
+public enum DatabaseError: Swift.Error {
 
     
     
@@ -16068,7 +16278,7 @@ extension DatabaseError: Foundation.LocalizedError {
 
 
 
-public enum DescriptorError {
+public enum DescriptorError: Swift.Error {
 
     
     
@@ -16664,7 +16874,7 @@ extension FfiColorScheme: Equatable, Hashable {}
 
 
 
-public enum FiatAmountError {
+public enum FiatAmountError: Swift.Error {
 
     
     
@@ -16909,7 +17119,7 @@ extension FiatOrBtc: Equatable, Hashable {}
 
 
 
-public enum FileHandlerError {
+public enum FileHandlerError: Swift.Error {
 
     
     
@@ -17008,7 +17218,7 @@ extension FileHandlerError: Foundation.LocalizedError {
 
 
 
-public enum FingerprintError {
+public enum FingerprintError: Swift.Error {
 
     
     
@@ -17077,7 +17287,7 @@ extension FingerprintError: Foundation.LocalizedError {
 
 
 
-public enum GlobalCacheTableError {
+public enum GlobalCacheTableError: Swift.Error {
 
     
     
@@ -17300,7 +17510,7 @@ extension GlobalConfigKey: Equatable, Hashable {}
 
 
 
-public enum GlobalConfigTableError {
+public enum GlobalConfigTableError: Swift.Error {
 
     
     
@@ -17449,7 +17659,7 @@ extension GlobalFlagKey: Equatable, Hashable {}
 
 
 
-public enum GlobalFlagTableError {
+public enum GlobalFlagTableError: Swift.Error {
 
     
     
@@ -17697,7 +17907,7 @@ extension ImportType: Equatable, Hashable {}
 
 
 
-public enum ImportWalletError {
+public enum ImportWalletError: Swift.Error {
 
     
     
@@ -18013,7 +18223,7 @@ extension InsertOrUpdate: Equatable, Hashable {}
 
 
 
-public enum KeychainError {
+public enum KeychainError: Swift.Error {
 
     
     
@@ -18118,7 +18328,7 @@ extension KeychainError: Foundation.LocalizedError {
 
 
 
-public enum LabelDbError {
+public enum LabelDbError: Swift.Error {
 
     
     
@@ -18201,7 +18411,7 @@ extension LabelDbError: Foundation.LocalizedError {
 
 
 
-public enum LabelManagerError {
+public enum LabelManagerError: Swift.Error {
 
     
     
@@ -18364,7 +18574,7 @@ extension LabelManagerError: Foundation.LocalizedError {
 
 
 
-public enum MnemonicError {
+public enum MnemonicError: Swift.Error {
 
     
     
@@ -18447,7 +18657,7 @@ extension MnemonicError: Foundation.LocalizedError {
 
 
 
-public enum MnemonicParseError {
+public enum MnemonicParseError: Swift.Error {
 
     
     
@@ -18623,7 +18833,7 @@ public func FfiConverterTypeMultiFormat_lower(_ value: MultiFormat) -> RustBuffe
 
 
 
-public enum MultiFormatError {
+public enum MultiFormatError: Swift.Error {
 
     
     
@@ -18714,7 +18924,7 @@ extension MultiFormatError: Foundation.LocalizedError {
 
 
 
-public enum MultiQrError {
+public enum MultiQrError: Swift.Error {
 
     
     
@@ -19274,7 +19484,7 @@ extension NewWalletRoute: Equatable, Hashable {}
 
 
 
-public enum NfcReaderError {
+public enum NfcReaderError: Swift.Error {
 
     
     
@@ -19432,7 +19642,7 @@ extension NodeSelection: Equatable, Hashable {}
 
 
 
-public enum NodeSelectorError {
+public enum NodeSelectorError: Swift.Error {
 
     
     
@@ -19895,7 +20105,7 @@ extension PendingWalletManagerAction: Equatable, Hashable {}
 
 
 
-public enum PendingWalletManagerError {
+public enum PendingWalletManagerError: Swift.Error {
 
     
     
@@ -20041,7 +20251,7 @@ extension PendingWalletManagerReconcileMessage: Equatable, Hashable {}
 
 
 
-public enum PsbtError {
+public enum PsbtError: Swift.Error {
 
     
     
@@ -20132,7 +20342,7 @@ extension PsbtError: Foundation.LocalizedError {
 
 
 
-public enum ResumeError {
+public enum ResumeError: Swift.Error {
 
     
     
@@ -20521,7 +20731,7 @@ extension ScannerResponse: Equatable, Hashable {}
 
 
 
-public enum SeedQrError {
+public enum SeedQrError: Swift.Error {
 
     
     
@@ -20779,7 +20989,7 @@ public func FfiConverterTypeSendRoute_lower(_ value: SendRoute) -> RustBuffer {
 
 
 
-public enum SerdeError {
+public enum SerdeError: Swift.Error {
 
     
     
@@ -20968,7 +21178,7 @@ extension SettingsRoute: Equatable, Hashable {}
 
 
 
-public enum SpecialPinError {
+public enum SpecialPinError: Swift.Error {
 
     
     
@@ -21278,7 +21488,7 @@ public func FfiConverterTypeTransaction_lower(_ value: Transaction) -> RustBuffe
 
 
 
-public enum TransactionDetailError {
+public enum TransactionDetailError: Swift.Error {
 
     
     
@@ -21592,7 +21802,7 @@ extension Unit: Equatable, Hashable {}
 
 
 
-public enum UnsignedTransactionsTableError {
+public enum UnsignedTransactionsTableError: Swift.Error {
 
     
     
@@ -21946,7 +22156,7 @@ extension WalletColor: Equatable, Hashable {}
 
 
 
-public enum WalletCreationError {
+public enum WalletCreationError: Swift.Error {
 
     
     
@@ -22069,7 +22279,7 @@ extension WalletCreationError: Foundation.LocalizedError {
 
 
 
-public enum WalletDataError {
+public enum WalletDataError: Swift.Error {
 
     
     
@@ -22239,7 +22449,7 @@ extension WalletDataKey: Equatable, Hashable {}
 
 
 
-public enum WalletError {
+public enum WalletError: Swift.Error {
 
     
     
@@ -22697,7 +22907,7 @@ extension WalletManagerAction: Equatable, Hashable {}
 
 
 
-public enum WalletManagerError {
+public enum WalletManagerError: Swift.Error {
 
     
     
@@ -23212,7 +23422,7 @@ extension WalletMode: Equatable, Hashable {}
 
 
 
-public enum WalletScannerError {
+public enum WalletScannerError: Swift.Error {
 
     
     
@@ -23368,7 +23578,7 @@ extension WalletSettingsRoute: Equatable, Hashable {}
 
 
 
-public enum WalletTableError {
+public enum WalletTableError: Swift.Error {
 
     
     
@@ -23524,7 +23734,7 @@ extension WalletType: Equatable, Hashable {}
 
 
 
-public enum XpubError {
+public enum XpubError: Swift.Error {
 
     
     
