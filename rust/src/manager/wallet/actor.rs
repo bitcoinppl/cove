@@ -48,15 +48,14 @@ pub struct WalletActor {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ActorState {
     Initial,
-    PerformingInitialScan,
-    PerformingExpandedFullScan,
     PerformingIncrementalScan,
+    PerformingFullScan(FullScanType),
+
+    FullScanComplete(FullScanType),
+    IncrementalScanComplete,
 
     FailedFullScan(FullScanType),
-
-    ExpandedFullScanComplete,
-    InitialFullScanComplete,
-    IncrementalScanComplete,
+    FailedIncrementalScan,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -74,10 +73,7 @@ impl FullScanType {
     }
 
     fn complete_state(&self) -> ActorState {
-        match self {
-            FullScanType::Initial => ActorState::InitialFullScanComplete,
-            FullScanType::Expanded => ActorState::ExpandedFullScanComplete,
-        }
+        ActorState::FullScanComplete(self.clone())
     }
 }
 
@@ -562,7 +558,7 @@ impl WalletActor {
             .unwrap();
 
         // scan happens in the background, state update afterwards
-        self.state = ActorState::PerformingInitialScan;
+        self.state = ActorState::PerformingFullScan(FullScanType::Initial);
         self.do_perform_initial_full_scan().await?;
 
         Produces::ok(())
@@ -572,7 +568,7 @@ impl WalletActor {
     // this is slower, but we want to be able to see all transactions in the UI, so scan the next
     // 150 addresses
     async fn perform_expanded_full_scan(&mut self) -> ActorResult<()> {
-        if self.state == ActorState::ExpandedFullScanComplete
+        if self.state == ActorState::FullScanComplete(FullScanType::Expanded)
             || self.state == ActorState::IncrementalScanComplete
         {
             debug!(
@@ -591,7 +587,7 @@ impl WalletActor {
             .unwrap();
 
         // scan happens in the background, state update afterwards
-        self.state = ActorState::PerformingExpandedFullScan;
+        self.state = ActorState::PerformingFullScan(FullScanType::Expanded);
         send!(self.addr.do_perform_expanded_full_scan());
 
         Produces::ok(())
@@ -733,6 +729,10 @@ impl WalletActor {
         &mut self,
         sync_result: Result<SyncResponse, crate::node::client::Error>,
     ) -> ActorResult<()> {
+        if sync_result.is_err() {
+            self.state = ActorState::FailedIncrementalScan;
+        }
+
         let sync_result = sync_result?;
         self.wallet.apply_update(sync_result)?;
         self.wallet.persist()?;
