@@ -253,6 +253,9 @@ struct SelectedWalletScreen: View {
                 let fileContents = try FileReader(for: file).read()
                 try labelManager.import(jsonl: fileContents)
                 alertState = .init(.importSuccess)
+
+                // when labels are imported, we need to get the transactions again with the updated labels
+                Task { await manager.rust.getTransactions() }
             } catch {
                 alertState = .init(.unableToImportLabels(error.localizedDescription))
             }
