@@ -89,7 +89,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    func updateFiatBalance() async {
+    private func updateFiatBalance() async {
         do {
             let fiatBalance = try await rust.balanceInFiat()
             await MainActor.run {

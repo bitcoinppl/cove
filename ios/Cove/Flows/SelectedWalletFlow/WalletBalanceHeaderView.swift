@@ -176,10 +176,7 @@ struct WalletBalanceHeaderView: View {
         }
         .task {
             if balance.asSats() != 0, fiatBalance == 0.00 || fiatBalance == nil {
-                Task {
-                    await manager.updateFiatBalance()
-                    await MainActor.run { fiatBalance = manager.fiatBalance }
-                }
+                Task { await manager.updateWalletBalance() }
             }
         }
     }
