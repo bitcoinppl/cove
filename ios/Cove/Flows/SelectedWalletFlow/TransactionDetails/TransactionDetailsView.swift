@@ -18,6 +18,9 @@ struct TransactionDetailsView: View {
     @State private var numberOfConfirmations: Int? = nil
     @State private var scrollPosition = ScrollPosition()
 
+    @State private var initialOffset: Double? = nil
+    @State private var currentOffset: Double = 0
+
     // public
     let id: WalletId
     @State var transactionDetails: TransactionDetails
@@ -211,6 +214,16 @@ struct TransactionDetailsView: View {
         .frame(alignment: .top)
         .scrollPosition($scrollPosition)
         .scrollDisabled(!detailsExpanded)
+        .onScrollGeometryChange(for: Double.self) { geo in
+            geo.contentOffset.y
+        } action: { oldValue, newValue in
+            if oldValue == newValue { return }
+            if oldValue == 0 { return }
+
+            let initialOffset = initialOffset ?? oldValue
+            self.initialOffset = initialOffset
+            currentOffset = initialOffset - newValue
+        }
     }
 
     var body: some View {
@@ -274,7 +287,9 @@ struct TransactionDetailsView: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity)
                 .ignoresSafeArea(edges: .top)
-                .opacity(colorScheme == .light ? 0.35 : 1)
+                .opacity(colorScheme == .light ? 0.40 : 1)
+                .offset(y: currentOffset > 0 ? 0 : currentOffset)
+                .opacity(max(0, 1 + (currentOffset / 275)))
         )
     }
 }
