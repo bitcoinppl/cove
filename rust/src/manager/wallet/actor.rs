@@ -52,12 +52,14 @@ pub enum ActorState {
     PerformingExpandedFullScan,
     PerformingIncrementalScan,
 
+    FailedFullScan(FullScanType),
+
     ExpandedFullScanComplete,
     InitialFullScanComplete,
     IncrementalScanComplete,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum FullScanType {
     Initial,
     Expanded,
@@ -693,9 +695,18 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("applying full scan result for {full_scan_type:?}");
 
+        if full_scan_result.is_err() {
+            self.state = ActorState::FailedFullScan(full_scan_type);
+            return Produces::ok(());
+        }
+
         self.wallet.apply_update(full_scan_result?)?;
         self.wallet.persist()?;
-        self.set_last_scan_finished();
+
+        // only mark as scan complete when the expanded full scan is complete
+        if full_scan_type == FullScanType::Expanded {
+            self.set_last_scan_finished();
+        }
 
         let now = jiff::Timestamp::now().as_second() as u64;
         self.wallet.metadata.performed_full_scan_at = Some(now);
