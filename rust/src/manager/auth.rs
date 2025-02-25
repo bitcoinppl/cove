@@ -55,10 +55,10 @@ type Error = AuthManagerError;
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum AuthManagerError {
     #[error("Unable to set the wipe data PIN, because {0}")]
-    WipeDataSet(SpecialPinError),
+    WipeDataSet(TrickPinError),
 
     #[error("Unable to set the decoy PIN, because {0}")]
-    DecoySet(SpecialPinError),
+    DecoySet(TrickPinError),
 
     #[error("There was a database error: {0}")]
     DatabaseError(#[from] database::Error),
@@ -70,20 +70,20 @@ fn auth_manager_error_to_string(error: AuthManagerError) -> String {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
-pub enum SpecialPinError {
-    /// Unable to set special PIN, because PIN is not enabled
+pub enum TrickPinError {
+    /// Unable to set trick PIN, because PIN is not enabled
     #[error("PIN is not enabled")]
     PinNotEnabled,
 
-    /// Unable to set special PIN, because its the same as the current pin
+    /// Unable to set trick PIN, because its the same as the current pin
     #[error("its is the same as the current pin")]
     SameAsCurrentPin,
 
-    /// Unable to set special PIN, its the same as another PIN
+    /// Unable to set trick PIN, its the same as another PIN
     #[error("its is the same as another PIN")]
     SameAsAnotherPin,
 
-    /// Unable to set special PIN, because biometrics is enabled
+    /// Unable to set trick PIN, because biometrics is enabled
     #[error("biometrics is enabled")]
     BiometricsEnabled,
 }
@@ -243,23 +243,23 @@ impl RustAuthManager {
     // private
 
     /// Validate if we have the correct settings to be able to set a decoy or wipe data pin
-    fn validate_pin_settings(&self, pin: &str) -> Result<(), SpecialPinError> {
+    fn validate_pin_settings(&self, pin: &str) -> Result<(), TrickPinError> {
         let auth_type = self.auth_type();
 
         if auth_type == AuthType::None {
-            return Err(SpecialPinError::PinNotEnabled);
+            return Err(TrickPinError::PinNotEnabled);
         }
 
         if auth_type == AuthType::Biometric || auth_type == AuthType::Both {
-            return Err(SpecialPinError::BiometricsEnabled);
+            return Err(TrickPinError::BiometricsEnabled);
         }
 
         if AuthPin::new().check(pin) {
-            return Err(SpecialPinError::SameAsCurrentPin);
+            return Err(TrickPinError::SameAsCurrentPin);
         }
 
         if self.check_decoy_pin(pin) || self.check_wipe_data_pin(pin) {
-            return Err(SpecialPinError::SameAsAnotherPin);
+            return Err(TrickPinError::SameAsAnotherPin);
         }
 
         // valid
