@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::{color::FfiColor, transaction::Amount};
 use derive_more::{AsRef, Deref, Display, From, Into};
+use tracing::debug;
 
 // MARK: FeeRate
 //
@@ -179,6 +180,10 @@ impl FeeSpeed {
             }
         }
     }
+
+    pub fn is_custom(&self) -> bool {
+        matches!(self, FeeSpeed::Custom { .. })
+    }
 }
 
 mod fee_speed_ffi {
@@ -197,6 +202,11 @@ mod fee_speed_ffi {
     #[uniffi::export]
     fn fee_speed_duration(fee_speed: FeeSpeed) -> String {
         fee_speed.duration()
+    }
+
+    #[uniffi::export]
+    fn fee_speed_is_custom(fee_speed: FeeSpeed) -> bool {
+        fee_speed.is_custom()
     }
 }
 
@@ -224,6 +234,14 @@ impl FeeRateOptionWithTotalFee {
             fee_rate: option.fee_rate,
             total_fee: total_fee.into(),
         }
+    }
+}
+
+#[uniffi::export]
+impl FeeRateOptionWithTotalFee {
+    #[uniffi::method]
+    pub fn is_custom(&self) -> bool {
+        self.fee_speed.is_custom()
     }
 }
 
@@ -266,6 +284,7 @@ impl FeeRateOptionsWithTotalFee {
 
     #[uniffi::method]
     pub fn get_fee_rate_with(&self, fee_rate: f32) -> Option<Arc<FeeRateOptionWithTotalFee>> {
+        debug!("get_fee_rate_with: {fee_rate}");
         if let Some(custom) = self.custom {
             if custom.fee_rate.sat_per_vb() == fee_rate {
                 return Some(custom.into());

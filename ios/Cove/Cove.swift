@@ -4160,6 +4160,8 @@ public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject {
     
     func feeSpeed()  -> FeeSpeed
     
+    func isCustom()  -> Bool
+    
     func isEqual(rhs: FeeRateOptionWithTotalFee)  -> Bool
     
     func satPerVb()  -> Float
@@ -4253,6 +4255,13 @@ open func feeRateOptions() -> FeeRateOption  {
 open func feeSpeed() -> FeeSpeed  {
     return try!  FfiConverterTypeFeeSpeed_lift(try! rustCall() {
     uniffi_cove_fn_method_feerateoptionwithtotalfee_fee_speed(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func isCustom() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_feerateoptionwithtotalfee_is_custom(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -26029,6 +26038,13 @@ public func feeSpeedDuration(feeSpeed: FeeSpeed) -> String  {
     )
 })
 }
+public func feeSpeedIsCustom(feeSpeed: FeeSpeed) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_fee_speed_is_custom(
+        FfiConverterTypeFeeSpeed_lower(feeSpeed),$0
+    )
+})
+}
 public func feeSpeedToCircleColor(feeSpeed: FeeSpeed) -> FfiColor  {
     return try!  FfiConverterTypeFfiColor_lift(try! rustCall() {
     uniffi_cove_fn_func_fee_speed_to_circle_color(
@@ -26307,6 +26323,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fee_speed_duration() != 28599) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_fee_speed_is_custom() != 29672) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fee_speed_to_circle_color() != 46076) {
@@ -26625,6 +26644,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_fee_speed() != 32155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_is_custom() != 36071) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_feerateoptionwithtotalfee_is_equal() != 47764) {

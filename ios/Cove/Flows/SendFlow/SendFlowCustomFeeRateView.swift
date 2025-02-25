@@ -91,13 +91,14 @@ struct SendFlowCustomFeeRateView: View {
     func addCustomFeeOption() {
         guard let feeRate = Float(feeRate) else { return }
 
-        // if the fee rate is the same as the selected option, remove custom fee option
-        if feeRate == selectedOption.feeRate().satPerVb() {
-            let feeOptions = feeOptions.removeCustomFee()
-            self.feeOptions = feeOptions
-            selectedOption = feeOptions.getFeeRateWith(feeRate: feeRate) ?? feeOptions.medium()
-
+        // if there is an non custom fee option for the same fee rate select it and remove the custom fee option
+        if let newSelectedOption = feeOptions.getFeeRateWith(feeRate: feeRate),
+           !newSelectedOption.isCustom()
+        {
+            Log.debug("removing custom fee option (fee rate: \(feeRate)), selected: \(newSelectedOption.feeSpeed().string)")
             presenter.sheetState = .none
+            self.feeOptions = feeOptions.removeCustomFee()
+            selectedOption = newSelectedOption
             return
         }
 
