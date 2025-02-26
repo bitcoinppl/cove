@@ -108,7 +108,7 @@ struct EnterAmountView: View {
                     guard let prices = app.prices else { return }
 
                     do {
-                        let amount = try manager.rust.convertFromFiatString(fiatAmount: new, prices: prices)
+                        let amount = manager.rust.convertFromFiatString(fiatAmount: new, prices: prices)
                         presenter.amount = amount
                         sendAmount = manager.walletMetadata.selectedUnit == .btc ? amount.btcString() : ThousandsFormatter(amount.asSats()).fmt()
 

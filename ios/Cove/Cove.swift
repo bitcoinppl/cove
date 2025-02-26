@@ -9598,9 +9598,9 @@ public protocol RustWalletManagerProtocol: AnyObject {
     
     func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool)  -> String
     
-    func convertFiatStringToBtc(fiatAmount: String, prices: PriceResponse) throws  -> Amount
+    func convertFromFiat(fiatAmount: Double, prices: PriceResponse)  -> Amount
     
-    func convertFiatToBtc(fiatAmount: Double, prices: PriceResponse)  -> Amount
+    func convertFromFiatString(fiatAmount: String, prices: PriceResponse)  -> Amount
     
     func convertToFiat(amount: Amount, prices: PriceResponse)  -> Double
     
@@ -9934,19 +9934,19 @@ open func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffi
 })
 }
     
-open func convertFiatStringToBtc(fiatAmount: String, prices: PriceResponse)throws  -> Amount  {
-    return try  FfiConverterTypeAmount_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
-    uniffi_cove_fn_method_rustwalletmanager_convert_fiat_string_to_btc(self.uniffiClonePointer(),
-        FfiConverterString.lower(fiatAmount),
+open func convertFromFiat(fiatAmount: Double, prices: PriceResponse) -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat(self.uniffiClonePointer(),
+        FfiConverterDouble.lower(fiatAmount),
         FfiConverterTypePriceResponse_lower(prices),$0
     )
 })
 }
     
-open func convertFiatToBtc(fiatAmount: Double, prices: PriceResponse) -> Amount  {
+open func convertFromFiatString(fiatAmount: String, prices: PriceResponse) -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
-    uniffi_cove_fn_method_rustwalletmanager_convert_fiat_to_btc(self.uniffiClonePointer(),
-        FfiConverterDouble.lower(fiatAmount),
+    uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(self.uniffiClonePointer(),
+        FfiConverterString.lower(fiatAmount),
         FfiConverterTypePriceResponse_lower(prices),$0
     )
 })
@@ -27132,10 +27132,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 45939) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_convert_fiat_string_to_btc() != 31952) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat() != 2666) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_convert_fiat_to_btc() != 32339) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string() != 19916) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_convert_to_fiat() != 28790) {

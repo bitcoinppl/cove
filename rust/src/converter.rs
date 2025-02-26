@@ -34,8 +34,7 @@ impl Converter {
             .parse::<f64>()
             .map_err(|e| Error::FiatAmountFromStringError(e.to_string()))?;
 
-        let fiat_value = (fiat_value * 100.0).round() / 100.0;
-
+        let fiat_value = (fiat_value * 100.0).floor() / 100.0;
         Ok(fiat_value)
     }
 
