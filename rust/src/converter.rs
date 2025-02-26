@@ -25,6 +25,10 @@ impl Converter {
     }
 
     pub fn get_fiat_value(&self, fiat_amount: String) -> Result<f64> {
+        if fiat_amount.is_empty() {
+            return Ok(0.0);
+        }
+
         let fiat_amount = fiat_amount
             .chars()
             .filter(|c| c.is_numeric() || *c == '.')
