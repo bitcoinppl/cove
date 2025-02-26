@@ -85,6 +85,7 @@ struct SendFlowSelectFeeRateView: View {
 private struct FeeOptionView: View {
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     // passed in args
     let manager: WalletManager
@@ -100,7 +101,12 @@ private struct FeeOptionView: View {
     }
 
     var strokeColor: Color {
-        if isSelected { Color.midnightBtn } else { Color.secondary }
+        if colorScheme == .dark {
+            return if isSelected { Color.primary.opacity(0.75) } else { Color(UIColor.tertiaryLabel).opacity(0.6) }
+        }
+
+        // light
+        return if isSelected { Color.primary } else { Color.secondary }
     }
 
     var totalFee: String {
