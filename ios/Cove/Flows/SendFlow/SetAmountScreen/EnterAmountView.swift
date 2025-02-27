@@ -19,7 +19,6 @@ struct EnterAmountView: View {
 
     // private state for entering sendAmountFiat, don't show sendAmountFiat update
     @State private var fiatText: String = ""
-
     @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
 
@@ -66,6 +65,7 @@ struct EnterAmountView: View {
                 }
                 .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
                 .onChange(of: focusField, initial: true) { oldFocusField, newFocusField in
+                    guard let newFocusField else { return }
                     presenter.focusField = newFocusField
 
                     // focusField changed when entering btc/sats
@@ -73,7 +73,9 @@ struct EnterAmountView: View {
                         let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
                         if newFocusField == .amount { self.sendAmount = sendAmount }
 
-                        if newFocusField != .amount, metadata.selectedUnit == .sat, let amountInt = Int(sendAmount) {
+                        if newFocusField != .amount, metadata.selectedUnit == .sat,
+                           let amountInt = Int(sendAmount)
+                        {
                             self.sendAmount = ThousandsFormatter(amountInt).fmt()
                         }
                     }
@@ -84,22 +86,30 @@ struct EnterAmountView: View {
                             do {
                                 if fiatText == "" { return }
                                 let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
-                                let fiatAmount = manager.rust.displayFiatAmount(amount: fiatValue, withSuffix: false)
+                                let fiatAmount = manager.rust.displayFiatAmount(
+                                    amount: fiatValue, withSuffix: false
+                                )
                                 fiatText = fiatAmount
                             } catch {
-                                Log.error("'EnterAmountView' failed to convert fiat amount (\(fiatText)) to btc: \(error)")
+                                Log.error(
+                                    "'EnterAmountView' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
+                                )
                             }
                         }
 
                         if oldFocusField == .amount, newFocusField != .amount {
                             do {
                                 let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
-                                let fiatAmount = manager.rust.displayFiatAmount(amount: fiatValue, withSuffix: false)
+                                let fiatAmount = manager.rust.displayFiatAmount(
+                                    amount: fiatValue, withSuffix: false
+                                )
 
                                 sendAmountFiat = fiatAmount
                                 fiatText = fiatAmount
                             } catch {
-                                Log.error("'EnterAmountView' failed to convert fiat amount (\(fiatText)) to btc: \(error)")
+                                Log.error(
+                                    "'EnterAmountView' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
+                                )
                             }
                         }
                     }
@@ -127,7 +137,8 @@ struct EnterAmountView: View {
                         let fiatValue = try Converter().getFiatValue(fiatAmount: newValue)
                         sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatValue)
                     } catch {
-                        Log.error("'EnterAmountView' failed to convert fiat amount to btc: \(error)")
+                        Log.error(
+                            "'EnterAmountView' failed to convert fiat amount to btc: \(error)")
                     }
                 }
                 .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
