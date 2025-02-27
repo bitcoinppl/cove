@@ -62,6 +62,7 @@ impl From<bitcoin::Network> for Network {
         match network {
             bitcoin::Network::Bitcoin => Network::Bitcoin,
             bitcoin::Network::Testnet => Network::Testnet,
+            bitcoin::Network::Signet => Network::Signet,
             network => panic!("unsupported network: {network:?}"),
         }
     }
