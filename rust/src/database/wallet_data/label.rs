@@ -7,11 +7,11 @@ use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableD
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
-    database::{cbor::Postcard, key::InOutIdKey},
+    database::{cbor::Cbor, key::InOutIdKey},
     transaction::TxId,
 };
 
-type SerdeRecord<T> = Postcard<Record<T>>;
+type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -26,10 +26,8 @@ pub enum LabelDbError {
 const TXN_TABLE: TableDefinition<TxId, SerdeRecord<TransactionRecord>> =
     TableDefinition::new("transaction_labels.cbor");
 
-const ADDRESS_TABLE: TableDefinition<
-    Postcard<Address<NetworkUnchecked>>,
-    SerdeRecord<AddressRecord>,
-> = TableDefinition::new("address_labels.cbor");
+const ADDRESS_TABLE: TableDefinition<Cbor<Address<NetworkUnchecked>>, SerdeRecord<AddressRecord>> =
+    TableDefinition::new("address_labels.cbor");
 
 const INPUT_TABLE: TableDefinition<InOutIdKey, SerdeRecord<InputRecord>> =
     TableDefinition::new("input_records.cbor");
@@ -452,8 +450,8 @@ impl LabelsTable {
 
     fn read_table<K, V>(
         &self,
-        table: TableDefinition<K, Postcard<V>>,
-    ) -> Result<ReadOnlyTable<K, Postcard<V>>, Error>
+        table: TableDefinition<K, Cbor<V>>,
+    ) -> Result<ReadOnlyTable<K, Cbor<V>>, Error>
     where
         K: redb::Key + Debug + Clone + Send + Sync + 'static,
         V: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
