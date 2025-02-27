@@ -74,7 +74,7 @@ struct EnterAmountView: View {
                         if newFocusField == .amount { self.sendAmount = sendAmount }
 
                         if newFocusField != .amount, metadata.selectedUnit == .sat,
-                            let amountInt = Int(sendAmount)
+                           let amountInt = Int(sendAmount)
                         {
                             self.sendAmount = ThousandsFormatter(amountInt).fmt()
                         }
@@ -87,7 +87,8 @@ struct EnterAmountView: View {
                                 if fiatText == "" { return }
                                 let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
                                 let fiatAmount = manager.rust.displayFiatAmount(
-                                    amount: fiatValue, withSuffix: false)
+                                    amount: fiatValue, withSuffix: false
+                                )
                                 fiatText = fiatAmount
                             } catch {
                                 Log.error(
@@ -100,7 +101,8 @@ struct EnterAmountView: View {
                             do {
                                 let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
                                 let fiatAmount = manager.rust.displayFiatAmount(
-                                    amount: fiatValue, withSuffix: false)
+                                    amount: fiatValue, withSuffix: false
+                                )
 
                                 sendAmountFiat = fiatAmount
                                 fiatText = fiatAmount
