@@ -3,6 +3,7 @@
 use std::{str::FromStr as _, sync::Arc};
 
 use bdk_wallet::bitcoin::bip32::Xpub;
+use bdk_wallet::descriptor::ExtendedDescriptor;
 use bip39::Mnemonic;
 use once_cell::sync::OnceCell;
 use tracing::warn;
@@ -148,6 +149,23 @@ impl Keychain {
         let key = wallet_xpub_key_name(id);
         self.0.delete(key)
     }
+
+    pub fn save_public_descriptor(
+        &self,
+        id: &WalletId,
+        external_descriptor: ExtendedDescriptor,
+        internal_descriptor: ExtendedDescriptor,
+    ) -> Result<(), KeychainError> {
+        let key = wallet_public_descriptor_key_name(id);
+        let value = format!("{external_descriptor}\n{internal_descriptor}");
+
+        self.0.save(key, value)
+    }
+
+    pub fn delete_public_descriptor(&self, id: &WalletId) -> bool {
+        let key = wallet_public_descriptor_key_name(id);
+        self.0.delete(key)
+    }
 }
 
 fn wallet_mnemonic_key_name(id: &WalletId) -> String {
@@ -160,4 +178,8 @@ fn wallet_xpub_key_name(id: &WalletId) -> String {
 
 fn wallet_mnemonic_encryption_and_nonce_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_mnemonic_encryption_key_and_nonce")
+}
+
+fn wallet_public_descriptor_key_name(id: &WalletId) -> String {
+    format!("{id}::wallet_public_descriptor")
 }

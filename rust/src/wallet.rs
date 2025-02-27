@@ -132,6 +132,13 @@ impl Wallet {
             let xpub = mnemonic.xpub(me.network.into());
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
+            // save public descriptors in keychain too
+            keychain.save_public_descriptor(
+                &me.id,
+                me.bdk.public_descriptor(KeychainKind::External).clone(),
+                me.bdk.public_descriptor(KeychainKind::Internal).clone(),
+            )?;
+
             // save wallet_metadata to database
             database
                 .wallets
@@ -151,6 +158,7 @@ impl Wallet {
 
                 keychain.delete_wallet_key(&metadata.id);
                 keychain.delete_wallet_xpub(&metadata.id);
+                keychain.delete_public_descriptor(&metadata.id);
 
                 if let Err(error) = delete_data_path(&metadata.id) {
                     warn!("clean up failed, failed to delete wallet data: {error}");
@@ -254,7 +262,7 @@ impl Wallet {
         )
         .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
-        let descriptors = match pubport {
+        let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
             Format::Json(json) => {
                 let descriptors = json.bip84.clone().ok_or(WalletError::ParseXpubError(
@@ -269,7 +277,7 @@ impl Wallet {
             Format::Electrum(descriptors) => descriptors,
         };
 
-        let fingerprint = descriptors.fingerprint();
+        let fingerprint = pubport_descriptors.fingerprint();
 
         // make sure its not already imported
         if let Some(fingerprint) = fingerprint.as_ref() {
@@ -301,7 +309,7 @@ impl Wallet {
         }
 
         let fingerprint = fingerprint.map(|s| s.to_string());
-        let xpub = descriptors
+        let xpub = pubport_descriptors
             .xpub()
             .map_err(Into::into)
             .map_err(WalletError::ParseXpubError)?;
@@ -311,10 +319,11 @@ impl Wallet {
             None => "Imported".to_string(),
         };
 
-        let descriptors: Descriptors = descriptors.into();
+        let descriptors: Descriptors = pubport_descriptors.into();
         let origin = descriptors.origin().ok();
 
         let wallet = descriptors
+            .clone()
             .into_create_params()
             .network(network.into())
             .create_wallet(&mut db)
@@ -322,6 +331,13 @@ impl Wallet {
 
         // save public key in keychain too
         keychain.save_wallet_xpub(&id, xpub)?;
+
+        // save public descriptor in keychain too
+        keychain.save_public_descriptor(
+            &metadata.id,
+            descriptors.external.extended_descriptor,
+            descriptors.internal.extended_descriptor,
+        )?;
 
         // save wallet_metadata to database
         metadata.origin = origin;
@@ -460,7 +476,7 @@ impl Wallet {
         self.bdk.balance().into()
     }
 
-    pub fn public_descriptor(&self) -> crate::keys::Descriptor {
+    pub fn public_external_descriptor(&self) -> crate::keys::Descriptor {
         let extended_descriptor: ExtendedDescriptor =
             self.bdk.public_descriptor(KeychainKind::External).clone();
 
