@@ -3,6 +3,7 @@
 use std::{str::FromStr as _, sync::Arc};
 
 use bdk_wallet::bitcoin::bip32::Xpub;
+use bdk_wallet::descriptor::ExtendedDescriptor;
 use bip39::Mnemonic;
 use once_cell::sync::OnceCell;
 use tracing::warn;
@@ -109,7 +110,7 @@ impl Keychain {
         Ok(Some(mnemonic))
     }
 
-    pub fn delete_wallet_key(&self, id: &WalletId) -> bool {
+    fn delete_wallet_key(&self, id: &WalletId) -> bool {
         let encryption_key_key = wallet_mnemonic_encryption_and_nonce_key_name(id);
         let key = wallet_mnemonic_key_name(id);
 
@@ -144,9 +145,34 @@ impl Keychain {
         Ok(Some(xpub))
     }
 
-    pub fn delete_wallet_xpub(&self, id: &WalletId) -> bool {
+    fn delete_wallet_xpub(&self, id: &WalletId) -> bool {
         let key = wallet_xpub_key_name(id);
         self.0.delete(key)
+    }
+
+    pub fn save_public_descriptor(
+        &self,
+        id: &WalletId,
+        external_descriptor: ExtendedDescriptor,
+        internal_descriptor: ExtendedDescriptor,
+    ) -> Result<(), KeychainError> {
+        let key = wallet_public_descriptor_key_name(id);
+        let value = format!("{external_descriptor}\n{internal_descriptor}");
+
+        self.0.save(key, value)
+    }
+
+    fn delete_public_descriptor(&self, id: &WalletId) -> bool {
+        let key = wallet_public_descriptor_key_name(id);
+        self.0.delete(key)
+    }
+
+    // MARK: Delete
+    // deletes all items saved in the keychain for the given wallet id
+    pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
+        self.delete_wallet_key(id)
+            && self.delete_wallet_xpub(id)
+            && self.delete_public_descriptor(id)
     }
 }
 
@@ -160,4 +186,8 @@ fn wallet_xpub_key_name(id: &WalletId) -> String {
 
 fn wallet_mnemonic_encryption_and_nonce_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_mnemonic_encryption_key_and_nonce")
+}
+
+fn wallet_public_descriptor_key_name(id: &WalletId) -> String {
+    format!("{id}::wallet_public_descriptor")
 }

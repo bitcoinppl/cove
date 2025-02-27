@@ -40,7 +40,7 @@ pub enum DescriptorKeyParseError {
     NoOrigin,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Descriptors {
     /// The external descriptor, main account
     pub external: Descriptor,
