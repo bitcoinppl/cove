@@ -11,7 +11,7 @@ enum SendState: Hashable, Equatable {
     case idle
     case sending
     case sent
-    case error
+    case error(String)
 }
 
 struct SwipeToSendView: View {
@@ -173,7 +173,7 @@ struct SwipeToSendView: View {
 
 #Preview("error") {
     struct Container: View {
-        @State var sendState: SendState = .error
+        @State var sendState: SendState = .error("no work")
 
         var body: some View {
             SwipeToSendView(
