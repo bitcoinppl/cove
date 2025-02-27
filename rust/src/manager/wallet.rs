@@ -240,22 +240,29 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn convert_fiat_string_to_btc(
+    pub fn convert_from_fiat_string(
         &self,
         fiat_amount: String,
         prices: Arc<PriceResponse>,
-    ) -> Result<Amount, Error> {
-        let fiat_value = CONVERTER.get_fiat_value(fiat_amount)?;
-        let amount = self.convert_fiat_to_btc(fiat_value, prices);
-        Ok(amount)
+    ) -> Amount {
+        let fiat_value = if fiat_amount.is_empty() {
+            0.0
+        } else {
+            CONVERTER
+                .get_fiat_value(fiat_amount)
+                .tap_err(|error| error!("failed to convert fiat amount: {error}"))
+                .unwrap_or_default()
+        };
+
+        self.convert_from_fiat(fiat_value, prices)
     }
 
     #[uniffi::method]
-    pub fn convert_fiat_to_btc(&self, fiat_amount: f64, prices: Arc<PriceResponse>) -> Amount {
+    pub fn convert_from_fiat(&self, fiat_amount: f64, prices: Arc<PriceResponse>) -> Amount {
         let currency = self.selected_fiat_currency();
         let price = prices.get_for_currency(currency) as f64;
         let btc_amount = fiat_amount / price;
-        let sat_amount = (btc_amount * 100_000_000.0) as u64;
+        let sat_amount = (btc_amount * 100_000_000.0).floor() as u64;
 
         Amount::from_sat(sat_amount)
     }
@@ -512,8 +519,7 @@ impl RustWalletManager {
     pub fn convert_to_fiat(&self, amount: Arc<Amount>, prices: Arc<PriceResponse>) -> f64 {
         let currency = self.selected_fiat_currency();
         let price = prices.get_for_currency(currency) as f64;
-
-        amount.as_btc() * price
+        ((amount.as_btc() * price) * 100.0).ceil() / 100.0
     }
 
     #[uniffi::method(default(with_suffix = true))]

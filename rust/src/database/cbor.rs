@@ -4,11 +4,11 @@ use derive_more::Display;
 use redb::{Key, TypeName, Value};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-/// Wrapper type to handle keys and values using bincode serialization
+/// Wrapper type to handle keys and values using cbor serialization
 #[derive(Debug, Display, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Postcard<T>(pub T);
+pub struct Cbor<T>(pub T);
 
-impl<T> Value for Postcard<T>
+impl<T> Value for Cbor<T>
 where
     T: Debug + Serialize + for<'a> Deserialize<'a>,
 {
@@ -47,7 +47,7 @@ where
     }
 }
 
-impl<T> Key for Postcard<T>
+impl<T> Key for Cbor<T>
 where
     T: Debug + Serialize + DeserializeOwned + Ord,
 {

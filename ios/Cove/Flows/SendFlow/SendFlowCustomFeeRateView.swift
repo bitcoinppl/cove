@@ -62,8 +62,8 @@ struct SendFlowCustomFeeRateView: View {
     func getTotalSatsDeduped(for feeRate: Float) {
         guard let address = presenter.address else { return }
         guard let amount = presenter.amount else { return }
-        let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
 
+        let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
         let isMaxSelected = presenter.maxSelected != nil
 
         if let totalSatsTask { totalSatsTask.cancel() }

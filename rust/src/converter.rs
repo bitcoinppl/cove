@@ -25,6 +25,10 @@ impl Converter {
     }
 
     pub fn get_fiat_value(&self, fiat_amount: String) -> Result<f64> {
+        if fiat_amount.is_empty() {
+            return Ok(0.0);
+        }
+
         let fiat_amount = fiat_amount
             .chars()
             .filter(|c| c.is_numeric() || *c == '.')
@@ -34,8 +38,7 @@ impl Converter {
             .parse::<f64>()
             .map_err(|e| Error::FiatAmountFromStringError(e.to_string()))?;
 
-        let fiat_value = (fiat_value * 100.0).round() / 100.0;
-
+        let fiat_value = (fiat_value * 100.0).floor() / 100.0;
         Ok(fiat_value)
     }
 

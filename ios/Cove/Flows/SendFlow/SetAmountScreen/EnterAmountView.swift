@@ -82,6 +82,7 @@ struct EnterAmountView: View {
                     if metadata.fiatOrBtc == .fiat {
                         if newFocusField == .amount {
                             do {
+                                if fiatText == "" { return }
                                 let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
                                 let fiatAmount = manager.rust.displayFiatAmount(amount: fiatValue, withSuffix: false)
                                 fiatText = fiatAmount
@@ -103,15 +104,27 @@ struct EnterAmountView: View {
                         }
                     }
                 }
-                .onChange(of: fiatText, initial: true) { _, new in
+                .onChange(of: fiatText, initial: true) { oldValue, newValue in
                     guard metadata.fiatOrBtc == .fiat else { return }
                     guard let prices = app.prices else { return }
 
+                    // note: using contains instead of direct comparison because need to support multiple currencies
+                    // on first number if erasing, erase the entire thing,
+                    if oldValue.contains("0.00"), newValue.contains("0.0"), !newValue.contains("0.00"), sendAmount == "0" {
+                        return fiatText = newValue.replacingOccurrences(of: "0.0", with: "")
+                    }
+
+                    // on first enter, use just the entered number
+                    if oldValue.contains("0.00"), newValue.contains("0.00"), sendAmount == "0" {
+                        return fiatText = newValue.replacingOccurrences(of: "0.00", with: "")
+                    }
+
                     do {
-                        let amount = try manager.rust.convertFiatStringToBtc(fiatAmount: new, prices: prices)
+                        let amount = manager.rust.convertFromFiatString(fiatAmount: newValue, prices: prices)
+                        presenter.amount = amount
                         sendAmount = manager.walletMetadata.selectedUnit == .btc ? amount.btcString() : ThousandsFormatter(amount.asSats()).fmt()
 
-                        let fiatValue = try Converter().getFiatValue(fiatAmount: new)
+                        let fiatValue = try Converter().getFiatValue(fiatAmount: newValue)
                         sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatValue)
                     } catch {
                         Log.error("'EnterAmountView' failed to convert fiat amount to btc: \(error)")

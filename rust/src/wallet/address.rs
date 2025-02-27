@@ -150,6 +150,15 @@ impl AddressWithNetwork {
         }
 
         let network = Network::Testnet;
+        if let Ok(address) = address.clone().require_network(network.into()) {
+            return Ok(Self {
+                address: address.into(),
+                network,
+                amount,
+            });
+        }
+
+        let network = Network::Signet;
         if let Ok(address) = address.require_network(network.into()) {
             return Ok(Self {
                 address: address.into(),
