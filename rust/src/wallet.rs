@@ -156,9 +156,8 @@ impl Wallet {
             Err(error) => {
                 error!("failed to create wallet: {error}");
 
-                keychain.delete_wallet_key(&metadata.id);
-                keychain.delete_wallet_xpub(&metadata.id);
-                keychain.delete_public_descriptor(&metadata.id);
+                // delete the secret key, xpub and public descriptor from the keychain
+                keychain.delete_wallet_items(&metadata.id);
 
                 if let Err(error) = delete_data_path(&metadata.id) {
                     warn!("clean up failed, failed to delete wallet data: {error}");

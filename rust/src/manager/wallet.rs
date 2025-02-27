@@ -628,11 +628,8 @@ impl RustWalletManager {
         // delete the wallet from the database
         database.wallets.delete(&wallet_id)?;
 
-        // delete the secret key from the keychain
-        keychain.delete_wallet_key(&wallet_id);
-
-        // delete the xpub from keychain
-        keychain.delete_wallet_xpub(&wallet_id);
+        // delete the secret key, xpub and public descriptor from the keychain
+        keychain.delete_wallet_items(&wallet_id);
 
         // delete the wallet persisted bdk data
         if let Err(error) = crate::wallet::delete_data_path(&wallet_id) {
