@@ -28,7 +28,18 @@ struct SelectedWalletContainer: View {
             }
         } catch {
             Log.error("Something went very wrong: \(error)")
-            navigate(Route.listWallets)
+            do {
+                let wallets = try Database().wallets().all()
+                let wallet = wallets.first(where: { $0.id != id })
+
+                if let wallet {
+                    try app.rust.selectWallet(id: wallet.id)
+                } else {
+                    app.loadAndReset(to: Route.newWallet(.select))
+                }
+            } catch {
+                app.loadAndReset(to: Route.newWallet(.select))
+            }
         }
     }
 
