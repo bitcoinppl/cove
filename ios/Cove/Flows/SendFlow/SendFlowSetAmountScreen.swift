@@ -189,6 +189,7 @@ struct SendFlowSetAmountScreen: View {
 
     // validate, create final psbt and send to next screen
     private func next() {
+        Log.debug("next button pressed")
         guard validate(displayAlert: true) else { return }
         guard let sendAmountSats else {
             return setAlertState(.invalidNumber)
@@ -270,8 +271,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                           selectedFeeRate != nil,
-                           Address.isValid(address)
+                            selectedFeeRate != nil,
+                            Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -311,12 +312,11 @@ struct SendFlowSetAmountScreen: View {
         }
         .padding(.top, 0)
         .onChange(of: _privateFocusField, initial: true) { _, new in
+            guard let new else { return }
             presenter.focusField = new
         }
         .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
-        .onChange(
-            of: metadata.selectedUnit, initial: false, selectedUnitChanged
-        )
+        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
         .onChange(of: sendAmount, initial: true, sendAmountChanged)
         .onChange(of: address, initial: true, addressChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
@@ -521,8 +521,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -535,8 +535,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 
@@ -605,7 +605,6 @@ struct SendFlowSetAmountScreen: View {
         )
 
         _privateFocusField = newField
-
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
                 if newField == .none, validate() {
@@ -666,7 +665,8 @@ struct SendFlowSetAmountScreen: View {
         let amount = Amount.fromSat(sats: UInt64(amountSats))
 
         // address and amount is valid, dismiss the keyboard
-        if validateAmount() {
+        if validateAmount(), validateAddress(addressString) {
+            Log.debug("amount and address valid, dismissing keyboard")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 presenter.focusField = .none
             }
@@ -765,7 +765,6 @@ struct SendFlowSetAmountScreen: View {
                     Button(action: { presenter.focusField = .address }) {
                         Text("Next")
                     }
-
                 } else {
                     Button(action: { presenter.focusField = .none }) {
                         Text("Done")

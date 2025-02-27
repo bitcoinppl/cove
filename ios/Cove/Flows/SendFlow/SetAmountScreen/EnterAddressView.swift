@@ -52,9 +52,13 @@ struct EnterAddressView: View {
             }
         }
         .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
-        .onChange(of: focusField, initial: false) { _, new in presenter.focusField = new }
+        .onChange(of: focusField, initial: false) { _, new in
+            guard let new else { return }
+            presenter.focusField = new
+        }
         .onChange(of: address, initial: true) { _, new in
-            let noSpaces = new.replacingOccurrences(of: " ", with: "").trimmingCharacters(in: .whitespaces)
+            let noSpaces = new.replacingOccurrences(of: " ", with: "").trimmingCharacters(
+                in: .whitespaces)
             address = noSpaces
         }
         .padding(.top, 14)
