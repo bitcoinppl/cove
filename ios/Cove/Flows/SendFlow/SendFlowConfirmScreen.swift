@@ -22,6 +22,7 @@ struct SendFlowConfirmScreen: View {
     // private
     @State private var isShowingAlert = false
     @State private var sendState: SendState = .idle
+    @State private var isShowingErrorAlert = false
 
     // popover to change btc and sats
     @State private var showingMenu: Bool = false
@@ -157,7 +158,8 @@ struct SendFlowConfirmScreen: View {
                         sendState = .sent
                         isShowingAlert = true
                     } catch {
-                        sendState = .error
+                        sendState = .error(error.localizedDescription)
+                        isShowingErrorAlert = true
                     }
                 }
             }
@@ -180,6 +182,23 @@ struct SendFlowConfirmScreen: View {
                 },
                 message: {
                     Text("Transaction was successfully sent!")
+                }
+            )
+            .alert(
+                "Error Broadcasting!",
+                isPresented: $isShowingErrorAlert,
+                actions: {
+                    Button("OK") {
+                        sendState = .idle
+                        isShowingErrorAlert = false
+                    }
+                },
+                message: {
+                    if case let .error(error) = sendState {
+                        Text(error)
+                    } else {
+                        Text("Unknown error, unable to broadcast transaction, please try again!")
+                    }
                 }
             )
         }
