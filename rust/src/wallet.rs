@@ -5,15 +5,10 @@ pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
 
-use std::{
-    ops::{Deref, DerefMut},
-    path::PathBuf,
-    str::FromStr as _,
-    sync::Arc,
-};
+use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
-    consts::ROOT_DATA_DIR,
+    bdk_store::BdkStore,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     keys::{Descriptor, Descriptors},
@@ -23,14 +18,16 @@ use crate::{
     xpub::{self, XpubError},
 };
 use balance::Balance;
-use bdk_file_store::Store;
+use bdk_chain::rusqlite::Connection;
 use bdk_wallet::{
     KeychainKind, bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
     keys::DescriptorPublicKey,
 };
 use bip39::Mnemonic;
+use eyre::Context as _;
 use fingerprint::Fingerprint;
 use metadata::{DiscoveryState, WalletId, WalletMetadata};
+use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
 
@@ -78,10 +75,9 @@ pub enum WalletError {
 pub struct Wallet {
     pub id: WalletId,
     pub network: Network,
-    pub bdk: bdk_wallet::PersistedWallet<Store<bdk_wallet::ChangeSet>>,
+    pub bdk: Mutex<bdk_wallet::PersistedWallet<Connection>>,
     pub metadata: WalletMetadata,
-
-    db: Store<bdk_wallet::ChangeSet>,
+    db: Mutex<Connection>,
 }
 
 #[derive(
@@ -135,8 +131,14 @@ impl Wallet {
             // save public descriptors in keychain too
             keychain.save_public_descriptor(
                 &me.id,
-                me.bdk.public_descriptor(KeychainKind::External).clone(),
-                me.bdk.public_descriptor(KeychainKind::Internal).clone(),
+                me.bdk
+                    .lock()
+                    .public_descriptor(KeychainKind::External)
+                    .clone(),
+                me.bdk
+                    .lock()
+                    .public_descriptor(KeychainKind::Internal)
+                    .clone(),
             )?;
 
             // save wallet_metadata to database
@@ -159,7 +161,7 @@ impl Wallet {
                 // delete the secret key, xpub and public descriptor from the keychain
                 keychain.delete_wallet_items(&metadata.id);
 
-                if let Err(error) = delete_data_path(&metadata.id) {
+                if let Err(error) = delete_wallet_specific_data(&metadata.id) {
                     warn!("clean up failed, failed to delete wallet data: {error}");
                 };
 
@@ -183,12 +185,11 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let mut db =
-            Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
-                .map_err(|error| WalletError::LoadError(error.to_string()))?;
+        let mut store = crate::bdk_store::BdkStore::try_new(&id, network)
+            .map_err(|e| WalletError::LoadError(e.to_string()))?;
 
         let wallet = bdk_wallet::Wallet::load()
-            .load_wallet(&mut db)
+            .load_wallet(&mut store.conn)
             .map_err(|error| WalletError::LoadError(error.to_string()))?
             .ok_or(WalletError::WalletNotFound)?;
 
@@ -220,8 +221,8 @@ impl Wallet {
             id,
             network,
             metadata,
-            bdk: wallet,
-            db,
+            bdk: Mutex::new(wallet),
+            db: Mutex::new(store.conn),
         })
     }
 
@@ -255,11 +256,8 @@ impl Wallet {
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
 
-        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
-            id.to_string().as_bytes(),
-            data_path(&id),
-        )
-        .map_err(|error| WalletError::PersistError(error.to_string()))?;
+        let mut store =
+            BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
 
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
@@ -325,7 +323,7 @@ impl Wallet {
             .clone()
             .into_create_params()
             .network(network.into())
-            .create_wallet(&mut db)
+            .create_wallet(&mut store.conn)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         // save public key in keychain too
@@ -349,8 +347,8 @@ impl Wallet {
             id,
             metadata,
             network,
-            bdk: wallet,
-            db,
+            bdk: Mutex::new(wallet),
+            db: Mutex::new(store.conn),
         })
     }
 
@@ -365,15 +363,14 @@ impl Wallet {
         let id = self.id.clone();
 
         // delete the bdk wallet filestore
-        std::fs::remove_file(data_path(&self.id)).map_err(|error| {
+        BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
             WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
         })?;
 
-        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
-            id.to_string().as_bytes(),
-            data_path(&id),
-        )
-        .map_err(|error| WalletError::PersistError(error.to_string()))?;
+        let store = BdkStore::try_new(&id, self.network);
+        let mut db = store
+            .map_err(|e| WalletError::LoadError(e.to_string()))?
+            .conn;
 
         let descriptors: Descriptors = descriptors.into();
         let wallet = descriptors
@@ -383,8 +380,7 @@ impl Wallet {
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         // switch db and wallet
-        self.db = db;
-        self.bdk = wallet;
+        self.bdk = Mutex::new(wallet);
         self.metadata.address_type = address_type;
         self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
 
@@ -399,7 +395,7 @@ impl Wallet {
         debug!("switching mnemonic wallet to new address type");
 
         // delete the bdk wallet filestore
-        std::fs::remove_file(data_path(&self.id)).map_err(|error| {
+        BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
             WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
         })?;
 
@@ -446,11 +442,8 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = metadata.id.clone();
-        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
-            id.to_string().as_bytes(),
-            data_path(&id),
-        )
-        .map_err(|error| WalletError::PersistError(error.to_string()))?;
+        let mut store =
+            BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
         let origin = descriptors.origin().ok();
@@ -459,35 +452,43 @@ impl Wallet {
         let wallet = descriptors
             .into_create_params()
             .network(network.into())
-            .create_wallet(&mut db)
+            .create_wallet(&mut store.conn)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         Ok(Self {
             id,
             metadata,
             network,
-            bdk: wallet,
-            db,
+            bdk: Mutex::new(wallet),
+            db: Mutex::new(store.conn),
         })
     }
 
     pub fn balance(&self) -> Balance {
-        self.bdk.balance().into()
+        self.bdk.lock().balance().into()
     }
 
+    #[allow(dead_code)]
     pub fn public_external_descriptor(&self) -> crate::keys::Descriptor {
-        let extended_descriptor: ExtendedDescriptor =
-            self.bdk.public_descriptor(KeychainKind::External).clone();
+        let extended_descriptor: ExtendedDescriptor = self
+            .bdk
+            .lock()
+            .public_descriptor(KeychainKind::External)
+            .clone();
 
         crate::keys::Descriptor::from(extended_descriptor)
     }
 
+    #[allow(dead_code)]
     pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {
         use bdk_wallet::miniscript::Descriptor;
         use bdk_wallet::miniscript::descriptor::ShInner;
 
-        let extended_descriptor: ExtendedDescriptor =
-            self.bdk.public_descriptor(KeychainKind::External).clone();
+        let extended_descriptor: ExtendedDescriptor = self
+            .bdk
+            .lock()
+            .public_descriptor(KeychainKind::External)
+            .clone();
 
         let key = match extended_descriptor {
             Descriptor::Pkh(pk) => pk.into_inner(),
@@ -519,6 +520,7 @@ impl Wallet {
 
         let addresses: Vec<AddressInfo> = self
             .bdk
+            .lock()
             .list_unused_addresses(KeychainKind::External)
             .take(MAX_ADDRESSES)
             .map(Into::into)
@@ -526,7 +528,12 @@ impl Wallet {
 
         // get up to 25 revealed but unused addresses
         if addresses.len() < MAX_ADDRESSES {
-            let address_info = self.bdk.reveal_next_address(KeychainKind::External).into();
+            let address_info = self
+                .bdk
+                .lock()
+                .reveal_next_address(KeychainKind::External)
+                .into();
+
             self.persist()?;
 
             return Ok(address_info);
@@ -560,6 +567,7 @@ impl Wallet {
         Ok(address_info)
     }
 
+    #[allow(dead_code)]
     pub fn master_fingerprint(&self) -> Result<BdkFingerprint, WalletError> {
         let key = self.get_pub_key()?;
         Ok(key.master_fingerprint())
@@ -567,7 +575,8 @@ impl Wallet {
 
     pub fn persist(&mut self) -> Result<(), WalletError> {
         self.bdk
-            .persist(&mut self.db)
+            .lock()
+            .persist(&mut self.db.lock())
             .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         Ok(())
@@ -583,7 +592,7 @@ impl Wallet {
         let passphrase = None;
         let metadata = WalletMetadata::preview_new();
 
-        if let Err(error) = delete_data_path(&metadata.id) {
+        if let Err(error) = delete_wallet_specific_data(&metadata.id) {
             debug!("clean up failed, failed to delete wallet data: {error}");
         }
 
@@ -599,20 +608,6 @@ impl Wallet {
     }
 }
 
-impl Deref for Wallet {
-    type Target = bdk_wallet::PersistedWallet<Store<bdk_wallet::ChangeSet>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.bdk
-    }
-}
-
-impl DerefMut for Wallet {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.bdk
-    }
-}
-
 impl WalletAddressType {
     pub fn index(&self) -> usize {
         match self {
@@ -623,18 +618,13 @@ impl WalletAddressType {
     }
 }
 
-pub fn delete_data_path(wallet_id: &WalletId) -> Result<(), std::io::Error> {
-    let path = data_path(wallet_id);
-    std::fs::remove_file(path)?;
-
-    crate::database::wallet_data::delete_database(wallet_id)?;
+// delete wallet filestore / sqlite store and wallet data database
+pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
+    BdkStore::delete_wallet_stores(wallet_id)?;
+    crate::database::wallet_data::delete_database(wallet_id)
+        .context("unable to delete wallet data database")?;
 
     Ok(())
-}
-
-fn data_path(wallet_id: &WalletId) -> PathBuf {
-    let db = format!("bdk_wallet_{}.db", wallet_id.as_str().to_lowercase());
-    ROOT_DATA_DIR.join(db)
 }
 
 #[cfg(test)]
@@ -655,7 +645,7 @@ mod tests {
                 .unwrap();
 
         let fingerprint = wallet.master_fingerprint();
-        let _ = delete_data_path(&metadata.id);
+        let _ = delete_wallet_specific_data(&metadata.id);
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }

@@ -95,6 +95,17 @@ pub struct InternalOnlyMetadata {
     #[serde(default)]
     /// this is the time that a full expanded scan was completed, this should only happen once
     pub performed_full_scan_at: Option<u64>,
+
+    // the type of store used for the wallet
+    #[serde(default = "file_store_default")]
+    pub store_type: StoreType,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum StoreType {
+    #[default]
+    Sqlite,
+    FileStore,
 }
 
 #[derive(
@@ -363,4 +374,8 @@ fn wallet_metadata_hash(metadata: WalletMetadata) -> u64 {
 #[uniffi::export]
 fn wallet_metadata_preview() -> WalletMetadata {
     WalletMetadata::preview_new()
+}
+
+fn file_store_default() -> StoreType {
+    StoreType::FileStore
 }

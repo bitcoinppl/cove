@@ -214,6 +214,7 @@ impl RustWalletManager {
 
         let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id.clone())?;
+        let metadata = wallet.metadata.clone();
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         // only creates the scanner if its not already complet
@@ -632,8 +633,8 @@ impl RustWalletManager {
         keychain.delete_wallet_items(&wallet_id);
 
         // delete the wallet persisted bdk data
-        if let Err(error) = crate::wallet::delete_data_path(&wallet_id) {
-            error!("Unable to delete wallet persisted bdk data: {error}");
+        if let Err(error) = crate::wallet::delete_wallet_specific_data(&wallet_id) {
+            error!("Unable to delete wallet persisted bdk data and wallet data database: {error}");
         }
 
         // unselect the wallet in the database

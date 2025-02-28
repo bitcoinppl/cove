@@ -11,10 +11,10 @@ members = ["./macros"]
 uniffi = { version = "=0.28.3", features = ["tokio"] }
 
 # error handling
-thiserror = "1.0"
+thiserror = "2.0"
 
 # derive macros
-derive_more = { version = "1", features = ["display", "from", "error"] }
+derive_more = { version = "2", features = ["display", "from", "error"] }
 
 # logging
 tracing = "0.1"

@@ -393,7 +393,7 @@ impl FfiApp {
             keychain.delete_wallet_items(wallet_id);
 
             // delete the wallet persisted bdk data
-            if let Err(error) = crate::wallet::delete_data_path(wallet_id) {
+            if let Err(error) = crate::wallet::delete_wallet_specific_data(wallet_id) {
                 error!("Unable to delete wallet persisted bdk data: {error}");
             }
         }

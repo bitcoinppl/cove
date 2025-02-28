@@ -55,6 +55,13 @@ pub struct Descriptor {
 }
 
 impl Descriptors {
+    pub fn new_from_public(external: ExtendedDescriptor, internal: ExtendedDescriptor) -> Self {
+        Self {
+            external: Descriptor::new_from_public(external),
+            internal: Descriptor::new_from_public(internal),
+        }
+    }
+
     pub fn into_create_params(self) -> CreateParams {
         bdk_wallet::Wallet::create(self.external.into_tuple(), self.internal.into_tuple())
     }
@@ -65,6 +72,13 @@ impl Descriptors {
 }
 
 impl Descriptor {
+    pub fn new_from_public(extended_descriptor: ExtendedDescriptor) -> Self {
+        Self {
+            extended_descriptor,
+            key_map: KeyMap::new(),
+        }
+    }
+
     /// Parse a descriptor string into a `Descriptor` struct.
     pub fn parse_public_descriptor(descriptor: &str) -> Result<Self, Error> {
         let secp = &secp256k1::Secp256k1::signing_only();
