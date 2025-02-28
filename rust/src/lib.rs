@@ -6,6 +6,7 @@ mod router;
 
 mod auth;
 mod autocomplete;
+mod bdk_store;
 mod bip39;
 mod color;
 mod color_scheme;
@@ -34,7 +35,6 @@ mod psbt;
 mod push_tx;
 mod redb;
 mod seed_qr;
-mod bdk_store;
 mod task;
 mod transaction;
 mod unblock;
