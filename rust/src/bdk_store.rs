@@ -12,13 +12,13 @@ use crate::{
     wallet::metadata::{StoreType, WalletId},
 };
 
-pub struct Store {
+pub struct BdkStore {
     id: WalletId,
     network: Network,
     pub conn: bdk_wallet::rusqlite::Connection,
 }
 
-impl Store {
+impl BdkStore {
     pub fn try_new(id: &WalletId, network: impl Into<Network>) -> Result<Self> {
         let mut me = Self {
             id: id.clone(),
@@ -41,19 +41,23 @@ impl Store {
         let id = &self.id;
         let network = self.network;
 
-        // get the metadata for the wallet
-        let mode = Database::global().global_config().wallet_mode();
-        let mut metadata = Database::global()
-            .wallets()
-            .get(id, self.network.into(), mode)
-            .context("unable to get metadata for wallet")?
-            .context("no metadata found for wallet")?;
-
-        if metadata.internal.store_type == StoreType::Sqlite {
+        if !file_store_data_path(id).exists() {
             return Ok(false);
         }
 
-        if !file_store_data_path(id).exists() {
+        // get the metadata for the wallet
+        let mode = Database::global().global_config().wallet_mode();
+        let Some(mut metadata) = Database::global()
+            .wallets()
+            .get(id, self.network.into(), mode)
+            .context("unable to get metadata for wallet")?
+        else {
+            // if not metdata found this is a new wallet so we can just return
+            return Ok(false);
+        };
+
+        tracing::debug!("wallet metadata: {:?}", metadata.internal.store_type);
+        if metadata.internal.store_type == StoreType::Sqlite {
             return Ok(false);
         }
 
@@ -99,6 +103,31 @@ impl Store {
         info!("completed migrating from file store to sqlite store");
 
         Ok(true)
+    }
+
+    pub fn delete_wallet_stores(wallet_id: &WalletId) -> Result<()> {
+        let file_store_data_path = file_store_data_path(wallet_id);
+        let sqlite_data_path = sqlite_data_path(wallet_id);
+
+        if file_store_data_path.exists() {
+            std::fs::remove_file(file_store_data_path).context("unable to delete filestore")?;
+        }
+
+        if sqlite_data_path.exists() {
+            std::fs::remove_file(sqlite_data_path).context("unable to delete sqlite store")?;
+        }
+
+        Ok(())
+    }
+
+    pub fn delete_sqlite_store(wallet_id: &WalletId) -> Result<()> {
+        let sqlite_data_path = sqlite_data_path(wallet_id);
+
+        if sqlite_data_path.exists() {
+            std::fs::remove_file(sqlite_data_path).context("unable to delete sqlite store")?;
+        }
+
+        Ok(())
     }
 }
 

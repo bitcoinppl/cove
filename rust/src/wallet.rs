@@ -5,17 +5,16 @@ pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
 
-use std::{path::PathBuf, str::FromStr as _, sync::Arc};
+use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
-    consts::ROOT_DATA_DIR,
+    bdk_store::BdkStore,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     keys::{Descriptor, Descriptors},
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
     network::Network,
-    store::Store,
     xpub::{self, XpubError},
 };
 use balance::Balance;
@@ -25,6 +24,7 @@ use bdk_wallet::{
     keys::DescriptorPublicKey,
 };
 use bip39::Mnemonic;
+use eyre::Context as _;
 use fingerprint::Fingerprint;
 use metadata::{DiscoveryState, WalletId, WalletMetadata};
 use parking_lot::Mutex;
@@ -161,7 +161,7 @@ impl Wallet {
                 // delete the secret key, xpub and public descriptor from the keychain
                 keychain.delete_wallet_items(&metadata.id);
 
-                if let Err(error) = delete_data_path(&metadata.id) {
+                if let Err(error) = delete_wallet_specific_data(&metadata.id) {
                     warn!("clean up failed, failed to delete wallet data: {error}");
                 };
 
@@ -185,7 +185,7 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let store = crate::store::Store::try_new(&id, network);
+        let store = crate::bdk_store::BdkStore::try_new(&id, network);
         let mut db = store
             .map_err(|e| WalletError::LoadError(e.to_string()))?
             .conn;
@@ -258,7 +258,7 @@ impl Wallet {
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
 
-        let store = Store::try_new(&id, network);
+        let store = BdkStore::try_new(&id, network);
         let mut db = store
             .map_err(|e| WalletError::LoadError(e.to_string()))?
             .conn;
@@ -367,11 +367,11 @@ impl Wallet {
         let id = self.id.clone();
 
         // delete the bdk wallet filestore
-        std::fs::remove_file(data_path(&self.id)).map_err(|error| {
+        BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
             WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
         })?;
 
-        let store = Store::try_new(&id, self.network);
+        let store = BdkStore::try_new(&id, self.network);
         let mut db = store
             .map_err(|e| WalletError::LoadError(e.to_string()))?
             .conn;
@@ -399,7 +399,7 @@ impl Wallet {
         debug!("switching mnemonic wallet to new address type");
 
         // delete the bdk wallet filestore
-        std::fs::remove_file(data_path(&self.id)).map_err(|error| {
+        BdkStore::delete_sqlite_store(&self.id).map_err(|error| {
             WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
         })?;
 
@@ -446,7 +446,7 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = metadata.id.clone();
-        let store = Store::try_new(&id, network);
+        let store = BdkStore::try_new(&id, network);
         let mut db = store
             .map_err(|e| WalletError::LoadError(e.to_string()))?
             .conn;
@@ -595,7 +595,7 @@ impl Wallet {
         let passphrase = None;
         let metadata = WalletMetadata::preview_new();
 
-        if let Err(error) = delete_data_path(&metadata.id) {
+        if let Err(error) = delete_wallet_specific_data(&metadata.id) {
             debug!("clean up failed, failed to delete wallet data: {error}");
         }
 
@@ -621,18 +621,13 @@ impl WalletAddressType {
     }
 }
 
-pub fn delete_data_path(wallet_id: &WalletId) -> Result<(), std::io::Error> {
-    let path = data_path(wallet_id);
-    std::fs::remove_file(path)?;
-
-    crate::database::wallet_data::delete_database(wallet_id)?;
+// delete wallet filestore / sqlite store and wallet data database
+pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
+    BdkStore::delete_wallet_stores(wallet_id)?;
+    crate::database::wallet_data::delete_database(wallet_id)
+        .context("unable to delete wallet data database")?;
 
     Ok(())
-}
-
-fn data_path(wallet_id: &WalletId) -> PathBuf {
-    let db = format!("bdk_wallet_{}.db", wallet_id.as_str().to_lowercase());
-    ROOT_DATA_DIR.join(db)
 }
 
 #[cfg(test)]
@@ -653,7 +648,7 @@ mod tests {
                 .unwrap();
 
         let fingerprint = wallet.master_fingerprint();
-        let _ = delete_data_path(&metadata.id);
+        let _ = delete_wallet_specific_data(&metadata.id);
 
         assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
     }
