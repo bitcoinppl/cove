@@ -206,22 +206,25 @@ struct TransactionDetailsView: View {
     }
 
     @ViewBuilder
-    func ContentScrollView(content: () -> some View) -> some View {
-        ScrollView(.vertical) {
-            content()
-        }
-        .scrollIndicators(.never)
-        .frame(alignment: .top)
-        .scrollPosition($scrollPosition)
-        .scrollDisabled(!detailsExpanded)
-        .onScrollGeometryChange(for: Double.self) { geo in
-            geo.contentOffset.y
-        } action: { oldValue, newValue in
-            if oldValue == newValue { return }
-            if oldValue == 0 { return }
-            let initialOffset = initialOffset ?? oldValue
-            self.initialOffset = initialOffset
-            currentOffset = initialOffset - newValue
+    func ContentScrollView(content: @escaping () -> some View) -> some View {
+        GeometryReader { geo in
+            ScrollView(.vertical) {
+                content()
+                    .frame(minHeight: geo.size.height)
+            }
+            .scrollIndicators(.never)
+            .frame(alignment: .top)
+            .scrollPosition($scrollPosition)
+            .scrollDisabled(!detailsExpanded)
+            .onScrollGeometryChange(for: Double.self) { geo in
+                geo.contentOffset.y
+            } action: { oldValue, newValue in
+                if oldValue == newValue { return }
+                if oldValue == 0 { return }
+                let initialOffset = initialOffset ?? oldValue
+                self.initialOffset = initialOffset
+                currentOffset = initialOffset - newValue
+            }
         }
     }
 
@@ -229,6 +232,7 @@ struct TransactionDetailsView: View {
         ContentScrollView {
             VStack(spacing: 24) {
                 Spacer()
+
                 Group {
                     if transactionDetails.isReceived() {
                         ReceivedDetails
@@ -237,6 +241,7 @@ struct TransactionDetailsView: View {
                     }
                 }
 
+                Spacer()
                 Spacer()
                 Spacer()
 
@@ -266,8 +271,9 @@ struct TransactionDetailsView: View {
                         .font(.footnote)
                         .fontWeight(.bold)
                         .foregroundStyle(.gray.opacity(0.8))
-                        .padding(.vertical, 6)
                 }
+                .padding(.top, 10)
+                .offset(y: -20)
             }
         }
         .task {
