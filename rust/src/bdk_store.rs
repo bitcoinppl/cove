@@ -7,6 +7,7 @@ use eyre::{Context as _, ContextCompat as _, Result};
 use tracing::{info, warn};
 
 use crate::{
+    app::reconcile::{AppStateReconcileMessage, Updater},
     consts::ROOT_DATA_DIR,
     database::Database,
     wallet::metadata::{StoreType, WalletId},
@@ -100,6 +101,8 @@ impl BdkStore {
             .wallets()
             .update_wallet_metadata(metadata)
             .context("unable to save updated metadata")?;
+
+        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
         // TODO: put back when we are sure this works
         // std::fs::remove_file(file_store_data_path(id)).context("unable to delete filestore")?;

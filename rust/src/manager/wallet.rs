@@ -214,6 +214,7 @@ impl RustWalletManager {
 
         let id = metadata.id.clone();
         let wallet = Wallet::try_load_persisted(id.clone())?;
+        let metadata = wallet.metadata.clone();
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         // only creates the scanner if its not already complet
