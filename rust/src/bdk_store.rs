@@ -20,11 +20,15 @@ pub struct BdkStore {
 
 impl BdkStore {
     pub fn try_new(id: &WalletId, network: impl Into<Network>) -> Result<Self> {
+        let sqlite_data_path = sqlite_data_path(id);
+
+        let conn = bdk_wallet::rusqlite::Connection::open(&sqlite_data_path)
+            .context("unable to open rusqlite connection")?;
+
         let mut me = Self {
             id: id.clone(),
             network: network.into(),
-            conn: bdk_wallet::rusqlite::Connection::open(sqlite_data_path(id))
-                .context("unable to open connection to sqlite db")?,
+            conn,
         };
 
         if let Err(e) = me.check_and_migrate_from_file_store() {

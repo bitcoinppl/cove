@@ -198,12 +198,16 @@ impl WalletActor {
 
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
         let zero = Amount::ZERO.into();
-        let mut transactions = self
-            .wallet
-            .bdk
-            .lock()
+
+        let bdk = self.wallet.bdk.lock();
+
+        let mut transactions = bdk
             .transactions()
-            .map(|tx| Transaction::new(&self.wallet, tx))
+            .map(|tx| {
+                let sent_and_received = bdk.sent_and_received(&tx.tx_node.tx).into();
+                (tx, sent_and_received)
+            })
+            .map(|(tx, sent_and_received)| Transaction::new(&self.wallet.id, sent_and_received, tx))
             .filter(|tx| tx.sent_and_received().amount() > zero)
             .collect::<Vec<Transaction>>();
 
@@ -243,12 +247,13 @@ impl WalletActor {
             WalletManagerError::GetConfirmDetailsError(s.to_string()).into()
         }
 
-        let network = self.wallet.bdk.lock().network();
+        let bdk = self.wallet.bdk.lock();
+        let network = bdk.network();
         let external_outputs = psbt
             .unsigned_tx
             .output
             .iter()
-            .filter(|output| !self.wallet.bdk.lock().is_mine(output.script_pubkey.clone()))
+            .filter(|output| !bdk.is_mine(output.script_pubkey.clone()))
             .collect::<Vec<&bitcoin::TxOut>>();
 
         if external_outputs.len() > 1 {
@@ -651,9 +656,10 @@ impl WalletActor {
     async fn get_for_full_scan(
         &self,
     ) -> eyre::Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
-        let full_scan_request = self.wallet.bdk.lock().start_full_scan().build();
+        let bdk = self.wallet.bdk.lock();
 
-        let graph = self.wallet.bdk.lock().tx_graph().clone();
+        let full_scan_request = bdk.start_full_scan().build();
+        let graph = bdk.tx_graph().clone();
 
         let node_client = self
             .node_client

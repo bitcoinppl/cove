@@ -24,7 +24,7 @@ use std::{borrow::Borrow, cmp::Ordering, sync::Arc};
 use crate::{
     database::{Database, wallet_data::WalletDataDb},
     fiat::FiatAmount,
-    wallet::Wallet,
+    wallet::metadata::WalletId,
 };
 
 pub type Amount = amount::Amount;
@@ -134,7 +134,8 @@ impl Transaction {
     }
 
     pub fn new(
-        wallet: &Wallet,
+        wallet_id: &WalletId,
+        sent_and_received: SentAndReceived,
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
     ) -> Self {
         let txid = tx.tx_node.txid.into();
@@ -143,10 +144,9 @@ impl Transaction {
             .fiat_currency()
             .unwrap_or_default();
 
-        let sent_and_received = wallet.bdk.lock().sent_and_received(&tx.tx_node.tx).into();
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
-        let label_db = WalletDataDb::new_or_existing(wallet.id.clone());
+        let label_db = WalletDataDb::new_or_existing(wallet_id.clone());
         let labels = label_db
             .labels
             .all_labels_for_txn(tx.tx_node.txid)

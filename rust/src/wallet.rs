@@ -77,7 +77,7 @@ pub struct Wallet {
     pub network: Network,
     pub bdk: Mutex<bdk_wallet::PersistedWallet<Connection>>,
     pub metadata: WalletMetadata,
-    db: Arc<Mutex<Connection>>,
+    db: Mutex<Connection>,
 }
 
 #[derive(
@@ -185,13 +185,11 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let store = crate::bdk_store::BdkStore::try_new(&id, network);
-        let mut db = store
-            .map_err(|e| WalletError::LoadError(e.to_string()))?
-            .conn;
+        let mut store = crate::bdk_store::BdkStore::try_new(&id, network)
+            .map_err(|e| WalletError::LoadError(e.to_string()))?;
 
         let wallet = bdk_wallet::Wallet::load()
-            .load_wallet(&mut db)
+            .load_wallet(&mut store.conn)
             .map_err(|error| WalletError::LoadError(error.to_string()))?
             .ok_or(WalletError::WalletNotFound)?;
 
@@ -224,7 +222,7 @@ impl Wallet {
             network,
             metadata,
             bdk: Mutex::new(wallet),
-            db: Arc::new(Mutex::new(db)),
+            db: Mutex::new(store.conn),
         })
     }
 
@@ -258,10 +256,8 @@ impl Wallet {
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
 
-        let store = BdkStore::try_new(&id, network);
-        let mut db = store
-            .map_err(|e| WalletError::LoadError(e.to_string()))?
-            .conn;
+        let mut store =
+            BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
 
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
@@ -327,7 +323,7 @@ impl Wallet {
             .clone()
             .into_create_params()
             .network(network.into())
-            .create_wallet(&mut db)
+            .create_wallet(&mut store.conn)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         // save public key in keychain too
@@ -352,7 +348,7 @@ impl Wallet {
             metadata,
             network,
             bdk: Mutex::new(wallet),
-            db: Arc::new(Mutex::new(db)),
+            db: Mutex::new(store.conn),
         })
     }
 
@@ -446,10 +442,8 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = metadata.id.clone();
-        let store = BdkStore::try_new(&id, network);
-        let mut db = store
-            .map_err(|e| WalletError::LoadError(e.to_string()))?
-            .conn;
+        let mut store =
+            BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
         let origin = descriptors.origin().ok();
@@ -458,7 +452,7 @@ impl Wallet {
         let wallet = descriptors
             .into_create_params()
             .network(network.into())
-            .create_wallet(&mut db)
+            .create_wallet(&mut store.conn)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         Ok(Self {
@@ -466,7 +460,7 @@ impl Wallet {
             metadata,
             network,
             bdk: Mutex::new(wallet),
-            db: Arc::new(Mutex::new(db)),
+            db: Mutex::new(store.conn),
         })
     }
 
@@ -474,6 +468,7 @@ impl Wallet {
         self.bdk.lock().balance().into()
     }
 
+    #[allow(dead_code)]
     pub fn public_external_descriptor(&self) -> crate::keys::Descriptor {
         let extended_descriptor: ExtendedDescriptor = self
             .bdk
@@ -484,6 +479,7 @@ impl Wallet {
         crate::keys::Descriptor::from(extended_descriptor)
     }
 
+    #[allow(dead_code)]
     pub fn get_pub_key(&self) -> Result<DescriptorPublicKey, WalletError> {
         use bdk_wallet::miniscript::Descriptor;
         use bdk_wallet::miniscript::descriptor::ShInner;
@@ -571,6 +567,7 @@ impl Wallet {
         Ok(address_info)
     }
 
+    #[allow(dead_code)]
     pub fn master_fingerprint(&self) -> Result<BdkFingerprint, WalletError> {
         let key = self.get_pub_key()?;
         Ok(key.master_fingerprint())
