@@ -34,6 +34,7 @@ mod psbt;
 mod push_tx;
 mod redb;
 mod seed_qr;
+pub mod store;
 mod task;
 mod transaction;
 mod unblock;

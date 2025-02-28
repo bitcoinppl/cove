@@ -5,12 +5,7 @@ pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
 
-use std::{
-    ops::{Deref, DerefMut},
-    path::PathBuf,
-    str::FromStr as _,
-    sync::Arc,
-};
+use std::{path::PathBuf, str::FromStr as _, sync::Arc};
 
 use crate::{
     consts::ROOT_DATA_DIR,
@@ -20,10 +15,11 @@ use crate::{
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
     network::Network,
+    store::Store,
     xpub::{self, XpubError},
 };
 use balance::Balance;
-use bdk_file_store::Store;
+use bdk_chain::rusqlite::Connection;
 use bdk_wallet::{
     KeychainKind, bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
     keys::DescriptorPublicKey,
@@ -31,6 +27,7 @@ use bdk_wallet::{
 use bip39::Mnemonic;
 use fingerprint::Fingerprint;
 use metadata::{DiscoveryState, WalletId, WalletMetadata};
+use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
 
@@ -78,10 +75,9 @@ pub enum WalletError {
 pub struct Wallet {
     pub id: WalletId,
     pub network: Network,
-    pub bdk: bdk_wallet::PersistedWallet<Store<bdk_wallet::ChangeSet>>,
+    pub bdk: Mutex<bdk_wallet::PersistedWallet<Connection>>,
     pub metadata: WalletMetadata,
-
-    db: Store<bdk_wallet::ChangeSet>,
+    db: Arc<Mutex<Connection>>,
 }
 
 #[derive(
@@ -135,8 +131,14 @@ impl Wallet {
             // save public descriptors in keychain too
             keychain.save_public_descriptor(
                 &me.id,
-                me.bdk.public_descriptor(KeychainKind::External).clone(),
-                me.bdk.public_descriptor(KeychainKind::Internal).clone(),
+                me.bdk
+                    .lock()
+                    .public_descriptor(KeychainKind::External)
+                    .clone(),
+                me.bdk
+                    .lock()
+                    .public_descriptor(KeychainKind::Internal)
+                    .clone(),
             )?;
 
             // save wallet_metadata to database
@@ -183,9 +185,10 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let mut db =
-            Store::<bdk_wallet::ChangeSet>::open(id.to_string().as_bytes(), data_path(&id))
-                .map_err(|error| WalletError::LoadError(error.to_string()))?;
+        let store = crate::store::Store::try_new(&id, network);
+        let mut db = store
+            .map_err(|e| WalletError::LoadError(e.to_string()))?
+            .conn;
 
         let wallet = bdk_wallet::Wallet::load()
             .load_wallet(&mut db)
@@ -220,8 +223,8 @@ impl Wallet {
             id,
             network,
             metadata,
-            bdk: wallet,
-            db,
+            bdk: Mutex::new(wallet),
+            db: Arc::new(Mutex::new(db)),
         })
     }
 
@@ -255,11 +258,10 @@ impl Wallet {
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
 
-        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
-            id.to_string().as_bytes(),
-            data_path(&id),
-        )
-        .map_err(|error| WalletError::PersistError(error.to_string()))?;
+        let store = Store::try_new(&id, network);
+        let mut db = store
+            .map_err(|e| WalletError::LoadError(e.to_string()))?
+            .conn;
 
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
@@ -349,8 +351,8 @@ impl Wallet {
             id,
             metadata,
             network,
-            bdk: wallet,
-            db,
+            bdk: Mutex::new(wallet),
+            db: Arc::new(Mutex::new(db)),
         })
     }
 
@@ -369,11 +371,10 @@ impl Wallet {
             WalletError::PersistError(format!("failed to delete wallet filestore: {error}"))
         })?;
 
-        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
-            id.to_string().as_bytes(),
-            data_path(&id),
-        )
-        .map_err(|error| WalletError::PersistError(error.to_string()))?;
+        let store = Store::try_new(&id, self.network);
+        let mut db = store
+            .map_err(|e| WalletError::LoadError(e.to_string()))?
+            .conn;
 
         let descriptors: Descriptors = descriptors.into();
         let wallet = descriptors
@@ -383,8 +384,7 @@ impl Wallet {
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         // switch db and wallet
-        self.db = db;
-        self.bdk = wallet;
+        self.bdk = Mutex::new(wallet);
         self.metadata.address_type = address_type;
         self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
 
@@ -446,11 +446,10 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = metadata.id.clone();
-        let mut db = Store::<bdk_wallet::ChangeSet>::open_or_create_new(
-            id.to_string().as_bytes(),
-            data_path(&id),
-        )
-        .map_err(|error| WalletError::PersistError(error.to_string()))?;
+        let store = Store::try_new(&id, network);
+        let mut db = store
+            .map_err(|e| WalletError::LoadError(e.to_string()))?
+            .conn;
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
         let origin = descriptors.origin().ok();
@@ -466,18 +465,21 @@ impl Wallet {
             id,
             metadata,
             network,
-            bdk: wallet,
-            db,
+            bdk: Mutex::new(wallet),
+            db: Arc::new(Mutex::new(db)),
         })
     }
 
     pub fn balance(&self) -> Balance {
-        self.bdk.balance().into()
+        self.bdk.lock().balance().into()
     }
 
     pub fn public_external_descriptor(&self) -> crate::keys::Descriptor {
-        let extended_descriptor: ExtendedDescriptor =
-            self.bdk.public_descriptor(KeychainKind::External).clone();
+        let extended_descriptor: ExtendedDescriptor = self
+            .bdk
+            .lock()
+            .public_descriptor(KeychainKind::External)
+            .clone();
 
         crate::keys::Descriptor::from(extended_descriptor)
     }
@@ -486,8 +488,11 @@ impl Wallet {
         use bdk_wallet::miniscript::Descriptor;
         use bdk_wallet::miniscript::descriptor::ShInner;
 
-        let extended_descriptor: ExtendedDescriptor =
-            self.bdk.public_descriptor(KeychainKind::External).clone();
+        let extended_descriptor: ExtendedDescriptor = self
+            .bdk
+            .lock()
+            .public_descriptor(KeychainKind::External)
+            .clone();
 
         let key = match extended_descriptor {
             Descriptor::Pkh(pk) => pk.into_inner(),
@@ -519,6 +524,7 @@ impl Wallet {
 
         let addresses: Vec<AddressInfo> = self
             .bdk
+            .lock()
             .list_unused_addresses(KeychainKind::External)
             .take(MAX_ADDRESSES)
             .map(Into::into)
@@ -526,7 +532,12 @@ impl Wallet {
 
         // get up to 25 revealed but unused addresses
         if addresses.len() < MAX_ADDRESSES {
-            let address_info = self.bdk.reveal_next_address(KeychainKind::External).into();
+            let address_info = self
+                .bdk
+                .lock()
+                .reveal_next_address(KeychainKind::External)
+                .into();
+
             self.persist()?;
 
             return Ok(address_info);
@@ -567,7 +578,8 @@ impl Wallet {
 
     pub fn persist(&mut self) -> Result<(), WalletError> {
         self.bdk
-            .persist(&mut self.db)
+            .lock()
+            .persist(&mut self.db.lock())
             .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         Ok(())
@@ -596,20 +608,6 @@ impl Wallet {
 
     pub fn id(&self) -> WalletId {
         self.id.clone()
-    }
-}
-
-impl Deref for Wallet {
-    type Target = bdk_wallet::PersistedWallet<Store<bdk_wallet::ChangeSet>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.bdk
-    }
-}
-
-impl DerefMut for Wallet {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.bdk
     }
 }
 

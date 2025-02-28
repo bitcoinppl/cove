@@ -143,7 +143,7 @@ impl Transaction {
             .fiat_currency()
             .unwrap_or_default();
 
-        let sent_and_received = wallet.sent_and_received(&tx.tx_node.tx).into();
+        let sent_and_received = wallet.bdk.lock().sent_and_received(&tx.tx_node.tx).into();
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
         let label_db = WalletDataDb::new_or_existing(wallet.id.clone());

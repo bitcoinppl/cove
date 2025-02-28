@@ -13507,6 +13507,7 @@ public struct InternalOnlyMetadata {
      * this is the time that a full expanded scan was completed, this should only happen once
      */
     public var performedFullScanAt: UInt64?
+    public var storeType: StoreType
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -13516,11 +13517,12 @@ public struct InternalOnlyMetadata {
          */lastScanFinished: TimeInterval?, lastHeightFetched: BlockSizeLast?, 
         /**
          * this is the time that a full expanded scan was completed, this should only happen once
-         */performedFullScanAt: UInt64?) {
+         */performedFullScanAt: UInt64?, storeType: StoreType) {
         self.addressIndex = addressIndex
         self.lastScanFinished = lastScanFinished
         self.lastHeightFetched = lastHeightFetched
         self.performedFullScanAt = performedFullScanAt
+        self.storeType = storeType
     }
 }
 
@@ -13543,6 +13545,9 @@ extension InternalOnlyMetadata: Equatable, Hashable {
         if lhs.performedFullScanAt != rhs.performedFullScanAt {
             return false
         }
+        if lhs.storeType != rhs.storeType {
+            return false
+        }
         return true
     }
 
@@ -13551,6 +13556,7 @@ extension InternalOnlyMetadata: Equatable, Hashable {
         hasher.combine(lastScanFinished)
         hasher.combine(lastHeightFetched)
         hasher.combine(performedFullScanAt)
+        hasher.combine(storeType)
     }
 }
 
@@ -13566,7 +13572,8 @@ public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
                 addressIndex: FfiConverterOptionTypeAddressIndex.read(from: &buf), 
                 lastScanFinished: FfiConverterOptionDuration.read(from: &buf), 
                 lastHeightFetched: FfiConverterOptionTypeBlockSizeLast.read(from: &buf), 
-                performedFullScanAt: FfiConverterOptionUInt64.read(from: &buf)
+                performedFullScanAt: FfiConverterOptionUInt64.read(from: &buf), 
+                storeType: FfiConverterTypeStoreType.read(from: &buf)
         )
     }
 
@@ -13575,6 +13582,7 @@ public struct FfiConverterTypeInternalOnlyMetadata: FfiConverterRustBuffer {
         FfiConverterOptionDuration.write(value.lastScanFinished, into: &buf)
         FfiConverterOptionTypeBlockSizeLast.write(value.lastHeightFetched, into: &buf)
         FfiConverterOptionUInt64.write(value.performedFullScanAt, into: &buf)
+        FfiConverterTypeStoreType.write(value.storeType, into: &buf)
     }
 }
 
@@ -21199,6 +21207,73 @@ public func FfiConverterTypeSettingsRoute_lower(_ value: SettingsRoute) -> RustB
 
 
 extension SettingsRoute: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum StoreType {
+    
+    case sqlite
+    case fileStore
+}
+
+
+#if compiler(>=6)
+extension StoreType: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStoreType: FfiConverterRustBuffer {
+    typealias SwiftType = StoreType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StoreType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .sqlite
+        
+        case 2: return .fileStore
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: StoreType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .sqlite:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .fileStore:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreType_lift(_ buf: RustBuffer) throws -> StoreType {
+    return try FfiConverterTypeStoreType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStoreType_lower(_ value: StoreType) -> RustBuffer {
+    return FfiConverterTypeStoreType.lower(value)
+}
+
+
+extension StoreType: Equatable, Hashable {}
 
 
 
