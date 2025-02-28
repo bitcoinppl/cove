@@ -128,18 +128,16 @@ impl Wallet {
             let xpub = mnemonic.xpub(me.network.into());
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
+            let (external_descriptor, internal_descriptor) = {
+                let bdk = me.bdk.lock();
+                let external_descriptor = bdk.public_descriptor(KeychainKind::External);
+                let internal_descriptor = bdk.public_descriptor(KeychainKind::Internal);
+
+                (external_descriptor.clone(), internal_descriptor.clone())
+            };
+
             // save public descriptors in keychain too
-            keychain.save_public_descriptor(
-                &me.id,
-                me.bdk
-                    .lock()
-                    .public_descriptor(KeychainKind::External)
-                    .clone(),
-                me.bdk
-                    .lock()
-                    .public_descriptor(KeychainKind::Internal)
-                    .clone(),
-            )?;
+            keychain.save_public_descriptor(&me.id, external_descriptor, internal_descriptor)?;
 
             // save wallet_metadata to database
             database
