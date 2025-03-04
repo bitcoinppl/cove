@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Add version number, git short hash and feedback email to wallet settings screen
+- Fixed bug where custom node url starting with `http` or `https` would crash the app
 
 ## [0.0.1] [Build 39] - 2025-02-28
 
