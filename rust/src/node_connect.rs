@@ -245,7 +245,11 @@ fn parse_node_url(url: &str) -> Result<Url, url::ParseError> {
         ("http", _) => url.set_scheme("tcp").expect("set scheme"),
         ("none", Some(50002)) => url.set_scheme("ssl").expect("set scheme"),
         ("none", Some(50001)) => url.set_scheme("tcp").expect("set scheme"),
-        ("none", _) => url.set_scheme("tcp").expect("set scheme"),
+        ("none", _) => {
+            if let Err(error) = url.set_scheme("tcp") {
+                error!("failed to set scheme: {error:?}");
+            }
+        }
         _ => {}
     };
 
@@ -256,7 +260,9 @@ fn parse_node_url(url: &str) -> Result<Url, url::ParseError> {
         (None, "tcp") => url.set_port(Some(50001)).expect("set port"),
         (None, _) => {
             error!("invalid node url: {url}, should already be set");
-            url.set_port(Some(50002)).expect("set port")
+            if let Err(error) = url.set_port(Some(50002)) {
+                error!("failed to set port: {error:?}");
+            }
         }
     };
 

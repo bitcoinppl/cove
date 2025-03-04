@@ -61,7 +61,6 @@ impl BdkStore {
             return Ok(false);
         };
 
-        tracing::debug!("wallet metadata: {:?}", metadata.internal.store_type);
         if metadata.internal.store_type == StoreType::Sqlite {
             return Ok(false);
         }
