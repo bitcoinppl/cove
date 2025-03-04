@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/cove_icon.png" width="100" height="100">
+  <img src="images/cove_logo_github.jpg" width="250" >
 </div>
 
 ## About
@@ -29,6 +29,8 @@ Cove is currently in beta, be careful when using it with large amounts of Bitcoi
 
 ## Features
 
+![features list](images/features.jpg)
+
 - Import hardware wallet (xpub / public descriptor) using NFC, File & QR
 - Create hot wallet, and verify hot wallet backup
 - Send Bitcoin using a hot wallet
@@ -41,6 +43,10 @@ Cove is currently in beta, be careful when using it with large amounts of Bitcoi
 - Connect your own node
 - Create Trick Pins (Wipe Data & Decoy PIN)
 - Use FaceID or PIN to lock your wallets
+
+## Demo Video
+
+https://github.com/user-attachments/assets/9c933b90-a991-4c09-be29-2825d535bc1e
 
 ## Coming Soon...
 
