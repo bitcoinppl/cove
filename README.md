@@ -63,8 +63,9 @@ https://github.com/user-attachments/assets/9c933b90-a991-4c09-be29-2825d535bc1e
 
 - [OpenSats](https://opensats.org/) for the grant that made it possible for me to dedicate my time to this project.
 - [BDK](https://bitcoindevkit.org/) which Cove is built on, thanks for the great work, and for your help along the way.
+- Adrian for the UI designs and UX feedback.
 - All the alpha and beta testers that have provided valuable feedback.
-- [Craig Raw](https://x.com/craigraw) for helping me with make integrations with sparrow work smoothly.
+- [Craig Raw](https://x.com/craigraw) for helping me make integrations with sparrow work smoothly.
 - [Coinkite](http://coinkite.com) for providing me with hardware to test on and helping me with integrations.
 - [NVK](http://twitter.com/nvk) for the Cove name.
 
