@@ -4731,12 +4731,18 @@ public protocol FfiAppProtocol: AnyObject {
      */
     func dangerousWipeAllData() 
     
+    func debugOrRelease()  -> String
+    
     /**
      * Frontend calls this method to send events to the rust application logic
      */
     func dispatch(action: AppAction) 
     
+    func emailMailto(ios: String)  -> String
+    
     func fees() async throws  -> FeeResponse
+    
+    func gitShortHash()  -> String
     
     /**
      * Get the selected wallet
@@ -4796,6 +4802,8 @@ public protocol FfiAppProtocol: AnyObject {
      * Get wallets that have not been backed up and verified
      */
     func unverifiedWalletIds()  -> [WalletId]
+    
+    func version()  -> String
     
 }
 /**
@@ -4882,6 +4890,13 @@ open func dangerousWipeAllData()  {try! rustCall() {
 }
 }
     
+open func debugOrRelease() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_debug_or_release(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
     /**
      * Frontend calls this method to send events to the rust application logic
      */
@@ -4890,6 +4905,14 @@ open func dispatch(action: AppAction)  {try! rustCall() {
         FfiConverterTypeAppAction_lower(action),$0
     )
 }
+}
+    
+open func emailMailto(ios: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_email_mailto(self.uniffiClonePointer(),
+        FfiConverterString.lower(ios),$0
+    )
+})
 }
     
 open func fees()async throws  -> FeeResponse  {
@@ -4907,6 +4930,13 @@ open func fees()async throws  -> FeeResponse  {
             liftFunc: FfiConverterTypeFeeResponse_lift,
             errorHandler: FfiConverterTypeAppError.lift
         )
+}
+    
+open func gitShortHash() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_git_short_hash(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -5058,6 +5088,13 @@ open func state() -> AppState  {
 open func unverifiedWalletIds() -> [WalletId]  {
     return try!  FfiConverterSequenceTypeWalletId.lift(try! rustCall() {
     uniffi_cove_fn_method_ffiapp_unverified_wallet_ids(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func version() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_version(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -26781,10 +26818,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 63122) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_debug_or_release() != 37153) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_dispatch() != 48712) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_email_mailto() != 16522) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_fees() != 44559) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_git_short_hash() != 10133) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_go_to_selected_wallet() != 36820) {
@@ -26827,6 +26873,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_unverified_wallet_ids() != 20710) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_version() != 12247) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffinfcreader_data_from_records() != 32962) {

@@ -189,10 +189,21 @@ struct MainSettingsScreen: View {
     }
 
     var body: some View {
-        Form {
-            GeneralSection
-            WalletSettingsSection()
-            SecuritySection
+        ZStack(alignment: .bottom) {
+            VStack {
+                HStack { Text(app.rust.debugOrRelease()) }
+                HStack { Text(app.fullVersionId) }
+                HStack { Text("feedback@covebitcoinwallet.com") }
+            }
+            .foregroundStyle(Color(UIColor.tertiaryLabel))
+            .font(.caption2)
+            .tint(Color(UIColor.tertiaryLabel))
+
+            Form {
+                GeneralSection
+                WalletSettingsSection()
+                SecuritySection
+            }
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("Settings")

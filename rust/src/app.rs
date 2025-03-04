@@ -255,6 +255,37 @@ impl FfiApp {
         Ok(())
     }
 
+    pub fn version(&self) -> String {
+        crate::build::version()
+    }
+
+    pub fn git_short_hash(&self) -> String {
+        crate::build::git_short_hash()
+    }
+
+    pub fn debug_or_release(&self) -> String {
+        if !crate::build::is_release() {
+            return "DEBUG".to_string();
+        }
+
+        if crate::build::profile() == "release-smaller" {
+            return "".to_string();
+        }
+
+        crate::build::profile()
+    }
+
+    pub fn email_mailto(&self, ios: String) -> String {
+        let version = self.version();
+        let hash = crate::build::git_short_hash();
+
+        let email = "feedback@covebitcoinwallet.com";
+        let subject = "Cove Feedback ({version})";
+        let body = format!("Issue Description: \nversion:{version}\nhash:{hash}\niOS: {ios}\n");
+
+        format!("mailto:{email}?subject{subject}&body={body}")
+    }
+
     /// Get the auth type for the app
     pub fn auth_type(&self) -> AuthType {
         Database::global()
