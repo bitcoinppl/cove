@@ -11,6 +11,10 @@ We provide hot wallet support but one of the main goals is to be the best mobile
 
 Cove is currently in beta, be careful when using it with large amounts of Bitcoin.
 
+## TestFlight Beta
+
+You can download the app from the [TestFlight Beta](https://testflight.apple.com/join/pDxFQsxF)
+
 ## Build from Source
 
 ### Requirements
