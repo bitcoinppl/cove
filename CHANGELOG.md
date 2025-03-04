@@ -1,0 +1,18 @@
+# Changelog
+
+## [Unreleased]
+
+## [0.0.1] [Build 39] - 2025-02-28
+
+- Import hardware wallet (xpub / public descriptor) using NFC, File & QR
+- Create hot wallet, and verify hot wallet backup
+- Send Bitcoin using a hot wallet
+- Send Bitcoin using a hardware wallet, using NFC, File or QR for transferring PSBTs
+- View transaction details
+- Create and use multiple wallets
+- Create and use BIP329 labels
+- Import and Export BIP329 labels
+- Select your preferred fiat currency
+- Connect your own node
+- Create Trick Pins (Wipe Data & Decoy PIN)
+- Use FaceID or PIN to lock your wallets
