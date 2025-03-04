@@ -28,7 +28,11 @@ cargo build
 # Generate bindings
 cargo run --bin uniffi-bindgen generate --library ./target/debug/libcove.dylib --language swift --out-dir ./bindings
 
-if [ $BUILD_TYPE == "release" ]; then
+echo "BUILD_TYPE: $BUILD_TYPE"
+echo "DEVICE: $DEVICE"
+echo "SIGN: $SIGN"
+
+if [ $BUILD_TYPE == "release" ] || [ $BUILD_TYPE == "release-smaller" ]; then
     TARGETS=(
         # aarch64-apple-ios-sim \
         aarch64-apple-ios \
