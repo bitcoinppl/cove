@@ -2,6 +2,7 @@ use tracing::error;
 use url::Url;
 
 use crate::{database::Database, network::Network, node::Node};
+use eyre::{Context, eyre};
 use macros::impl_default_for;
 
 pub const BITCOIN_ESPLORA: [(&str, &str); 2] = [
@@ -231,9 +232,12 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
-fn parse_node_url(url: &str) -> Result<Url, url::ParseError> {
+fn parse_node_url(url: &str) -> eyre::Result<Url> {
+    let url = url.replace("http://", "tcp://");
+    let url = url.replace("https://", "ssl://");
+
     let mut url = if url.contains("://") {
-        Url::parse(url)?
+        Url::parse(&url)?
     } else {
         let url_str = format!("none://{url}/");
         Url::parse(&url_str)?
@@ -241,14 +245,18 @@ fn parse_node_url(url: &str) -> Result<Url, url::ParseError> {
 
     // set the scheme properly, use the port as a hint
     match (url.scheme(), url.port()) {
-        ("https", _) => url.set_scheme("ssl").expect("set scheme"),
-        ("http", _) => url.set_scheme("tcp").expect("set scheme"),
-        ("none", Some(50002)) => url.set_scheme("ssl").expect("set scheme"),
-        ("none", Some(50001)) => url.set_scheme("tcp").expect("set scheme"),
-        ("none", _) => {
-            if let Err(error) = url.set_scheme("tcp") {
-                error!("failed to set scheme: {error:?}");
-            }
+        ("none", Some(50002)) => url
+            .set_scheme("ssl")
+            .map_err(|_| eyre!("can't set scheme to ssl"))
+            .context("original: none, port is 50002")?,
+        ("none", Some(50001)) => url
+            .set_scheme("tcp")
+            .map_err(|_| eyre!("can't set scheme to tcp"))
+            .context("original: none, port is 50001")?,
+        ("none", port) => {
+            url.set_scheme("tcp")
+                .map_err(|_| eyre!("can't set scheme to tcp"))
+                .wrap_err_with(|| format!("original: none, port is {port:?}"))?;
         }
         _ => {}
     };
@@ -256,13 +264,15 @@ fn parse_node_url(url: &str) -> Result<Url, url::ParseError> {
     // set the port to if not set, default to 50002 for ssl and 50001 for tcp
     match (url.port(), url.scheme()) {
         (Some(_), _) => {}
-        (None, "ssl") => url.set_port(Some(50002)).expect("set port"),
-        (None, "tcp") => url.set_port(Some(50001)).expect("set port"),
+        (None, "ssl") => url
+            .set_port(Some(50002))
+            .map_err(|_| eyre!("can't set port"))?,
+        (None, "tcp") => url
+            .set_port(Some(50001))
+            .map_err(|_| eyre!("can't set port"))?,
         (None, _) => {
-            error!("invalid node url: {url}, should already be set");
-            if let Err(error) = url.set_port(Some(50002)) {
-                error!("failed to set port: {error:?}");
-            }
+            url.set_port(Some(50002))
+                .map_err(|_| eyre!("can't set port"))?;
         }
     };
 
