@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add version number, git short hash and feedback email to wallet settings screen
+
 ## [0.0.1] [Build 39] - 2025-02-28
 
 - Import hardware wallet (xpub / public descriptor) using NFC, File & QR
