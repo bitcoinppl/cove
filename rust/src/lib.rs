@@ -8,6 +8,7 @@ mod auth;
 mod autocomplete;
 mod bdk_store;
 mod bip39;
+mod build;
 mod color;
 mod color_scheme;
 mod consts;
