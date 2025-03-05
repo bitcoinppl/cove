@@ -22,7 +22,7 @@ use bdk_wallet::{KeychainKind, TxOrdering};
 use bitcoin::Amount;
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use crossbeam::channel::Sender;
-use eyre::Context as _;
+use eyre::{Context as _, Result};
 use std::time::{Duration, UNIX_EPOCH};
 use tap::TapFallible as _;
 use tracing::{debug, error, info};
@@ -340,9 +340,9 @@ impl WalletActor {
             Error::SignAndBroadcastError(s.to_string()).into()
         }
 
-        self.node_client
-            .as_ref()
-            .ok_or_else(|| err("node client not set"))?
+        self.check_node_connection().await?;
+        self.node_client()
+            .await?
             .broadcast_transaction(transaction)
             .await
             .map_err(|_error| err("failed to broadcast transaction, try again"))?;
@@ -365,18 +365,8 @@ impl WalletActor {
     }
 
     pub async fn check_node_connection(&mut self) -> ActorResult<()> {
-        let node_client = match &self.node_client {
-            Some(node_client) => node_client,
-            None => {
-                let node = Database::global().global_config.selected_node();
-                let node_client = NodeClient::new(&node).await?;
-                self.node_client = Some(node_client);
-
-                self.node_client.as_ref().expect("just checked")
-            }
-        };
-
-        node_client
+        self.node_client()
+            .await?
             .check_url()
             .await
             .map_err(|error| Error::NodeConnectionFailed(error.to_string()))?;
@@ -513,11 +503,8 @@ impl WalletActor {
     }
 
     async fn update_height(&mut self) -> ActorResult<usize> {
-        let node_client = self
-            .node_client
-            .as_ref()
-            .ok_or(eyre::eyre!("node client not set"))?;
-
+        self.check_node_connection().await?;
+        let node_client = self.node_client().await?;
         let block_height = node_client
             .get_height()
             .await
@@ -654,19 +641,13 @@ impl WalletActor {
     }
 
     async fn get_for_full_scan(
-        &self,
-    ) -> eyre::Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
+        &mut self,
+    ) -> Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
+        let node_client = self.node_client().await?.clone();
         let bdk = self.wallet.bdk.lock();
 
         let full_scan_request = bdk.start_full_scan().build();
         let graph = bdk.tx_graph().clone();
-
-        let node_client = self
-            .node_client
-            .clone()
-            .as_ref()
-            .ok_or(eyre::eyre!("node client not set"))?
-            .clone();
 
         Ok((full_scan_request, graph, node_client))
     }
@@ -677,15 +658,11 @@ impl WalletActor {
 
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
+        let node_client = self.node_client().await?.clone();
         let bdk = self.wallet.bdk.lock();
         let scan_request = bdk.start_sync_with_revealed_spks().build();
 
         let graph = bdk.tx_graph().clone();
-        let node_client = self
-            .node_client
-            .as_ref()
-            .ok_or(eyre::eyre!("node client not set"))?
-            .clone();
 
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
@@ -878,6 +855,17 @@ impl WalletActor {
         });
 
         wallets.update_wallet_metadata(metadata).ok()
+    }
+
+    async fn node_client(&mut self) -> Result<&NodeClient> {
+        let node_client = self.node_client.as_ref();
+        if node_client.is_none() {
+            let node = Database::global().global_config.selected_node();
+            let node_client = NodeClient::new(&node).await?;
+            self.node_client = Some(node_client);
+        };
+
+        Ok(self.node_client.as_ref().expect("just checked"))
     }
 }
 
