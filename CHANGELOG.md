@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add ability to import an XPUB (not a descriptor) as a watch-only wallet
+
 ## [0.1.0] - 2025-03-04
 
 - Add version number, git short hash and feedback email to wallet settings screen
