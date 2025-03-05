@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2025-03-05
 
 - Add ability to import an XPUB (not a descriptor) as a watch-only wallet
 - Fixed visual bug in dark mode transaction list (main wallet screen)
