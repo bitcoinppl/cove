@@ -178,7 +178,7 @@ mod ffi_preview {
 
     #[uniffi::export]
     impl ConfirmDetails {
-        #[uniffi::constructor(default(amount = 16338))]
+        #[uniffi::constructor(default(amount = 20448))]
         pub fn preview_new(amount: u64) -> Self {
             let psbt = psbt_preview_new();
             let more_details = InputOutputDetails::new(&psbt, Network::Bitcoin);
@@ -187,7 +187,7 @@ mod ffi_preview {
                 spending_amount: Amount::from_sat(amount),
                 sending_amount: Amount::from_sat(amount - 658),
                 fee_total: Amount::from_sat(658),
-                fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(658).into(),
+                fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
                 sending_to: Address::preview_new(),
                 psbt,
                 more_details,

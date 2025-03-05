@@ -67,9 +67,8 @@ struct SelectedWalletScreen: View {
             scanComplete: scanComplete,
             metadata: manager.walletMetadata
         )
-        .background(colorScheme == .dark ? .black.opacity(0.9) : .clear)
-        .background(Color.white)
         .ignoresSafeArea()
+        .background(Color.coveBg)
     }
 
     @ViewBuilder
@@ -226,9 +225,10 @@ struct SelectedWalletScreen: View {
             Transactions
                 .environment(manager)
         }
+        .background(Color.coveBg)
         .toolbar { MainToolBar }
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbarBackground(Color.midnightBlue.opacity(0.9), for: .navigationBar)
+        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
         .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
         .sheet(item: $sheetState, content: SheetContent)
         .fileExporter(
@@ -292,18 +292,14 @@ struct SelectedWalletScreen: View {
     var body: some View {
         VStack {
             // set background colors below the scrollview
-            ZStack {
-                VStack(spacing: 0) {
-                    Color.midnightBlue.frame(height: screenHeight * 0.30)
-                    Color.black.opacity(colorScheme == .dark ? 0.9 : 0)
-                        .frame(height: screenHeight * 0.50)
-                }
-                .edgesIgnoringSafeArea(.all)
-                .background(.white)
-
-                ScrollView {
-                    MainContent
-                }
+            ScrollView {
+                MainContent
+                    .background(
+                        VStack {
+                            Color.midnightBlue.frame(height: screenHeight * 0.40)
+                            Color.coveBg
+                        }
+                    )
             }
             .refreshable {
                 await manager.rust.forceWalletScan()

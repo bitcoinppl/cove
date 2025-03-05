@@ -3076,7 +3076,7 @@ open class ConfirmDetails: ConfirmDetailsProtocol, @unchecked Sendable {
     }
 
     
-public static func previewNew(amount: UInt64 = UInt64(16338)) -> ConfirmDetails  {
+public static func previewNew(amount: UInt64 = UInt64(20448)) -> ConfirmDetails  {
     return try!  FfiConverterTypeConfirmDetails_lift(try! rustCall() {
     uniffi_cove_fn_constructor_confirmdetails_preview_new(
         FfiConverterUInt64.lower(amount),$0
@@ -27610,7 +27610,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_boxedroute_new() != 62486) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_confirmdetails_preview_new() != 10014) {
+    if (uniffi_cove_checksum_constructor_confirmdetails_preview_new() != 40847) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_converter_new() != 25365) {
