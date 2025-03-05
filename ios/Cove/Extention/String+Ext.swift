@@ -20,6 +20,10 @@ extension String {
         self = address.string()
     }
 
+    init(_ walletType: WalletType) {
+        self = walletTypeToString(walletType: walletType)
+    }
+
     init(_ fingeprint: Fingerprint) {
         self = fingeprint.asUppercase()
     }

@@ -39,15 +39,15 @@ struct WalletSettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     .font(.subheadline)
-                } else {
-                    HStack {
-                        Text("Wallet Type")
-                        Spacer()
-                        Text("Watch Only")
-                            .foregroundColor(.secondary)
-                    }
-                    .font(.subheadline)
                 }
+
+                HStack {
+                    Text("Wallet Type")
+                    Spacer()
+                    Text(String(metadata.walletType))
+                        .foregroundColor(.secondary)
+                }
+                .font(.subheadline)
             }
 
             Section(header: Text("Settings")) {

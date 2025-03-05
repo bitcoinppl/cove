@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::transaction::Unit;
+use derive_more::Display;
 use macros::{impl_default_for, new_type};
 use nid::Nanoid;
 use rand::Rng as _;
@@ -157,7 +158,7 @@ pub struct FoundAddress {
 pub struct FoundJson(pub pubport::formats::Json);
 
 #[derive(
-    Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum,
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum, Display,
 )]
 pub enum WalletType {
     #[default]
@@ -185,7 +186,7 @@ pub enum FiatOrBtc {
 }
 
 impl WalletMetadata {
-    pub fn new(name: impl Into<String>, fingerprint: impl Into<Arc<Fingerprint>>) -> Self {
+    pub fn new(name: impl Into<String>, fingerprint: Option<impl Into<Arc<Fingerprint>>>) -> Self {
         let network = Database::global().global_config.selected_network();
         let wallet_mode = Database::global().global_config.wallet_mode();
 
@@ -193,7 +194,7 @@ impl WalletMetadata {
             id: WalletId::new(),
             name: name.into(),
             color: WalletColor::random(),
-            master_fingerprint: Some(fingerprint.into()),
+            master_fingerprint: fingerprint.map(Into::into),
             origin: None,
             verified: false,
             network,
@@ -210,15 +211,12 @@ impl WalletMetadata {
         }
     }
 
-    pub fn new_with_id(
+    pub fn new_for_hardware(
         id: WalletId,
         name: impl Into<String>,
         fingerprint: Option<Arc<Fingerprint>>,
     ) -> Self {
-        let me = Self::new(
-            name,
-            fingerprint.unwrap_or_else(|| Arc::new(Fingerprint::default())),
-        );
+        let me = Self::new(name, fingerprint);
 
         Self {
             id,
@@ -233,7 +231,7 @@ impl WalletMetadata {
         network: Network,
         fingerprint: impl Into<Arc<Fingerprint>>,
     ) -> Self {
-        let mut me = Self::new(name, fingerprint);
+        let mut me = Self::new(name, Some(fingerprint));
         me.discovery_state = DiscoveryState::StartedMnemonic;
 
         Self {
@@ -379,4 +377,9 @@ fn wallet_metadata_preview() -> WalletMetadata {
 
 fn file_store_default() -> StoreType {
     StoreType::FileStore
+}
+
+#[uniffi::export]
+fn wallet_type_to_string(wallet_type: WalletType) -> String {
+    wallet_type.to_string()
 }

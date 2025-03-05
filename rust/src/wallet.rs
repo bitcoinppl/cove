@@ -19,10 +19,7 @@ use crate::{
 };
 use balance::Balance;
 use bdk_chain::rusqlite::Connection;
-use bdk_wallet::{
-    KeychainKind, bitcoin::bip32::Fingerprint as BdkFingerprint, descriptor::ExtendedDescriptor,
-    keys::DescriptorPublicKey,
-};
+use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey};
 use bip39::Mnemonic;
 use eyre::Context as _;
 use fingerprint::Fingerprint;
@@ -199,7 +196,8 @@ impl Wallet {
 
         // set and save the origin if not set
         // we should be able to remove this because we should always have the origin
-        if metadata.origin.is_none() {
+        // unless its a watch only wallet
+        if metadata.origin.is_none() && metadata.wallet_type != WalletType::WatchOnly {
             warn!("no origin found, setting using descriptor");
             let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
             let descriptor = Descriptor::from(extended_descriptor.clone());
@@ -252,7 +250,7 @@ impl Wallet {
         let mode = database.global_config.wallet_mode();
 
         let id = WalletId::new();
-        let mut metadata = WalletMetadata::new_with_id(id.clone(), "", None);
+        let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
 
         let mut store =
             BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
@@ -309,6 +307,8 @@ impl Wallet {
             .map_err(Into::into)
             .map_err(WalletError::ParseXpubError)?;
 
+        let descriptors: Descriptors = pubport_descriptors.into();
+
         metadata.name = match &fingerprint {
             Some(fingerprint) => format!("Imported {}", fingerprint.to_ascii_uppercase()),
             None => "Imported Watch Only".to_string(),
@@ -319,8 +319,10 @@ impl Wallet {
             None => WalletType::WatchOnly,
         };
 
-        let descriptors: Descriptors = pubport_descriptors.into();
-        let origin = descriptors.origin().ok();
+        // get origin only if its not a watch only wallet
+        if metadata.wallet_type != WalletType::WatchOnly {
+            metadata.origin = descriptors.origin().ok();
+        }
 
         let wallet = descriptors
             .clone()
@@ -338,9 +340,6 @@ impl Wallet {
             descriptors.external.extended_descriptor,
             descriptors.internal.extended_descriptor,
         )?;
-
-        // save wallet_metadata to database
-        metadata.origin = origin;
 
         database
             .wallets
@@ -570,12 +569,6 @@ impl Wallet {
         Ok(address_info)
     }
 
-    #[allow(dead_code)]
-    pub fn master_fingerprint(&self) -> Result<BdkFingerprint, WalletError> {
-        let key = self.get_pub_key()?;
-        Ok(key.master_fingerprint())
-    }
-
     pub fn persist(&mut self) -> Result<(), WalletError> {
         self.bdk
             .lock()
@@ -642,15 +635,10 @@ mod tests {
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
 
         let metadata = WalletMetadata::preview_new();
-
-        let wallet =
-            Wallet::try_new_persisted_from_mnemonic_segwit(metadata.clone(), mnemonic, None)
-                .unwrap();
-
-        let fingerprint = wallet.master_fingerprint();
+        let fingerprint = metadata.master_fingerprint.as_ref().unwrap();
         let _ = delete_wallet_specific_data(&metadata.id);
 
-        assert_eq!("73c5da0a", fingerprint.unwrap().to_string().as_str());
+        assert_eq!("73c5da0a", fingerprint.as_lowercase().as_str());
     }
 }
 

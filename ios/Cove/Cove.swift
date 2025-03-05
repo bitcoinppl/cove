@@ -23816,6 +23816,7 @@ public enum WalletType {
     
     case hot
     case cold
+    case watchOnly
 }
 
 
@@ -23837,6 +23838,8 @@ public struct FfiConverterTypeWalletType: FfiConverterRustBuffer {
         
         case 2: return .cold
         
+        case 3: return .watchOnly
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23851,6 +23854,10 @@ public struct FfiConverterTypeWalletType: FfiConverterRustBuffer {
         
         case .cold:
             writeInt(&buf, Int32(2))
+        
+        
+        case .watchOnly:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -26221,6 +26228,13 @@ public func fiatCurrencyToString(fiatCurrency: FiatCurrency) -> String  {
     )
 })
 }
+public func fingerprintToString(fingerprint: Fingerprint) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_fingerprint_to_string(
+        FfiConverterTypeFingerprint_lower(fingerprint),$0
+    )
+})
+}
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[String]]  {
     return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError_lift) {
     uniffi_cove_fn_func_grouped_plain_words_of(
@@ -26386,6 +26400,13 @@ public func walletStateIsEqual(lhs: WalletLoadState, rhs: WalletLoadState) -> Bo
     )
 })
 }
+public func walletTypeToString(walletType: WalletType) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_wallet_type_to_string(
+        FfiConverterTypeWalletType_lower(walletType),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -26477,6 +26498,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_fiat_currency_to_string() != 50490) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_fingerprint_to_string() != 50539) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 45802) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26541,6 +26565,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_state_is_equal() != 27037) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_type_to_string() != 18258) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_address_spaced_out() != 29461) {

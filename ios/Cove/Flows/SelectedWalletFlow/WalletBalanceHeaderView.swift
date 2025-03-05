@@ -123,7 +123,7 @@ struct WalletBalanceHeaderView: View {
                         return
                     }
 
-                    if metadata.masterFingerprint == nil {
+                    if metadata.walletType == .watchOnly || metadata.masterFingerprint == nil {
                         app.alertState = .init(.cantSendOnWatchOnlyWallet)
                         return
                     }
@@ -134,11 +134,15 @@ struct WalletBalanceHeaderView: View {
                         Image(systemName: "arrow.up.right")
                         Text("Send")
                     }
-                    .foregroundColor(Color.midnightBtn)
+                    .foregroundColor(
+                        metadata.walletType == .watchOnly ? Color.secondary : Color.midnightBtn
+                    )
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
-                    .background(Color.btnPrimary)
+                    .background(
+                        metadata.walletType == .watchOnly ? Color.gray : Color.btnPrimary
+                    )
                     .cornerRadius(10)
                 }
 
@@ -268,6 +272,25 @@ struct WalletBalanceHeaderView: View {
     metadata.sensitiveVisible = true
     metadata.color = .purple
     metadata.fiatOrBtc = .fiat
+
+    return
+        AsyncPreview {
+            WalletBalanceHeaderView(
+                balance: Amount.fromSat(sats: 10_000_000_738),
+                fiatBalance: 1835.00,
+                metadata: metadata,
+                updater: { _ in () },
+                showReceiveSheet: {}
+            )
+            .environment(AppManager.shared)
+            .environment(WalletManager(preview: "preview_only"))
+        }
+}
+
+#Preview("watch only") {
+    var metadata = walletMetadataPreview()
+    metadata.sensitiveVisible = true
+    metadata.walletType = .watchOnly
 
     return
         AsyncPreview {
