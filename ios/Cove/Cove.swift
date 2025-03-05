@@ -9666,8 +9666,6 @@ public protocol RustWalletManagerProtocol: AnyObject {
     
     func fees()  -> FeeResponse?
     
-    func fingerprint()  -> String
-    
     func forceUpdateHeight() async throws  -> UInt32
     
     func forceWalletScan() async 
@@ -9686,6 +9684,8 @@ public protocol RustWalletManagerProtocol: AnyObject {
     func listenForUpdates(reconciler: WalletManagerReconciler) 
     
     func markWalletAsVerified() throws 
+    
+    func masterFingerprint()  -> String?
     
     /**
      * Get the next address for the wallet
@@ -10121,13 +10121,6 @@ open func fees() -> FeeResponse?  {
 })
 }
     
-open func fingerprint() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustwalletmanager_fingerprint(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
 open func forceUpdateHeight()async throws  -> UInt32  {
     return
         try  await uniffiRustCallAsync(
@@ -10226,6 +10219,13 @@ open func markWalletAsVerified()throws   {try rustCallWithError(FfiConverterType
     uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(self.uniffiClonePointer(),$0
     )
 }
+}
+    
+open func masterFingerprint() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -16370,6 +16370,7 @@ public enum DescriptorError: Swift.Error {
     )
     case NoXpubInDescriptor
     case SinglePubkeyNotSupported
+    case MasterXpub
 }
 
 
@@ -16409,6 +16410,7 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
             )
         case 12: return .NoXpubInDescriptor
         case 13: return .SinglePubkeyNotSupported
+        case 14: return .MasterXpub
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16476,6 +16478,10 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
         
         case .SinglePubkeyNotSupported:
             writeInt(&buf, Int32(13))
+        
+        
+        case .MasterXpub:
+            writeInt(&buf, Int32(14))
         
         }
     }
@@ -23883,6 +23889,8 @@ public enum XpubError: Swift.Error {
     case JsonNoDecriptor
     case MissingXpub(String
     )
+    case InvalidXpub(String
+    )
 }
 
 
@@ -23908,6 +23916,9 @@ public struct FfiConverterTypeXpubError: FfiConverterRustBuffer {
         case 3: return .InvalidDescriptorInJson
         case 4: return .JsonNoDecriptor
         case 5: return .MissingXpub(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .InvalidXpub(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -23942,6 +23953,11 @@ public struct FfiConverterTypeXpubError: FfiConverterRustBuffer {
         
         case let .MissingXpub(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .InvalidXpub(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -27298,9 +27314,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_fees() != 1824) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_fingerprint() != 63952) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustwalletmanager_force_update_height() != 23832) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27323,6 +27336,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified() != 7383) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint() != 64933) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 51147) {

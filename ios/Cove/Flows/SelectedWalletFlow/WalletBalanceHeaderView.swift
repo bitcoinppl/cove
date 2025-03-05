@@ -123,6 +123,11 @@ struct WalletBalanceHeaderView: View {
                         return
                     }
 
+                    if metadata.masterFingerprint == nil {
+                        app.alertState = .init(.cantSendOnWatchOnlyWallet)
+                        return
+                    }
+
                     app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
                 }) {
                     HStack(spacing: 10) {

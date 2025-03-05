@@ -163,6 +163,7 @@ pub enum WalletType {
     #[default]
     Hot,
     Cold,
+    WatchOnly,
 }
 
 #[derive(

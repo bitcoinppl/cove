@@ -27,6 +27,7 @@ public enum AppAlertState: Equatable {
     case unableToGetAddress(error: String)
     case noCameraPermission
     case failedToScanQr(error: String)
+    case cantSendOnWatchOnlyWallet
 
     func title() -> String {
         switch self {
@@ -49,7 +50,7 @@ public enum AppAlertState: Equatable {
         case .addressWrongNetwork:
             "Wrong Network"
         case .noWalletSelected,
-             .foundAddress:
+            .foundAddress:
             "Found Address"
         case .noCameraPermission:
             "Camera Access is Required"
@@ -59,6 +60,8 @@ public enum AppAlertState: Equatable {
             "No Unsigned Transaction Found"
         case .unableToGetAddress:
             "Unable to Get Address"
+        case .cantSendOnWatchOnlyWallet:
+            "Watch Only Wallet"
         }
     }
 }

@@ -32,7 +32,9 @@ pub enum MultiFormatError {
     #[error("Address is not supported for any network")]
     UnsupportedNetworkAddress,
 
-    #[error("Not a valid format, we only support addresses, SeedQr, mnemonic and XPUBs")]
+    #[error(
+        "Not a valid format, we only support addresses, SeedQr, mnemonic, descriptors and XPUBs"
+    )]
     UnrecognizedFormat,
 
     #[error("UR format not supported, please use a plain QR or a BBQr")]

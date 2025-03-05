@@ -31,13 +31,23 @@ struct WalletSettingsView: View {
                 }
                 .font(.subheadline)
 
-                HStack {
-                    Text("Fingerprint")
-                    Spacer()
-                    Text(manager.rust.fingerprint())
-                        .foregroundColor(.secondary)
+                if let masterFingerprint = manager.rust.masterFingerprint() {
+                    HStack {
+                        Text("Fingerprint")
+                        Spacer()
+                        Text(masterFingerprint)
+                            .foregroundColor(.secondary)
+                    }
+                    .font(.subheadline)
+                } else {
+                    HStack {
+                        Text("Wallet Type")
+                        Spacer()
+                        Text("Watch Only")
+                            .foregroundColor(.secondary)
+                    }
+                    .font(.subheadline)
                 }
-                .font(.subheadline)
             }
 
             Section(header: Text("Settings")) {

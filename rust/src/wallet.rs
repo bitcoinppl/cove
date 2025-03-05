@@ -26,7 +26,7 @@ use bdk_wallet::{
 use bip39::Mnemonic;
 use eyre::Context as _;
 use fingerprint::Fingerprint;
-use metadata::{DiscoveryState, WalletId, WalletMetadata};
+use metadata::{DiscoveryState, WalletId, WalletMetadata, WalletType};
 use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
@@ -309,9 +309,14 @@ impl Wallet {
             .map_err(Into::into)
             .map_err(WalletError::ParseXpubError)?;
 
-        metadata.name = match fingerprint {
+        metadata.name = match &fingerprint {
             Some(fingerprint) => format!("Imported {}", fingerprint.to_ascii_uppercase()),
-            None => "Imported".to_string(),
+            None => "Imported Watch Only".to_string(),
+        };
+
+        metadata.wallet_type = match &fingerprint {
+            Some(_) => WalletType::Cold,
+            None => WalletType::WatchOnly,
         };
 
         let descriptors: Descriptors = pubport_descriptors.into();
