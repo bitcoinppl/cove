@@ -100,6 +100,9 @@ struct WalletBalanceHeaderView: View {
                         .onTapGesture { updater(.toggleSensitiveVisibility) }
                 }
             }
+            .onTapGesture {
+                manager.dispatch(action: .toggleFiatBtcPrimarySecondary)
+            }
             .contentShape(
                 .contextMenuPreview,
                 RoundedRectangle(cornerRadius: 8).inset(by: -8)
@@ -171,10 +174,7 @@ struct WalletBalanceHeaderView: View {
                 .frame(maxWidth: .infinity)
                 .brightness(0.1)
         )
-        .background(Color.midnightBlue)
-        .onTapGesture {
-            manager.dispatch(action: .toggleFiatBtcPrimarySecondary)
-        }
+        .background(.midnightBlue)
         .onChange(of: manager.fiatBalance, initial: true) {
             // if fiatBalance was pased in explicitly, don't update it, only for previews
             if fiatBalance ?? 0.0 > 0.0, manager.fiatBalance ?? 0.0 == 0.0 {
