@@ -449,6 +449,8 @@ impl Wallet {
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
         let origin = descriptors.origin().ok();
+
+        metadata.master_fingerprint = descriptors.fingerprint().map(|f| Arc::new(f.into()));
         metadata.origin = origin;
 
         let wallet = descriptors
@@ -635,10 +637,20 @@ mod tests {
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
 
         let metadata = WalletMetadata::preview_new();
-        let fingerprint = metadata.master_fingerprint.as_ref().unwrap();
-        let _ = delete_wallet_specific_data(&metadata.id);
 
-        assert_eq!("73c5da0a", fingerprint.as_lowercase().as_str());
+        let wallet =
+            Wallet::try_new_persisted_from_mnemonic_segwit(metadata.clone(), mnemonic, None)
+                .unwrap();
+
+        let fingerprint = wallet
+            .metadata
+            .master_fingerprint
+            .as_ref()
+            .unwrap()
+            .as_lowercase();
+
+        let _ = delete_wallet_specific_data(&metadata.id);
+        assert_eq!("73c5da0a", fingerprint.as_str());
     }
 }
 
