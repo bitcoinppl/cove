@@ -69,6 +69,17 @@ impl Descriptors {
     pub fn origin(&self) -> Result<String, Error> {
         self.external.origin()
     }
+
+    pub fn fingerprint(&self) -> Option<Fingerprint> {
+        let pub_key = self.external.descriptor_public_key().ok()?;
+        let fingerprint = pub_key.master_fingerprint();
+
+        if fingerprint == Fingerprint::default() {
+            return None;
+        }
+
+        Some(fingerprint)
+    }
 }
 
 impl Descriptor {

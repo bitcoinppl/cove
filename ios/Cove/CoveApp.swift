@@ -93,6 +93,8 @@ struct CoveApp: App {
                 "No unsigned transaction found for transaction \(txId.asHashString())"
             case let .unableToGetAddress(error: error):
                 "Error: \(error)"
+            case .cantSendOnWatchOnlyWallet:
+                "This is watch-only wallet and cannot send transactions. Please import the wallet using a descriptor or JSON"
             }
 
         if case .foundAddress = alert.item {

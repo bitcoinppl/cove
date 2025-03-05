@@ -730,19 +730,15 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn fingerprint(&self) -> String {
-        let wallet_id = &self.metadata.read().id;
-        let fingerprint = &self.metadata.read().master_fingerprint;
+    pub fn master_fingerprint(&self) -> Option<String> {
+        let fingerprint = self.metadata.read().master_fingerprint.clone()?;
         let fingerprint = fingerprint.as_ref();
 
-        // if its the default fingerprint get the xpriv fingerprint
-        if fingerprint.is_none() {
-            return Fingerprint::try_new(wallet_id)
-                .map(|f| f.as_uppercase())
-                .unwrap_or_else(|_| "Unknown".to_string());
+        if *fingerprint == Fingerprint::default() {
+            return None;
         }
 
-        fingerprint.expect("checked above").as_uppercase()
+        Some(fingerprint.as_uppercase())
     }
 
     #[uniffi::method]

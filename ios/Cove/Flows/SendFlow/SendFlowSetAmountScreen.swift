@@ -221,6 +221,7 @@ struct SendFlowSetAmountScreen: View {
                     switch metadata.walletType {
                     case .hot: RouteFactory().sendConfirm(id: id, details: confirmDetails)
                     case .cold: RouteFactory().sendHardwareExport(id: id, details: confirmDetails)
+                    case .watchOnly: fatalError("can't send from watch only wallet")
                     }
 
                 presenter.focusField = .none
@@ -360,6 +361,12 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
+            if metadata.walletType == .watchOnly || metadata.masterFingerprint == nil {
+                app.alertState = .init(.cantSendOnWatchOnlyWallet)
+                app.popRoute()
+                return
+            }
+
             if sendAmountFiat == "" {
                 sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
             }

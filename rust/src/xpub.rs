@@ -16,6 +16,9 @@ pub enum XpubError {
 
     #[error("Missing xpub: {0}")]
     MissingXpub(String),
+
+    #[error("Invalid xpub: {0}")]
+    InvalidXpub(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -58,6 +61,9 @@ pub enum DescriptorError {
 
     #[error("Single pubkey is not supported, must be an extended key")]
     SinglePubkeyNotSupported,
+
+    #[error("Can't import using the master xpub, please use a child xpub")]
+    MasterXpub,
 }
 
 impl From<descriptor::Error> for DescriptorError {
@@ -78,6 +84,7 @@ impl From<descriptor::Error> for DescriptorError {
             DS::SinglePubkeyNotSupported => Self::SinglePubkeyNotSupported,
             DS::UnableToParseXpub(error) => Self::UnableToParseXpub(error.to_string()),
             DS::NoXpubInDescriptor => Self::NoXpubInDescriptor,
+            DS::MasterXpub => Self::MasterXpub,
             DS::InvalidJsonDescriptor(..) => {
                 Self::InvalidDescriptor("invalid json descriptor".to_string())
             }
@@ -94,6 +101,7 @@ impl From<pubport::Error> for XpubError {
             Error::InvalidJsonParse(error) => Self::InvalidJson(error.to_string()),
             Error::InvalidDescriptorInJson => Self::InvalidDescriptorInJson,
             Error::JsonNoDecriptor => Self::JsonNoDecriptor,
+            Error::InvalidXpub(error) => Self::InvalidXpub(error.to_string()),
         }
     }
 }

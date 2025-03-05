@@ -126,7 +126,7 @@ impl RustPendingWalletManager {
             .fingerprint()
             .into();
 
-        let wallet_metadata = WalletMetadata::new(name, fingerprint);
+        let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
 
         // create, persist and select the wallet
         let wallet = Wallet::try_new_persisted_and_selected(

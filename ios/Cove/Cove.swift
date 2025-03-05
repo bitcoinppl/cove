@@ -623,7 +623,7 @@ fileprivate struct FfiConverterDuration: FfiConverterRustBuffer {
 
 
 
-public protocol AddressProtocol: AnyObject {
+public protocol AddressProtocol: AnyObject, Sendable {
     
     func spacedOut()  -> String
     
@@ -787,7 +787,7 @@ public func FfiConverterTypeAddress_lower(_ value: Address) -> UnsafeMutableRawP
 
 
 
-public protocol AddressArgsProtocol: AnyObject {
+public protocol AddressArgsProtocol: AnyObject, Sendable {
     
 }
 open class AddressArgs: AddressArgsProtocol, @unchecked Sendable {
@@ -910,7 +910,7 @@ public func FfiConverterTypeAddressArgs_lower(_ value: AddressArgs) -> UnsafeMut
 
 
 
-public protocol AddressInfoProtocol: AnyObject {
+public protocol AddressInfoProtocol: AnyObject, Sendable {
     
     func address()  -> Address
     
@@ -1050,7 +1050,7 @@ public func FfiConverterTypeAddressInfo_lower(_ value: AddressInfo) -> UnsafeMut
 
 
 
-public protocol AddressWithNetworkProtocol: AnyObject {
+public protocol AddressWithNetworkProtocol: AnyObject, Sendable {
     
     func address()  -> Address
     
@@ -1198,7 +1198,7 @@ public func FfiConverterTypeAddressWithNetwork_lower(_ value: AddressWithNetwork
 
 
 
-public protocol AmountProtocol: AnyObject {
+public protocol AmountProtocol: AnyObject, Sendable {
     
     func asBtc()  -> Double
     
@@ -1397,7 +1397,7 @@ public func FfiConverterTypeAmount_lower(_ value: Amount) -> UnsafeMutableRawPoi
 
 
 
-public protocol AuthPinProtocol: AnyObject {
+public protocol AuthPinProtocol: AnyObject, Sendable {
     
     func check(pin: String)  -> Bool
     
@@ -1527,7 +1527,7 @@ public func FfiConverterTypeAuthPin_lower(_ value: AuthPin) -> UnsafeMutableRawP
 
 
 
-public protocol AutoComplete: AnyObject {
+public protocol AutoComplete: AnyObject, Sendable {
     
     func autocomplete(word: String)  -> [String]
     
@@ -1741,7 +1741,7 @@ public func FfiConverterTypeAutoComplete_lower(_ value: AutoComplete) -> UnsafeM
 
 
 
-public protocol BalanceProtocol: AnyObject {
+public protocol BalanceProtocol: AnyObject, Sendable {
     
     func spendable()  -> Amount
     
@@ -1879,7 +1879,7 @@ public func FfiConverterTypeBalance_lower(_ value: Balance) -> UnsafeMutableRawP
 
 
 
-public protocol BbqrJoinResultProtocol: AnyObject {
+public protocol BbqrJoinResultProtocol: AnyObject, Sendable {
     
     func finalResult() throws  -> String
     
@@ -2019,7 +2019,7 @@ public func FfiConverterTypeBbqrJoinResult_lower(_ value: BbqrJoinResult) -> Uns
 
 
 
-public protocol BbqrJoinedProtocol: AnyObject {
+public protocol BbqrJoinedProtocol: AnyObject, Sendable {
     
     func getGroupedWords(chunks: UInt8) throws  -> [[String]]
     
@@ -2151,7 +2151,7 @@ public func FfiConverterTypeBbqrJoined_lower(_ value: BbqrJoined) -> UnsafeMutab
 
 
 
-public protocol Bip329LabelsProtocol: AnyObject {
+public protocol Bip329LabelsProtocol: AnyObject, Sendable {
     
 }
 open class Bip329Labels: Bip329LabelsProtocol, @unchecked Sendable {
@@ -2264,7 +2264,7 @@ public func FfiConverterTypeBip329Labels_lower(_ value: Bip329Labels) -> UnsafeM
 
 
 
-public protocol Bip39AutoCompleteProtocol: AnyObject {
+public protocol Bip39AutoCompleteProtocol: AnyObject, Sendable {
     
     func autocomplete(word: String)  -> [String]
     
@@ -2423,7 +2423,7 @@ public func FfiConverterTypeBip39AutoComplete_lower(_ value: Bip39AutoComplete) 
 
 
 
-public protocol Bip39WordSpecificAutocompleteProtocol: AnyObject {
+public protocol Bip39WordSpecificAutocompleteProtocol: AnyObject, Sendable {
     
     func autocomplete(word: String, allWords: [[String]])  -> [String]
     
@@ -2588,7 +2588,7 @@ public func FfiConverterTypeBip39WordSpecificAutocomplete_lower(_ value: Bip39Wo
 
 
 
-public protocol BitcoinTransactionProtocol: AnyObject {
+public protocol BitcoinTransactionProtocol: AnyObject, Sendable {
     
     func normalizeTxId()  -> String
     
@@ -2752,7 +2752,7 @@ public func FfiConverterTypeBitcoinTransaction_lower(_ value: BitcoinTransaction
 
 
 
-public protocol BoxedRouteProtocol: AnyObject {
+public protocol BoxedRouteProtocol: AnyObject, Sendable {
     
     func route()  -> Route
     
@@ -2882,7 +2882,7 @@ public func FfiConverterTypeBoxedRoute_lower(_ value: BoxedRoute) -> UnsafeMutab
 
 
 
-public protocol ChainPositionProtocol: AnyObject {
+public protocol ChainPositionProtocol: AnyObject, Sendable {
     
 }
 open class ChainPosition: ChainPositionProtocol, @unchecked Sendable {
@@ -2995,7 +2995,7 @@ public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> Unsaf
 
 
 
-public protocol ConfirmDetailsProtocol: AnyObject {
+public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     
     func feeRate()  -> FeeRate
     
@@ -3242,7 +3242,7 @@ public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> Uns
 
 
 
-public protocol ConfirmedTransactionProtocol: AnyObject {
+public protocol ConfirmedTransactionProtocol: AnyObject, Sendable {
     
     func blockHeight()  -> UInt32
     
@@ -3436,7 +3436,7 @@ public func FfiConverterTypeConfirmedTransaction_lower(_ value: ConfirmedTransac
 
 
 
-public protocol ConverterProtocol: AnyObject {
+public protocol ConverterProtocol: AnyObject, Sendable {
     
     func getFiatValue(fiatAmount: String) throws  -> Double
     
@@ -3576,7 +3576,7 @@ public func FfiConverterTypeConverter_lower(_ value: Converter) -> UnsafeMutable
 
 
 
-public protocol DatabaseProtocol: AnyObject {
+public protocol DatabaseProtocol: AnyObject, Sendable {
     
     func dangerousResetAllData() 
     
@@ -3731,7 +3731,7 @@ public func FfiConverterTypeDatabase_lower(_ value: Database) -> UnsafeMutableRa
 
 
 
-public protocol DeviceProtocol: AnyObject {
+public protocol DeviceProtocol: AnyObject, Sendable {
     
 }
 open class Device: DeviceProtocol, @unchecked Sendable {
@@ -3852,7 +3852,7 @@ public func FfiConverterTypeDevice_lower(_ value: Device) -> UnsafeMutableRawPoi
 
 
 
-public protocol FeeRateProtocol: AnyObject {
+public protocol FeeRateProtocol: AnyObject, Sendable {
     
     func satPerVb()  -> Float
     
@@ -3982,7 +3982,7 @@ public func FfiConverterTypeFeeRate_lower(_ value: FeeRate) -> UnsafeMutableRawP
 
 
 
-public protocol FeeRateOptionProtocol: AnyObject {
+public protocol FeeRateOptionProtocol: AnyObject, Sendable {
     
     func duration()  -> String
     
@@ -4150,7 +4150,7 @@ public func FfiConverterTypeFeeRateOption_lower(_ value: FeeRateOption) -> Unsaf
 
 
 
-public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject {
+public protocol FeeRateOptionWithTotalFeeProtocol: AnyObject, Sendable {
     
     func duration()  -> String
     
@@ -4346,7 +4346,7 @@ public func FfiConverterTypeFeeRateOptionWithTotalFee_lower(_ value: FeeRateOpti
 
 
 
-public protocol FeeRateOptionsProtocol: AnyObject {
+public protocol FeeRateOptionsProtocol: AnyObject, Sendable {
     
     func fast()  -> FeeRateOption
     
@@ -4493,7 +4493,7 @@ public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> Uns
 
 
 
-public protocol FeeRateOptionsWithTotalFeeProtocol: AnyObject {
+public protocol FeeRateOptionsWithTotalFeeProtocol: AnyObject, Sendable {
     
     func addCustomFee(feeRate: Float)  -> FeeRateOptionsWithTotalFee
     
@@ -4719,7 +4719,7 @@ public func FfiConverterTypeFeeRateOptionsWithTotalFee_lower(_ value: FeeRateOpt
 /**
  * Representation of our app over FFI. Essenially a wrapper of [`App`].
  */
-public protocol FfiAppProtocol: AnyObject {
+public protocol FfiAppProtocol: AnyObject, Sendable {
     
     /**
      * Get the auth type for the app
@@ -4928,7 +4928,7 @@ open func fees()async throws  -> FeeResponse  {
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFeeResponse_lift,
-            errorHandler: FfiConverterTypeAppError.lift
+            errorHandler: FfiConverterTypeAppError_lift
         )
 }
     
@@ -5039,7 +5039,7 @@ open func prices()async throws  -> PriceResponse  {
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypePriceResponse_lift,
-            errorHandler: FfiConverterTypeAppError.lift
+            errorHandler: FfiConverterTypeAppError_lift
         )
 }
     
@@ -5157,7 +5157,7 @@ public func FfiConverterTypeFfiApp_lower(_ value: FfiApp) -> UnsafeMutableRawPoi
 
 
 
-public protocol FfiNfcReaderProtocol: AnyObject {
+public protocol FfiNfcReaderProtocol: AnyObject, Sendable {
     
     func dataFromRecords(records: [NdefRecord])  -> Data
     
@@ -5334,7 +5334,7 @@ public func FfiConverterTypeFfiNfcReader_lower(_ value: FfiNfcReader) -> UnsafeM
 
 
 
-public protocol FiatClientProtocol: AnyObject {
+public protocol FiatClientProtocol: AnyObject, Sendable {
     
 }
 open class FiatClient: FiatClientProtocol, @unchecked Sendable {
@@ -5447,7 +5447,7 @@ public func FfiConverterTypeFiatClient_lower(_ value: FiatClient) -> UnsafeMutab
 
 
 
-public protocol FileHandlerProtocol: AnyObject {
+public protocol FileHandlerProtocol: AnyObject, Sendable {
     
     func read() throws  -> MultiFormat
     
@@ -5577,7 +5577,7 @@ public func FfiConverterTypeFileHandler_lower(_ value: FileHandler) -> UnsafeMut
 
 
 
-public protocol FingerprintProtocol: AnyObject {
+public protocol FingerprintProtocol: AnyObject, Sendable {
     
     func asLowercase()  -> String
     
@@ -5716,7 +5716,7 @@ public func FfiConverterTypeFingerprint_lower(_ value: Fingerprint) -> UnsafeMut
 
 
 
-public protocol FoundJsonProtocol: AnyObject {
+public protocol FoundJsonProtocol: AnyObject, Sendable {
     
 }
 open class FoundJson: FoundJsonProtocol, @unchecked Sendable {
@@ -5829,7 +5829,7 @@ public func FfiConverterTypeFoundJson_lower(_ value: FoundJson) -> UnsafeMutable
 
 
 
-public protocol GlobalConfigTableProtocol: AnyObject {
+public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
     
     func authType()  -> AuthType
     
@@ -6122,7 +6122,7 @@ public func FfiConverterTypeGlobalConfigTable_lower(_ value: GlobalConfigTable) 
 
 
 
-public protocol GlobalFlagTableProtocol: AnyObject {
+public protocol GlobalFlagTableProtocol: AnyObject, Sendable {
     
     func get(key: GlobalFlagKey) throws  -> Bool
     
@@ -6274,7 +6274,7 @@ public func FfiConverterTypeGlobalFlagTable_lower(_ value: GlobalFlagTable) -> U
 
 
 
-public protocol HardwareExportProtocol: AnyObject {
+public protocol HardwareExportProtocol: AnyObject, Sendable {
     
 }
 open class HardwareExport: HardwareExportProtocol, @unchecked Sendable {
@@ -6387,7 +6387,7 @@ public func FfiConverterTypeHardwareExport_lower(_ value: HardwareExport) -> Uns
 
 
 
-public protocol HeaderIconPresenterProtocol: AnyObject {
+public protocol HeaderIconPresenterProtocol: AnyObject, Sendable {
     
     func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32)  -> FfiColor
     
@@ -6547,7 +6547,7 @@ public func FfiConverterTypeHeaderIconPresenter_lower(_ value: HeaderIconPresent
 
 
 
-public protocol InputOutputDetailsProtocol: AnyObject {
+public protocol InputOutputDetailsProtocol: AnyObject, Sendable {
     
 }
 open class InputOutputDetails: InputOutputDetailsProtocol, @unchecked Sendable {
@@ -6660,7 +6660,7 @@ public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails
 
 
 
-public protocol KeychainProtocol: AnyObject {
+public protocol KeychainProtocol: AnyObject, Sendable {
     
 }
 open class Keychain: KeychainProtocol, @unchecked Sendable {
@@ -6781,7 +6781,7 @@ public func FfiConverterTypeKeychain_lower(_ value: Keychain) -> UnsafeMutableRa
 
 
 
-public protocol LabelManagerProtocol: AnyObject {
+public protocol LabelManagerProtocol: AnyObject, Sendable {
     
     func deleteLabelsForTxn(txId: TxId) throws 
     
@@ -6978,7 +6978,7 @@ public func FfiConverterTypeLabelManager_lower(_ value: LabelManager) -> UnsafeM
 
 
 
-public protocol LabelsTableProtocol: AnyObject {
+public protocol LabelsTableProtocol: AnyObject, Sendable {
     
 }
 open class LabelsTable: LabelsTableProtocol, @unchecked Sendable {
@@ -7091,7 +7091,7 @@ public func FfiConverterTypeLabelsTable_lower(_ value: LabelsTable) -> UnsafeMut
 
 
 
-public protocol MnemonicProtocol: AnyObject {
+public protocol MnemonicProtocol: AnyObject, Sendable {
     
     func allWords()  -> [GroupedWord]
     
@@ -7238,7 +7238,7 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UnsafeMutableRa
 
 
 
-public protocol MultiQrProtocol: AnyObject {
+public protocol MultiQrProtocol: AnyObject, Sendable {
     
     func addPart(qr: String) throws  -> BbqrJoinResult
     
@@ -7433,7 +7433,7 @@ public func FfiConverterTypeMultiQr_lower(_ value: MultiQr) -> UnsafeMutableRawP
 
 
 
-public protocol NdefRecordReaderProtocol: AnyObject {
+public protocol NdefRecordReaderProtocol: AnyObject, Sendable {
     
     func id()  -> String?
     
@@ -7572,7 +7572,7 @@ public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) ->
 
 
 
-public protocol NfcConstProtocol: AnyObject {
+public protocol NfcConstProtocol: AnyObject, Sendable {
     
     func bytesPerBlock()  -> UInt16
     
@@ -7719,7 +7719,7 @@ public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UnsafeMutableRa
 
 
 
-public protocol NodeSelectorProtocol: AnyObject {
+public protocol NodeSelectorProtocol: AnyObject, Sendable {
     
     /**
      * Check the node url and set it as selected node if it is valid
@@ -7815,7 +7815,7 @@ open func checkAndSaveNode(node: Node)async throws   {
             completeFunc: ffi_cove_rust_future_complete_void,
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeNodeSelectorError.lift
+            errorHandler: FfiConverterTypeNodeSelectorError_lift
         )
 }
     
@@ -7832,7 +7832,7 @@ open func checkSelectedNode(node: Node)async throws   {
             completeFunc: ffi_cove_rust_future_complete_void,
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeNodeSelectorError.lift
+            errorHandler: FfiConverterTypeNodeSelectorError_lift
         )
 }
     
@@ -7929,7 +7929,7 @@ public func FfiConverterTypeNodeSelector_lower(_ value: NodeSelector) -> UnsafeM
 
 
 
-public protocol OutPointProtocol: AnyObject {
+public protocol OutPointProtocol: AnyObject, Sendable {
     
 }
 open class OutPoint: OutPointProtocol, @unchecked Sendable {
@@ -8042,7 +8042,7 @@ public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UnsafeMutableRa
 
 
 
-public protocol PendingWalletProtocol: AnyObject {
+public protocol PendingWalletProtocol: AnyObject, Sendable {
     
 }
 open class PendingWallet: PendingWalletProtocol, @unchecked Sendable {
@@ -8155,7 +8155,7 @@ public func FfiConverterTypePendingWallet_lower(_ value: PendingWallet) -> Unsaf
 
 
 
-public protocol PriceResponseProtocol: AnyObject {
+public protocol PriceResponseProtocol: AnyObject, Sendable {
     
     func get()  -> UInt64
     
@@ -8287,7 +8287,7 @@ public func FfiConverterTypePriceResponse_lower(_ value: PriceResponse) -> Unsaf
 
 
 
-public protocol PsbtProtocol: AnyObject {
+public protocol PsbtProtocol: AnyObject, Sendable {
     
     /**
      * Total fee in sats.
@@ -8468,7 +8468,7 @@ public func FfiConverterTypePsbt_lower(_ value: Psbt) -> UnsafeMutableRawPointer
 
 
 
-public protocol PushTxProtocol: AnyObject {
+public protocol PushTxProtocol: AnyObject, Sendable {
     
 }
 open class PushTx: PushTxProtocol, @unchecked Sendable {
@@ -8581,7 +8581,7 @@ public func FfiConverterTypePushTx_lower(_ value: PushTx) -> UnsafeMutableRawPoi
 
 
 
-public protocol RouteFactoryProtocol: AnyObject {
+public protocol RouteFactoryProtocol: AnyObject, Sendable {
     
     func coldWalletImport(route: ColdWalletRoute)  -> Route
     
@@ -8896,7 +8896,7 @@ public func FfiConverterTypeRouteFactory_lower(_ value: RouteFactory) -> UnsafeM
 
 
 
-public protocol RustAuthManagerProtocol: AnyObject {
+public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     
     /**
      * Get the auth type for the app
@@ -9251,7 +9251,7 @@ public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> U
 
 
 
-public protocol RustImportWalletManagerProtocol: AnyObject {
+public protocol RustImportWalletManagerProtocol: AnyObject, Sendable {
     
     /**
      * Action from the frontend to change the state of the view model
@@ -9411,7 +9411,7 @@ public func FfiConverterTypeRustImportWalletManager_lower(_ value: RustImportWal
 
 
 
-public protocol RustPendingWalletManagerProtocol: AnyObject {
+public protocol RustPendingWalletManagerProtocol: AnyObject, Sendable {
     
     func bip39Words()  -> [String]
     
@@ -9610,7 +9610,7 @@ public func FfiConverterTypeRustPendingWalletManager_lower(_ value: RustPendingW
 
 
 
-public protocol RustWalletManagerProtocol: AnyObject {
+public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     /**
      * Get address at the given index
@@ -9666,8 +9666,6 @@ public protocol RustWalletManagerProtocol: AnyObject {
     
     func fees()  -> FeeResponse?
     
-    func fingerprint()  -> String
-    
     func forceUpdateHeight() async throws  -> UInt32
     
     func forceWalletScan() async 
@@ -9686,6 +9684,8 @@ public protocol RustWalletManagerProtocol: AnyObject {
     func listenForUpdates(reconciler: WalletManagerReconciler) 
     
     func markWalletAsVerified() throws 
+    
+    func masterFingerprint()  -> String?
     
     /**
      * Get the next address for the wallet
@@ -9820,7 +9820,7 @@ open func addressAt(index: UInt32)async throws  -> AddressInfo  {
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeAddressInfo_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -9837,7 +9837,7 @@ open func amountInFiat(amount: Amount)async throws  -> Double  {
             completeFunc: ffi_cove_rust_future_complete_f64,
             freeFunc: ffi_cove_rust_future_free_f64,
             liftFunc: FfiConverterDouble.lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -9872,7 +9872,7 @@ open func balanceInFiat()async throws  -> Double  {
             completeFunc: ffi_cove_rust_future_complete_f64,
             freeFunc: ffi_cove_rust_future_free_f64,
             liftFunc: FfiConverterDouble.lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -9889,7 +9889,7 @@ open func broadcastTransaction(signedTransaction: BitcoinTransaction)async throw
             completeFunc: ffi_cove_rust_future_complete_void,
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -9906,7 +9906,7 @@ open func buildDrainTransaction(address: Address, fee: FeeRate)async throws  -> 
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypePsbt_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -9923,7 +9923,7 @@ open func buildTransaction(amount: Amount, address: Address)async throws  -> Psb
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypePsbt_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -9940,7 +9940,7 @@ open func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate:
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypePsbt_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -9957,7 +9957,7 @@ open func confirmTxn(amount: Amount, address: Address, feeRate: FeeRate)async th
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeConfirmDetails_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10011,7 +10011,7 @@ open func currentBlockHeight()async throws  -> UInt32  {
             completeFunc: ffi_cove_rust_future_complete_u32,
             freeFunc: ffi_cove_rust_future_free_u32,
             liftFunc: FfiConverterUInt32.lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10076,7 +10076,7 @@ open func feeRateOptions()async throws  -> FeeRateOptions  {
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeFeeRateOptions_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10093,7 +10093,7 @@ open func feeRateOptionsWithTotalFee(feeRateOptions: FeeRateOptions?, amount: Am
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeFeeRateOptionsWithTotalFee_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10110,20 +10110,13 @@ open func feeRateOptionsWithTotalFeeForDrain(feeRateOptions: FeeRateOptionsWithT
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeFeeRateOptionsWithTotalFee_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
 open func fees() -> FeeResponse?  {
     return try!  FfiConverterOptionTypeFeeResponse.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_fees(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func fingerprint() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustwalletmanager_fingerprint(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -10141,7 +10134,7 @@ open func forceUpdateHeight()async throws  -> UInt32  {
             completeFunc: ffi_cove_rust_future_complete_u32,
             freeFunc: ffi_cove_rust_future_free_u32,
             liftFunc: FfiConverterUInt32.lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10176,7 +10169,7 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeFeeRateOptions_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10228,6 +10221,13 @@ open func markWalletAsVerified()throws   {try rustCallWithError(FfiConverterType
 }
 }
     
+open func masterFingerprint() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
     /**
      * Get the next address for the wallet
      */
@@ -10244,7 +10244,7 @@ open func nextAddress()async throws  -> AddressInfo  {
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeAddressInfo_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10261,7 +10261,7 @@ open func numberOfConfirmations(blockHeight: UInt32)async throws  -> UInt32  {
             completeFunc: ffi_cove_rust_future_complete_u32,
             freeFunc: ffi_cove_rust_future_free_u32,
             liftFunc: FfiConverterUInt32.lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10278,7 +10278,7 @@ open func numberOfConfirmationsFmt(blockHeight: UInt32)async throws  -> String  
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10309,7 +10309,7 @@ open func sentAndReceivedFiat(sentAndReceived: SentAndReceived)async throws  -> 
             completeFunc: ffi_cove_rust_future_complete_f64,
             freeFunc: ffi_cove_rust_future_free_f64,
             liftFunc: FfiConverterDouble.lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10333,7 +10333,7 @@ open func signAndBroadcastTransaction(psbt: Psbt)async throws   {
             completeFunc: ffi_cove_rust_future_complete_void,
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10350,7 +10350,7 @@ open func splitTransactionOutputs(outputs: [AddressAndAmount])async throws  -> S
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSplitOutput_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10367,7 +10367,7 @@ open func startWalletScan()async throws   {
             completeFunc: ffi_cove_rust_future_complete_void,
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10384,7 +10384,7 @@ open func switchToDifferentWalletAddressType(walletAddressType: WalletAddressTyp
             completeFunc: ffi_cove_rust_future_complete_void,
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10401,7 +10401,7 @@ open func transactionDetails(txId: TxId)async throws  -> TransactionDetails  {
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeTransactionDetails_lift,
-            errorHandler: FfiConverterTypeWalletManagerError.lift
+            errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
     
@@ -10483,7 +10483,7 @@ public func FfiConverterTypeRustWalletManager_lower(_ value: RustWalletManager) 
 
 
 
-public protocol SeedQrProtocol: AnyObject {
+public protocol SeedQrProtocol: AnyObject, Sendable {
     
     func getWords()  -> [String]
     
@@ -10630,7 +10630,7 @@ public func FfiConverterTypeSeedQr_lower(_ value: SeedQr) -> UnsafeMutableRawPoi
 
 
 
-public protocol SentAndReceivedProtocol: AnyObject {
+public protocol SentAndReceivedProtocol: AnyObject, Sendable {
     
     func amount()  -> Amount
     
@@ -10807,7 +10807,7 @@ public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> U
 
 
 
-public protocol TransactionDetailsProtocol: AnyObject {
+public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
     func address()  -> Address
     
@@ -10977,7 +10977,7 @@ open func amountFiat()async throws  -> Double  {
             completeFunc: ffi_cove_rust_future_complete_f64,
             freeFunc: ffi_cove_rust_future_free_f64,
             liftFunc: FfiConverterDouble.lift,
-            errorHandler: FfiConverterTypeTransactionDetailError.lift
+            errorHandler: FfiConverterTypeTransactionDetailError_lift
         )
 }
     
@@ -10994,7 +10994,7 @@ open func amountFiatFmt()async throws  -> String  {
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeTransactionDetailError.lift
+            errorHandler: FfiConverterTypeTransactionDetailError_lift
         )
 }
     
@@ -11040,7 +11040,7 @@ open func feeFiatFmt()async throws  -> String  {
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeTransactionDetailError.lift
+            errorHandler: FfiConverterTypeTransactionDetailError_lift
         )
 }
     
@@ -11086,7 +11086,7 @@ open func sentSansFeeFiatFmt()async throws  -> String  {
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeTransactionDetailError.lift
+            errorHandler: FfiConverterTypeTransactionDetailError_lift
         )
 }
     
@@ -11177,7 +11177,7 @@ public func FfiConverterTypeTransactionDetails_lower(_ value: TransactionDetails
 
 
 
-public protocol TxIdProtocol: AnyObject {
+public protocol TxIdProtocol: AnyObject, Sendable {
     
     func asHashString()  -> String
     
@@ -11309,7 +11309,7 @@ public func FfiConverterTypeTxId_lower(_ value: TxId) -> UnsafeMutableRawPointer
 
 
 
-public protocol TxInProtocol: AnyObject {
+public protocol TxInProtocol: AnyObject, Sendable {
     
 }
 open class TxIn: TxInProtocol, @unchecked Sendable {
@@ -11422,7 +11422,7 @@ public func FfiConverterTypeTxIn_lower(_ value: TxIn) -> UnsafeMutableRawPointer
 
 
 
-public protocol TxOutProtocol: AnyObject {
+public protocol TxOutProtocol: AnyObject, Sendable {
     
 }
 open class TxOut: TxOutProtocol, @unchecked Sendable {
@@ -11535,7 +11535,7 @@ public func FfiConverterTypeTxOut_lower(_ value: TxOut) -> UnsafeMutableRawPoint
 
 
 
-public protocol UnconfirmedTransactionProtocol: AnyObject {
+public protocol UnconfirmedTransactionProtocol: AnyObject, Sendable {
     
     func fiatAmount()  -> FiatAmount?
     
@@ -11693,7 +11693,7 @@ public func FfiConverterTypeUnconfirmedTransaction_lower(_ value: UnconfirmedTra
 
 
 
-public protocol UnsignedTransactionProtocol: AnyObject {
+public protocol UnsignedTransactionProtocol: AnyObject, Sendable {
     
     func details()  -> ConfirmDetails
     
@@ -11858,7 +11858,7 @@ public func FfiConverterTypeUnsignedTransaction_lower(_ value: UnsignedTransacti
 
 
 
-public protocol UnsignedTransactionRecordProtocol: AnyObject {
+public protocol UnsignedTransactionRecordProtocol: AnyObject, Sendable {
     
     func confirmDetails()  -> ConfirmDetails
     
@@ -12007,7 +12007,7 @@ public func FfiConverterTypeUnsignedTransactionRecord_lower(_ value: UnsignedTra
 
 
 
-public protocol UnsignedTransactionsTableProtocol: AnyObject {
+public protocol UnsignedTransactionsTableProtocol: AnyObject, Sendable {
     
     func getTx(txId: TxId)  -> UnsignedTransactionRecord?
     
@@ -12140,7 +12140,7 @@ public func FfiConverterTypeUnsignedTransactionsTable_lower(_ value: UnsignedTra
 
 
 
-public protocol WalletProtocol: AnyObject {
+public protocol WalletProtocol: AnyObject, Sendable {
     
     func id()  -> WalletId
     
@@ -12285,7 +12285,7 @@ public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPoi
 
 
 
-public protocol WalletDataDbProtocol: AnyObject {
+public protocol WalletDataDbProtocol: AnyObject, Sendable {
     
 }
 open class WalletDataDb: WalletDataDbProtocol, @unchecked Sendable {
@@ -12398,7 +12398,7 @@ public func FfiConverterTypeWalletDataDb_lower(_ value: WalletDataDb) -> UnsafeM
 
 
 
-public protocol WalletKeyProtocol: AnyObject {
+public protocol WalletKeyProtocol: AnyObject, Sendable {
     
 }
 open class WalletKey: WalletKeyProtocol, @unchecked Sendable {
@@ -12511,7 +12511,7 @@ public func FfiConverterTypeWalletKey_lower(_ value: WalletKey) -> UnsafeMutable
 
 
 
-public protocol WalletsTableProtocol: AnyObject {
+public protocol WalletsTableProtocol: AnyObject, Sendable {
     
     func all() throws  -> [WalletMetadata]
     
@@ -12662,7 +12662,7 @@ public func FfiConverterTypeWalletsTable_lower(_ value: WalletsTable) -> UnsafeM
 
 
 
-public protocol WordValidatorProtocol: AnyObject {
+public protocol WordValidatorProtocol: AnyObject, Sendable {
     
     func isComplete(wordNumber: UInt8)  -> Bool
     
@@ -16370,6 +16370,7 @@ public enum DescriptorError: Swift.Error {
     )
     case NoXpubInDescriptor
     case SinglePubkeyNotSupported
+    case MasterXpub
 }
 
 
@@ -16409,6 +16410,7 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
             )
         case 12: return .NoXpubInDescriptor
         case 13: return .SinglePubkeyNotSupported
+        case 14: return .MasterXpub
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -16476,6 +16478,10 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
         
         case .SinglePubkeyNotSupported:
             writeInt(&buf, Int32(13))
+        
+        
+        case .MasterXpub:
+            writeInt(&buf, Int32(14))
         
         }
     }
@@ -23810,6 +23816,7 @@ public enum WalletType {
     
     case hot
     case cold
+    case watchOnly
 }
 
 
@@ -23831,6 +23838,8 @@ public struct FfiConverterTypeWalletType: FfiConverterRustBuffer {
         
         case 2: return .cold
         
+        case 3: return .watchOnly
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23845,6 +23854,10 @@ public struct FfiConverterTypeWalletType: FfiConverterRustBuffer {
         
         case .cold:
             writeInt(&buf, Int32(2))
+        
+        
+        case .watchOnly:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -23883,6 +23896,8 @@ public enum XpubError: Swift.Error {
     case JsonNoDecriptor
     case MissingXpub(String
     )
+    case InvalidXpub(String
+    )
 }
 
 
@@ -23908,6 +23923,9 @@ public struct FfiConverterTypeXpubError: FfiConverterRustBuffer {
         case 3: return .InvalidDescriptorInJson
         case 4: return .JsonNoDecriptor
         case 5: return .MissingXpub(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .InvalidXpub(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -23944,6 +23962,11 @@ public struct FfiConverterTypeXpubError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case let .InvalidXpub(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
         }
     }
 }
@@ -23978,7 +24001,7 @@ extension XpubError: Foundation.LocalizedError {
 
 
 
-public protocol AuthManagerReconciler: AnyObject {
+public protocol AuthManagerReconciler: AnyObject, Sendable {
     
     /**
      * Tells the frontend to reconcile the manager changes
@@ -24097,7 +24120,7 @@ public func FfiConverterCallbackInterfaceAuthManagerReconciler_lower(_ v: AuthMa
 
 
 
-public protocol DeviceAccess: AnyObject {
+public protocol DeviceAccess: AnyObject, Sendable {
     
     func timezone()  -> String
     
@@ -24211,7 +24234,7 @@ public func FfiConverterCallbackInterfaceDeviceAccess_lower(_ v: DeviceAccess) -
 
 
 
-public protocol FfiReconcile: AnyObject {
+public protocol FfiReconcile: AnyObject, Sendable {
     
     /**
      * Essentially a callback to the frontend
@@ -24330,7 +24353,7 @@ public func FfiConverterCallbackInterfaceFfiReconcile_lower(_ v: FfiReconcile) -
 
 
 
-public protocol ImportWalletManagerReconciler: AnyObject {
+public protocol ImportWalletManagerReconciler: AnyObject, Sendable {
     
     /**
      * Tells the frontend to reconcile the view model changes
@@ -24449,7 +24472,7 @@ public func FfiConverterCallbackInterfaceImportWalletManagerReconciler_lower(_ v
 
 
 
-public protocol KeychainAccess: AnyObject {
+public protocol KeychainAccess: AnyObject, Sendable {
     
     func save(key: String, value: String) throws 
     
@@ -24620,7 +24643,7 @@ public func FfiConverterCallbackInterfaceKeychainAccess_lower(_ v: KeychainAcces
 
 
 
-public protocol PendingWalletManagerReconciler: AnyObject {
+public protocol PendingWalletManagerReconciler: AnyObject, Sendable {
     
     /**
      * Tells the frontend to reconcile the view model changes
@@ -24739,7 +24762,7 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 
 
 
-public protocol WalletManagerReconciler: AnyObject {
+public protocol WalletManagerReconciler: AnyObject, Sendable {
     
     /**
      * Tells the frontend to reconcile the view model changes
@@ -26370,6 +26393,13 @@ public func walletStateIsEqual(lhs: WalletLoadState, rhs: WalletLoadState) -> Bo
     )
 })
 }
+public func walletTypeToString(walletType: WalletType) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_wallet_type_to_string(
+        FfiConverterTypeWalletType_lower(walletType),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -26525,6 +26555,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_state_is_equal() != 27037) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_wallet_type_to_string() != 18258) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_address_spaced_out() != 29461) {
@@ -27298,9 +27331,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_fees() != 1824) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_fingerprint() != 63952) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustwalletmanager_force_update_height() != 23832) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27323,6 +27353,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified() != 7383) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint() != 64933) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 51147) {
