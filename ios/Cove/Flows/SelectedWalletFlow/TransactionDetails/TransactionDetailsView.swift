@@ -11,6 +11,7 @@ struct TransactionDetailsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(AppManager.self) private var app
     @Environment(\.openURL) private var openURL
+    @Environment(\.sizeCategory) var sizeCategory
 
     private let screenWidth = UIScreen.main.bounds.width
     private let screenHeight = UIScreen.main.bounds.height
@@ -215,7 +216,6 @@ struct TransactionDetailsView: View {
             .scrollIndicators(.never)
             .frame(alignment: .top)
             .scrollPosition($scrollPosition)
-            .scrollDisabled(!detailsExpanded)
             .onScrollGeometryChange(for: Double.self) { geo in
                 geo.contentOffset.y
             } action: { oldValue, newValue in
@@ -231,7 +231,7 @@ struct TransactionDetailsView: View {
     var body: some View {
         ContentScrollView {
             VStack(spacing: 24) {
-                Spacer()
+                if sizeCategory < .extraExtraExtraLarge { Spacer() }
 
                 Group {
                     if transactionDetails.isReceived() {
@@ -242,8 +242,8 @@ struct TransactionDetailsView: View {
                 }
 
                 Spacer()
-                Spacer()
-                Spacer()
+                if sizeCategory < .extraExtraLarge { Spacer() }
+                if !isMiniDevice, sizeCategory < .extraLarge { Spacer() }
 
                 Button(action: {
                     if let url = URL(string: transactionDetails.transactionUrl()) {

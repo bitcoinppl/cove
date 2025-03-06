@@ -202,6 +202,7 @@ struct WordsView: View {
 }
 
 struct WordCardView: View {
+    @Environment(\.sizeCategory) var sizeCategory
     let words: [GroupedWord]
 
     var body: some View {
@@ -212,9 +213,10 @@ struct WordCardView: View {
                         .fontWeight(.medium)
                         .foregroundColor(.black.opacity(0.5))
                         .multilineTextAlignment(.leading)
-                        .lineLimit(1)
                         .frame(alignment: .leading)
-                        .minimumScaleFactor(0.10)
+                        .minimumScaleFactor(0.40)
+                        .lineLimit(sizeCategory >= .extraExtraLarge ? 3 : 1)
+                        .font(sizeCategory >= .extraExtraLarge ? .caption2 : .caption)
 
                     Spacer()
 
@@ -223,8 +225,9 @@ struct WordCardView: View {
                         .foregroundStyle(.midnightBlue)
                         .multilineTextAlignment(.center)
                         .frame(alignment: .leading)
-                        .minimumScaleFactor(0.50)
-                        .lineLimit(1)
+                        .minimumScaleFactor(0.40)
+                        .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
+                        .font(sizeCategory >= .extraExtraLarge ? .footnote : .callout)
 
                     Spacer()
                 }
