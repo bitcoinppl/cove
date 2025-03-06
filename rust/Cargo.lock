@@ -2385,9 +2385,9 @@ dependencies = [
 
 [[package]]
 name = "pubport"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12290bd97987b071ddd4e7e35d6c9a340fd5697d2220efc2dd4d60e34b6c710d"
+checksum = "25e4e9d35105877dd8d3747024a524d2e134ae2f2aa978885c0f2136db1d0c06"
 dependencies = [
  "bitcoin",
  "derive_more",
@@ -2639,9 +2639,9 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.17.11"
+version = "0.17.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da5349ae27d3887ca812fb375b45a4fbb36d8d12d2df394968cd86e35683fe73"
+checksum = "ed9b823fa29b721a59671b41d6b06e66b29e0628e207e8b1c3ceeda701ec928d"
 dependencies = [
  "cc",
  "cfg-if",
@@ -3609,7 +3609,7 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 [[package]]
 name = "uniffi"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "anyhow",
  "camino",
@@ -3624,7 +3624,7 @@ dependencies = [
 [[package]]
 name = "uniffi_bindgen"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "anyhow",
  "camino",
@@ -3647,7 +3647,7 @@ dependencies = [
 [[package]]
 name = "uniffi_build"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "anyhow",
  "camino",
@@ -3657,7 +3657,7 @@ dependencies = [
 [[package]]
 name = "uniffi_core"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "anyhow",
  "async-compat",
@@ -3670,7 +3670,7 @@ dependencies = [
 [[package]]
 name = "uniffi_internal_macros"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "quote",
  "syn",
@@ -3679,7 +3679,7 @@ dependencies = [
 [[package]]
 name = "uniffi_macros"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "camino",
  "fs-err",
@@ -3695,7 +3695,7 @@ dependencies = [
 [[package]]
 name = "uniffi_meta"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "anyhow",
  "siphasher",
@@ -3705,7 +3705,7 @@ dependencies = [
 [[package]]
 name = "uniffi_testing"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "anyhow",
  "camino",
@@ -3717,7 +3717,7 @@ dependencies = [
 [[package]]
 name = "uniffi_udl"
 version = "0.29.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "anyhow",
  "textwrap",
@@ -3906,7 +3906,7 @@ checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 [[package]]
 name = "weedle2"
 version = "5.0.0"
-source = "git+https://github.com/mozilla/uniffi-rs#722d4551b4f80caa0500f6106cca927379b50315"
+source = "git+https://github.com/mozilla/uniffi-rs#94d5bbb57c0fd358c6382ffad2175a3c7e929456"
 dependencies = [
  "nom",
 ]

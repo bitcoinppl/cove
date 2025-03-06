@@ -33,7 +33,7 @@ bdk_file_store = { version = "0.18.0" }
 bdk_chain = { version = "0.21.0" }
 
 # import / export hardware wallet public keys
-pubport = { version = "0.3.0", features = [] }
+pubport = { version = "0.3.1", features = [] }
 
 # bip329 labels
 bip329 = { version = "0.2.0", features = [] }
