@@ -274,8 +274,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                            selectedFeeRate != nil,
-                            Address.isValid(address)
+                           selectedFeeRate != nil,
+                           Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -363,7 +363,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
-            if metadata.walletType == .watchOnly || metadata.masterFingerprint == nil {
+            if metadata.walletType == .watchOnly {
                 app.alertState = .init(.cantSendOnWatchOnlyWallet)
                 app.popRoute()
                 return
@@ -530,8 +530,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -544,8 +544,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-            .replacingOccurrences(of: ",", with: "")
-            .removingLeadingZeros()
+                .replacingOccurrences(of: ",", with: "")
+                .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 

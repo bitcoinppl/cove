@@ -126,9 +126,8 @@ struct WalletBalanceHeaderView: View {
                         return
                     }
 
-                    if metadata.walletType == .watchOnly || metadata.masterFingerprint == nil {
-                        app.alertState = .init(.cantSendOnWatchOnlyWallet)
-                        return
+                    if metadata.walletType == .watchOnly {
+                        return app.alertState = .init(.cantSendOnWatchOnlyWallet)
                     }
 
                     app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
@@ -138,13 +137,13 @@ struct WalletBalanceHeaderView: View {
                         Text("Send")
                     }
                     .foregroundColor(
-                        (metadata.walletType == .watchOnly || metadata.masterFingerprint == nil) ? Color.secondary : Color.midnightBtn
+                        metadata.walletType == .watchOnly ? Color.secondary : Color.midnightBtn
                     )
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
                     .background(
-                        (metadata.walletType == .watchOnly || metadata.masterFingerprint == nil) ? Color.gray : Color.btnPrimary
+                        metadata.walletType == .watchOnly ? Color.gray : Color.btnPrimary
                     )
                     .cornerRadius(10)
                 }
