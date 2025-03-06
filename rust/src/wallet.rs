@@ -311,7 +311,7 @@ impl Wallet {
 
         metadata.name = match &fingerprint {
             Some(fingerprint) => format!("Imported {}", fingerprint.to_ascii_uppercase()),
-            None => "Imported Watch Only".to_string(),
+            None => "Imported XPub".to_string(),
         };
 
         metadata.wallet_type = match &fingerprint {
