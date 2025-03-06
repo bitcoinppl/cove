@@ -407,37 +407,17 @@ impl WalletActor {
     }
 
     pub async fn start_wallet_scan_in_task(&mut self, force_scan: bool) -> ActorResult<()> {
-        use WalletManagerReconcileMessage as Msg;
         debug!("start_wallet_scan");
 
         if let Some(last_scan) = self.last_scan_finished() {
             if elapsed_secs_since(last_scan) < 15 && !force_scan {
-                info!("skipping wallet scan, last scan was less than 15 seconds ago");
+                debug!("skipping wallet scan, last scan was less than 15 seconds ago");
                 return Produces::ok(());
             }
         }
 
-        let node = Database::global().global_config.selected_node();
-        let reconciler = self.reconciler.clone();
-
-        // save the node client
-        match NodeClient::new(&node).await {
-            Ok(client) => {
-                self.node_client = Some(client);
-            }
-            Err(error) => {
-                reconciler
-                    .send(Msg::NodeConnectionFailed(error.to_string()))
-                    .unwrap();
-
-                return Err(error.into());
-            }
-        }
-
-        assert!(self.node_client.is_some());
-
         // check the node connection, and send frontend the error if it fails
-        send!(self.addr.check_node_connection());
+        self.check_node_connection().await?;
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
@@ -457,20 +437,21 @@ impl WalletActor {
     }
 
     pub async fn get_height(&mut self, force: bool) -> ActorResult<usize> {
-        if !force {
-            if let Some((last_height_fetched, block_height)) = self.last_height_fetched() {
-                let elapsed = elapsed_secs_since(last_height_fetched);
-                if elapsed < 60 * 5 {
-                    if elapsed < 60 {
-                        return Produces::ok(block_height);
-                    }
-
-                    send!(self.addr.update_height());
+        if let Some((last_height_fetched, block_height)) = self.last_height_fetched() {
+            let elapsed = elapsed_secs_since(last_height_fetched);
+            if !force && elapsed < 120 {
+                // if less than a minute return the height, without updating
+                if elapsed < 60 {
                     return Produces::ok(block_height);
                 }
+
+                // if more than a minute return height immediately, but update the height in the background
+                send!(self.addr.update_height());
+                return Produces::ok(block_height);
             }
         }
 
+        // update the height and return the new height
         let block_height = self.update_height().await?.await?;
         Produces::ok(block_height)
     }
