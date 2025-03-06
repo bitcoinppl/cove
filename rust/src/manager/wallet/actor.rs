@@ -52,6 +52,8 @@ pub enum ActorState {
     PerformingFullScan(FullScanType),
 
     FullScanComplete(FullScanType),
+
+    /// incremental scan is performed after the expanded full scan
     IncrementalScanComplete,
 
     FailedFullScan(FullScanType),
@@ -665,12 +667,16 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("applying full scan result for {full_scan_type:?}");
 
-        if full_scan_result.is_err() {
-            self.state = ActorState::FailedFullScan(full_scan_type);
+        match full_scan_result {
+            Ok(full_scan_result) => {
+                self.wallet.bdk.lock().apply_update(full_scan_result)?;
+                self.wallet.persist()?;
+            }
+            Err(error) => {
+                self.state = ActorState::FailedFullScan(full_scan_type);
+                return Err(error.into());
+            }
         }
-
-        self.wallet.bdk.lock().apply_update(full_scan_result?)?;
-        self.wallet.persist()?;
 
         // only mark as scan complete when the expanded full scan is complete
         if full_scan_type == FullScanType::Expanded {
