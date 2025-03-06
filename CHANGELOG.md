@@ -1,8 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixes
+
+- Add more plausible deniability to decooy PIN mode
+  - Pretend to change PIN and trick PINs in the settings scree
+- Make it easier to click the "Change PIN" button in the settings screen
+
 ## [0.2.0] - 2025-03-05
 
-- Add ability to import an XPUB (not a descriptor) as a watch-only wallet
+### Features
+
+- Add ability to import an XPUB (not a descriptor) as a hardware wallet
+
+### Fixes
+
 - Fixed visual bug in dark mode transaction list (main wallet screen)
 
 ## [0.1.0] - 2025-03-04
