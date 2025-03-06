@@ -138,13 +138,13 @@ struct WalletBalanceHeaderView: View {
                         Text("Send")
                     }
                     .foregroundColor(
-                        metadata.walletType == .watchOnly ? Color.secondary : Color.midnightBtn
+                        (metadata.walletType == .watchOnly || metadata.masterFingerprint == nil) ? Color.secondary : Color.midnightBtn
                     )
                     .frame(maxWidth: .infinity)
                     .padding()
                     .padding(.vertical, 4)
                     .background(
-                        metadata.walletType == .watchOnly ? Color.gray : Color.btnPrimary
+                        (metadata.walletType == .watchOnly || metadata.masterFingerprint == nil) ? Color.gray : Color.btnPrimary
                     )
                     .cornerRadius(10)
                 }
