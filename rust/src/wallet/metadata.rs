@@ -164,6 +164,9 @@ pub enum WalletType {
     #[default]
     Hot,
     Cold,
+    XpubOnly,
+
+    /// deprecated, use XpubOnly instead
     WatchOnly,
 }
 

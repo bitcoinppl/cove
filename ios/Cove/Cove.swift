@@ -23816,6 +23816,10 @@ public enum WalletType {
     
     case hot
     case cold
+    case xpubOnly
+    /**
+     * deprecated, use XpubOnly instead
+     */
     case watchOnly
 }
 
@@ -23838,7 +23842,9 @@ public struct FfiConverterTypeWalletType: FfiConverterRustBuffer {
         
         case 2: return .cold
         
-        case 3: return .watchOnly
+        case 3: return .xpubOnly
+        
+        case 4: return .watchOnly
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23856,8 +23862,12 @@ public struct FfiConverterTypeWalletType: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case .watchOnly:
+        case .xpubOnly:
             writeInt(&buf, Int32(3))
+        
+        
+        case .watchOnly:
+            writeInt(&buf, Int32(4))
         
         }
     }

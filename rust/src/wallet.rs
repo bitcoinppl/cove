@@ -196,8 +196,8 @@ impl Wallet {
 
         // set and save the origin if not set
         // we should be able to remove this because we should always have the origin
-        // unless its a watch only wallet
-        if metadata.origin.is_none() && metadata.wallet_type != WalletType::WatchOnly {
+        // unless its a xpub only wallet
+        if metadata.origin.is_none() && metadata.wallet_type != WalletType::XpubOnly {
             warn!("no origin found, setting using descriptor");
             let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
             let descriptor = Descriptor::from(extended_descriptor.clone());
@@ -316,12 +316,15 @@ impl Wallet {
 
         metadata.wallet_type = match &fingerprint {
             Some(_) => WalletType::Cold,
-            None => WalletType::WatchOnly,
+            None => WalletType::XpubOnly,
         };
 
         // get origin only if its not a watch only wallet
-        if metadata.wallet_type != WalletType::WatchOnly {
-            metadata.origin = descriptors.origin().ok();
+        match metadata.wallet_type {
+            WalletType::Hot | WalletType::Cold => {
+                metadata.origin = descriptors.origin().ok();
+            }
+            _ => {}
         }
 
         let wallet = descriptors

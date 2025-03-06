@@ -213,7 +213,7 @@ struct SendFlowSetAmountScreen: View {
                     feeRate: feeRate.feeRate()
                 )
 
-                if case .cold = metadata.walletType {
+                if case .cold = metadata.walletType, case .xpubOnly = metadata.walletType {
                     try? manager.rust.saveUnsignedTransaction(details: confirmDetails)
                 }
 
@@ -221,6 +221,8 @@ struct SendFlowSetAmountScreen: View {
                     switch metadata.walletType {
                     case .hot: RouteFactory().sendConfirm(id: id, details: confirmDetails)
                     case .cold: RouteFactory().sendHardwareExport(id: id, details: confirmDetails)
+                    case .xpubOnly:
+                        RouteFactory().sendHardwareExport(id: id, details: confirmDetails)
                     case .watchOnly: fatalError("can't send from watch only wallet")
                     }
 
@@ -272,8 +274,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if feeRateOptions != nil,
-                           selectedFeeRate != nil,
-                           Address.isValid(address)
+                            selectedFeeRate != nil,
+                            Address.isValid(address)
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -528,8 +530,8 @@ struct SendFlowSetAmountScreen: View {
 
         let value =
             newValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if presenter.focusField == .amount {
             sendAmount = value
@@ -542,8 +544,8 @@ struct SendFlowSetAmountScreen: View {
 
         let oldValueCleaned =
             oldValue
-                .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
+            .replacingOccurrences(of: ",", with: "")
+            .removingLeadingZeros()
 
         if oldValueCleaned == value { return }
 

@@ -35,8 +35,8 @@ struct SafeAreaInsetsKey: EnvironmentKey {
     }
 }
 
-public extension EnvironmentValues {
-    var safeAreaInsets: EdgeInsets {
+extension EnvironmentValues {
+    public var safeAreaInsets: EdgeInsets {
         self[SafeAreaInsetsKey.self]
     }
 }
@@ -83,7 +83,7 @@ struct CoveApp: App {
             ):
                 "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
-                 let .foundAddress(address, _):
+                let .foundAddress(address, _):
                 address.unformatted()
             case .noCameraPermission:
                 "Please allow camera access in Settings to use this feature."
@@ -94,7 +94,7 @@ struct CoveApp: App {
             case let .unableToGetAddress(error: error):
                 "Error: \(error)"
             case .cantSendOnWatchOnlyWallet:
-                "This is watch-only wallet and cannot send transactions. Please import the wallet using a descriptor or JSON"
+                "This is watch-only wallet and cannot send transactions. Please import this wallet again to enable sending transactions."
             }
 
         if case .foundAddress = alert.item {
@@ -116,12 +116,12 @@ struct CoveApp: App {
                 try? app.rust.selectWallet(id: walletId)
             }
         case .invalidWordGroup,
-             .errorImportingHotWallet,
-             .importedSuccessfully,
-             .unableToSelectWallet,
-             .errorImportingHardwareWallet,
-             .invalidFileFormat,
-             .invalidFormat:
+            .errorImportingHotWallet,
+            .importedSuccessfully,
+            .unableToSelectWallet,
+            .errorImportingHardwareWallet,
+            .invalidFileFormat,
+            .invalidFormat:
             Button("OK") {
                 app.alertState = .none
             }
@@ -496,9 +496,9 @@ struct CoveApp: App {
 
         // PIN auth active, no biometrics, leaving app
         if auth.isAuthEnabled,
-           !auth.isUsingBiometrics,
-           oldPhase == .active,
-           newPhase == .inactive
+            !auth.isUsingBiometrics,
+            oldPhase == .active,
+            newPhase == .inactive
         {
             coverClearTask?.cancel()
             showCover = true
@@ -580,20 +580,20 @@ struct CoveApp: App {
                 .gesture(
                     app.router.routes.isEmpty
                         ? DragGesture()
-                        .onChanged { gesture in
-                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
+                            .onChanged { gesture in
+                                if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                    withAnimation(.spring()) {
+                                        app.isSidebarVisible = true
+                                    }
                                 }
                             }
-                        }
-                        .onEnded { gesture in
-                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                withAnimation(.spring()) {
-                                    app.isSidebarVisible = true
+                            .onEnded { gesture in
+                                if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                    withAnimation(.spring()) {
+                                        app.isSidebarVisible = true
+                                    }
                                 }
-                            }
-                        } : nil
+                            } : nil
                 )
                 .task {
                     await app.rust.initOnStart()
