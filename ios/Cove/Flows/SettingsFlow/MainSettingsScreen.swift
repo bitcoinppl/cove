@@ -190,9 +190,10 @@ struct MainSettingsScreen: View {
             SettingsToggle(title: "Enable PIN", symbol: "lock", item: togglePin)
 
             if togglePin.wrappedValue {
-                Button(action: { sheetState = .init(.changePin) }) {
-                    SettingsRow(title: "Change PIN", symbol: "lock.open.rotation")
+                SettingsRow(title: "Change PIN", symbol: "lock.open.rotation") {
+                    sheetState = .init(.changePin)
                 }
+                .foregroundStyle(.blue)
 
                 SettingsToggle(
                     title: "Enable Wipe Data PIN",
