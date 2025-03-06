@@ -26,8 +26,11 @@ private let columns = [
 ]
 
 struct WordsView: View {
+    @Environment(\.sizeCategory) var sizeCategory
+
     var manager: PendingWalletManager
     var groupedWords: [[GroupedWord]]
+
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
     @Environment(\.dismiss) private var dismiss
@@ -38,6 +41,25 @@ struct WordsView: View {
     }
 
     var body: some View {
+        Group {
+            if sizeCategory >= .extraExtraLarge {
+                ScrollView {
+                    MainContent
+                        .frame(minHeight: screenHeight, maxHeight: .infinity)
+                }
+                .background(
+                    Color.midnightBlue
+                        .ignoresSafeArea(.all)
+                )
+
+            } else {
+                MainContent
+            }
+        }
+    }
+
+    @ViewBuilder
+    var MainContent: some View {
         VStack(spacing: 24) {
             StyledWordCard(tabIndex: $tabIndex) {
                 ForEach(Array(groupedWords.enumerated()), id: \.offset) { index, wordGroup in
@@ -136,6 +158,7 @@ struct WordsView: View {
         }
         .padding()
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
         .frame(maxHeight: .infinity)
         .background(
             Image(.newWalletPattern)
