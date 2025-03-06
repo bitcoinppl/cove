@@ -11,10 +11,13 @@ struct SettingsRow: View {
     @Environment(AppManager.self) private var app
 
     let title: String
+
     var route: SettingsRoute? = nil
 
     var icon: SettingsIcon? = nil
     var symbol: String? = nil
+
+    var onTapGesture: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -35,7 +38,10 @@ struct SettingsRow: View {
         }
         .padding(.vertical, 1)
         .contentShape(Rectangle())
-        .onTapGesture { if let route { app.pushRoute(Route.settings(route)) } }
+        .onTapGesture {
+            if let onTapGesture { return onTapGesture() }
+            if let route { return app.pushRoute(Route.settings(route)) }
+        }
     }
 }
 
