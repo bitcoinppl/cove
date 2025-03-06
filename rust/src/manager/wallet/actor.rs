@@ -410,12 +410,10 @@ impl WalletActor {
         use WalletManagerReconcileMessage as Msg;
         debug!("start_wallet_scan");
 
-        if !force_scan {
-            if let Some(last_scan) = self.last_scan_finished() {
-                if elapsed_secs_since(last_scan) < 60 {
-                    info!("skipping wallet scan, last scan was less than 60 seconds ago");
-                    return Produces::ok(());
-                }
+        if let Some(last_scan) = self.last_scan_finished() {
+            if elapsed_secs_since(last_scan) < 15 && !force_scan {
+                info!("skipping wallet scan, last scan was less than 15 seconds ago");
+                return Produces::ok(());
             }
         }
 
