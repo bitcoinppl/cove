@@ -38,6 +38,11 @@ struct MainSettingsScreen: View {
     @State private var sheetState: TaggedItem<SheetState>? = nil
     @State private var alertState: TaggedItem<AlertState>? = nil
 
+    // settings toggles for when you are in decoy mode
+    @State private var isDecoyPinEnabled: Bool = false
+    @State private var isFaceIdEnabled: Bool = false
+    @State private var isWipeDataPinEnabled: Bool = false
+
     let themes = allColorSchemes()
 
     var networkChanged: Bool {
@@ -51,10 +56,17 @@ struct MainSettingsScreen: View {
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
+    // MARK: Binding toggles
+
     var toggleBiometric: Binding<Bool> {
         Binding(
-            get: { auth.type == AuthType.both || auth.type == AuthType.biometric },
+            get: {
+                if auth.isInDecoyMode() { return isFaceIdEnabled }
+                return auth.type == AuthType.both || auth.type == AuthType.biometric
+            },
             set: { enable in
+                if auth.isInDecoyMode() { return isFaceIdEnabled = enable }
+
                 // disable
                 if !enable {
                     sheetState = .init(.disableBiometric)
@@ -93,7 +105,10 @@ struct MainSettingsScreen: View {
 
     var toggleWipeMePin: Binding<Bool> {
         Binding(
-            get: { auth.isWipeDataPinEnabled },
+            get: {
+                if auth.isInDecoyMode() { return isWipeDataPinEnabled }
+                return auth.isWipeDataPinEnabled
+            },
             set: { enable in
                 // enable
                 if enable {
@@ -125,8 +140,14 @@ struct MainSettingsScreen: View {
 
     var toggleDecoyPin: Binding<Bool> {
         Binding(
-            get: { auth.isDecoyPinEnabled },
+            get: {
+                if auth.isInDecoyMode() { return isDecoyPinEnabled }
+                return auth.isDecoyPinEnabled
+            },
             set: { enable in
+                // pretend to turn it off if you are in decoy mode
+                if !enable, auth.isInDecoyMode() { return isDecoyPinEnabled = false }
+
                 // enable
                 if enable {
                     if auth.type == .biometric {
@@ -256,11 +277,6 @@ struct MainSettingsScreen: View {
                     }
                 } : nil
         )
-    }
-
-    func setPin(_ pin: String) {
-        auth.dispatch(action: .setPin(pin))
-        sheetState = .none
     }
 
     @ViewBuilder
@@ -597,8 +613,17 @@ struct MainSettingsScreen: View {
         }
     }
 
+    // MARK: Setter functions
+
+    func setPin(_ pin: String) {
+        if auth.isInDecoyMode() { return }
+        auth.dispatch(action: .setPin(pin))
+        sheetState = .none
+    }
+
     func setWipeDataPin(_ pin: String) {
         sheetState = .none
+        if auth.isInDecoyMode() { return isWipeDataPinEnabled = true }
 
         do { try auth.rust.setWipeDataPin(pin: pin) } catch {
             let error = error as! AuthManagerError
@@ -608,6 +633,7 @@ struct MainSettingsScreen: View {
 
     func setDecoyPin(_ pin: String) {
         sheetState = .none
+        if auth.isInDecoyMode() { return isDecoyPinEnabled = true }
 
         do { try auth.rust.setDecoyPin(pin: pin) } catch {
             let error = error as! AuthManagerError
