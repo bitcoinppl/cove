@@ -25,7 +25,7 @@ use crossbeam::channel::Sender;
 use eyre::{Context as _, Result};
 use std::time::{Duration, UNIX_EPOCH};
 use tap::TapFallible as _;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
