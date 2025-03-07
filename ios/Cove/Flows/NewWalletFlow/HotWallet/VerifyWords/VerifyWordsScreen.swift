@@ -11,6 +11,8 @@ import SwiftUI
 
 struct VerifyWordsContainer: View {
     @Environment(AppManager.self) private var app
+    @Environment(\.sizeCategory) var sizeCategory
+
     let id: WalletId
 
     @State var verificationComplete = false
@@ -55,18 +57,32 @@ struct VerifyWordsContainer: View {
     var body: some View {
         Group {
             if let manager, let validator {
-                LoadedScreen(manager: manager, validator: validator)
+                if sizeCategory > .extraExtraExtraLarge {
+                    ScrollView {
+                        LoadedScreen(manager: manager, validator: validator)
+                            .frame(minHeight: screenHeight, maxHeight: .infinity)
+                    }
+                    .background(
+                        Color.midnightBlue
+                            .ignoresSafeArea(.all)
+                    )
+                    .toolbarBackground(Color.midnightBlue, for: .navigationBar)
+                } else {
+                    LoadedScreen(manager: manager, validator: validator)
+                }
             } else {
                 Text("Loading....")
                     .onAppear(perform: initOnAppear)
             }
         }
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Verify Recovery Words")
-                    .foregroundStyle(.white)
-                    .font(.callout)
-                    .fontWeight(.semibold)
+            if sizeCategory < .extraExtraLarge || sizeCategory > .extraExtraExtraLarge {
+                ToolbarItem(placement: .principal) {
+                    Text("Verify Recovery Words")
+                        .foregroundStyle(.white)
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                }
             }
         }
     }
