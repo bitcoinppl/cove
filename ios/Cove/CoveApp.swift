@@ -349,9 +349,8 @@ struct CoveApp: App {
     }
 
     @MainActor
-    func handleScannedCode(_ stringOrData: StringOrData) {
+    func handleMultiFormat(_ multiFormat: MultiFormat) {
         do {
-            let multiFormat = try stringOrData.toMultiFormat()
             switch multiFormat {
             case let .mnemonic(mnemonic):
                 importHotWallet(mnemonic.words())
@@ -472,12 +471,43 @@ struct CoveApp: App {
         Log.debug("[COVE APP ROOT] onChangeQr")
         guard let scannedCode else { return }
         app.sheetState = .none
-        handleScannedCode(scannedCode.item)
+        do {
+            let multiFormat = try scannedCode.item.toMultiFormat()
+            handleMultiFormat(multiFormat)
+        } catch {
+            switch error {
+            case let multiFormatError as MultiFormatError:
+                Log.error(
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.describe)"
+                )
+                app.alertState = TaggedItem(.invalidFormat(multiFormatError.describe))
+
+            default:
+                Log.error("Unable to handle scanned code, error: \(error)")
+                app.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
+            }
+        }
     }
 
     func onChangeNfc(_: NfcMessage?, _ nfcMessage: NfcMessage?) {
         Log.debug("[COVE APP ROOT] onChangeNfc")
         guard let nfcMessage else { return }
+        do {
+            let multiFormat = try nfcMessage.tryIntoMultiFormat()
+            handleMultiFormat(multiFormat)
+        } catch {
+            switch error {
+            case let multiFormatError as MultiFormatError:
+                Log.error(
+                    "MultiFormat not recognized: \(multiFormatError): \(multiFormatError.describe)"
+                )
+                app.alertState = TaggedItem(.invalidFormat(multiFormatError.describe))
+
+            default:
+                Log.error("Unable to handle scanned code, error: \(error)")
+                app.alertState = TaggedItem(.invalidFileFormat(error.localizedDescription))
+            }
+        }
     }
 
     func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
@@ -601,13 +631,6 @@ struct CoveApp: App {
                 }
                 .onOpenURL(perform: handleFileOpen)
                 .onChange(of: phase, initial: true, handleScenePhaseChange)
-                .onAppear {
-                    if auth.isAuthEnabled {
-                        auth.lockState = .locked
-                    } else {
-                        auth.lockState = .unlocked
-                    }
-                }
         }
     }
 }

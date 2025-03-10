@@ -45,11 +45,11 @@ pub enum MultiFormatError {
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
 
 impl MultiFormat {
-    pub fn try_from_data(data: Vec<u8>) -> Result<Self> {
+    pub fn try_from_data(data: &[u8]) -> Result<Self> {
         debug!("MultiFormat::try_from_data");
 
         // try parsing a signed transaction
-        if let Ok(txn) = BitcoinTransaction::try_from_data(&data) {
+        if let Ok(txn) = BitcoinTransaction::try_from_data(data) {
             return Ok(Self::Transaction(Arc::new(txn)));
         }
 
@@ -62,7 +62,7 @@ impl MultiFormat {
         Err(MultiFormatError::UnrecognizedFormat)
     }
 
-    pub fn try_from_string(string: String) -> Result<Self> {
+    pub fn try_from_string(string: &str) -> Result<Self> {
         debug!("MultiFormat::try_from_string");
 
         let string = string.trim();
@@ -129,8 +129,8 @@ impl TryFrom<StringOrData> for MultiFormat {
 
     fn try_from(string_or_data: StringOrData) -> Result<Self, Self::Error> {
         match string_or_data {
-            StringOrData::String(string) => Self::try_from_string(string),
-            StringOrData::Data(data) => Self::try_from_data(data),
+            StringOrData::String(string) => Self::try_from_string(&string),
+            StringOrData::Data(data) => Self::try_from_data(&data),
         }
     }
 }
@@ -158,4 +158,5 @@ fn display_multi_format_error(error: MultiFormatError) -> String {
     derive_more::Deref,
     derive_more::AsRef,
 )]
+
 pub struct Bip329Labels(pub bip329::Labels);

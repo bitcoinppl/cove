@@ -7736,6 +7736,8 @@ public protocol NfcMessageProtocol: AnyObject, Sendable {
     
     func string()  -> String?
     
+    func tryIntoMultiFormat() throws  -> MultiFormat
+    
 }
 /**
  * A NFC message, could contain a string, data (bytes) or both
@@ -7811,6 +7813,13 @@ open func data() -> Data?  {
 open func string() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_nfcmessage_string(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func tryIntoMultiFormat()throws  -> MultiFormat  {
+    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
+    uniffi_cove_fn_method_nfcmessage_try_into_multi_format(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -27333,6 +27342,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nfcmessage_string() != 44145) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_nfcmessage_try_into_multi_format() != 23279) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 48519) {

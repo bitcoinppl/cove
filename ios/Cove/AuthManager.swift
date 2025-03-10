@@ -51,6 +51,7 @@ enum UnlockMode {
     public func handleAndReturnUnlockMode(_ pin: String) -> UnlockMode {
         if AuthPin().check(pin: pin) {
             if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
+            lockState = .unlocked
             return .main
         }
 

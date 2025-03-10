@@ -60,8 +60,8 @@ impl SeedQr {
         Ok(Self::Standard(mnemonic))
     }
 
-    pub fn try_from_data(data: Vec<u8>) -> Result<Self, Error> {
-        let mnemonic = Mnemonic::from_entropy(&data)?;
+    pub fn try_from_data(data: &[u8]) -> Result<Self, Error> {
+        let mnemonic = Mnemonic::from_entropy(data)?;
         Ok(Self::Compact(mnemonic))
     }
 
@@ -89,7 +89,7 @@ impl SeedQr {
 impl SeedQr {
     #[uniffi::constructor]
     pub fn new_from_data(data: Vec<u8>) -> Result<Self, Error> {
-        Self::try_from_data(data)
+        Self::try_from_data(&data)
     }
 
     #[uniffi::constructor]
