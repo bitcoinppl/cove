@@ -492,6 +492,7 @@ struct MainSettingsScreen: View {
                     lockType: .biometric,
                     isPinCorrect: { _ in true },
                     onUnlock: { pin in
+                        if auth.isInDecoyMode() { return }
                         auth.dispatch(action: .enableBiometric)
                         if !pin.isEmpty { auth.dispatch(action: .setPin(pin)) }
 
@@ -536,6 +537,7 @@ struct MainSettingsScreen: View {
                 showPin: false,
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
+                    if auth.isInDecoyMode() { return }
                     auth.dispatch(action: .disableWipeDataPin)
                     sheetState = nextSheet
                 }
@@ -571,8 +573,9 @@ struct MainSettingsScreen: View {
                 isPinCorrect: auth.checkPin,
                 backAction: { sheetState = .none },
                 onComplete: { pin in
-                    sheetState = .none
+                    if auth.isInDecoyMode() { return sheetState = .none }
 
+                    sheetState = .none
                     if auth.checkWipeDataPin(pin) {
                         alertState = .init(
                             .extraSetPinError(
