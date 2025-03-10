@@ -552,7 +552,6 @@ struct CoveApp: App {
         }
 
         // sanity check, get out of decoy mode if PIN is disabled
-        Log.error("DECOY MODE: \(auth.isInDecoyMode()), \(oldPhase) --> \(newPhase), \(auth.type)")
         if auth.isInDecoyMode(), newPhase == .active,
            auth.type == .none || auth.type == .biometric
         {
