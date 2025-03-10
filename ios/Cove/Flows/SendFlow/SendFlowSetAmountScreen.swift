@@ -213,7 +213,7 @@ struct SendFlowSetAmountScreen: View {
                     feeRate: feeRate.feeRate()
                 )
 
-                if case .cold = metadata.walletType, case .xpubOnly = metadata.walletType {
+                if case .cold = metadata.walletType || case .xpubOnly = metadata.walletType {
                     try? manager.rust.saveUnsignedTransaction(details: confirmDetails)
                 }
 
