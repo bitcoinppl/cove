@@ -472,7 +472,7 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    func onChangeNfcMessage(_ old: NfcMessage?, _ new: NfcMessage?) {
+    func onChangeNfcMessage(_: NfcMessage?, _ new: NfcMessage?) {
         // try string first
         if let string = new?.string() {
             do {

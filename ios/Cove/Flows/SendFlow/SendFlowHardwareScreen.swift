@@ -277,7 +277,7 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
-    func handleScanned(_ old: NfcMessage?, _ txn: NfcMessage?) {
+    func handleScanned(_: NfcMessage?, _ txn: NfcMessage?) {
         Log.debug("handleScanned")
         guard let txn else { return }
 

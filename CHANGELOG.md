@@ -6,6 +6,8 @@
 
 - Add bug where it was possible to get stuck in "Decoy PIN" mode
 - Add more plausible deniability to decooy PIN mode
+- Fix bug where unsigned transactions were not showing up in the transaction list
+- Fixed bug where NFC signed txn import was showing an error even tho it was successful
 
 ## [0.2.1] - 2025-03-07
 
