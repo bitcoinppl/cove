@@ -367,8 +367,7 @@ struct HotWalletImportScreen: View {
             }
         }
         .onChange(of: focusField, initial: false, onChangeFocusField)
-        .onChange(of: nfcReader.scannedMessage, initial: false, onChangeScannedMessage)
-        .onChange(of: nfcReader.scannedMessageData, initial: false, onChangeScannedMessageData)
+        .onChange(of: nfcReader.scannedMessage, initial: false, onChangeNfcMessage)
         .onChange(of: focusField, initial: false) { old, new in
             if new == nil { focusField = old }
         }
@@ -473,19 +472,19 @@ struct HotWalletImportScreen: View {
         }
     }
 
-    func onChangeScannedMessage(_: String?, _ msg: String?) {
-        guard let msg else { return }
-        do {
-            let words = try groupedPlainWordsOf(mnemonic: msg, groups: 6)
-            setWords(words)
-        } catch {
-            Log.error("Error NFC word parsing: \(error)")
+    func onChangeNfcMessage(_ old: NfcMessage?, _ new: NfcMessage?) {
+        // try string first
+        if let string = new?.string() {
+            do {
+                let words = try groupedPlainWordsOf(mnemonic: string, groups: 6)
+                return setWords(words)
+            } catch {
+                Log.error("Error NFC word parsing: \(error)")
+            }
         }
-    }
 
-    func onChangeScannedMessageData(_: Data?, _ data: Data?) {
-        // received data, probably a SeedQR in NFC
-        guard let data else { return }
+        // if string doesn't work, try data
+        guard let data = new?.data() else { return }
         do {
             let seedQR = try SeedQr.newFromData(data: data)
             let words = seedQR.groupedPlainWords()

@@ -16,8 +16,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     var reader: FfiNfcReader
     var session: NFCTagReaderSession?
 
-    var scannedMessage: String?
-    var scannedMessageData: Data?
+    var scannedMessage: NfcMessage?
 
     var retries = 0
     var readBytes: Data
@@ -206,8 +205,10 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             Log.debug("succesfully scanned records \(records)")
             resetReader()
 
-            scannedMessage = reader.stringFromRecord(record: records.first!)
-            if scannedMessage == nil {
+            let scannedMessageString = reader.stringFromRecord(record: records.first!)
+            var scannedMessageData: Data? = nil
+
+            if scannedMessageString == nil {
                 Log.debug("scannedMessage string is empty")
                 if case let .data(data) = records.first?.payload {
                     Log.debug("found scanned message data \(data)")
@@ -219,6 +220,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 Log.debug("more than one record found, take all non text data")
                 scannedMessageData = reader.dataFromRecords(records: records)
             }
+
+            scannedMessage = try? NfcMessage.tryNew(string: scannedMessageString, data: scannedMessageData)
 
             session.invalidate()
             return .complete
@@ -283,7 +286,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             Log.debug("---")
         }
 
-        scannedMessage = _message
+        scannedMessage = try? NfcMessage.tryNew(string: _message)
     }
 
     func tagReaderSessionDidBecomeActive(_: NFCTagReaderSession) {

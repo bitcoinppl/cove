@@ -2663,6 +2663,14 @@ public static func tryFromData(data: Data)throws  -> BitcoinTransaction  {
 })
 }
     
+public static func tryFromNfcMessage(nfcMessage: NfcMessage)throws  -> BitcoinTransaction  {
+    return try  FfiConverterTypeBitcoinTransaction_lift(try rustCallWithError(FfiConverterTypeBitcoinTransactionError_lift) {
+    uniffi_cove_fn_constructor_bitcointransaction_tryfromnfcmessage(
+        FfiConverterTypeNfcMessage_lower(nfcMessage),$0
+    )
+})
+}
+    
 public static func tryFromStringOrData(stringOrData: StringOrData)throws  -> BitcoinTransaction  {
     return try  FfiConverterTypeBitcoinTransaction_lift(try rustCallWithError(FfiConverterTypeBitcoinTransactionError_lift) {
     uniffi_cove_fn_constructor_bitcointransaction_tryfromstringordata(
@@ -7712,6 +7720,152 @@ public func FfiConverterTypeNfcConst_lift(_ pointer: UnsafeMutableRawPointer) th
 #endif
 public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
     return FfiConverterTypeNfcConst.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A NFC message, could contain a string, data (bytes) or both
+ */
+public protocol NfcMessageProtocol: AnyObject, Sendable {
+    
+    func data()  -> Data?
+    
+    func string()  -> String?
+    
+}
+/**
+ * A NFC message, could contain a string, data (bytes) or both
+ */
+open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_nfcmessage(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_nfcmessage(pointer, $0) }
+    }
+
+    
+public static func tryNew(string: String? = nil, data: Data? = nil)throws  -> NfcMessage  {
+    return try  FfiConverterTypeNfcMessage_lift(try rustCallWithError(FfiConverterTypeNfcMessageError_lift) {
+    uniffi_cove_fn_constructor_nfcmessage_try_new(
+        FfiConverterOptionString.lower(string),
+        FfiConverterOptionData.lower(data),$0
+    )
+})
+}
+    
+
+    
+open func data() -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_cove_fn_method_nfcmessage_data(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func string() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_nfcmessage_string(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNfcMessage: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = NfcMessage
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcMessage {
+        return NfcMessage(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: NfcMessage) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcMessage {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: NfcMessage, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNfcMessage_lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcMessage {
+    return try FfiConverterTypeNfcMessage.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNfcMessage_lower(_ value: NfcMessage) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeNfcMessage.lower(value)
 }
 
 
@@ -19560,6 +19714,75 @@ extension NewWalletRoute: Equatable, Hashable {}
 
 
 
+public enum NfcMessageError: Swift.Error {
+
+    
+    
+    case NoStringNorData
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNfcMessageError: FfiConverterRustBuffer {
+    typealias SwiftType = NfcMessageError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcMessageError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .NoStringNorData
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NfcMessageError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .NoStringNorData:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNfcMessageError_lift(_ buf: RustBuffer) throws -> NfcMessageError {
+    return try FfiConverterTypeNfcMessageError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNfcMessageError_lower(_ value: NfcMessageError) -> RustBuffer {
+    return FfiConverterTypeNfcMessageError.lower(value)
+}
+
+
+extension NfcMessageError: Equatable, Hashable {}
+
+
+
+extension NfcMessageError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+
 public enum NfcReaderError: Swift.Error {
 
     
@@ -21322,6 +21545,9 @@ extension StoreType: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * A string or data, could be a string or data (bytes)
+ */
 
 public enum StringOrData {
     
@@ -26268,6 +26494,14 @@ public func networkToString(network: Network) -> String  {
     )
 })
 }
+public func nfcMessageIsEqual(lhs: NfcMessage, rhs: NfcMessage) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_nfc_message_is_equal(
+        FfiConverterTypeNfcMessage_lower(lhs),
+        FfiConverterTypeNfcMessage_lower(rhs),$0
+    )
+})
+}
 public func nodeSelectionToNode(node: NodeSelection) -> Node  {
     return try!  FfiConverterTypeNode_lift(try! rustCall() {
     uniffi_cove_fn_func_node_selection_to_node(
@@ -26511,6 +26745,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_network_to_string() != 60660) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_nfc_message_is_equal() != 33109) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_node_selection_to_node() != 57209) {
@@ -27092,6 +27329,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_nfcconst_total_bytes_per_chunk() != 41799) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_nfcmessage_data() != 29716) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_nfcmessage_string() != 44145) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 48519) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27614,6 +27857,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_bitcointransaction_tryfromdata() != 16116) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_bitcointransaction_tryfromnfcmessage() != 63478) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_bitcointransaction_tryfromstringordata() != 18512) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27687,6 +27933,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_nfcconst_new() != 22455) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_nfcmessage_try_new() != 25285) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_nodeselector_new() != 61659) {

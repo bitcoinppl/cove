@@ -172,8 +172,8 @@ struct NewWalletSelectScreen: View {
         }
     }
 
-    private func onChangeScannedMessage(_: String?, _ message: String?) {
-        guard let xpub = message else { return }
+    private func onChangeScannedMessage(_: NfcMessage?, _ message: NfcMessage?) {
+        guard let xpub = message?.string() else { return }
         newWalletFromXpub(xpub)
     }
 

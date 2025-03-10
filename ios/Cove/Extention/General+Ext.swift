@@ -117,3 +117,23 @@ extension LabelManager {
         try importLabels(labels: labels)
     }
 }
+
+extension NfcMessage? {
+    init(_ string: String?, _ data: Data?) {
+        self = try? NfcMessage.tryNew(string: string, data: data)
+    }
+
+    init(string: String?, data: Data?) {
+        self = try? NfcMessage.tryNew(string: string, data: data)
+    }
+
+    init(string: String, data: Data? = nil) {
+        self = try? NfcMessage.tryNew(string: string, data: data)
+    }
+}
+
+extension NfcMessage: Equatable {
+    public static func == (lhs: NfcMessage, rhs: NfcMessage) -> Bool {
+        nfcMessageIsEqual(lhs: lhs, rhs: rhs)
+    }
+}

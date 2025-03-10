@@ -9,6 +9,7 @@ use crate::{
     wallet::{AddressWithNetwork, address::AddressError},
 };
 
+/// A string or data, could be a string or data (bytes)
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum StringOrData {
     String(String),
