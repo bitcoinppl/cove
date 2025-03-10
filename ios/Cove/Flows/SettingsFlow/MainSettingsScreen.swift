@@ -39,6 +39,7 @@ struct MainSettingsScreen: View {
     @State private var alertState: TaggedItem<AlertState>? = nil
 
     // settings toggles for when you are in decoy mode
+    @State private var isPinEnabled: Bool = true
     @State private var isDecoyPinEnabled: Bool = false
     @State private var isFaceIdEnabled: Bool = false
     @State private var isWipeDataPinEnabled: Bool = false
@@ -96,7 +97,10 @@ struct MainSettingsScreen: View {
 
     var togglePin: Binding<Bool> {
         Binding(
-            get: { auth.type == AuthType.both || auth.type == AuthType.pin },
+            get: {
+                if auth.isInDecoyMode() { return isPinEnabled }
+                return auth.type == AuthType.both || auth.type == AuthType.pin
+            },
             set: { enable in
                 if enable { sheetState = .init(.newPin) } else { sheetState = .init(.removePin) }
             }
@@ -488,6 +492,7 @@ struct MainSettingsScreen: View {
                     lockType: .biometric,
                     isPinCorrect: { _ in true },
                     onUnlock: { pin in
+                        if auth.isInDecoyMode() { return }
                         auth.dispatch(action: .enableBiometric)
                         if !pin.isEmpty { auth.dispatch(action: .setPin(pin)) }
 
@@ -506,10 +511,19 @@ struct MainSettingsScreen: View {
         case .removePin:
             NumberPadPinView(
                 title: "Enter Current PIN",
-                isPinCorrect: auth.checkPin,
+                isPinCorrect: { pin in
+                    if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
+                    return auth.checkPin(pin)
+                },
+
                 showPin: false,
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
+                    if auth.isInDecoyMode() {
+                        sheetState = .none
+                        return isPinEnabled = false
+                    }
+
                     auth.dispatch(action: .disablePin)
                     auth.dispatch(action: .disableWipeDataPin)
                     sheetState = .none
@@ -523,6 +537,7 @@ struct MainSettingsScreen: View {
                 showPin: false,
                 backAction: { sheetState = .none },
                 onUnlock: { _ in
+                    if auth.isInDecoyMode() { return }
                     auth.dispatch(action: .disableWipeDataPin)
                     sheetState = nextSheet
                 }
@@ -555,11 +570,15 @@ struct MainSettingsScreen: View {
 
         case .changePin:
             ChangePinView(
-                isPinCorrect: auth.checkPin,
+                isPinCorrect: { pin in
+                    if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
+                    return auth.checkPin(pin)
+                },
                 backAction: { sheetState = .none },
                 onComplete: { pin in
-                    sheetState = .none
+                    if auth.isInDecoyMode() { return sheetState = .none }
 
+                    sheetState = .none
                     if auth.checkWipeDataPin(pin) {
                         alertState = .init(
                             .extraSetPinError(
@@ -617,7 +636,7 @@ struct MainSettingsScreen: View {
     // MARK: Setter functions
 
     func setPin(_ pin: String) {
-        if auth.isInDecoyMode() { return }
+        if auth.isInDecoyMode() { return isPinEnabled = true }
         auth.dispatch(action: .setPin(pin))
         sheetState = .none
     }
