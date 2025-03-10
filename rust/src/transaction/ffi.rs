@@ -41,14 +41,14 @@ pub enum BitcoinTransactionError {
 impl BitcoinTransaction {
     pub fn try_from_nfc_message(nfc_message: &NfcMessage) -> Result<Self> {
         match nfc_message {
-            NfcMessage::String(string) => Self::try_from_str(&string),
-            NfcMessage::Data(data) => Self::try_from_data(&data),
+            NfcMessage::String(string) => Self::try_from_str(string),
+            NfcMessage::Data(data) => Self::try_from_data(data),
             NfcMessage::Both(string, data) => {
-                if let Ok(txn) = Self::try_from_data(&data) {
+                if let Ok(txn) = Self::try_from_data(data) {
                     return Ok(txn);
                 }
 
-                Self::try_from_str(&string)
+                Self::try_from_str(string)
             }
         }
     }
