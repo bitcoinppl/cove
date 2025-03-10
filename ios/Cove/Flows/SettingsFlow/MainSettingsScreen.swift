@@ -570,7 +570,10 @@ struct MainSettingsScreen: View {
 
         case .changePin:
             ChangePinView(
-                isPinCorrect: auth.checkPin,
+                isPinCorrect: { pin in
+                    if auth.isInDecoyMode() { return auth.checkDecoyPin(pin) }
+                    return auth.checkPin(pin)
+                },
                 backAction: { sheetState = .none },
                 onComplete: { pin in
                     if auth.isInDecoyMode() { return sheetState = .none }
