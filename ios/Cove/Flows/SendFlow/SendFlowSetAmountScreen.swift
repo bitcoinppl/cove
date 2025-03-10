@@ -213,8 +213,8 @@ struct SendFlowSetAmountScreen: View {
                     feeRate: feeRate.feeRate()
                 )
 
-                if case .cold = metadata.walletType, case .xpubOnly = metadata.walletType {
-                    try? manager.rust.saveUnsignedTransaction(details: confirmDetails)
+                if metadata.walletType == .cold || metadata.walletType == .xpubOnly {
+                    try manager.rust.saveUnsignedTransaction(details: confirmDetails)
                 }
 
                 let route =

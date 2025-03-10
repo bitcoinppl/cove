@@ -469,21 +469,15 @@ struct CoveApp: App {
     func onChangeQr(
         _: TaggedItem<StringOrData>?, _ scannedCode: TaggedItem<StringOrData>?
     ) {
+        Log.debug("[COVE APP ROOT] onChangeQr")
         guard let scannedCode else { return }
         app.sheetState = .none
         handleScannedCode(scannedCode.item)
     }
 
-    func onChangeNfc(_: String?, _ scannedMessage: String?) {
-        guard let scannedMessage else { return }
-        if scannedMessage.isEmpty { return }
-        handleScannedCode(StringOrData(scannedMessage))
-    }
-
-    func onChangeNfcData(_: Data?, _ scannedMessage: Data?) {
-        guard let scannedMessage else { return }
-        if scannedMessage.isEmpty { return }
-        handleScannedCode(StringOrData(scannedMessage))
+    func onChangeNfc(_: NfcMessage?, _ nfcMessage: NfcMessage?) {
+        Log.debug("[COVE APP ROOT] onChangeNfc")
+        guard let nfcMessage else { return }
     }
 
     func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
@@ -552,7 +546,6 @@ struct CoveApp: App {
         }
 
         // sanity check, get out of decoy mode if PIN is disabled
-        Log.error("DECOY MODE: \(auth.isInDecoyMode()), \(oldPhase) --> \(newPhase), \(auth.type)")
         if auth.isInDecoyMode(), newPhase == .active,
            auth.type == .none || auth.type == .biometric
         {
@@ -576,7 +569,6 @@ struct CoveApp: App {
                 .onChange(of: scannedCode, onChangeQr)
                 // NFC scanning
                 .onChange(of: app.nfcReader.scannedMessage, onChangeNfc)
-                .onChange(of: app.nfcReader.scannedMessageData, onChangeNfcData)
                 .alert(
                     app.alertState?.item.title() ?? "Alert",
                     isPresented: showingAlert,

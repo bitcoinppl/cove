@@ -6,7 +6,7 @@ use jiff::ToSpan as _;
 use numfmt::Formatter;
 use rand::Rng as _;
 
-use crate::{multi_format::StringOrData, push_tx::PushTx};
+use crate::{cove_nfc::message::NfcMessage, multi_format::StringOrData, push_tx::PushTx};
 
 use super::*;
 
@@ -39,6 +39,20 @@ pub enum BitcoinTransactionError {
 }
 
 impl BitcoinTransaction {
+    pub fn try_from_nfc_message(nfc_message: &NfcMessage) -> Result<Self> {
+        match nfc_message {
+            NfcMessage::String(string) => Self::try_from_str(string),
+            NfcMessage::Data(data) => Self::try_from_data(data),
+            NfcMessage::Both(string, data) => {
+                if let Ok(txn) = Self::try_from_data(data) {
+                    return Ok(txn);
+                }
+
+                Self::try_from_str(string)
+            }
+        }
+    }
+
     pub fn try_from_data(data: &[u8]) -> Result<Self> {
         // try dropping the first 64 bytes and try again, coldcard nfc transaction
         // 32 bytes for the txid
@@ -85,7 +99,7 @@ impl BitcoinTransaction {
 #[uniffi::export]
 impl BitcoinTransaction {
     #[uniffi::constructor(name = "new")]
-    pub fn ffi_try_from(tx_hex: String) -> Result<Self> {
+    pub fn _try_rom(tx_hex: String) -> Result<Self> {
         Self::try_from_str(&tx_hex)
     }
 
@@ -100,6 +114,11 @@ impl BitcoinTransaction {
             StringOrData::String(tx_hex) => Self::try_from_str(&tx_hex),
             StringOrData::Data(tx_bytes) => Self::try_from_data(&tx_bytes),
         }
+    }
+
+    #[uniffi::constructor(name = "tryFromNfcMessage")]
+    pub fn _try_from_nfc_message(nfc_message: Arc<NfcMessage>) -> Result<Self> {
+        Self::try_from_nfc_message(&nfc_message)
     }
 
     #[uniffi::method]

@@ -8,6 +8,7 @@ use winnow::error::Needed;
 
 pub mod ffi;
 pub mod header;
+pub mod message;
 pub mod message_info;
 pub mod ndef_type;
 pub mod parser;

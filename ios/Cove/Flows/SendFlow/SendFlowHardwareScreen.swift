@@ -52,6 +52,8 @@ struct SendFlowHardwareScreen: View {
     // file import
     @State private var isPresentingFilePicker = false
 
+    //
+
     var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -220,12 +222,7 @@ struct SendFlowHardwareScreen: View {
                 isPresented: confirmationDialogIsPresented,
                 actions: ConfirmationDialogView
             )
-            .onChange(of: nfcReader.scannedMessageData) { _, txn in
-                handleScannedData(txn)
-            }
-            .onChange(of: nfcReader.scannedMessage) { _, txn in
-                handleScannedString(txn)
-            }
+            .onChange(of: nfcReader.scannedMessage, initial: false, handleScanned)
             .fileImporter(
                 isPresented: $isPresentingFilePicker,
                 allowedContentTypes: [.plainText, .psbt, .txn],
@@ -280,33 +277,12 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
-    func handleScannedString(_ txn: String?) {
-        guard let txn else {
-            alertState = .init(.nfcError("No transaction found"))
-            return
-        }
-        if txn.isEmpty {
-            alertState = .init(.nfcError("No transaction found, empty string"))
-            return
-        }
-        handleScanned(.string(txn))
-    }
+    func handleScanned(_: NfcMessage?, _ txn: NfcMessage?) {
+        Log.debug("handleScanned")
+        guard let txn else { return }
 
-    func handleScannedData(_ txn: Data?) {
-        guard let txn else {
-            alertState = .init(.nfcError("No transaction found"))
-            return
-        }
-        if txn.isEmpty {
-            alertState = .init(.nfcError("No transaction found, empty string"))
-            return
-        }
-        handleScanned(.data(txn))
-    }
-
-    func handleScanned(_ txn: StringOrData) {
         do {
-            let bitcoinTransaction = try BitcoinTransaction.tryFromStringOrData(stringOrData: txn)
+            let bitcoinTransaction = try BitcoinTransaction.tryFromNfcMessage(nfcMessage: txn)
             let db = Database().unsignedTransactions()
             let txnRecord = try db.getTxThrow(txId: bitcoinTransaction.txId())
 
@@ -319,6 +295,7 @@ struct SendFlowHardwareScreen: View {
 
             app.pushRoute(route)
         } catch {
+            Log.error("Failed to handle scanned transaction: \(error), txn: \(txn)")
             alertState = .init(.nfcError(error.localizedDescription))
         }
     }
@@ -326,6 +303,7 @@ struct SendFlowHardwareScreen: View {
     func txnRecordAndSignedTxn(_ hex: String) throws -> (
         UnsignedTransactionRecord, BitcoinTransaction
     ) {
+        Log.info("txnRecordAndSignedTxn")
         let bitcoinTransaction = try BitcoinTransaction(txHex: hex)
         let db = Database().unsignedTransactions()
         let record = try db.getTxThrow(txId: bitcoinTransaction.txId())
