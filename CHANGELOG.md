@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixes
+
+- Add bug where it was possible to get stuck in "Decoy PIN" mode
+- Add more plausible deniability to decooy PIN mode
+
 ## [0.2.1] - 2025-03-07
 
 ### Fixes
