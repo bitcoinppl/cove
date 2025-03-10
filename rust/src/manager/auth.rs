@@ -130,6 +130,29 @@ impl RustAuthManager {
             .unwrap_or_default()
     }
 
+    pub fn set_locked_at(&self, locked_at: u64) -> Result<()> {
+        Database::global()
+            .global_config
+            .set_locked_at(locked_at)
+            .tap_err(|error| error!("unable to set locked at: {error:?}"))?;
+
+        Ok(())
+    }
+
+    pub fn locked_at(&self) -> Option<u64> {
+        let locked_at = Database::global()
+            .global_config
+            .locked_at()
+            .tap_err(|error| error!("unable to get locked at: {error:?}"))
+            .ok()?;
+
+        if locked_at == u64::default() {
+            return None;
+        }
+
+        Some(locked_at)
+    }
+
     // MARK: DECOY PIN
 
     /// Check if decoy pin is enabled, not if the user is in decoy mode

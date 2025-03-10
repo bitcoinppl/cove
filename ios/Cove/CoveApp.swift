@@ -45,7 +45,6 @@ public extension EnvironmentValues {
 struct CoveApp: App {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var phase
-    @AppStorage("lockedAt") var lockedAt: Date = .init()
 
     @State var app: AppManager
     @State var auth: AuthManager
@@ -444,6 +443,9 @@ struct CoveApp: App {
                 }
             }
         }
+        .onChange(of: auth.lockState) { old, new in
+            Log.warn("AUTH LOCK STATE CHANGED: \(old) --> \(new)")
+        }
         .environment(app)
         .environment(auth)
     }
@@ -524,29 +526,25 @@ struct CoveApp: App {
            oldPhase == .active,
            newPhase == .inactive
         {
+            Log.debug("[scene] app going inactive")
             coverClearTask?.cancel()
             showCover = true
 
             // prevent getting stuck on show cover
             coverClearTask = Task {
+                try? await Task.sleep(for: .milliseconds(100))
+                if phase == .active { showCover = false }
                 try? await Task.sleep(for: .milliseconds(200))
                 if phase == .active { showCover = false }
-            }
-
-            if auth.lockState != .locked {
-                auth.lockState = .locked
-                lockedAt = Date.now
             }
         }
 
         // close all open sheets when going into the background
-        if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .background {
+        if auth.isAuthEnabled, newPhase == .background {
+            Log.debug("[scene] app going into background")
             coverClearTask?.cancel()
 
-            if auth.lockState != .locked {
-                auth.lockState = .locked
-                lockedAt = Date.now
-            }
+            if auth.lockState != .locked { auth.lock() }
 
             UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }
@@ -558,6 +556,7 @@ struct CoveApp: App {
 
         // auth enabled, opening app again
         if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
+            guard let lockedAt = auth.lockedAt else { return }
             let sinceLocked = Date.now.timeIntervalSince(lockedAt)
             Log.debug("LOCKED AT: \(lockedAt) == \(sinceLocked)")
 
@@ -565,13 +564,13 @@ struct CoveApp: App {
             // TODO: make this configurable and put in DB
             if auth.type == .pin, !auth.isDecoyPinEnabled, sinceLocked < 2 {
                 showCover = false
-                auth.lockState = .unlocked
+                auth.unlock()
                 return
             }
 
             if sinceLocked < 1 {
                 showCover = false
-                auth.lockState = .unlocked
+                auth.unlock()
             }
         }
 
