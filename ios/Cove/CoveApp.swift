@@ -550,6 +550,13 @@ struct CoveApp: App {
                 auth.lockState = .unlocked
             }
         }
+
+        // sanity check, get out of decoy mode if PIN is disabled
+        if auth.isInDecoyMode(), newPhase == .active,
+           auth.type == .none || auth.type == .biometric
+        {
+            auth.switchToMainMode()
+        }
     }
 
     var body: some Scene {

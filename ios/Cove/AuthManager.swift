@@ -4,7 +4,7 @@ enum UnlockMode {
     case main, decoy, wipe, locked
 }
 
-@Observable class AuthManager: AuthManagerReconciler {
+@Observable final class AuthManager: AuthManagerReconciler {
     static let shared = AuthManager()
 
     private let logger = Log(id: "AuthManager")
@@ -50,21 +50,7 @@ enum UnlockMode {
     @MainActor
     public func handleAndReturnUnlockMode(_ pin: String) -> UnlockMode {
         if AuthPin().check(pin: pin) {
-            if Database().globalConfig().isInDecoyMode() {
-                rust.switchToMainMode()
-
-                let app = AppManager.shared
-                app.reset()
-                app.isLoading = true
-
-                let db = Database()
-                if let selectedWalletId = db.globalConfig().selectedWallet() {
-                    try? app.rust.selectWallet(id: selectedWalletId)
-                } else {
-                    app.loadAndReset(to: RouteFactory().newWalletSelect())
-                }
-            }
-
+            if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
             return .main
         }
 
@@ -107,6 +93,22 @@ enum UnlockMode {
         }
 
         return .locked
+    }
+
+    @MainActor
+    public func switchToMainMode() {
+        rust.switchToMainMode()
+
+        let app = AppManager.shared
+        app.reset()
+        app.isLoading = true
+
+        let db = Database()
+        if let selectedWalletId = db.globalConfig().selectedWallet() {
+            try? app.rust.selectWallet(id: selectedWalletId)
+        } else {
+            app.loadAndReset(to: RouteFactory().newWalletSelect())
+        }
     }
 
     public func checkWipeDataPin(_ pin: String) -> Bool {
