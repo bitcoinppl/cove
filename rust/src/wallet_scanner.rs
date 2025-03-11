@@ -359,7 +359,7 @@ impl WalletScanner {
         };
 
         metadata.discovery_state = discovery_state;
-        db.update_wallet_metadata(metadata.clone())?;
+        db.update_metadata_discovery_state(&metadata)?;
 
         self.responder
             .send(WalletManagerReconcileMessage::WalletMetadataChanged(

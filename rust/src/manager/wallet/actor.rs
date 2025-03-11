@@ -491,7 +491,7 @@ impl WalletActor {
             .await
             .map_err(|_| Error::GetHeightError)?;
 
-        self.set_last_height_fetched(block_height);
+        self.save_last_height_fetched(block_height);
         Produces::ok(block_height)
     }
 
@@ -685,12 +685,7 @@ impl WalletActor {
         }
 
         // always update the last scan finished time
-        self.set_last_scan_finished();
-
-        Database::global()
-            .wallets
-            .update_wallet_metadata(self.wallet.metadata.clone())?;
-
+        self.save_last_scan_finished();
         self.notify_scan_complete().await?;
 
         // update the state
@@ -710,7 +705,7 @@ impl WalletActor {
         let sync_result = sync_result?;
         self.wallet.bdk.lock().apply_update(sync_result)?;
         self.wallet.persist()?;
-        self.set_last_scan_finished();
+        self.save_last_scan_finished();
 
         self.notify_scan_complete().await?;
 
@@ -778,7 +773,7 @@ impl WalletActor {
         last_scan_finished
     }
 
-    fn set_last_scan_finished(&mut self) -> Option<()> {
+    fn save_last_scan_finished(&mut self) -> Option<()> {
         let now = UNIX_EPOCH.elapsed().unwrap();
         self.last_scan_finished_ = Some(now);
 
@@ -793,7 +788,11 @@ impl WalletActor {
             .ok()??;
 
         metadata.internal_mut().last_scan_finished = Some(now);
-        wallets.update_wallet_metadata(metadata).ok()
+
+        wallets.update_internal_metadata(&metadata).ok();
+        self.wallet.metadata = metadata;
+
+        Some(())
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
@@ -821,7 +820,7 @@ impl WalletActor {
         last_height_fetched
     }
 
-    fn set_last_height_fetched(&mut self, block_height: usize) -> Option<()> {
+    fn save_last_height_fetched(&mut self, block_height: usize) -> Option<()> {
         let now = UNIX_EPOCH.elapsed().unwrap();
         self.last_height_fetched_ = Some((now, block_height));
 
@@ -839,7 +838,10 @@ impl WalletActor {
             last_seen: now,
         });
 
-        wallets.update_wallet_metadata(metadata).ok()
+        wallets.update_internal_metadata(&metadata).ok();
+        self.wallet.metadata = metadata.clone();
+
+        Some(())
     }
 
     async fn node_client(&mut self) -> Result<&NodeClient> {

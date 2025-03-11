@@ -179,6 +179,43 @@ impl WalletsTable {
         Ok(())
     }
 
+    // update just the discovery state
+    pub fn update_metadata_discovery_state(&self, metadata: &WalletMetadata) -> Result<(), Error> {
+        let network = metadata.network;
+        let mode = metadata.wallet_mode;
+
+        let mut wallets = self.get_all(network, mode)?;
+
+        // update the wallet
+        wallets.iter_mut().for_each(|wallet| {
+            if metadata.id == wallet.id {
+                wallet.discovery_state = metadata.discovery_state.clone();
+            }
+        });
+
+        self.save_all_wallets(network, mode, wallets)?;
+
+        Ok(())
+    }
+
+    pub fn update_internal_metadata(&self, metadata: &WalletMetadata) -> Result<(), Error> {
+        let network = metadata.network;
+        let mode = metadata.wallet_mode;
+
+        let mut wallets = self.get_all(network, mode)?;
+
+        // update the wallet
+        wallets.iter_mut().for_each(|wallet| {
+            if wallet.id == metadata.id {
+                wallet.internal = metadata.internal.clone();
+            }
+        });
+
+        self.save_all_wallets(network, mode, wallets)?;
+
+        Ok(())
+    }
+
     pub fn delete(&self, id: &WalletId) -> Result<(), Error> {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();

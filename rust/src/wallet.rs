@@ -569,7 +569,7 @@ impl Wallet {
 
         Database::global()
             .wallets
-            .update_wallet_metadata(self.metadata.clone())?;
+            .update_internal_metadata(&self.metadata)?;
 
         Ok(address_info)
     }
