@@ -426,7 +426,7 @@ impl WalletActor {
         if self
             .wallet
             .metadata
-            .internal()
+            .internal
             .performed_full_scan_at
             .is_some()
         {
@@ -484,6 +484,7 @@ impl WalletActor {
     }
 
     async fn update_height(&mut self) -> ActorResult<usize> {
+        debug!("actor update_height");
         self.check_node_connection().await?;
         let node_client = self.node_client().await?;
         let block_height = node_client
@@ -681,7 +682,10 @@ impl WalletActor {
         // only mark as scan complete when the expanded full scan is complete
         if full_scan_type == FullScanType::Expanded {
             let now = jiff::Timestamp::now().as_second() as u64;
-            self.wallet.metadata.internal_mut().performed_full_scan_at = Some(now);
+            self.wallet.metadata.internal.performed_full_scan_at = Some(now);
+            Database::global()
+                .wallets
+                .update_internal_metadata(&self.wallet.metadata)?;
         }
 
         // always update the last scan finished time
@@ -767,7 +771,7 @@ impl WalletActor {
             )
             .ok()??;
 
-        let last_scan_finished = metadata.internal().last_scan_finished;
+        let last_scan_finished = metadata.internal.last_scan_finished;
         self.last_scan_finished_ = last_scan_finished;
 
         last_scan_finished
@@ -787,8 +791,7 @@ impl WalletActor {
             )
             .ok()??;
 
-        metadata.internal_mut().last_scan_finished = Some(now);
-
+        metadata.internal.last_scan_finished = Some(now);
         wallets.update_internal_metadata(&metadata).ok();
         self.wallet.metadata = metadata;
 
@@ -812,7 +815,7 @@ impl WalletActor {
         let BlockSizeLast {
             block_height,
             last_seen,
-        } = &metadata.internal().last_height_fetched?;
+        } = &metadata.internal.last_height_fetched?;
 
         let last_height_fetched = Some((*last_seen, *(block_height) as usize));
         self.last_height_fetched_ = last_height_fetched;
@@ -821,6 +824,7 @@ impl WalletActor {
     }
 
     fn save_last_height_fetched(&mut self, block_height: usize) -> Option<()> {
+        debug!("actor save_last_height_fetched");
         let now = UNIX_EPOCH.elapsed().unwrap();
         self.last_height_fetched_ = Some((now, block_height));
 
@@ -833,7 +837,7 @@ impl WalletActor {
             )
             .ok()??;
 
-        metadata.internal_mut().last_height_fetched = Some(BlockSizeLast {
+        metadata.internal.last_height_fetched = Some(BlockSizeLast {
             block_height: block_height as u64,
             last_seen: now,
         });

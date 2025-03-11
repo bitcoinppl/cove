@@ -265,14 +265,6 @@ impl WalletMetadata {
             discovery_state: DiscoveryState::default(),
         }
     }
-
-    pub fn internal(&self) -> &InternalOnlyMetadata {
-        &self.internal
-    }
-
-    pub fn internal_mut(&mut self) -> &mut InternalOnlyMetadata {
-        &mut self.internal
-    }
 }
 
 impl InternalOnlyMetadata {
