@@ -14,13 +14,16 @@ struct LoadAndResetContainer: View {
     var body: some View {
         ProgressView()
             .task {
-                try? await Task.sleep(for: .milliseconds(loadingTimeMs))
-                app.resetRoute(to: nextRoute)
+                do {
+                    try await Task.sleep(for: .milliseconds(loadingTimeMs))
+                    app.resetRoute(to: nextRoute)
+                } catch {}
             }
             .tint(.primary)
     }
 }
 
 #Preview {
-    LoadAndResetContainer(nextRoute: [.listWallets], loadingTimeMs: 100).environment(AppManager.shared)
+    LoadAndResetContainer(nextRoute: [.listWallets], loadingTimeMs: 100).environment(
+        AppManager.shared)
 }

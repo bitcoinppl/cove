@@ -41,8 +41,10 @@ enum UnlockMode {
 
     public func lock() {
         guard isAuthEnabled else { return }
+        let now = UInt64(Date.now.timeIntervalSince1970)
+        Log.debug("[AUTH] locking at \(now)")
         lockState = .locked
-        try? rust.setLockedAt(lockedAt: UInt64(Date.now.timeIntervalSince1970))
+        try? rust.setLockedAt(lockedAt: now)
     }
 
     public func unlock() {

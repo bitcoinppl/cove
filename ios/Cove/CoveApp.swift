@@ -460,9 +460,7 @@ struct CoveApp: App {
     }
 
     func onChangeRoute(_ old: [Route], _ new: [Route]) {
-        if !old.isEmpty, new.isEmpty {
-            id = UUID()
-        }
+        if !old.isEmpty, new.isEmpty { id = UUID() }
 
         app.dispatch(action: AppAction.updateRoute(routes: new))
     }
@@ -533,8 +531,13 @@ struct CoveApp: App {
             // prevent getting stuck on show cover
             coverClearTask = Task {
                 try? await Task.sleep(for: .milliseconds(100))
+                if Task.isCancelled { return }
+
                 if phase == .active { showCover = false }
+
                 try? await Task.sleep(for: .milliseconds(200))
+                if Task.isCancelled { return }
+
                 if phase == .active { showCover = false }
             }
         }
@@ -558,7 +561,7 @@ struct CoveApp: App {
         if auth.isAuthEnabled, oldPhase == .inactive, newPhase == .active {
             guard let lockedAt = auth.lockedAt else { return }
             let sinceLocked = Date.now.timeIntervalSince(lockedAt)
-            Log.debug("LOCKED AT: \(lockedAt) == \(sinceLocked)")
+            Log.debug("[ROOT][AUTH] lockedAt \(lockedAt) == \(sinceLocked)")
 
             // less than 1 second, auto unlock if PIN only, and not in decoy mode
             // TODO: make this configurable and put in DB
