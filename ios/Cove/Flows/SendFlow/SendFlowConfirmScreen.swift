@@ -27,6 +27,9 @@ struct SendFlowConfirmScreen: View {
     // popover to change btc and sats
     @State private var showingMenu: Bool = false
 
+    // locking task, cancel if its screen is leaving
+    @State private var lockingTask: Task<Void, Never>? = nil
+
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
             app.dispatch(action: .updateFiatPrices)
@@ -157,6 +160,7 @@ struct SendFlowConfirmScreen: View {
                         }
                         sendState = .sent
                         isShowingAlert = true
+                        auth.unlock()
                     } catch {
                         sendState = .error(error.localizedDescription)
                         isShowingErrorAlert = true
@@ -169,15 +173,25 @@ struct SendFlowConfirmScreen: View {
             .padding(.top, 20)
             .background(Color.coveBg)
             .onAppear {
-                // accessing seed words for signing, lock so we can re-auth
-                if metadata.walletType == .hot { auth.lock() }
+                lockingTask = Task {
+                    try? await Task.sleep(for: .milliseconds(50))
+                    if Task.isCancelled { return }
+
+                    if metadata.walletType == .hot { auth.lock() }
+                }
+            }
+            .onDisappear {
+                lockingTask?.cancel()
+                guard let lockedAt = auth.lockedAt else { return }
+                let sinceLocked = Date.now.timeIntervalSince(lockedAt)
+                if sinceLocked < 5 { auth.lockState = .unlocked }
             }
             .alert(
                 "Sent!",
                 isPresented: $isShowingAlert,
                 actions: {
                     Button("OK") {
-                        app.resetRoute(to: Route.selectedWallet(id))
+                        app.loadAndReset(to: Route.selectedWallet(id))
                     }
                 },
                 message: {

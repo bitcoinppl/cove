@@ -14,6 +14,12 @@ enum UnlockMode {
     var isWipeDataPinEnabled: Bool
     var isDecoyPinEnabled: Bool
 
+    @ObservationIgnored
+    var lockedAt: Date? {
+        guard let lockedAt = rust.lockedAt() else { return nil }
+        return Date(timeIntervalSince1970: Double(lockedAt))
+    }
+
     @MainActor
     var isUsingBiometrics: Bool = false
 
@@ -35,7 +41,15 @@ enum UnlockMode {
 
     public func lock() {
         guard isAuthEnabled else { return }
+        let now = UInt64(Date.now.timeIntervalSince1970)
+        Log.debug("[AUTH] locking at \(now)")
         lockState = .locked
+        try? rust.setLockedAt(lockedAt: now)
+    }
+
+    public func unlock() {
+        lockState = .unlocked
+        try? rust.setLockedAt(lockedAt: 0)
     }
 
     public var isAuthEnabled: Bool {
@@ -51,6 +65,7 @@ enum UnlockMode {
     public func handleAndReturnUnlockMode(_ pin: String) -> UnlockMode {
         if AuthPin().check(pin: pin) {
             if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
+            unlock()
             return .main
         }
 
@@ -59,7 +74,7 @@ enum UnlockMode {
             // enter decoy mode if not already in decoy mode and reset app and router
             if Database().globalConfig().isInMainMode() {
                 rust.switchToDecoyMode()
-                lockState = .unlocked
+                unlock()
 
                 let app = AppManager.shared
                 app.reset()
@@ -83,7 +98,8 @@ enum UnlockMode {
 
             // reset auth maanger
             rust = RustAuthManager()
-            lockState = .unlocked
+            unlock()
+
             type = .none
 
             // reset app manager

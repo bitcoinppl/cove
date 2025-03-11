@@ -60,8 +60,8 @@ impl SeedQr {
         Ok(Self::Standard(mnemonic))
     }
 
-    pub fn try_from_data(data: Vec<u8>) -> Result<Self, Error> {
-        let mnemonic = Mnemonic::from_entropy(&data)?;
+    pub fn try_from_data(data: &[u8]) -> Result<Self, Error> {
+        let mnemonic = Mnemonic::from_entropy(data)?;
         Ok(Self::Compact(mnemonic))
     }
 
@@ -89,7 +89,7 @@ impl SeedQr {
 impl SeedQr {
     #[uniffi::constructor]
     pub fn new_from_data(data: Vec<u8>) -> Result<Self, Error> {
-        Self::try_from_data(data)
+        Self::try_from_data(&data)
     }
 
     #[uniffi::constructor]
@@ -209,7 +209,7 @@ pub mod tests {
         assert_eq!(bytes, hex_bytes);
         let bytes = hex_bytes;
 
-        let seed_qr = SeedQr::try_from_data(bytes).unwrap();
+        let seed_qr = SeedQr::try_from_data(&bytes).unwrap();
         let expected = "forum undo fragile fade shy sign arrest garment culture tube off merit"
             .split_whitespace()
             .collect::<Vec<&str>>();
@@ -305,7 +305,7 @@ pub mod tests {
             let seed_qr = seed_qr.unwrap();
             assert_eq!(seed_qr.get_words(), vector_words);
 
-            let seed_qr = SeedQr::try_from_data(vector.bytes);
+            let seed_qr = SeedQr::try_from_data(&vector.bytes);
             assert!(seed_qr.is_ok());
             let seed_qr = seed_qr.unwrap();
             assert_eq!(seed_qr.get_words(), vector_words);
@@ -317,7 +317,7 @@ pub mod tests {
         let words = "play element inch believe wrestle because feed sign pool soldier roof loop monitor burst grace".split_whitespace().collect::<Vec<&str>>();
         let bytes = hex::decode("a648f5c90a5fe427952e42a819d2eec1f8f03d99").unwrap();
 
-        let seed_qr = SeedQr::try_from_data(bytes).unwrap();
+        let seed_qr = SeedQr::try_from_data(&bytes).unwrap();
         assert_eq!(seed_qr.get_words(), words);
     }
 
@@ -326,7 +326,7 @@ pub mod tests {
         let words = "chuckle remind squeeze useful area absorb pretty essence occur orchard knock worry usage fan cradle rifle daring abandon".split_whitespace().collect::<Vec<&str>>();
         let bytes = hex::decode("2896bb4e77f0b401aa8a6a98d381ef7eeef8a58c7dcd3780").unwrap();
 
-        let seed_qr = SeedQr::try_from_data(bytes).unwrap();
+        let seed_qr = SeedQr::try_from_data(&bytes).unwrap();
         assert_eq!(seed_qr.get_words(), words);
     }
 
@@ -336,7 +336,7 @@ pub mod tests {
         let bytes =
             hex::decode("2916036ebff2c1042ff7ed4080af7ec6dee62ac3ab20754e13f83aad").unwrap();
 
-        let seed_qr = SeedQr::try_from_data(bytes).unwrap();
+        let seed_qr = SeedQr::try_from_data(&bytes).unwrap();
         assert_eq!(seed_qr.get_words(), words);
     }
 }

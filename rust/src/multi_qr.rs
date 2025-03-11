@@ -104,7 +104,7 @@ impl MultiQr {
 
     #[uniffi::constructor]
     pub fn try_new_from_data(data: Vec<u8>) -> Result<Self, Error> {
-        let seed_qr = SeedQr::try_from_data(data)?;
+        let seed_qr = SeedQr::try_from_data(&data)?;
         Ok(Self::SeedQr(seed_qr))
     }
 

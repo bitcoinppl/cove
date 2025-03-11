@@ -35,6 +35,7 @@ pub enum GlobalConfigKey {
     InDecoyMode,
     MainSelectedWalletId,
     DecoySelectedWalletId,
+    LockedAt,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -54,6 +55,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::InDecoyMode => "in_decoy_mode",
             GlobalConfigKey::MainSelectedWalletId => "main_selected_wallet_id",
             GlobalConfigKey::DecoySelectedWalletId => "decoy_selected_wallet_id",
+            GlobalConfigKey::LockedAt => "locked_at",
         }
     }
 }
@@ -107,8 +109,9 @@ impl GlobalConfigTable {
 
     string_config_accessor!(pub wipe_data_pin, GlobalConfigKey::WipeDataPin, String);
     string_config_accessor!(pub decoy_pin, GlobalConfigKey::DecoyPin, String);
-
     string_config_accessor!(priv_hashed_pin_code, GlobalConfigKey::HashedPinCode, String);
+
+    string_config_accessor!(pub locked_at, GlobalConfigKey::LockedAt, u64);
 
     // string_config_accessor!(
     //     pub auth_type,

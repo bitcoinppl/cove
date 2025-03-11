@@ -23,7 +23,7 @@ struct SelectedWalletContainer: View {
             manager = try app.getWalletManager(id: id)
 
             Task {
-                try? await Task.sleep(for: .milliseconds(500))
+                try await Task.sleep(for: .milliseconds(500))
                 await manager?.updateWalletBalance()
             }
         } catch {
@@ -79,7 +79,7 @@ struct SelectedWalletContainer: View {
             // small delay and then start scanning wallet
             if let manager {
                 do {
-                    try? await Task.sleep(for: .milliseconds(400))
+                    try await Task.sleep(for: .milliseconds(400))
                     await manager.rust.getTransactions()
                     await manager.updateWalletBalance()
                     try await manager.rust.startWalletScan()

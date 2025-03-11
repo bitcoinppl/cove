@@ -7736,6 +7736,8 @@ public protocol NfcMessageProtocol: AnyObject, Sendable {
     
     func string()  -> String?
     
+    func tryIntoMultiFormat() throws  -> MultiFormat
+    
 }
 /**
  * A NFC message, could contain a string, data (bytes) or both
@@ -7811,6 +7813,13 @@ open func data() -> Data?  {
 open func string() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_nfcmessage_string(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func tryIntoMultiFormat()throws  -> MultiFormat  {
+    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
+    uniffi_cove_fn_method_nfcmessage_try_into_multi_format(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -9099,6 +9108,8 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: AuthManagerReconciler) 
     
+    func lockedAt()  -> UInt64?
+    
     func send(message: AuthManagerReconcileMessage) 
     
     func setAuthType(authType: AuthType) 
@@ -9107,6 +9118,8 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
      * Set the decoy pin
      */
     func setDecoyPin(pin: String) throws 
+    
+    func setLockedAt(lockedAt: UInt64) throws 
     
     /**
      * Set the wipe data pin
@@ -9285,6 +9298,13 @@ open func listenForUpdates(reconciler: AuthManagerReconciler)  {try! rustCall() 
 }
 }
     
+open func lockedAt() -> UInt64?  {
+    return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustauthmanager_locked_at(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func send(message: AuthManagerReconcileMessage)  {try! rustCall() {
     uniffi_cove_fn_method_rustauthmanager_send(self.uniffiClonePointer(),
         FfiConverterTypeAuthManagerReconcileMessage_lower(message),$0
@@ -9305,6 +9325,13 @@ open func setAuthType(authType: AuthType)  {try! rustCall() {
 open func setDecoyPin(pin: String)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
     uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(self.uniffiClonePointer(),
         FfiConverterString.lower(pin),$0
+    )
+}
+}
+    
+open func setLockedAt(lockedAt: UInt64)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
+    uniffi_cove_fn_method_rustauthmanager_set_locked_at(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(lockedAt),$0
     )
 }
 }
@@ -17617,6 +17644,7 @@ public enum GlobalConfigKey {
     case inDecoyMode
     case mainSelectedWalletId
     case decoySelectedWalletId
+    case lockedAt
 }
 
 
@@ -17658,6 +17686,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         case 11: return .mainSelectedWalletId
         
         case 12: return .decoySelectedWalletId
+        
+        case 13: return .lockedAt
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -17714,6 +17744,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         
         case .decoySelectedWalletId:
             writeInt(&buf, Int32(12))
+        
+        
+        case .lockedAt:
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -27335,6 +27369,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_nfcmessage_string() != 44145) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_nfcmessage_try_into_multi_format() != 23279) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_nodeselector_check_and_save_node() != 48519) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27458,6 +27495,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_listen_for_updates() != 6029) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustauthmanager_locked_at() != 46905) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustauthmanager_send() != 55296) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27465,6 +27505,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 2272) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_set_locked_at() != 12721) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 20226) {
