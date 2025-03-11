@@ -2,12 +2,15 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-03-11
+
 ### Fixes
 
 - Fixed bug where it was possible to get stuck in "Decoy PIN" mode
 - Added more plausible deniability to decoy PIN mode
 - Fix bug where unsigned transactions were not showing up in the transaction list
 - Fixed bug where NFC signed txn import was showing an error even tho it was successful
+- Fixed bug where NFC scanning would lock the app
 
 ## [0.2.1] - 2025-03-07
 
