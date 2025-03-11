@@ -39,10 +39,6 @@ struct SendFlowHardwareScreen: View {
     let details: ConfirmDetails
     let prices: PriceResponse? = nil
 
-    // private nfc
-    let nfcWriter = NFCWriter()
-    @State private var nfcReader = NFCReader()
-
     // sheets, alerts, confirmations
     @State private var alertState: TaggedItem<AlertState>? = .none
     @State private var sheetState: TaggedItem<SheetState>? = .none
@@ -222,7 +218,6 @@ struct SendFlowHardwareScreen: View {
                 isPresented: confirmationDialogIsPresented,
                 actions: ConfirmationDialogView
             )
-            .onChange(of: nfcReader.scannedMessage, initial: false, handleScanned)
             .fileImporter(
                 isPresented: $isPresentingFilePicker,
                 allowedContentTypes: [.plainText, .psbt, .txn],
@@ -421,7 +416,7 @@ struct SendFlowHardwareScreen: View {
         }
 
         Button("NFC") {
-            nfcWriter.writeToTag(data: details.psbtBytes())
+            app.nfcWriter.writeToTag(data: details.psbtBytes())
         }
 
         ShareLink(
@@ -466,7 +461,7 @@ struct SendFlowHardwareScreen: View {
         }
 
         Button("NFC") {
-            nfcReader.scan()
+            app.nfcReader.scan()
         }
     }
 

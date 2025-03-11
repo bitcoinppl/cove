@@ -1,7 +1,7 @@
 import Observation
 import SwiftUI
 
-@Observable class AppManager: FfiReconcile {
+@Observable final class AppManager: FfiReconcile {
     static let shared = AppManager()
 
     private let logger = Log(id: "AppManager")
@@ -23,6 +23,7 @@ import SwiftUI
     var selectedFiatCurrency = Database().globalConfig().selectedFiatCurrency()
 
     var nfcReader = NFCReader()
+    var nfcWriter = NFCWriter()
 
     var prices: PriceResponse?
     var fees: FeeResponse?
