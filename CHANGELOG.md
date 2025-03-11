@@ -11,6 +11,11 @@
 - Fix bug where unsigned transactions were not showing up in the transaction list
 - Fixed bug where NFC signed txn import was showing an error even tho it was successful
 - Fixed bug where NFC scanning would lock the app
+- Fix where imported name was reset to the default name
+
+### Changes
+
+- Don't show cover when using NFC
 
 ## [0.2.1] - 2025-03-07
 
