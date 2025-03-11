@@ -526,7 +526,8 @@ struct CoveApp: App {
         {
             Log.debug("[scene] app going inactive")
             coverClearTask?.cancel()
-            showCover = true
+
+            if !app.nfcWriter.isScanning, !app.nfcReader.isScanning { showCover = true }
 
             // prevent getting stuck on show cover
             coverClearTask = Task {
@@ -547,6 +548,7 @@ struct CoveApp: App {
             Log.debug("[scene] app going into background")
             coverClearTask?.cancel()
 
+            showCover = true
             if auth.lockState != .locked { auth.lock() }
 
             UIApplication.shared.connectedScenes

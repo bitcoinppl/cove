@@ -5,10 +5,14 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
     var data: Data?
     var session: NFCNDEFReaderSession?
 
+    var isScanning: Bool = false
+
     private let logger = Log(id: "NfcWriter")
     private var task: Task<Void, Never>?
 
     func writeToTag(data: Data) {
+        isScanning = true
+
         Log.debug("Writing to NFC tag, with data of size: \(data.count)")
         self.data = data
         guard NFCNDEFReaderSession.readingAvailable else { return }
@@ -19,11 +23,11 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
     }
 
     func readerSession(_: NFCNDEFReaderSession, didDetectNDEFs _: [NFCNDEFMessage]) {
-        logger.debug("[NfcWriter] Detected NDEFs, ignoring")
+        logger.debug("detected NDEFs, ignoring")
     }
 
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
-        logger.debug("[NfcWriter] Detected \(tags.count) tags, continuing...")
+        logger.debug("detected \(tags.count) tags, continuing...")
 
         guard let data, !data.isEmpty else {
             session.invalidate(errorMessage: "No data to write to NFC tag")
@@ -64,8 +68,10 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
 
                 tag.writeNDEF(message) { error in
                     if let error {
+                        self.isScanning = false
                         session.invalidate(errorMessage: "Write failed: \(error.localizedDescription)")
                     } else {
+                        self.isScanning = false
                         session.alertMessage = "Successfully wrote to tag!"
                         session.invalidate()
                         self.task?.cancel()
@@ -76,11 +82,13 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
     }
 
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError _: Error) {
+        isScanning = false
         logger.debug("Session did invalidate with error")
         session.invalidate()
     }
 
     func tagReaderSession(_: NFCTagReaderSession, didInvalidateWithError error: any Error) {
+        isScanning = false
         logger.error("Tag reader session did invalidate with error: \(error.localizedDescription)")
         task?.cancel()
     }

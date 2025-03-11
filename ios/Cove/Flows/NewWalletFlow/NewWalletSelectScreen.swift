@@ -16,7 +16,6 @@ struct NewWalletSelectScreen: View {
     @State var showSelectDialog: Bool = false
 
     // private
-    @State private var nfcReader = NFCReader()
     @State private var nfcCalled: Bool = false
     let routeFactory: RouteFactory = .init()
 
@@ -136,7 +135,6 @@ struct NewWalletSelectScreen: View {
                 }
             )
         }
-        .onChange(of: nfcReader.scannedMessage, initial: false, onChangeScannedMessage)
         .sheet(item: $sheetState, content: SheetContent)
         .frame(maxHeight: .infinity)
         .background(
@@ -172,11 +170,6 @@ struct NewWalletSelectScreen: View {
         }
     }
 
-    private func onChangeScannedMessage(_: NfcMessage?, _ message: NfcMessage?) {
-        guard let xpub = message?.string() else { return }
-        newWalletFromXpub(xpub)
-    }
-
     private func newWalletFromXpub(_ xpub: String) {
         do {
             let wallet = try Wallet.newFromXpub(xpub: xpub)
@@ -201,7 +194,7 @@ struct NewWalletSelectScreen: View {
         }
 
         Button("NFC") {
-            nfcReader.scan()
+            app.nfcReader.scan()
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 withAnimation {

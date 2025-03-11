@@ -25,6 +25,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     var readingMessage = ""
     var currentBlock = 0
 
+    var isScanning = false
+
     override init() {
         Log.debug("create nfc reader")
         consts = NfcConst()
@@ -36,6 +38,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     func scan() {
         Log.info("started scanning")
 
+        isScanning = true
         scannedMessage = nil
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
@@ -45,6 +48,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
     func resetReader() {
         Log.debug("reset reader")
+        isScanning = false
         reader = FfiNfcReader()
         readBytes = Data()
         currentBlock = 0
@@ -78,6 +82,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 Log.debug("found tag feliCa")
                 self.readNDEF(from: feliCaTag, session: session)
             @unknown default:
+                self.isScanning = false
                 Log.error("unsupported tag type: \(tag)")
                 session.invalidate(errorMessage: "Unsupported tag type.")
             }
@@ -125,6 +130,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             // already complete
             if scannedMessage != nil {
                 Log.warn("scanning complete")
+                isScanning = false
                 self.session?.invalidate()
                 self.session = nil
                 return
@@ -197,12 +203,15 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         switch Result(catching: { try self.reader.parse(data: self.readBytes) }) {
         case let .success(.incomplete(result)):
             Log.debug("succesfully scanned incomplete record")
+            isScanning = false
+
             messageInfo = result.messageInfo
             readBytes = result.leftOverBytes
             return .incomplete
 
         case let .success(.complete(_, records)):
             Log.debug("succesfully scanned records \(records)")
+            isScanning = false
             resetReader()
 
             let scannedMessageString = reader.stringFromRecord(record: records.first!)
@@ -228,6 +237,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
         case let .failure(error):
             Log.debug("parse and handle result error: \(error)")
+            isScanning = false
             resetReader()
             tagReaderSession(session, didInvalidateWithError: error)
             return .error
@@ -243,6 +253,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             if let error {
                 if message == nil {
                     Log.error("read error: \(error.localizedDescription)")
+                    self.isScanning = false
                     session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
                     return
                 }
@@ -250,6 +261,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
             guard let message else {
                 Log.error("no NDEF message found")
+                self.isScanning = false
                 session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
                 return
             }
@@ -257,6 +269,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             self.processNDEFMessage(message)
             if self.scannedMessage != nil {
                 DispatchQueue.main.async {
+                    self.isScanning = false
                     session.alertMessage = "Tag read successfully!"
                     session.invalidate()
                 }
@@ -269,7 +282,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         var _message = ""
 
         Log.debug("num of records: \(message.records.count)")
-
         for record in message.records {
             Log.debug("Record type: \(record.typeNameFormat)")
             if let type = String(data: record.type, encoding: .utf8) {
@@ -286,6 +298,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             Log.debug("---")
         }
 
+        isScanning = false
         scannedMessage = try? NfcMessage.tryNew(string: _message)
     }
 
@@ -295,6 +308,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
     func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: any Error) {
         Log.error("Tag reader session did invalidate with error: \(error.localizedDescription)")
+        isScanning = false
 
         switch error as? NFCReaderError {
         case .none:
