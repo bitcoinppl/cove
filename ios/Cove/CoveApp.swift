@@ -515,7 +515,11 @@ struct CoveApp: App {
             "[SCENE PHASE]: \(oldPhase) --> \(newPhase) && using biometrics: \(auth.isUsingBiometrics)"
         )
 
-        if !auth.isAuthEnabled { showCover = false }
+        if !auth.isAuthEnabled {
+            showCover = false
+            auth.unlock()
+        }
+
         if newPhase == .active { showCover = false }
 
         // PIN auth active, no biometrics, leaving app
