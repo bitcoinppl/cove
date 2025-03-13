@@ -640,6 +640,7 @@ dependencies = [
  "reqwest 0.12.14",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sha2",
  "strum",
  "tap",
