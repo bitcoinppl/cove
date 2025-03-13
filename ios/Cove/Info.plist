@@ -5,7 +5,9 @@
 	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
 	<array>
     	<string>D2760000850101</string>
+      <string>F0436F696E6B697465434152447631</string>
 	</array>
+
 
 	<key>CFBundleDocumentTypes</key>
 	<array>

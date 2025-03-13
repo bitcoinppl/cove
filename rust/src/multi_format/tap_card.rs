@@ -3,7 +3,14 @@ use std::{collections::HashMap, num::ParseIntError};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
-pub enum CardState {
+pub enum TapSignerState {
+    Sealed,
+    Unused,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum SatsCardState {
     Sealed,
     Unsealed,
     Error,
@@ -11,7 +18,7 @@ pub enum CardState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct SatsCard {
-    pub state: CardState,
+    pub state: SatsCardState,
     pub slot_number: u32,
     pub address_suffix: String,
     pub nonce: String,
@@ -20,7 +27,7 @@ pub struct SatsCard {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct TapSigner {
-    pub state: CardState,
+    pub state: TapSignerState,
     pub card_ident: String,
     pub nonce: String,
     pub signature: String,
@@ -70,7 +77,7 @@ pub enum Error {
     EmptyCardState,
 
     #[error("unable to parse slot number: {0}")]
-    ParseSlotNumberError(#[from] ParseIntError),
+    UnableToParseSlot(#[from] ParseIntError),
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -97,7 +104,6 @@ fn parse_card(url_encoded: &str) -> Result<TapCard> {
         .to_string();
 
     let state_field = params.get("u").ok_or(Error::MissingField(Field::State))?;
-    let state = parse_state(state_field)?;
 
     // Check if it's a TapSigner (has t=1)
     if is_tap_signer(url_encoded, &params) {
@@ -105,6 +111,8 @@ fn parse_card(url_encoded: &str) -> Result<TapCard> {
             .get("c")
             .ok_or(Error::MissingField(Field::Ident))?
             .to_string();
+
+        let state = parse_tap_signer_state(state_field)?;
 
         return Ok(TapCard::TapSigner(TapSigner {
             state,
@@ -125,6 +133,8 @@ fn parse_card(url_encoded: &str) -> Result<TapCard> {
         .ok_or(Error::MissingField(Field::Address))?
         .to_string();
 
+    let state = parse_sats_card_state(state_field)?;
+
     Ok(TapCard::SatsCard(SatsCard {
         state,
         slot_number,
@@ -135,11 +145,23 @@ fn parse_card(url_encoded: &str) -> Result<TapCard> {
 }
 
 // Helper function to parse state
-fn parse_state(state_str: &str) -> Result<CardState> {
+fn parse_tap_signer_state(state_str: &str) -> Result<TapSignerState> {
     match state_str {
-        "s" | "S" => Ok(CardState::Sealed),
-        "u" | "U" => Ok(CardState::Unsealed),
-        "e" | "E" => Ok(CardState::Error),
+        "s" | "S" => Ok(TapSignerState::Sealed),
+        "u" | "U" => Ok(TapSignerState::Unused),
+        "e" | "E" => Ok(TapSignerState::Error),
+        "" => Err(Error::EmptyCardState),
+        unknown => Err(Error::UnknownCardState(
+            unknown.chars().next().expect("just checked"),
+        )),
+    }
+}
+
+fn parse_sats_card_state(state_str: &str) -> Result<SatsCardState> {
+    match state_str {
+        "s" | "S" => Ok(SatsCardState::Sealed),
+        "u" | "U" => Ok(SatsCardState::Unsealed),
+        "e" | "E" => Ok(SatsCardState::Error),
         "" => Err(Error::EmptyCardState),
         unknown => Err(Error::UnknownCardState(
             unknown.chars().next().expect("just checked"),
@@ -157,7 +179,7 @@ fn is_tap_signer(url_encoded: &str, params: &HashMap<&str, &str>) -> bool {
         return t == "1";
     }
 
-    params.get("t").map_or(false, |v| *v == "1")
+    params.get("t").is_some_and(|v| *v == "1")
 }
 
 // For uniffi
@@ -189,7 +211,7 @@ pub mod ffi {
                 Error::MissingField(field) => Self::MissingField(field),
                 Error::UnknownCardState(state) => Self::UnknownCardState(state.to_string()),
                 Error::EmptyCardState => Self::EmptyCardState,
-                Error::ParseSlotNumberError(error) => Self::ParseSlotNumberError(error.to_string()),
+                Error::UnableToParseSlot(error) => Self::ParseSlotNumberError(error.to_string()),
             }
         }
     }
@@ -212,7 +234,7 @@ mod tests {
             panic!("not a tap signer")
         };
 
-        assert_eq!(tap_signer.state, CardState::Unsealed);
+        assert_eq!(tap_signer.state, TapSignerState::Unused);
         assert_eq!(tap_signer.card_ident, "0000000000000000");
         assert_eq!(tap_signer.nonce, "0000000000000000");
         assert_eq!(
@@ -229,7 +251,7 @@ mod ffi_preview {
     pub fn tap_signer_preview_new(preview: bool) -> TapSigner {
         assert!(preview);
         TapSigner {
-                state: CardState::Unsealed,
+                state: TapSignerState::Unused,
                 card_ident: "0000000000000000".to_string(),
                 nonce: "0000000000000000".to_string(),
                 signature: "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000".to_string(),
