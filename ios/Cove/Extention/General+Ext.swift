@@ -138,3 +138,9 @@ extension NfcMessage: Equatable {
         nfcMessageIsEqual(lhs: lhs, rhs: rhs)
     }
 }
+
+extension TapCardReader: Equatable {
+    public static func == (lhs: TapCardReader, rhs: TapCardReader) -> Bool {
+        tapCardIsEqual(lhs: lhs, rhs: rhs)
+    }
+}

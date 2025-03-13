@@ -10,6 +10,8 @@ import Foundation
 
 private let logger = Log(id: "TapCardNFC")
 
+let nfcQueue = DispatchQueue(label: "com.yourapp.nfc")
+
 @Observable
 class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     private var tag: NFCISO7816Tag?
@@ -59,6 +61,10 @@ class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
                 session.invalidate(errorMessage: "Unsupported tag type.")
             case let .iso7816(iso7816Tag):
                 Log.debug("found tag iso7816")
+
+                let readingMessage = "Reading tag, please hold still"
+                session.alertMessage = readingMessage
+
                 self.tag = iso7816Tag
                 self.createReader(from: iso7816Tag, session: session)
             case .miFare:
@@ -80,6 +86,7 @@ class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             self.reader = reader
         } catch {
             logger.error("Error creating reader: \(error)")
+            session.invalidate(errorMessage: "error creating reader: \(error.localizedDescription)")
         }
     }
 
@@ -115,12 +122,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
     }
 
     func transmitApdu(commandApdu: Data) -> Data {
-        // Create the APDU command
-        guard let apdu = NFCISO7816APDU(data: Data(commandApdu)) else {
-            // Handle invalid APDU
-            logger.error("Invalid APDU")
-            return Data()
-        }
+        let dispatchGroup = DispatchGroup()
+        logger.debug("Transmitting APDU: \(commandApdu.count)")
 
         // We need to use a semaphore to make this synchronous
         let semaphore = DispatchSemaphore(value: 0)
@@ -129,25 +132,36 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
         var sw2: UInt8 = 0
         var commandError: Error?
 
-        // Send the command
-        tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
-            responseData = response
-            sw1 = sw1Value
-            sw2 = sw2Value
-            commandError = error
-            semaphore.signal()
+        dispatchGroup.enter()
+
+        nfcQueue.async {
+            guard let apdu = NFCISO7816APDU(data: commandApdu) else {
+                logger.error("Invalid APDU")
+                dispatchGroup.leave()
+                return
+            }
+
+            self.tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
+                logger.debug("got response for apdu: \(response), \(sw1Value), \(sw2Value), \(error)")
+                responseData = response
+                sw1 = sw1Value
+                sw2 = sw2Value
+                commandError = error
+                dispatchGroup.leave()
+            }
         }
 
-        // Wait for the response
-        _ = semaphore.wait(timeout: .now() + 5.0) // 5 second timeout
+        // Wait with timeout
+        if dispatchGroup.wait(timeout: .now() + 5.0) == .timedOut {
+            logger.error("NFC command timed out")
+            return Data()
+        }
 
         if let error = commandError {
-            // Handle error
             logger.error("APDU error: \(error)")
             return Data()
         }
 
-        // Combine response data with status words
         var fullResponse = responseData
         fullResponse.append(sw1)
         fullResponse.append(sw2)

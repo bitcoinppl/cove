@@ -1,14 +1,7 @@
-use std::fmt::Debug;
-
 use rust_cktap::CkTapCard;
 use rust_cktap::apdu::Error as ApduError;
-use rust_cktap::commands::{Authentication, CkTransport};
-
-// Define the callback interface that Swift will implement
-#[uniffi::export(callback_interface)]
-pub trait TapcardTransportProtocol: Send + Sync + std::fmt::Debug + 'static {
-    fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, TransportError>;
-}
+use rust_cktap::commands::{Authentication as _, CkTransport};
+use std::fmt::Debug;
 
 // Define error types
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -29,12 +22,20 @@ pub enum TransportError {
     UnknownCardType(String),
 }
 
+// Define the callback interface that Swift will implement
+#[uniffi::export(callback_interface)]
+#[async_trait::async_trait]
+pub trait TapcardTransportProtocol: Send + Sync + std::fmt::Debug + 'static {
+    async fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, TransportError>;
+}
+
 // Implement the CkTransport trait for our callback-based transport
+#[derive(Debug)]
 pub struct TapcardTransport(Box<dyn TapcardTransportProtocol>);
 
 impl CkTransport for TapcardTransport {
-    fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, ApduError> {
-        let response_bytes = self.0.transmit_apdu(command_apdu)?;
+    async fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, ApduError> {
+        let response_bytes = self.0.transmit_apdu(command_apdu).await?;
         Ok(response_bytes)
     }
 }
@@ -74,6 +75,27 @@ impl From<TransportError> for ApduError {
 #[derive(Debug, uniffi::Object)]
 pub struct TapCardReader(CkTapCard<TapcardTransport>);
 
+#[uniffi::export]
+impl TapCardReader {
+    #[uniffi::constructor(name = "new")]
+    pub async fn new(transport: Box<dyn TapcardTransportProtocol>) -> Result<Self, TransportError> {
+        let transport = TapcardTransport(transport);
+        let card = transport.to_cktap().await.map_err(TransportError::from)?;
+        Ok(Self(card))
+    }
+}
+
+mod ffi {
+    use std::sync::Arc;
+
+    use super::TapCardReader;
+
+    #[uniffi::export]
+    pub fn tap_card_is_equal(lhs: Arc<TapCardReader>, rhs: Arc<TapCardReader>) -> bool {
+        lhs == rhs
+    }
+}
+
 impl Eq for TapCardReader {}
 
 impl PartialEq for TapCardReader {
@@ -101,18 +123,5 @@ impl PartialEq for TapCardReader {
             (CkTapCard::SatsChip(_), CkTapCard::SatsChip(_)) => unimplemented!(),
             (_, _) => false,
         }
-    }
-}
-
-#[uniffi::export]
-impl TapCardReader {
-    #[uniffi::constructor(name = "new")]
-    pub fn new(transport: Box<dyn TapcardTransportProtocol>) -> Result<Self, TransportError> {
-        let transport = TapcardTransport(transport);
-
-        // Convert to CkTapCard
-        let card = transport.to_cktap().map_err(TransportError::from)?;
-
-        Ok(TapCardReader(card))
     }
 }

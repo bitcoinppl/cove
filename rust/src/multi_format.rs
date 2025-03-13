@@ -125,7 +125,7 @@ impl MultiFormat {
 
             match tap_card {
                 tap_card::TapCard::TapSigner(card) => {
-                    return Ok(card.into());
+                    return Ok(MultiFormat::from(card));
                 }
 
                 tap_card::TapCard::SatsCard(_card) => {
@@ -188,10 +188,10 @@ pub struct Bip329Labels(pub bip329::Labels);
 
 impl From<TapSigner> for MultiFormat {
     fn from(tap_signer: TapSigner) -> Self {
-        if tap_signer.state == tap_card::CardState::Unsealed {
-            Self::TapSigner(tap_signer)
-        } else {
+        if tap_signer.state == tap_card::TapSignerState::Unused {
             Self::TapSignerInit(tap_signer)
+        } else {
+            Self::TapSigner(tap_signer)
         }
     }
 }
