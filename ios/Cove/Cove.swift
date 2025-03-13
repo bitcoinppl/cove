@@ -9791,6 +9791,150 @@ public func FfiConverterTypeRustPendingWalletManager_lower(_ value: RustPendingW
 
 
 
+public protocol RustTapSignerManagerProtocol: AnyObject, Sendable {
+    
+    /**
+     * Action from the frontend to change the state of the view model
+     */
+    func dispatch(action: TapSignerManagerAction) 
+    
+    func listenForUpdates(reconciler: TapSignerManagerReconciler) 
+    
+}
+open class RustTapSignerManager: RustTapSignerManagerProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_rusttapsignermanager(self.pointer, $0) }
+    }
+public convenience init() {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_rusttapsignermanager_new($0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rusttapsignermanager(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Action from the frontend to change the state of the view model
+     */
+open func dispatch(action: TapSignerManagerAction)  {try! rustCall() {
+    uniffi_cove_fn_method_rusttapsignermanager_dispatch(self.uniffiClonePointer(),
+        FfiConverterTypeTapSignerManagerAction_lower(action),$0
+    )
+}
+}
+    
+open func listenForUpdates(reconciler: TapSignerManagerReconciler)  {try! rustCall() {
+    uniffi_cove_fn_method_rusttapsignermanager_listen_for_updates(self.uniffiClonePointer(),
+        FfiConverterCallbackInterfaceTapSignerManagerReconciler_lower(reconciler),$0
+    )
+}
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustTapSignerManager: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = RustTapSignerManager
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> RustTapSignerManager {
+        return RustTapSignerManager(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: RustTapSignerManager) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustTapSignerManager {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: RustTapSignerManager, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustTapSignerManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> RustTapSignerManager {
+    return try FfiConverterTypeRustTapSignerManager.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustTapSignerManager_lower(_ value: RustTapSignerManager) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeRustTapSignerManager.lower(value)
+}
+
+
+
+
+
+
 public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     /**
@@ -14720,6 +14864,59 @@ public func FfiConverterTypeSplitOutput_lower(_ value: SplitOutput) -> RustBuffe
 }
 
 
+public struct TapSignerManagerState {
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init() {
+    }
+}
+
+#if compiler(>=6)
+extension TapSignerManagerState: Sendable {}
+#endif
+
+
+extension TapSignerManagerState: Equatable, Hashable {
+    public static func ==(lhs: TapSignerManagerState, rhs: TapSignerManagerState) -> Bool {
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerManagerState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerManagerState {
+        return
+            TapSignerManagerState()
+    }
+
+    public static func write(_ value: TapSignerManagerState, into buf: inout [UInt8]) {
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerManagerState_lift(_ buf: RustBuffer) throws -> TapSignerManagerState {
+    return try FfiConverterTypeTapSignerManagerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerManagerState_lower(_ value: TapSignerManagerState) -> RustBuffer {
+    return FfiConverterTypeTapSignerManagerState.lower(value)
+}
+
+
 public struct TextPayload {
     public var format: TextPayloadFormat
     public var language: String
@@ -19010,6 +19207,7 @@ public enum MultiFormat {
     )
     case bip329Labels(Bip329Labels
     )
+    case tapSignerInit
 }
 
 
@@ -19041,6 +19239,8 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         
         case 5: return .bip329Labels(try FfiConverterTypeBip329Labels.read(from: &buf)
         )
+        
+        case 6: return .tapSignerInit
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -19074,6 +19274,10 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
             FfiConverterTypeBip329Labels.write(v1, into: &buf)
             
+        
+        case .tapSignerInit:
+            writeInt(&buf, Int32(6))
+        
         }
     }
 }
@@ -21650,6 +21854,214 @@ public func FfiConverterTypeStringOrData_lower(_ value: StringOrData) -> RustBuf
 
 
 extension StringOrData: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TapSignerManagerAction {
+    
+    case noOp
+}
+
+
+#if compiler(>=6)
+extension TapSignerManagerAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerManagerAction: FfiConverterRustBuffer {
+    typealias SwiftType = TapSignerManagerAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerManagerAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .noOp
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TapSignerManagerAction, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .noOp:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerManagerAction_lift(_ buf: RustBuffer) throws -> TapSignerManagerAction {
+    return try FfiConverterTypeTapSignerManagerAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerManagerAction_lower(_ value: TapSignerManagerAction) -> RustBuffer {
+    return FfiConverterTypeTapSignerManagerAction.lower(value)
+}
+
+
+extension TapSignerManagerAction: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TapSignerManagerReconcileMessage {
+    
+    case noOp
+}
+
+
+#if compiler(>=6)
+extension TapSignerManagerReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = TapSignerManagerReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerManagerReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .noOp
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TapSignerManagerReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .noOp:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerManagerReconcileMessage_lift(_ buf: RustBuffer) throws -> TapSignerManagerReconcileMessage {
+    return try FfiConverterTypeTapSignerManagerReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerManagerReconcileMessage_lower(_ value: TapSignerManagerReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeTapSignerManagerReconcileMessage.lower(value)
+}
+
+
+extension TapSignerManagerReconcileMessage: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum TapSignerRoute {
+    
+    case initSelect
+    case initAdvanced
+    case startingPin
+    case newPin
+    case confirmPin
+}
+
+
+#if compiler(>=6)
+extension TapSignerRoute: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
+    typealias SwiftType = TapSignerRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .initSelect
+        
+        case 2: return .initAdvanced
+        
+        case 3: return .startingPin
+        
+        case 4: return .newPin
+        
+        case 5: return .confirmPin
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TapSignerRoute, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .initSelect:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .initAdvanced:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .startingPin:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .newPin:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .confirmPin:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerRoute_lift(_ buf: RustBuffer) throws -> TapSignerRoute {
+    return try FfiConverterTypeTapSignerRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerRoute_lower(_ value: TapSignerRoute) -> RustBuffer {
+    return FfiConverterTypeTapSignerRoute.lower(value)
+}
+
+
+extension TapSignerRoute: Equatable, Hashable {}
 
 
 
@@ -25032,6 +25444,125 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 
 
 
+public protocol TapSignerManagerReconciler: AnyObject, Sendable {
+    
+    /**
+     * Tells the frontend to reconcile the manager changes
+     */
+    func reconcile(message: TapSignerManagerReconcileMessage) 
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceTapSignerManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceTapSignerManagerReconciler] = [UniffiVTableCallbackInterfaceTapSignerManagerReconciler(
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceTapSignerManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeTapSignerManagerReconcileMessage_lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterCallbackInterfaceTapSignerManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface TapSignerManagerReconciler: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitTapSignerManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_tapsignermanagerreconciler(UniffiCallbackInterfaceTapSignerManagerReconciler.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceTapSignerManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<TapSignerManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceTapSignerManagerReconciler : FfiConverter {
+    typealias SwiftType = TapSignerManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceTapSignerManagerReconciler_lift(_ handle: UInt64) throws -> TapSignerManagerReconciler {
+    return try FfiConverterCallbackInterfaceTapSignerManagerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceTapSignerManagerReconciler_lower(_ v: TapSignerManagerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceTapSignerManagerReconciler.lower(v)
+}
+
+
+
+
 public protocol WalletManagerReconciler: AnyObject, Sendable {
     
     /**
@@ -27555,6 +28086,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 15246) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rusttapsignermanager_dispatch() != 44454) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rusttapsignermanager_listen_for_updates() != 25910) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 57955) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27999,6 +28536,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustpendingwalletmanager_new() != 12185) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rusttapsignermanager_new() != 7613) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_new() != 53982) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28074,6 +28614,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 39280) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_tapsignermanagerreconciler_reconcile() != 49404) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 1495) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28085,6 +28628,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitImportWalletManagerReconciler()
     uniffiCallbackInitKeychainAccess()
     uniffiCallbackInitPendingWalletManagerReconciler()
+    uniffiCallbackInitTapSignerManagerReconciler()
     uniffiCallbackInitWalletManagerReconciler()
     return InitializationResult.ok
 }()

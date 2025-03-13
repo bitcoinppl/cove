@@ -102,6 +102,16 @@ pub enum SendRoute {
     },
 }
 
+#[derive(Debug, Default, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum TapSignerRoute {
+    #[default]
+    InitSelect,
+    InitAdvanced,
+    StartingPin,
+    NewPin,
+    ConfirmPin,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct Router {
     pub app: Arc<FfiApp>,
