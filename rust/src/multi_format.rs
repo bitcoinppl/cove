@@ -1,3 +1,5 @@
+pub mod tap_card;
+
 use std::sync::Arc;
 
 use tracing::{debug, warn};
@@ -23,6 +25,7 @@ pub enum MultiFormat {
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
+    TapSigner(tap_card::TapSigner),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -40,6 +43,9 @@ pub enum MultiFormatError {
 
     #[error("UR format not supported, please use a plain QR or a BBQr")]
     UrFormatNotSupported,
+
+    #[error("Invalid TapSigner {0}")]
+    InvalidTapSigner(tap_card::ffi::TapCardParseError),
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
@@ -107,6 +113,21 @@ impl MultiFormat {
         // try and parse bip329 labels
         if let Ok(labels) = bip329::Labels::try_from_str(string) {
             return Ok(Self::Bip329Labels(Arc::new(labels.into())));
+        }
+
+        if string.contains("tapsigner.com/start") {
+            let tap_card = tap_card::TapCard::parse(string)
+                .map_err(|e| MultiFormatError::InvalidTapSigner(e.into()))?;
+
+            match tap_card {
+                tap_card::TapCard::TapSigner(card) => {
+                    return Ok(Self::TapSigner(card));
+                }
+
+                tap_card::TapCard::SatsCard(_card) => {
+                    unreachable!("tap card should not be a sats card");
+                }
+            }
         }
 
         warn!("could not parse string as MultiFormat: {string}");
