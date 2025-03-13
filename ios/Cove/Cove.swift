@@ -10988,6 +10988,127 @@ public func FfiConverterTypeSentAndReceived_lower(_ value: SentAndReceived) -> U
 
 
 
+public protocol TapCardReaderProtocol: AnyObject, Sendable {
+    
+}
+open class TapCardReader: TapCardReaderProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_tapcardreader(self.pointer, $0) }
+    }
+public convenience init(transport: TapcardTransportProtocol)throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeTransportError_lift) {
+    uniffi_cove_fn_constructor_tapcardreader_new(
+        FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(transport),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_tapcardreader(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapCardReader: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = TapCardReader
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> TapCardReader {
+        return TapCardReader(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: TapCardReader) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapCardReader {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: TapCardReader, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapCardReader_lift(_ pointer: UnsafeMutableRawPointer) throws -> TapCardReader {
+    return try FfiConverterTypeTapCardReader.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapCardReader_lower(_ value: TapCardReader) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeTapCardReader.lower(value)
+}
+
+
+
+
+
+
 public protocol TransactionDetailsProtocol: AnyObject, Sendable {
     
     func address()  -> Address
@@ -19359,7 +19480,15 @@ public enum MultiFormat {
     )
     case bip329Labels(Bip329Labels
     )
+    /**
+     * TAPSIGNER has not been initialized yet
+     */
     case tapSigner(TapSigner
+    )
+    /**
+     * TAPSIGNER has not been initialized yet
+     */
+    case tapSignerInit(TapSigner
     )
 }
 
@@ -19394,6 +19523,9 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         )
         
         case 6: return .tapSigner(try FfiConverterTypeTapSigner.read(from: &buf)
+        )
+        
+        case 7: return .tapSignerInit(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -19431,6 +19563,11 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         
         case let .tapSigner(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
+        
+        case let .tapSignerInit(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
         }
@@ -22209,11 +22346,16 @@ extension TapCardParseError: Foundation.LocalizedError {
 
 public enum TapSignerRoute {
     
-    case initSelect
-    case initAdvanced
-    case startingPin
-    case newPin
-    case confirmPin
+    case initSelect(TapSigner
+    )
+    case initAdvanced(TapSigner
+    )
+    case startingPin(TapSigner
+    )
+    case newPin(TapSigner
+    )
+    case confirmPin(TapSigner
+    )
 }
 
 
@@ -22231,15 +22373,20 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .initSelect
+        case 1: return .initSelect(try FfiConverterTypeTapSigner.read(from: &buf)
+        )
         
-        case 2: return .initAdvanced
+        case 2: return .initAdvanced(try FfiConverterTypeTapSigner.read(from: &buf)
+        )
         
-        case 3: return .startingPin
+        case 3: return .startingPin(try FfiConverterTypeTapSigner.read(from: &buf)
+        )
         
-        case 4: return .newPin
+        case 4: return .newPin(try FfiConverterTypeTapSigner.read(from: &buf)
+        )
         
-        case 5: return .confirmPin
+        case 5: return .confirmPin(try FfiConverterTypeTapSigner.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22249,25 +22396,30 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         switch value {
         
         
-        case .initSelect:
+        case let .initSelect(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
         
-        
-        case .initAdvanced:
+        case let .initAdvanced(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
         
-        
-        case .startingPin:
+        case let .startingPin(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
         
-        
-        case .newPin:
+        case let .newPin(v1):
             writeInt(&buf, Int32(4))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
         
-        
-        case .confirmPin:
+        case let .confirmPin(v1):
             writeInt(&buf, Int32(5))
-        
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
         }
     }
 }
@@ -22675,6 +22827,121 @@ public func FfiConverterTypeTransactionState_lower(_ value: TransactionState) ->
 
 extension TransactionState: Equatable, Hashable {}
 
+
+
+
+public enum TransportError: Swift.Error {
+
+    
+    
+    case CiborDe(String
+    )
+    case CiborValue(String
+    )
+    case CkTap(error: String, code: UInt64
+    )
+    case IncorrectSignature(String
+    )
+    case UnknownCardType(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
+    typealias SwiftType = TransportError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransportError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .CiborDe(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .CiborValue(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .CkTap(
+            error: try FfiConverterString.read(from: &buf), 
+            code: try FfiConverterUInt64.read(from: &buf)
+            )
+        case 4: return .IncorrectSignature(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 5: return .UnknownCardType(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TransportError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .CiborDe(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .CiborValue(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .CkTap(error,code):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(error, into: &buf)
+            FfiConverterUInt64.write(code, into: &buf)
+            
+        
+        case let .IncorrectSignature(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .UnknownCardType(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransportError_lift(_ buf: RustBuffer) throws -> TransportError {
+    return try FfiConverterTypeTransportError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransportError_lower(_ value: TransportError) -> RustBuffer {
+    return FfiConverterTypeTransportError.lower(value)
+}
+
+
+extension TransportError: Equatable, Hashable {}
+
+
+
+extension TransportError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
 
 
 
@@ -25671,6 +25938,123 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 
 
 
+public protocol TapcardTransportProtocol: AnyObject, Sendable {
+    
+    func transmitApdu(commandApdu: Data) throws  -> Data
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceTapcardTransportProtocol {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceTapcardTransportProtocol] = [UniffiVTableCallbackInterfaceTapcardTransportProtocol(
+        transmitApdu: { (
+            uniffiHandle: UInt64,
+            commandApdu: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Data in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.transmitApdu(
+                     commandApdu: try FfiConverterData.lift(commandApdu)
+                )
+            }
+
+            
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeTransportError_lower
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface TapcardTransportProtocol: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitTapcardTransportProtocol() {
+    uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(UniffiCallbackInterfaceTapcardTransportProtocol.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceTapcardTransportProtocol {
+    fileprivate static let handleMap = UniffiHandleMap<TapcardTransportProtocol>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceTapcardTransportProtocol : FfiConverter {
+    typealias SwiftType = TapcardTransportProtocol
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceTapcardTransportProtocol_lift(_ handle: UInt64) throws -> TapcardTransportProtocol {
+    return try FfiConverterCallbackInterfaceTapcardTransportProtocol.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(_ v: TapcardTransportProtocol) -> UInt64 {
+    return FfiConverterCallbackInterfaceTapcardTransportProtocol.lower(v)
+}
+
+
+
+
 public protocol WalletManagerReconciler: AnyObject, Sendable {
     
     /**
@@ -27224,6 +27608,13 @@ public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  ->
     )
 })
 }
+public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
+    return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_preview_new(
+        FfiConverterBool.lower(preview),$0
+    )
+})
+}
 public func transactionPreviewConfirmedNew() -> Transaction  {
     return try!  FfiConverterTypeTransaction_lift(try! rustCall() {
     uniffi_cove_fn_func_transaction_preview_confirmed_new($0
@@ -27442,6 +27833,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 43706) {
@@ -28656,6 +29050,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_seedqr_new_from_str() != 6520) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_tapcardreader_new() != 42565) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_received() != 6979) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28713,6 +29110,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 39280) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 33482) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 1495) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -28724,6 +29124,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitImportWalletManagerReconciler()
     uniffiCallbackInitKeychainAccess()
     uniffiCallbackInitPendingWalletManagerReconciler()
+    uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     return InitializationResult.ok
 }()

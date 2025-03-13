@@ -2,6 +2,7 @@ pub mod tap_card;
 
 use std::sync::Arc;
 
+use tap_card::TapSigner;
 use tracing::{debug, warn};
 
 use crate::{
@@ -25,7 +26,10 @@ pub enum MultiFormat {
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
-    TapSigner(tap_card::TapSigner),
+    /// TAPSIGNER has not been initialized yet
+    TapSigner(TapSigner),
+    /// TAPSIGNER has not been initialized yet
+    TapSignerInit(TapSigner),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -121,7 +125,7 @@ impl MultiFormat {
 
             match tap_card {
                 tap_card::TapCard::TapSigner(card) => {
-                    return Ok(Self::TapSigner(card));
+                    return Ok(card.into());
                 }
 
                 tap_card::TapCard::SatsCard(_card) => {
@@ -181,3 +185,13 @@ fn display_multi_format_error(error: MultiFormatError) -> String {
 )]
 
 pub struct Bip329Labels(pub bip329::Labels);
+
+impl From<TapSigner> for MultiFormat {
+    fn from(tap_signer: TapSigner) -> Self {
+        if tap_signer.state == tap_card::CardState::Unsealed {
+            Self::TapSigner(tap_signer)
+        } else {
+            Self::TapSignerInit(tap_signer)
+        }
+    }
+}

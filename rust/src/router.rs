@@ -4,6 +4,7 @@ use crate::{
     app::FfiApp,
     database::Database,
     mnemonic::NumberOfBip39Words,
+    multi_format::tap_card::TapSigner,
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
 };
@@ -102,14 +103,13 @@ pub enum SendRoute {
     },
 }
 
-#[derive(Debug, Default, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum TapSignerRoute {
-    #[default]
-    InitSelect,
-    InitAdvanced,
-    StartingPin,
-    NewPin,
-    ConfirmPin,
+    InitSelect(TapSigner),
+    InitAdvanced(TapSigner),
+    StartingPin(TapSigner),
+    NewPin(TapSigner),
+    ConfirmPin(TapSigner),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]

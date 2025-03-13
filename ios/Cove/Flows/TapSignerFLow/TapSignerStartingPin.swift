@@ -11,6 +11,11 @@ struct TapSignerStartingPin: View {
     @Environment(AppManager.self) private var app
     @Environment(AuthManager.self) private var auth
 
+    let tapSigner: TapSigner
+
+    @State var nfc: TapCardNFC?
+    @State var reader: TapCardReader?
+
     @State private var pin = ""
     @State private var pinConfirm = ""
 
@@ -46,7 +51,7 @@ struct TapSignerStartingPin: View {
             }
 
             Button {
-//                app.dispatch(action: .tapSignerStartingPin(pin: pin))
+                nfc?.scan()
             } label: {
                 Text("Continue")
                     .font(.title)
@@ -61,11 +66,17 @@ struct TapSignerStartingPin: View {
         .padding(.horizontal, 20)
         .padding(.top, 20)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            nfc = TapCardNFC(tapcard: .tapSigner(tapSigner))
+        }
+        .onChange(of: nfc?.reader) { reader in
+            Log.warn("GOT READER: \(reader)")
+        }
     }
 }
 
 #Preview {
-    TapSignerContainer(route: .startingPin)
+    TapSignerContainer(route: .startingPin(tapSignerPreviewNew(preview: true)))
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
 }

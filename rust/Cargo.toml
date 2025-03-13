@@ -41,6 +41,9 @@ bip329 = { version = "0.4.0" }
 # bitcoin
 bitcoin = { version = "0.32", features = ["serde"] }
 
+# tapsigner / satscard
+rust-cktap = { path = "../../rust-cktap/lib/" }
+
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }
 act-zero = { version = "0.4.0", features = ["default-tokio"] }
