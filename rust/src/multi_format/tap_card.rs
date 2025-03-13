@@ -221,3 +221,18 @@ mod tests {
         );
     }
 }
+
+mod ffi_preview {
+    use super::*;
+
+    #[uniffi::export]
+    pub fn tap_signer_preview_new(preview: bool) -> TapSigner {
+        assert!(preview);
+        TapSigner {
+                state: CardState::Unsealed,
+                card_ident: "0000000000000000".to_string(),
+                nonce: "0000000000000000".to_string(),
+                signature: "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            }
+    }
+}

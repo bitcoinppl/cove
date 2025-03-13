@@ -14,14 +14,14 @@ struct TapSignerContainer: View {
     var body: some View {
         Group {
             switch route {
-            case .initSelect:
+            case let .initSelect(t):
                 // TapSignerInitSelect()
-                TapSignerStartingPin()
+                TapSignerStartingPin(tapSigner: t)
             case .initAdvanced:
                 // TapSignerInitAdvanced()
                 EmptyView()
-            case .startingPin:
-                TapSignerStartingPin()
+            case let .startingPin(t):
+                TapSignerStartingPin(tapSigner: t)
             case .newPin:
                 // TapSignerNewPin()
                 EmptyView()
@@ -49,5 +49,5 @@ struct TapSignerContainer: View {
 }
 
 #Preview {
-    TapSignerContainer(route: .startingPin)
+    TapSignerContainer(route: .startingPin(tapSignerPreviewNew(preview: true)))
 }
