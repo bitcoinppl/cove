@@ -11030,13 +11030,21 @@ open class TapCardReader: TapCardReaderProtocol, @unchecked Sendable {
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_cove_fn_clone_tapcardreader(self.pointer, $0) }
     }
-public convenience init(transport: TapcardTransportProtocol)throws  {
+public convenience init(transport: TapcardTransportProtocol)async throws  {
     let pointer =
-        try rustCallWithError(FfiConverterTypeTransportError_lift) {
-    uniffi_cove_fn_constructor_tapcardreader_new(
-        FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(transport),$0
-    )
-}
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_constructor_tapcardreader_new(FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(transport)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeTapCardReader_lift,
+            errorHandler: FfiConverterTypeTransportError_lift
+        )
+        
+        .uniffiClonePointer()
     self.init(unsafeFromRawPointer: pointer)
 }
 
@@ -26014,7 +26022,7 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 
 public protocol TapcardTransportProtocol: AnyObject, Sendable {
     
-    func transmitApdu(commandApdu: Data) throws  -> Data
+    func transmitApdu(commandApdu: Data) async throws  -> Data
     
 }
 
@@ -26031,27 +26039,45 @@ fileprivate struct UniffiCallbackInterfaceTapcardTransportProtocol {
         transmitApdu: { (
             uniffiHandle: UInt64,
             commandApdu: RustBuffer,
-            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+            uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
+            uniffiCallbackData: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<UniffiForeignFuture>
         ) in
             let makeCall = {
-                () throws -> Data in
+                () async throws -> Data in
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return try uniffiObj.transmitApdu(
+                return try await uniffiObj.transmitApdu(
                      commandApdu: try FfiConverterData.lift(commandApdu)
                 )
             }
 
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterData.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
+            let uniffiHandleSuccess = { (returnValue: Data) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: FfiConverterData.lower(returnValue),
+                        callStatus: RustCallStatus()
+                    )
+                )
+            }
+            let uniffiHandleError = { (statusCode, errorBuf) in
+                uniffiFutureCallback(
+                    uniffiCallbackData,
+                    UniffiForeignFutureStructRustBuffer(
+                        returnValue: RustBuffer.empty(),
+                        callStatus: RustCallStatus(code: statusCode, errorBuf: errorBuf)
+                    )
+                )
+            }
+            let uniffiForeignFuture = uniffiTraitInterfaceCallAsyncWithError(
                 makeCall: makeCall,
-                writeReturn: writeReturn,
+                handleSuccess: uniffiHandleSuccess,
+                handleError: uniffiHandleError,
                 lowerError: FfiConverterTypeTransportError_lower
             )
+            uniffiOutReturn.pointee = uniffiForeignFuture
         },
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             let result = try? FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.remove(handle: uniffiHandle)
@@ -27424,6 +27450,72 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
     } else {
         print("uniffiFutureContinuationCallback invalid handle")
     }
+}
+private func uniffiTraitInterfaceCallAsync<T>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> ()
+) -> UniffiForeignFuture {
+    let task = Task {
+        do {
+            handleSuccess(try await makeCall())
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+        }
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    return UniffiForeignFuture(handle: handle, free: uniffiForeignFutureFree)
+
+}
+
+private func uniffiTraitInterfaceCallAsyncWithError<T, E>(
+    makeCall: @escaping () async throws -> T,
+    handleSuccess: @escaping (T) -> (),
+    handleError: @escaping (Int8, RustBuffer) -> (),
+    lowerError: @escaping (E) -> RustBuffer
+) -> UniffiForeignFuture {
+    let task = Task {
+        do {
+            handleSuccess(try await makeCall())
+        } catch let error as E {
+            handleError(CALL_ERROR, lowerError(error))
+        } catch {
+            handleError(CALL_UNEXPECTED_ERROR, FfiConverterString.lower(String(describing: error)))
+        }
+    }
+    let handle = UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.insert(obj: task)
+    return UniffiForeignFuture(handle: handle, free: uniffiForeignFutureFree)
+}
+
+// Borrow the callback handle map implementation to store foreign future handles
+// TODO: consolidate the handle-map code (https://github.com/mozilla/uniffi-rs/pull/1823)
+fileprivate let UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = UniffiHandleMap<UniffiForeignFutureTask>()
+
+// Protocol for tasks that handle foreign futures.
+//
+// Defining a protocol allows all tasks to be stored in the same handle map.  This can't be done
+// with the task object itself, since has generic parameters.
+fileprivate protocol UniffiForeignFutureTask {
+    func cancel()
+}
+
+extension Task: UniffiForeignFutureTask {}
+
+private func uniffiForeignFutureFree(handle: UInt64) {
+    do {
+        let task = try UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.remove(handle: handle)
+        // Set the cancellation flag on the task.  If it's still running, the code can check the
+        // cancellation flag or call `Task.checkCancellation()`.  If the task has completed, this is
+        // a no-op.
+        task.cancel()
+    } catch {
+        print("uniffiForeignFutureFree: handle missing from handlemap")
+    }
+}
+
+// For testing
+public func uniffiForeignFutureHandleCountCove() -> Int {
+    UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
 public func addressIsEqual(lhs: Address, rhs: Address) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
@@ -29135,7 +29227,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_seedqr_new_from_str() != 6520) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_tapcardreader_new() != 42565) {
+    if (uniffi_cove_checksum_constructor_tapcardreader_new() != 31864) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_transactiondetails_preview_confirmed_received() != 6979) {
@@ -29195,7 +29287,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 39280) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 33482) {
+    if (uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 4530) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 1495) {
