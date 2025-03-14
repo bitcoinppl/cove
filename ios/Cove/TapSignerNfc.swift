@@ -10,8 +10,6 @@ import Foundation
 
 private let logger = Log(id: "TapCardNFC")
 
-let nfcQueue = DispatchQueue(label: "com.yourapp.nfc")
-
 @Observable
 class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     private var tag: NFCISO7816Tag?
@@ -66,7 +64,9 @@ class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
                 session.alertMessage = readingMessage
 
                 self.tag = iso7816Tag
-                self.createReader(from: iso7816Tag, session: session)
+                Task {
+                    await self.createReader(from: iso7816Tag, session: session)
+                }
             case .miFare:
                 logger.error("found tag miFare")
                 session.invalidate(errorMessage: "Unsupported tag type.")
@@ -80,10 +80,12 @@ class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         }
     }
 
-    private func createReader(from tag: NFCISO7816Tag, session: NFCTagReaderSession) {
+    @MainActor
+    private func createReader(from tag: NFCISO7816Tag, session: NFCTagReaderSession) async {
         do {
-            let reader = try TapCardReader(transport: TapCardTransport(session: session, tag: tag))
+            let reader = try await TapCardReader(transport: TapCardTransport(session: session, tag: tag))
             self.reader = reader
+            session.invalidate()
         } catch {
             logger.error("Error creating reader: \(error)")
             session.invalidate(errorMessage: "error creating reader: \(error.localizedDescription)")
@@ -121,51 +123,30 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
         self.tag = tag
     }
 
-    func transmitApdu(commandApdu: Data) -> Data {
-        let dispatchGroup = DispatchGroup()
+    func transmitApdu(commandApdu: Data) async throws -> Data {
         logger.debug("Transmitting APDU: \(commandApdu.count)")
 
-        // We need to use a semaphore to make this synchronous
-        let semaphore = DispatchSemaphore(value: 0)
-        var responseData = Data()
-        var sw1: UInt8 = 0
-        var sw2: UInt8 = 0
-        var commandError: Error?
+        guard let apdu = NFCISO7816APDU(data: commandApdu) else {
+            logger.error("Invalid APDU")
+            return Data()
+        }
 
-        dispatchGroup.enter()
-
-        nfcQueue.async {
-            guard let apdu = NFCISO7816APDU(data: commandApdu) else {
-                logger.error("Invalid APDU")
-                dispatchGroup.leave()
-                return
-            }
-
-            self.tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
+        return try await withCheckedThrowingContinuation { continuation in
+            tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
                 logger.debug("got response for apdu: \(response), \(sw1Value), \(sw2Value), \(error)")
-                responseData = response
-                sw1 = sw1Value
-                sw2 = sw2Value
-                commandError = error
-                dispatchGroup.leave()
+
+                if let error {
+                    logger.error("APDU error: \(error)")
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                var fullResponse = response
+                fullResponse.append(sw1Value)
+                fullResponse.append(sw2Value)
+
+                continuation.resume(returning: fullResponse)
             }
         }
-
-        // Wait with timeout
-        if dispatchGroup.wait(timeout: .now() + 5.0) == .timedOut {
-            logger.error("NFC command timed out")
-            return Data()
-        }
-
-        if let error = commandError {
-            logger.error("APDU error: \(error)")
-            return Data()
-        }
-
-        var fullResponse = responseData
-        fullResponse.append(sw1)
-        fullResponse.append(sw2)
-
-        return fullResponse
     }
 }
