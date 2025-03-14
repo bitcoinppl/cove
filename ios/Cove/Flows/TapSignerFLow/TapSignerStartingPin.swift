@@ -16,39 +16,75 @@ struct TapSignerStartingPin: View {
     @State var nfc: TapCardNFC?
     @State var reader: TapCardReader?
 
-    @State private var pin = ""
-    @State private var pinConfirm = ""
+    @State private var startingPin = ""
+    @State private var newPin = ""
+    @State private var confirmPin = ""
+
+    private var pinsMatch: Bool {
+        !newPin.isEmpty && newPin == confirmPin
+    }
 
     var body: some View {
         VStack {
-            Spacer()
-
-            Text("TapSigner")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-
-            Spacer()
-
             VStack {
-                Text("Starting PIN")
+                Text("TapSigner Setup")
                     .font(.title)
                     .fontWeight(.bold)
 
-                Text("Please enter your PIN")
+                Text("Please enter your PINs")
                     .font(.body)
             }
             .padding(.horizontal, 20)
 
-            HStack {
-                TextField("PIN", text: $pin)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(.horizontal, 10)
-                    .frame(height: 50)
-                    .background(Color.white)
-                    .cornerRadius(10)
+            Spacer()
 
-                Spacer()
+            VStack(spacing: 15) {
+                VStack(alignment: .leading) {
+                    Text("Starting PIN")
+                        .font(.subheadline)
+                        .padding(.leading, 5)
+
+                    TextField("Starting PIN", text: $startingPin)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.horizontal, 10)
+                        .frame(height: 50)
+                        .background(Color.white)
+                        .cornerRadius(10)
+                }
+
+                VStack(alignment: .leading) {
+                    Text("New PIN")
+                        .font(.subheadline)
+                        .padding(.leading, 5)
+
+                    TextField("New PIN", text: $newPin)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.horizontal, 10)
+                        .frame(height: 50)
+                        .background(Color.white)
+                        .cornerRadius(10)
+                }
+
+                VStack(alignment: .leading) {
+                    Text("Confirm New PIN")
+                        .font(.subheadline)
+                        .padding(.leading, 5)
+
+                    TextField("Confirm New PIN", text: $confirmPin)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.horizontal, 10)
+                        .frame(height: 50)
+                        .background(Color.white)
+                        .cornerRadius(10)
+                }
+
+                if !confirmPin.isEmpty, !pinsMatch {
+                    Text("PINs do not match")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
             }
+            .padding(.bottom, 20)
 
             Button {
                 nfc?.scan()
@@ -60,8 +96,9 @@ struct TapSignerStartingPin: View {
             }
             .padding(.horizontal, 20)
             .frame(height: 50)
-            .background(Color.blue)
+            .background(pinsMatch ? Color.blue : Color.gray)
             .cornerRadius(10)
+            .disabled(!pinsMatch)
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
@@ -70,7 +107,8 @@ struct TapSignerStartingPin: View {
             nfc = TapCardNFC(tapcard: .tapSigner(tapSigner))
         }
         .onChange(of: nfc?.reader) { reader in
-            Log.warn("GOT READER: \(reader)")
+            guard let reader else { return }
+            self.reader = reader
         }
     }
 }

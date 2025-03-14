@@ -10,8 +10,53 @@ import Foundation
 
 private let logger = Log(id: "TapCardNFC")
 
+private enum Cmd {
+    case initialPin(startingPin: String, newPin: String)
+}
+
+class TapSignerNFC {
+    private var nfc: TapCardNFC
+
+    init(tapcard: TapCard) {
+        self.nfc = TapCardNFC(tapcard: tapcard)
+    }
+
+    public func setInitialPin(_ startingPin: String, _ newPin: String) async throws -> TapSignerResponse {
+        // Create a continuation to bridge between async world and property changes
+        try await withCheckedThrowingContinuation { continuation in
+            // Set up observation tracking before starting the operation
+            Task {
+                withObservationTracking {
+                    // Access the properties to track them
+                    _ = nfc.tapSignerResponse
+                    _ = nfc.tapSignerError
+                } onChange: {
+                    // Re-register for changes
+                    Task {
+                        // Check if we got a response or error
+                        if let response = self.nfc.tapSignerResponse {
+                            continuation.resume(returning: response)
+                            return
+                        }
+
+                        if let error = self.nfc.tapSignerError {
+                            continuation.resume(throwing: error)
+                            return
+                        }
+                    }
+                }
+
+                // Start the NFC operation
+                nfc.cmd = Cmd.initialPin(startingPin: startingPin, newPin: newPin)
+                nfc.scan()
+            }
+        }
+    }
+}
+
 @Observable
-class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
+private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
+    // private
     private var tag: NFCISO7816Tag?
     private var session: NFCTagReaderSession?
     private var transport: TapCardTransport?
@@ -19,19 +64,35 @@ class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     // public
     public let tapcard: TapCard
     public var isScanning: Bool = false
-    public var reader: TapCardReader? = nil
+
+    public var tapSignerReader: TapSignerReader? = nil
+    public var tapSignerCmd: TapSignerCmd? = nil
+    public var tapSignerResponse: TapSignerResponse? = nil
+    public var tapSignerError: TapSignerReaderError? = nil
+
+    // public var satsCardReader: SatsCardReader? = nil
+    // public var satsCardCmd: SatsCardCmd? = nil
+
+    // cmd
+    var cmd: Cmd? = nil
 
     init(tapcard: TapCard) {
         self.tapcard = tapcard
 
-        self.reader = nil
+        self.tapSignerReader = nil
+        self.tapSignerCmd = nil
+
+        //  self.satsCardReader = nil
+        //  self.satsCardReader = nil
+
         self.tag = nil
         self.session = nil
         self.transport = nil
     }
 
     func scan() {
-        logger.info("started scanning")
+        guard let cmd else { return Log.error("cmd not set") }
+        logger.info("started scanning \(cmd)")
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
@@ -83,12 +144,27 @@ class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     @MainActor
     private func createReader(from tag: NFCISO7816Tag, session: NFCTagReaderSession) async {
         do {
-            let reader = try await TapCardReader(transport: TapCardTransport(session: session, tag: tag))
-            self.reader = reader
-            session.invalidate()
+            let transport = TapCardTransport(session: session, tag: tag)
+            switch tapcard {
+            case let .satsCard(satsCard):
+                    // TODO!()
+
+            case let .tapSigner(tapSigner):
+                let tapSignerReader = try await TapSignerReader(transport: transport, cmd: tapSignerCmd)
+                self.tapSignerReader = tapSignerReader
+
+                let response = try await tapSignerReader.run()
+                tapSignerResponse = response
+
+                session.invalidate()
+            }
+        } catch let error as TapSignerReaderError {
+            logger.error("TapSigner error: \(error)")
+            tapSignerError = error
+            session.invalidate(errorMessage: "TapSigner error: \(error.localizedDescription)")
         } catch {
             logger.error("Error creating reader: \(error)")
-            session.invalidate(errorMessage: "error creating reader: \(error.localizedDescription)")
+            session.invalidate(errorMessage: "Error creating reader: \(error.localizedDescription)")
         }
     }
 
@@ -133,11 +209,30 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
 
         return try await withCheckedThrowingContinuation { continuation in
             tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
-                logger.debug("got response for apdu: \(response), \(sw1Value), \(sw2Value), \(error)")
-
                 if let error {
                     logger.error("APDU error: \(error)")
                     continuation.resume(throwing: error)
+                    return
+                }
+
+                // Check for success (0x9000)
+                let statusWord = (Int(sw1Value) << 8) | Int(sw2Value)
+                if statusWord != 0x9000 {
+                    // Handle specific error codes
+                    var errorMessage = ""
+                    switch statusWord {
+                    case 0x6d00:
+                        errorMessage = "Instruction code not supported or invalid"
+                    default:
+                        errorMessage =
+                            if !response.isEmpty {
+                                "Card error: SW=\(String(format: "0x%04X", statusWord)), data: \(response.hexEncodedString())"
+                            } else {
+                                "Card error: SW=\(String(format: "0x%04X", statusWord))"
+                            }
+                    }
+                    logger.error(errorMessage)
+                    continuation.resume(throwing: TransportError.CkTap(error: errorMessage, code: UInt64(statusWord)))
                     return
                 }
 
