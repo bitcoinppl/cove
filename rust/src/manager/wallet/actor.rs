@@ -642,7 +642,7 @@ impl WalletActor {
 
         let node_client = self.node_client().await?.clone();
         let bdk = self.wallet.bdk.lock();
-        let scan_request = bdk.start_sync_with_revealed_spks().build();
+        let scan_request = self.wallet.gap_limit_sync_request();
 
         let graph = bdk.tx_graph().clone();
 

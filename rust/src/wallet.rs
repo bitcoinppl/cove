@@ -9,6 +9,7 @@ use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
     bdk_store::BdkStore,
+    consts::GAP_LIMIT,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     keys::{Descriptor, Descriptors},
@@ -19,6 +20,7 @@ use crate::{
 };
 use balance::Balance;
 use bdk_chain::rusqlite::Connection;
+use bdk_core::spk_client::SyncRequest;
 use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey};
 use bip39::Mnemonic;
 use eyre::Context as _;
@@ -523,7 +525,7 @@ impl Wallet {
     }
 
     pub fn get_next_address(&mut self) -> Result<AddressInfo, WalletError> {
-        const MAX_ADDRESSES: usize = 25;
+        const MAX_ADDRESSES: usize = (GAP_LIMIT - 5) as usize;
 
         let addresses: Vec<AddressInfo> = self
             .bdk
@@ -578,6 +580,45 @@ impl Wallet {
             .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
         Ok(())
+    }
+
+    pub fn gap_limit_sync_request(&self) -> SyncRequest<(KeychainKind, u32)> {
+        let bdk = self.bdk.lock();
+        let local_chain = bdk.local_chain();
+        let tip = local_chain.tip();
+
+        let last_used_index = bdk.spk_index().last_used_index(KeychainKind::External);
+        let next_unused_index = last_used_index
+            .map(|i| i + 1)
+            .unwrap_or_else(|| bdk.next_derivation_index(KeychainKind::External));
+
+        let gap_limit_max_index = next_unused_index + GAP_LIMIT as u32;
+
+        // take the index of the used address and then get the next 30 (gap limit) addresses
+        let next_gap_limit_addresses = (next_unused_index..gap_limit_max_index)
+            .map(|index| bdk.peek_address(KeychainKind::External, index))
+            .map(|address_info| {
+                (
+                    (KeychainKind::External, address_info.index),
+                    address_info.script_pubkey(),
+                )
+            });
+
+        // these are all the addresses that the user has revealed in the wallet
+        let revealed_spks = bdk.spk_index().revealed_spks(..);
+
+        let mut all_spks = revealed_spks
+            .chain(next_gap_limit_addresses)
+            .collect::<Vec<_>>();
+
+        // might be the same spks, so sort and dedup to remove duplicates
+        all_spks.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        all_spks.dedup_by(|a, b| a.0 == b.0);
+
+        SyncRequest::builder()
+            .chain_tip(tip)
+            .spks_with_indexes(all_spks)
+            .build()
     }
 }
 
