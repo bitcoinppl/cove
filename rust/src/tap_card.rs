@@ -1,6 +1,6 @@
-use rust_cktap::CkTapCard;
-use rust_cktap::apdu::Error as ApduError;
-use rust_cktap::commands::{Authentication as _, CkTransport};
+pub mod tap_signer_reader;
+
+use rust_cktap::{apdu::Error as ApduError, commands::CkTransport};
 use std::fmt::Debug;
 
 // Define error types
@@ -67,61 +67,6 @@ impl From<TransportError> for ApduError {
             },
             TransportError::IncorrectSignature(msg) => ApduError::IncorrectSignature(msg),
             TransportError::UnknownCardType(msg) => ApduError::UnknownCardType(msg),
-        }
-    }
-}
-
-// Main interface exposed to Swift
-#[derive(Debug, uniffi::Object)]
-pub struct TapCardReader(CkTapCard<TapcardTransport>);
-
-#[uniffi::export]
-impl TapCardReader {
-    #[uniffi::constructor(name = "new")]
-    pub async fn new(transport: Box<dyn TapcardTransportProtocol>) -> Result<Self, TransportError> {
-        let transport = TapcardTransport(transport);
-        let card = transport.to_cktap().await.map_err(TransportError::from)?;
-        Ok(Self(card))
-    }
-}
-
-mod ffi {
-    use std::sync::Arc;
-
-    use super::TapCardReader;
-
-    #[uniffi::export]
-    pub fn tap_card_is_equal(lhs: Arc<TapCardReader>, rhs: Arc<TapCardReader>) -> bool {
-        lhs == rhs
-    }
-}
-
-impl Eq for TapCardReader {}
-
-impl PartialEq for TapCardReader {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (CkTapCard::SatsCard(a), CkTapCard::SatsCard(b)) => {
-                a.pubkey() == a.pubkey()
-                    && a.card_nonce() == b.card_nonce()
-                    && a.slots == b.slots
-                    && a.birth == b.birth
-                    && a.auth_delay == b.auth_delay
-                    && a.proto == b.proto
-                    && a.ver == b.ver
-            }
-            (CkTapCard::TapSigner(a), CkTapCard::TapSigner(b)) => {
-                a.pubkey() == b.pubkey()
-                    && a.card_nonce() == b.card_nonce()
-                    && a.birth == b.birth
-                    && a.path == b.path
-                    && a.num_backups == b.num_backups
-                    && a.auth_delay == b.auth_delay
-                    && a.proto == b.proto
-                    && a.ver == b.ver
-            }
-            (CkTapCard::SatsChip(_), CkTapCard::SatsChip(_)) => unimplemented!(),
-            (_, _) => false,
         }
     }
 }
