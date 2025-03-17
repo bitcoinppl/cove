@@ -4,24 +4,24 @@ use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 #[derive(FromBytes, IntoBytes, Immutable, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
-pub struct OutpointKey {
+pub struct OutPointKey {
     pub id: [u8; 32],
     pub index: u32,
 }
 
-impl From<&bitcoin::OutPoint> for OutpointKey {
+impl From<&bitcoin::OutPoint> for OutPointKey {
     fn from(id: &bitcoin::OutPoint) -> Self {
         Self::new(id.txid, id.vout)
     }
 }
 
-impl From<bitcoin::OutPoint> for OutpointKey {
+impl From<bitcoin::OutPoint> for OutPointKey {
     fn from(id: bitcoin::OutPoint) -> Self {
         Self::from(&id)
     }
 }
 
-impl OutpointKey {
+impl OutPointKey {
     pub fn new(id: impl AsRef<[u8; 32]>, index: u32) -> Self {
         Self {
             id: *id.as_ref(),
@@ -35,15 +35,15 @@ impl OutpointKey {
     }
 }
 
-impl redb::Key for OutpointKey {
+impl redb::Key for OutPointKey {
     fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
         data1.cmp(data2)
     }
 }
 
-impl redb::Value for OutpointKey {
+impl redb::Value for OutPointKey {
     type SelfType<'a>
-        = OutpointKey
+        = OutPointKey
     where
         Self: 'a;
 
@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn test_in_out_id() {
-        let id = OutpointKey::new(
+        let id = OutPointKey::new(
             bitcoin::Txid::from_str(
                 "d9f76c1c2338eb2010255c16e7cbdf72c1263e81c08a465b5d1d76a36d9980dc",
             )
