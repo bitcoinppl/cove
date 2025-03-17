@@ -30,10 +30,10 @@ const ADDRESS_TABLE: TableDefinition<Cbor<Address<NetworkUnchecked>>, SerdeRecor
     TableDefinition::new("address_labels.cbor");
 
 const INPUT_TABLE: TableDefinition<InOutIdKey, SerdeRecord<InputRecord>> =
-    TableDefinition::new("input_records.cbor");
+    TableDefinition::new("input_records_v2.cbor");
 
 const OUTPUT_TABLE: TableDefinition<InOutIdKey, SerdeRecord<OutputRecord>> =
-    TableDefinition::new("output_records.cbor");
+    TableDefinition::new("output_records_v2.cbor");
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelsTable {

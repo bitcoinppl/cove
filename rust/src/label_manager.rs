@@ -7,7 +7,7 @@ use crate::{
     wallet::{Address, metadata::WalletId},
 };
 use ahash::AHashMap as HashMap;
-use bip329::{AddressRecord, InOutId, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
+use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {
@@ -282,7 +282,7 @@ impl LabelManager {
             .labels
             .txn_input_records_iter(tx_id.as_ref())
             .map_err(|e| LabelManagerError::GetInputRecords(e.to_string()))?
-            .map(|record| (record.item.ref_.index, record))
+            .map(|record| (record.item.ref_.vout, record))
             .collect::<HashMap<u32, Record<InputRecord>>>();
 
         let mut current_output_records = self
@@ -290,14 +290,14 @@ impl LabelManager {
             .labels
             .txn_output_records_iter(tx_id.as_ref())
             .map_err(|e| LabelManagerError::GetOutputRecords(e.to_string()))?
-            .map(|record| (record.item.ref_.index, record))
+            .map(|record| (record.item.ref_.vout, record))
             .collect::<HashMap<u32, Record<OutputRecord>>>();
 
         let input_records = new_input_records_iter.into_iter().map(|record| {
-            let index = record.ref_.index;
+            let vout = record.ref_.vout;
             let label: Label = record.into();
 
-            match current_input_records.remove(&index) {
+            match current_input_records.remove(&vout) {
                 Some(current) => {
                     let mut timestamps = current.timestamps;
                     timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
@@ -308,10 +308,10 @@ impl LabelManager {
         });
 
         let output_records = new_output_records_iter.into_iter().map(|record| {
-            let index = record.ref_.index;
+            let vout = record.ref_.vout;
             let label: Label = record.into();
 
-            match current_output_records.remove(&index) {
+            match current_output_records.remove(&vout) {
                 Some(current) => {
                     let mut timestamps = current.timestamps;
                     timestamps.updated_at = jiff::Timestamp::now().as_second() as u64;
@@ -432,7 +432,7 @@ impl LabelManager {
         &self,
         tx_id: &TxId,
         label: &str,
-        indexs: &[u32],
+        vouts: &[u32],
         direction: TransactionDirection,
     ) -> Vec<InputRecord> {
         // no input lables on incoming transactions
@@ -444,10 +444,13 @@ impl LabelManager {
         // input labels only for outgoing transactions, so all inputs are marked at `input`
         let input_label = format!("{label} (input)");
 
-        indexs
+        vouts
             .iter()
-            .map(|index| InputRecord {
-                ref_: InOutId::new(tx_id.0, *index),
+            .map(|vout| InputRecord {
+                ref_: bitcoin::OutPoint {
+                    txid: tx_id.0,
+                    vout: *vout,
+                },
                 label: Some(input_label.clone()),
             })
             .collect()
@@ -458,7 +461,7 @@ impl LabelManager {
         &self,
         tx_id: &TxId,
         label: &str,
-        indexs: &[u32],
+        vouts: &[u32],
         direction: TransactionDirection,
     ) -> Vec<OutputRecord> {
         // the outputs for a incoming transaction are received
@@ -470,10 +473,13 @@ impl LabelManager {
 
         let output_label = format!("{label} ({output_label_suffix})");
 
-        indexs
+        vouts
             .iter()
-            .map(|index| OutputRecord {
-                ref_: InOutId::new(tx_id.0, *index),
+            .map(|vout| OutputRecord {
+                ref_: bitcoin::OutPoint {
+                    txid: tx_id.0,
+                    vout: *vout,
+                },
                 label: Some(output_label.clone()),
                 spendable: true,
             })
