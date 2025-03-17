@@ -64,6 +64,9 @@ pub enum Field {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
+    #[error("not a valid url, must start with tapsigner.com or getsatscard.com: {0}")]
+    InvalidUrl(String),
+
     #[error("not in encoded url format: {0}")]
     NotUrlEncoded(#[from] serde_urlencoded::de::Error),
 
@@ -90,8 +93,18 @@ impl TapCard {
 
 // Parse URL-encoded string into a Card
 fn parse_card(url_encoded: &str) -> Result<TapCard> {
+    let url_encoded = url_encoded
+        .trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+
+    let url_encoded = url_encoded
+        .strip_prefix("tapsigner.com/start#")
+        .or_else(|| url_encoded.strip_prefix("getsatscard.com/start#"))
+        .ok_or_else(|| Error::InvalidUrl(url_encoded.to_string()))?;
+
     // Parse URL-encoded string into a HashMap
-    let params: HashMap<&str, &str> = serde_urlencoded::from_str(url_encoded)?;
+    let params: HashMap<&str, &str> = serde_urlencoded::from_str(&url_encoded)?;
 
     let nonce = params
         .get("n")
@@ -106,7 +119,7 @@ fn parse_card(url_encoded: &str) -> Result<TapCard> {
     let state_field = params.get("u").ok_or(Error::MissingField(Field::State))?;
 
     // Check if it's a TapSigner (has t=1)
-    if is_tap_signer(url_encoded, &params) {
+    if is_tap_signer(&params) {
         let card_ident = params
             .get("c")
             .ok_or(Error::MissingField(Field::Ident))?
@@ -169,16 +182,7 @@ fn parse_sats_card_state(state_str: &str) -> Result<SatsCardState> {
     }
 }
 
-fn is_tap_signer(url_encoded: &str, params: &HashMap<&str, &str>) -> bool {
-    static PATTERN: &str = "#t=";
-    if let Some(position) = memchr::memmem::find(url_encoded.as_bytes(), PATTERN.as_bytes()) {
-        let start_position = position + PATTERN.len();
-        let end_position = start_position + 1;
-
-        let t = &url_encoded[start_position..end_position];
-        return t == "1";
-    }
-
+fn is_tap_signer(params: &HashMap<&str, &str>) -> bool {
     params.get("t").is_some_and(|v| *v == "1")
 }
 
@@ -188,6 +192,9 @@ pub mod ffi {
 
     #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, uniffi::Error)]
     pub enum TapCardParseError {
+        #[error("not a valid url: {0}")]
+        InvalidUrl(String),
+
         #[error("not in encoded url format: {0}")]
         NotUrlEncoded(String),
 
@@ -207,6 +214,7 @@ pub mod ffi {
     impl From<Error> for TapCardParseError {
         fn from(error: Error) -> Self {
             match error {
+                Error::InvalidUrl(error) => Self::InvalidUrl(error.to_string()),
                 Error::NotUrlEncoded(error) => Self::NotUrlEncoded(error.to_string()),
                 Error::MissingField(field) => Self::MissingField(field),
                 Error::UnknownCardState(state) => Self::UnknownCardState(state.to_string()),
@@ -222,7 +230,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parses_tap_card() {
+    fn test_parses_tap_signer() {
         let card = "tapsigner.com/start#t=1&u=U&c=0000000000000000&n=0000000000000000&s=00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
         let tap_card = TapCard::parse(card);
 
@@ -239,6 +247,49 @@ mod tests {
         assert_eq!(tap_signer.nonce, "0000000000000000");
         assert_eq!(
             tap_signer.signature,
+            "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        );
+    }
+
+    #[test]
+    fn test_parses_tap_signer_order() {
+        let card = "tapsigner.com/start#u=U&c=0000000000000000&n=0000000000000000&s=00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000&t=1";
+        let tap_card = TapCard::parse(card);
+
+        println!("{tap_card:?}");
+        assert!(tap_card.is_ok());
+
+        assert!(matches!(tap_card.clone().unwrap(), TapCard::TapSigner(_)));
+        let TapCard::TapSigner(tap_signer) = tap_card.unwrap() else {
+            panic!("not a tap signer")
+        };
+
+        assert_eq!(tap_signer.state, TapSignerState::Unused);
+        assert_eq!(tap_signer.card_ident, "0000000000000000");
+        assert_eq!(tap_signer.nonce, "0000000000000000");
+        assert_eq!(
+            tap_signer.signature,
+            "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        );
+    }
+
+    #[test]
+    fn test_parses_sats_card() {
+        let card = "getsatscard.com/start#t=0&u=U&c=0000000000000000&n=0000000000000000&s=00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000&r=bcajrh2jdk&o=1";
+        let tap_card = TapCard::parse(card);
+
+        println!("{tap_card:?}");
+        assert!(tap_card.is_ok());
+
+        assert!(matches!(tap_card.clone().unwrap(), TapCard::SatsCard(_)));
+        let TapCard::SatsCard(sats_card) = tap_card.unwrap() else {
+            panic!("not a tap signer")
+        };
+
+        assert_eq!(sats_card.state, SatsCardState::Unsealed);
+        assert_eq!(sats_card.nonce, "0000000000000000");
+        assert_eq!(
+            sats_card.signature,
             "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         );
     }
