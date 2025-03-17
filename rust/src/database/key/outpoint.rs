@@ -4,24 +4,24 @@ use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 #[derive(FromBytes, IntoBytes, Immutable, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
-pub struct InOutIdKey {
+pub struct OutPointKey {
     pub id: [u8; 32],
     pub index: u32,
 }
 
-impl From<&bip329::InOutId> for InOutIdKey {
-    fn from(id: &bip329::InOutId) -> Self {
-        Self::new(id.txid, id.index)
+impl From<&bitcoin::OutPoint> for OutPointKey {
+    fn from(id: &bitcoin::OutPoint) -> Self {
+        Self::new(id.txid, id.vout)
     }
 }
 
-impl From<bip329::InOutId> for InOutIdKey {
-    fn from(id: bip329::InOutId) -> Self {
+impl From<bitcoin::OutPoint> for OutPointKey {
+    fn from(id: bitcoin::OutPoint) -> Self {
         Self::from(&id)
     }
 }
 
-impl InOutIdKey {
+impl OutPointKey {
     pub fn new(id: impl AsRef<[u8; 32]>, index: u32) -> Self {
         Self {
             id: *id.as_ref(),
@@ -35,15 +35,15 @@ impl InOutIdKey {
     }
 }
 
-impl redb::Key for InOutIdKey {
+impl redb::Key for OutPointKey {
     fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
         data1.cmp(data2)
     }
 }
 
-impl redb::Value for InOutIdKey {
+impl redb::Value for OutPointKey {
     type SelfType<'a>
-        = InOutIdKey
+        = OutPointKey
     where
         Self: 'a;
 
@@ -75,7 +75,7 @@ impl redb::Value for InOutIdKey {
     }
 
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new("InOutId::bip329::InOutId")
+        redb::TypeName::new("OutPointKey::bitcoin::OutPoint")
     }
 }
 
@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn test_in_out_id() {
-        let id = InOutIdKey::new(
+        let id = OutPointKey::new(
             bitcoin::Txid::from_str(
                 "d9f76c1c2338eb2010255c16e7cbdf72c1263e81c08a465b5d1d76a36d9980dc",
             )
