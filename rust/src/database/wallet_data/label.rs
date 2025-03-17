@@ -7,7 +7,7 @@ use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableD
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
-    database::{cbor::Cbor, key::InOutIdKey},
+    database::{cbor::Cbor, key::OutPointKey},
     transaction::TxId,
 };
 
@@ -29,10 +29,10 @@ const TXN_TABLE: TableDefinition<TxId, SerdeRecord<TransactionRecord>> =
 const ADDRESS_TABLE: TableDefinition<Cbor<Address<NetworkUnchecked>>, SerdeRecord<AddressRecord>> =
     TableDefinition::new("address_labels.cbor");
 
-const INPUT_TABLE: TableDefinition<InOutIdKey, SerdeRecord<InputRecord>> =
+const INPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<InputRecord>> =
     TableDefinition::new("input_records_v2.cbor");
 
-const OUTPUT_TABLE: TableDefinition<InOutIdKey, SerdeRecord<OutputRecord>> =
+const OUTPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<OutputRecord>> =
     TableDefinition::new("output_records_v2.cbor");
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -155,7 +155,7 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = Record<InputRecord>>, Error> {
         let table = self.read_table(INPUT_TABLE)?;
 
-        let start_inout_id = InOutIdKey {
+        let start_inout_id = OutPointKey {
             id: *txid.as_ref(),
             index: 0,
         };
@@ -174,7 +174,7 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = Record<OutputRecord>>, Error> {
         let table = self.read_table(OUTPUT_TABLE)?;
 
-        let start_inout_id = InOutIdKey {
+        let start_inout_id = OutPointKey {
             id: *txid.as_ref(),
             index: 0,
         };
@@ -221,7 +221,7 @@ impl LabelsTable {
 
             Label::Input(input_record) => {
                 let table = self.read_table(INPUT_TABLE)?;
-                let key: InOutIdKey = input_record.ref_.into();
+                let key: OutPointKey = input_record.ref_.into();
 
                 let record = table.get(key)?.map(|record| record.value());
                 Ok(record.map(|record| record.into()))
@@ -229,7 +229,7 @@ impl LabelsTable {
 
             Label::Output(output_record) => {
                 let table = self.read_table(OUTPUT_TABLE)?;
-                let key: InOutIdKey = output_record.ref_.into();
+                let key: OutPointKey = output_record.ref_.into();
 
                 let record = table.get(key)?.map(|record| record.value());
                 Ok(record.map(|record| record.into()))
@@ -369,14 +369,14 @@ impl LabelsTable {
             }
             Label::Input(input) => {
                 let mut table = write_txn.open_table(INPUT_TABLE)?;
-                let key = InOutIdKey::from(&input.ref_);
+                let key = OutPointKey::from(&input.ref_);
                 let value: Record<InputRecord> = Record::with_timestamps(input, timestamps);
 
                 table.insert(key, value)?;
             }
             Label::Output(output) => {
                 let mut table = write_txn.open_table(OUTPUT_TABLE)?;
-                let key = InOutIdKey::from(&output.ref_);
+                let key = OutPointKey::from(&output.ref_);
                 let output: Record<OutputRecord> = Record::with_timestamps(output, timestamps);
 
                 table.insert(key, output)?;
@@ -426,12 +426,12 @@ impl LabelsTable {
                 table.remove(key)?;
             }
             Label::Input(input) => {
-                let key = InOutIdKey::from(&input.ref_);
+                let key = OutPointKey::from(&input.ref_);
                 let mut table = write_txn.open_table(INPUT_TABLE)?;
                 table.remove(key)?;
             }
             Label::Output(output) => {
-                let key = InOutIdKey::from(&output.ref_);
+                let key = OutPointKey::from(&output.ref_);
                 let mut table = write_txn.open_table(OUTPUT_TABLE)?;
                 table.remove(key)?;
             }

@@ -1,3 +1,3 @@
 pub mod outpoint;
 
-pub type InOutIdKey = outpoint::OutpointKey;
+pub type OutPointKey = outpoint::OutpointKey;
