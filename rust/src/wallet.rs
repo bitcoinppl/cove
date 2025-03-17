@@ -9,6 +9,7 @@ use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
     bdk_store::BdkStore,
+    consts::GAP_LIMIT,
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     keys::{Descriptor, Descriptors},
@@ -523,7 +524,7 @@ impl Wallet {
     }
 
     pub fn get_next_address(&mut self) -> Result<AddressInfo, WalletError> {
-        const MAX_ADDRESSES: usize = 25;
+        const MAX_ADDRESSES: usize = (GAP_LIMIT - 5) as usize;
 
         let addresses: Vec<AddressInfo> = self
             .bdk

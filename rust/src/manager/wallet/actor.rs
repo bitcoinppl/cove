@@ -1,4 +1,5 @@
 use crate::{
+    consts::GAP_LIMIT,
     database::{Database, wallet_data::WalletDataDb},
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
@@ -12,11 +13,7 @@ use crate::{
     },
 };
 use act_zero::*;
-use bdk_chain::{
-    TxGraph,
-    bitcoin::Psbt,
-    spk_client::{FullScanResponse, SyncResponse},
-};
+use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
 use bdk_core::spk_client::FullScanRequest;
 use bdk_wallet::{KeychainKind, TxOrdering};
 use bitcoin::Amount;
@@ -38,11 +35,12 @@ pub struct WalletActor {
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
 
-    last_scan_finished_: Option<Duration>,
-    last_height_fetched_: Option<(Duration, usize)>,
-
     pub db: WalletDataDb,
     pub state: ActorState,
+
+    // cached values, source of truth is the redb database saved with wallet metadata
+    last_scan_finished: Option<Duration>,
+    last_height_fetched: Option<(Duration, usize)>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -62,7 +60,9 @@ pub enum ActorState {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum FullScanType {
+    /// Initial scan scans for 20 addresses GAP_LIMIT
     Initial,
+    /// Expanded scan scans for 150 addresses GAP_LIMIT
     Expanded,
 }
 
@@ -129,8 +129,8 @@ impl WalletActor {
             reconciler,
             wallet,
             node_client: None,
-            last_scan_finished_: None,
-            last_height_fetched_: None,
+            last_scan_finished: None,
+            last_height_fetched: None,
             state: ActorState::Initial,
             db,
         }
@@ -557,7 +557,6 @@ impl WalletActor {
         }
 
         debug!("starting expanded full scan");
-
         let txns = self.transactions().await?.await?;
 
         self.reconciler
@@ -636,27 +635,28 @@ impl WalletActor {
 
     async fn perform_incremental_scan(&mut self) -> ActorResult<()> {
         debug!("starting incremental scan");
-        self.state = ActorState::PerformingIncrementalScan;
 
+        self.state = ActorState::PerformingIncrementalScan;
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
         let node_client = self.node_client().await?.clone();
         let bdk = self.wallet.bdk.lock();
-        let scan_request = bdk.start_sync_with_revealed_spks().build();
 
+        let full_scan_request = bdk.start_full_scan().build();
         let graph = bdk.tx_graph().clone();
 
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
-            let sync_result = node_client.sync(&graph, scan_request).await;
+            let scan_result = node_client
+                .start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize)
+                .await;
+
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("done incremental scan in {}s", now - start);
 
             // update wallet state
-            send!(addr.handle_incremental_scan_complete(sync_result));
+            send!(addr.handle_incremental_scan_complete(scan_result));
         });
-
-        self.state = ActorState::IncrementalScanComplete;
 
         Produces::ok(())
     }
@@ -700,13 +700,13 @@ impl WalletActor {
 
     async fn handle_incremental_scan_complete(
         &mut self,
-        sync_result: Result<SyncResponse, crate::node::client::Error>,
+        scan_result: Result<FullScanResponse<KeychainKind>, crate::node::client::Error>,
     ) -> ActorResult<()> {
-        if sync_result.is_err() {
+        if scan_result.is_err() {
             self.state = ActorState::FailedIncrementalScan;
         }
 
-        let sync_result = sync_result?;
+        let sync_result = scan_result?;
         self.wallet.bdk.lock().apply_update(sync_result)?;
         self.wallet.persist()?;
         self.save_last_scan_finished();
@@ -718,7 +718,7 @@ impl WalletActor {
 
     /// Mark the wallet as scanned
     /// Notify the frontend that the wallet scan is complete
-    /// Ssend the wallet balance and transactions
+    /// Ssend the wallet balance and transaction
     async fn notify_scan_complete(&mut self) -> ActorResult<()> {
         use WalletManagerReconcileMessage as Msg;
 
@@ -758,7 +758,7 @@ impl WalletActor {
     }
 
     fn last_scan_finished(&mut self) -> Option<Duration> {
-        if let Some(last_scan_finished) = self.last_scan_finished_ {
+        if let Some(last_scan_finished) = self.last_scan_finished {
             return Some(last_scan_finished);
         }
 
@@ -772,14 +772,14 @@ impl WalletActor {
             .ok()??;
 
         let last_scan_finished = metadata.internal.last_scan_finished;
-        self.last_scan_finished_ = last_scan_finished;
+        self.last_scan_finished = last_scan_finished;
 
         last_scan_finished
     }
 
     fn save_last_scan_finished(&mut self) -> Option<()> {
         let now = UNIX_EPOCH.elapsed().unwrap();
-        self.last_scan_finished_ = Some(now);
+        self.last_scan_finished = Some(now);
 
         let wallets = Database::global().wallets();
 
@@ -799,7 +799,7 @@ impl WalletActor {
     }
 
     fn last_height_fetched(&mut self) -> Option<(Duration, usize)> {
-        if let Some(last_height_fetched) = self.last_height_fetched_ {
+        if let Some(last_height_fetched) = self.last_height_fetched {
             return Some(last_height_fetched);
         }
 
@@ -818,7 +818,7 @@ impl WalletActor {
         } = &metadata.internal.last_height_fetched?;
 
         let last_height_fetched = Some((*last_seen, *(block_height) as usize));
-        self.last_height_fetched_ = last_height_fetched;
+        self.last_height_fetched = last_height_fetched;
 
         last_height_fetched
     }
@@ -826,7 +826,7 @@ impl WalletActor {
     fn save_last_height_fetched(&mut self, block_height: usize) -> Option<()> {
         debug!("actor save_last_height_fetched");
         let now = UNIX_EPOCH.elapsed().unwrap();
-        self.last_height_fetched_ = Some((now, block_height));
+        self.last_height_fetched = Some((now, block_height));
 
         let wallets = Database::global().wallets();
         let mut metadata = wallets

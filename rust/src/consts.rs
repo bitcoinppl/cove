@@ -5,6 +5,7 @@ use once_cell::sync::Lazy;
 
 pub static ROOT_DATA_DIR: Lazy<PathBuf> = Lazy::new(data_dir_init);
 pub static WALLET_DATA_DIR: Lazy<PathBuf> = Lazy::new(wallet_data_dir_init);
+pub static GAP_LIMIT: u8 = 30;
 
 fn data_dir_init() -> PathBuf {
     let dir = dirs::home_dir()
