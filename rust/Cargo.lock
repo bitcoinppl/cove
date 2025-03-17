@@ -344,8 +344,9 @@ dependencies = [
 
 [[package]]
 name = "bip329"
-version = "0.2.0"
-source = "git+https://github.com/bitcoinppl/bip329#ef1bf8fe34a4ab824ccb4bfc5dcfcfb1c052eb74"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8351c1cf438ae5814ad2a696f06fd07d7be4a1a133d889b1785260fa8797798c"
 dependencies = [
  "age",
  "bitcoin",
