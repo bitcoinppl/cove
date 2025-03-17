@@ -36,7 +36,7 @@ bdk_chain = { version = "0.21.0" }
 pubport = { version = "0.3.1", features = [] }
 
 # bip329 labels
-bip329 = { version = "0.3.0", features = [] }
+bip329 = { version = "0.4.0" }
 
 # bitcoin
 bitcoin = { version = "0.32", features = ["serde"] }
