@@ -72,8 +72,8 @@ extension PriceResponse: Equatable {
     }
 }
 
-public extension SendRoute {
-    func id() -> WalletId {
+extension SendRoute {
+    public func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
         case let .confirm(id: id, details: _, signedTransaction: _): id
@@ -95,7 +95,8 @@ extension [BoxedRoute] {
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
+    {
         feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
 }
@@ -138,14 +139,18 @@ extension NfcMessage: Equatable {
     }
 }
 
-extension TapCardReader: Equatable {
-    public static func == (lhs: TapCardReader, rhs: TapCardReader) -> Bool {
-        tapCardIsEqual(lhs: lhs, rhs: rhs)
-    }
-}
-
 extension Data {
     func hexEncodedString() -> String {
         map { String(format: "%02hhx", $0) }.joined()
+    }
+}
+
+extension SetupCmdResponse {
+    var error: TapSignerReaderError? {
+        switch self {
+        case .complete: return nil
+        case let .continueFromInit(continueCmd): return continueCmd.error
+        case let .continueFromBackup(continueCmd): return continueCmd.error
+        }
     }
 }

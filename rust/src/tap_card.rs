@@ -5,7 +5,7 @@ use std::fmt::Debug;
 
 // Define error types
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
-pub enum TapSignerError {
+pub enum TransportError {
     #[error("CiborDe: {0}")]
     CiborDe(String),
 
@@ -29,7 +29,7 @@ pub enum TapSignerError {
 #[uniffi::export(callback_interface)]
 #[async_trait::async_trait]
 pub trait TapcardTransportProtocol: Send + Sync + std::fmt::Debug + 'static {
-    async fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, TapSignerError>;
+    async fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, TransportError>;
 }
 
 // Implement the CkTransport trait for our callback-based transport
@@ -44,33 +44,33 @@ impl CkTransport for TapcardTransport {
 }
 
 // Convert ApduError type to TransportError for UniFFI
-impl From<ApduError> for TapSignerError {
+impl From<ApduError> for TransportError {
     fn from(error: ApduError) -> Self {
         match error {
-            ApduError::CiborDe(msg) => TapSignerError::CiborDe(msg),
-            ApduError::CiborValue(msg) => TapSignerError::CiborValue(msg),
-            ApduError::CkTap { error, code } => TapSignerError::CkTap {
+            ApduError::CiborDe(msg) => TransportError::CiborDe(msg),
+            ApduError::CiborValue(msg) => TransportError::CiborValue(msg),
+            ApduError::CkTap { error, code } => TransportError::CkTap {
                 error,
                 code: code as u64,
             },
-            ApduError::IncorrectSignature(msg) => TapSignerError::IncorrectSignature(msg),
-            ApduError::UnknownCardType(msg) => TapSignerError::UnknownCardType(msg),
+            ApduError::IncorrectSignature(msg) => TransportError::IncorrectSignature(msg),
+            ApduError::UnknownCardType(msg) => TransportError::UnknownCardType(msg),
         }
     }
 }
 
-impl From<TapSignerError> for ApduError {
-    fn from(error: TapSignerError) -> Self {
+impl From<TransportError> for ApduError {
+    fn from(error: TransportError) -> Self {
         match error {
-            TapSignerError::CiborDe(msg) => ApduError::CiborDe(msg),
-            TapSignerError::CiborValue(msg) => ApduError::CiborValue(msg),
-            TapSignerError::CkTap { error, code } => ApduError::CkTap {
+            TransportError::CiborDe(msg) => ApduError::CiborDe(msg),
+            TransportError::CiborValue(msg) => ApduError::CiborValue(msg),
+            TransportError::CkTap { error, code } => ApduError::CkTap {
                 error,
                 code: code as usize,
             },
-            TapSignerError::IncorrectSignature(msg) => ApduError::IncorrectSignature(msg),
-            TapSignerError::UnknownCardType(msg) => ApduError::UnknownCardType(msg),
-            TapSignerError::CvcChangeError(error) => ApduError::CkTap {
+            TransportError::IncorrectSignature(msg) => ApduError::IncorrectSignature(msg),
+            TransportError::UnknownCardType(msg) => ApduError::UnknownCardType(msg),
+            TransportError::CvcChangeError(error) => ApduError::CkTap {
                 error: error.to_string(),
                 code: 0,
             },
@@ -78,13 +78,13 @@ impl From<TapSignerError> for ApduError {
     }
 }
 
-impl From<rust_cktap::tap_signer::TapSignerError> for TapSignerError {
+impl From<rust_cktap::tap_signer::TapSignerError> for TransportError {
     fn from(value: rust_cktap::tap_signer::TapSignerError) -> Self {
         use rust_cktap::tap_signer::TapSignerError as TE;
         match value {
-            TE::ApduError(error) => TapSignerError::from(error),
+            TE::ApduError(error) => TransportError::from(error),
             TE::CvcChangeError(cvc_change_error) => {
-                TapSignerError::CvcChangeError(cvc_change_error.to_string())
+                TransportError::CvcChangeError(cvc_change_error.to_string())
             }
         }
     }

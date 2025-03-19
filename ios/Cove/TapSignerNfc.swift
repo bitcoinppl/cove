@@ -10,10 +10,6 @@ import Foundation
 
 private let logger = Log(id: "TapCardNFC")
 
-private enum Cmd {
-    case initialPin(startingPin: String, newPin: String)
-}
-
 class TapSignerNFC {
     private var nfc: TapCardNFC
 
@@ -21,9 +17,12 @@ class TapSignerNFC {
         self.nfc = TapCardNFC(tapcard: tapcard)
     }
 
-    public func setInitialPin(_ startingPin: String, _ newPin: String) async throws -> TapSignerResponse {
+    public func setupTapSigner(_ factoryPin: String, _ newPin: String) async throws -> TapSignerResponse {
+        var errorCount = 0
+        var lastError: TapSignerReaderError? = nil
+
         // Create a continuation to bridge between async world and property changes
-        try await withCheckedThrowingContinuation { continuation in
+        let response = try await withCheckedThrowingContinuation { continuation in
             // Set up observation tracking before starting the operation
             Task {
                 withObservationTracking {
@@ -47,9 +46,89 @@ class TapSignerNFC {
                 }
 
                 // Start the NFC operation
-                nfc.cmd = Cmd.initialPin(startingPin: startingPin, newPin: newPin)
+                let setupCmd = SetupCmd(factoryPin: factoryPin, newPin: newPin)
+                nfc.tapSignerCmd = TapSignerCmd.setup(setupCmd)
                 nfc.scan()
             }
+        }
+
+        switch response {
+        case .setup(.complete):
+            nfc.session?.invalidate()
+            return response
+        case .setup(let incomplete):
+            while true {
+                var incompleteResponse = incomplete
+
+                // convert this to a result type
+                let response = await continueSetup(incompleteResponse)
+                switch response {
+                case .success(.setup(.complete(let backup))):
+                    nfc.session?.invalidate()
+                    return .setup(.complete(backup: backup))
+                case .success(.setup(let other)):
+                    errorCount += 1
+                    lastError = other.error
+                    incompleteResponse = other
+                case .failure(let error):
+                    nfc.session?.invalidate()
+                    throw error
+                }
+
+                if errorCount > 5 {
+                    nfc.session?.invalidate()
+                    throw lastError ?? TapSignerReaderError.Unknown("Unknown error, exceeded rety limit")
+                }
+            }
+        }
+    }
+
+    public func continueSetup(_ response: SetupCmdResponse) async -> Result<TapSignerResponse, TapSignerReaderError> {
+        let cmd: SetupCmd? = switch response {
+        case .complete:
+            nil
+        case .continueFromInit(let c):
+            c.continueCmd
+        case .continueFromBackup(let c):
+            c.continueCmd
+        }
+
+        guard let cmd else { return .success(.setup(response)) }
+
+        // Create a continuation to bridge between async world and property changes
+        do {
+            return try await withCheckedThrowingContinuation { continuation in
+                // Set up observation tracking before starting the operation
+                Task {
+                    withObservationTracking {
+                        // Access the properties to track them
+                        _ = nfc.tapSignerResponse
+                        _ = nfc.tapSignerError
+                    } onChange: {
+                        // Re-register for changes
+                        Task {
+                            // Check if we got a response or error
+                            if let response = self.nfc.tapSignerResponse {
+                                continuation.resume(returning: Result.success(response))
+                                return
+                            }
+
+                            if let error = self.nfc.tapSignerError {
+                                continuation.resume(returning: Result.failure(error))
+                                return
+                            }
+                        }
+                    }
+
+                    // Start the NFC operation
+                    nfc.tapSignerCmd = TapSignerCmd.setup(cmd)
+                    nfc.scan()
+                }
+            }
+        } catch let error as TapSignerReaderError {
+            return .failure(error)
+        } catch {
+            return .failure(.Unknown(error.localizedDescription))
         }
     }
 }
@@ -58,10 +137,10 @@ class TapSignerNFC {
 private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     // private
     private var tag: NFCISO7816Tag?
-    private var session: NFCTagReaderSession?
     private var transport: TapCardTransport?
 
     // public
+    public var session: NFCTagReaderSession?
     public let tapcard: TapCard
     public var isScanning: Bool = false
 
@@ -74,8 +153,6 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     // public var satsCardCmd: SatsCardCmd? = nil
 
     // cmd
-    var cmd: Cmd? = nil
-
     init(tapcard: TapCard) {
         self.tapcard = tapcard
 
@@ -91,8 +168,8 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     }
 
     func scan() {
-        guard let cmd else { return Log.error("cmd not set") }
-        logger.info("started scanning \(cmd)")
+        guard let tapSignerCmd else { return Log.error("cmd not set") }
+        logger.info("started scanning \(tapSignerCmd)")
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
@@ -118,7 +195,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             case .iso15693:
                 logger.error("found tag iso15693Tag")
                 session.invalidate(errorMessage: "Unsupported tag type.")
-            case let .iso7816(iso7816Tag):
+            case .iso7816(let iso7816Tag):
                 Log.debug("found tag iso7816")
 
                 let readingMessage = "Reading tag, please hold still"
@@ -146,17 +223,17 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         do {
             let transport = TapCardTransport(session: session, tag: tag)
             switch tapcard {
-            case let .satsCard(satsCard):
-                    // TODO!()
+            case .satsCard:
+                (
+                    // TODO: Implement SatsCardReader
+                )
 
-            case let .tapSigner(tapSigner):
+            case .tapSigner:
                 let tapSignerReader = try await TapSignerReader(transport: transport, cmd: tapSignerCmd)
                 self.tapSignerReader = tapSignerReader
 
                 let response = try await tapSignerReader.run()
                 tapSignerResponse = response
-
-                session.invalidate()
             }
         } catch let error as TapSignerReaderError {
             logger.error("TapSigner error: \(error)")
@@ -177,7 +254,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         switch error as? NFCReaderError {
         case .none:
             session.invalidate(errorMessage: "Unable to read NFC tag, try again")
-        case let .some(error):
+        case .some(let error):
             switch error.code {
             case .readerTransceiveErrorTagConnectionLost:
                 session.invalidate(

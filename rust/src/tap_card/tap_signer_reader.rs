@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
+use bitcoin::secp256k1;
 use parking_lot::RwLock;
 use rust_cktap::{CkTapCard, commands::CkTransport as _};
 use tokio::sync::Mutex;
 
-use super::{TapSignerError, TapcardTransport, TapcardTransportProtocol};
+use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum TapSignerReaderError {
     #[error(transparent)]
-    TapSignerError(#[from] TapSignerError),
+    TapSignerError(#[from] TransportError),
 
     #[error("UnknownCardType: {0}, expected TapSigner")]
     UnknownCardType(String),
@@ -25,6 +26,9 @@ pub enum TapSignerReaderError {
 
     #[error("Setup is already complete")]
     SetupAlreadyComplete,
+
+    #[error("Unknown error: {0}")]
+    Unknown(String),
 }
 
 type Error = TapSignerReaderError;
@@ -51,11 +55,11 @@ pub struct SetupCmd {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum, derive_more::From)]
 pub enum TapSignerResponse {
-    Setup(SetupCommandResponse),
+    Setup(SetupCmdResponse),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum SetupCommandResponse {
+pub enum SetupCmdResponse {
     Complete { backup: Vec<u8> },
     ContinueFromInit(ContinueFromInit),
     ContinueFromBackup(ContinueFromBackup),
@@ -82,7 +86,7 @@ impl TapSignerReader {
         cmd: Option<TapSignerCmd>,
     ) -> Result<Self> {
         let transport = TapcardTransport(transport);
-        let card = transport.to_cktap().await.map_err(TapSignerError::from)?;
+        let card = transport.to_cktap().await.map_err(TransportError::from)?;
 
         let card = match card {
             CkTapCard::TapSigner(card) => Ok(card),
@@ -117,7 +121,7 @@ impl TapSignerReader {
     }
 
     /// Start the setup process
-    pub async fn setup(&self, cmd: Arc<SetupCmd>) -> Result<SetupCommandResponse, Error> {
+    pub async fn setup(&self, cmd: Arc<SetupCmd>) -> Result<SetupCmdResponse, Error> {
         let new_pin = cmd.new_pin.as_bytes();
         if new_pin.len() < 6 || new_pin.len() > 32 {
             return Err(TapSignerReaderError::InvalidPinLength(new_pin.len() as u8));
@@ -133,47 +137,45 @@ impl TapSignerReader {
     /// User started the setup process, but errored out before completing the setup, we can continue from the last step
     pub async fn continue_setup(
         &self,
-        response: SetupCommandResponse,
-    ) -> Result<SetupCommandResponse, Error> {
+        response: SetupCmdResponse,
+    ) -> Result<SetupCmdResponse, Error> {
         match response {
-            SetupCommandResponse::ContinueFromInit(c) => {
-                self.init_backup_change(c.continue_cmd).await
-            }
+            SetupCmdResponse::ContinueFromInit(c) => self.init_backup_change(c.continue_cmd).await,
 
-            SetupCommandResponse::ContinueFromBackup(c) => {
+            SetupCmdResponse::ContinueFromBackup(c) => {
                 let response = self.change(c.continue_cmd, c.backup).await;
                 Ok(response)
             }
 
             // already complete, just return the backup
-            SetupCommandResponse::Complete { backup } => {
-                return Ok(SetupCommandResponse::Complete { backup });
+            SetupCmdResponse::Complete { backup } => {
+                return Ok(SetupCmdResponse::Complete { backup });
             }
         }
     }
 }
 
 impl TapSignerReader {
-    async fn init_backup_change(&self, cmd: Arc<SetupCmd>) -> Result<SetupCommandResponse, Error> {
+    async fn init_backup_change(&self, cmd: Arc<SetupCmd>) -> Result<SetupCmdResponse, Error> {
         let _init_response = self
             .reader
             .lock()
             .await
             .init(cmd.chain_code, &cmd.factory_pin)
             .await
-            .map_err(TapSignerError::from)?;
+            .map_err(TransportError::from)?;
 
         Ok(self.backup_and_change(cmd).await)
     }
 
-    async fn backup_and_change(&self, cmd: Arc<SetupCmd>) -> SetupCommandResponse {
+    async fn backup_and_change(&self, cmd: Arc<SetupCmd>) -> SetupCmdResponse {
         let backup_response = self.reader.lock().await.backup(&cmd.factory_pin).await;
 
         let backup = match backup_response {
             Ok(backup) => backup.data,
             Err(e) => {
                 let error = TapSignerReaderError::TapSignerError(e.into());
-                let response = SetupCommandResponse::ContinueFromInit(ContinueFromInit {
+                let response = SetupCmdResponse::ContinueFromInit(ContinueFromInit {
                     continue_cmd: cmd,
                     error,
                 });
@@ -185,7 +187,7 @@ impl TapSignerReader {
         self.change(cmd.clone(), backup).await
     }
 
-    async fn change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCommandResponse {
+    async fn change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
         let change_response = self
             .reader
             .lock()
@@ -195,7 +197,7 @@ impl TapSignerReader {
 
         if let Err(e) = change_response {
             let error = TapSignerReaderError::TapSignerError(e.into());
-            let response = SetupCommandResponse::ContinueFromBackup(ContinueFromBackup {
+            let response = SetupCmdResponse::ContinueFromBackup(ContinueFromBackup {
                 backup,
                 continue_cmd: cmd,
                 error,
@@ -204,6 +206,20 @@ impl TapSignerReader {
             return response;
         }
 
-        SetupCommandResponse::Complete { backup }
+        SetupCmdResponse::Complete { backup }
+    }
+}
+
+#[uniffi::export]
+impl SetupCmd {
+    #[uniffi::constructor]
+    pub fn new(factory_pin: String, new_pin: String) -> Self {
+        let chain_code = rust_cktap::rand_chaincode(&mut secp256k1::rand::thread_rng());
+
+        Self {
+            factory_pin,
+            new_pin,
+            chain_code,
+        }
     }
 }

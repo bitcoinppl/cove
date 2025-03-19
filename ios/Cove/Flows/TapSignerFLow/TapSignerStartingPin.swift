@@ -12,9 +12,7 @@ struct TapSignerStartingPin: View {
     @Environment(AuthManager.self) private var auth
 
     let tapSigner: TapSigner
-
-    @State var nfc: TapCardNFC?
-    @State var reader: TapCardReader?
+    @State var nfc: TapSignerNFC?
 
     @State private var startingPin = ""
     @State private var newPin = ""
@@ -22,6 +20,17 @@ struct TapSignerStartingPin: View {
 
     private var pinsMatch: Bool {
         !newPin.isEmpty && newPin == confirmPin
+    }
+
+    private func setupTapSigner() {
+        if !pinsMatch { return }
+        guard let nfc else { return }
+
+        Task {
+            do {
+                let backup = try await nfc.setupTapSigner(startingPin, newPin)
+            } catch {}
+        }
     }
 
     var body: some View {
@@ -87,7 +96,7 @@ struct TapSignerStartingPin: View {
             .padding(.bottom, 20)
 
             Button {
-                nfc?.scan()
+                setupTapSigner()
             } label: {
                 Text("Continue")
                     .font(.title)
@@ -104,11 +113,7 @@ struct TapSignerStartingPin: View {
         .padding(.top, 20)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            nfc = TapCardNFC(tapcard: .tapSigner(tapSigner))
-        }
-        .onChange(of: nfc?.reader) { reader in
-            guard let reader else { return }
-            self.reader = reader
+            nfc = TapSignerNFC(tapcard: .tapSigner(tapSigner))
         }
     }
 }
