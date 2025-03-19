@@ -95,6 +95,7 @@ impl TapCard {
 fn parse_card(url_encoded: &str) -> Result<TapCard> {
     let url_encoded = url_encoded
         .trim()
+        .trim_start_matches(|p: char| !p.is_ascii_alphabetic())
         .trim_start_matches("https://")
         .trim_start_matches("http://");
 

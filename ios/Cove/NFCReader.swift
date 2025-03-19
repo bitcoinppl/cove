@@ -285,10 +285,10 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         for record in message.records {
             Log.debug("record type: \(record.typeNameFormat)")
             if let type = String(data: record.type, encoding: .utf8) {
-                _message += "\(type): "
+                Log.debug("type: \(type)")
             }
             if let payload = String(data: record.payload, encoding: .utf8) {
-                _message += "\(payload)\n"
+                _message = payload
             }
             Log.debug("id: \(record.identifier)")
         }
