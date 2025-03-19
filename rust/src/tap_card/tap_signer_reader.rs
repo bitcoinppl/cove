@@ -27,6 +27,9 @@ pub enum TapSignerReaderError {
     #[error("Setup is already complete")]
     SetupAlreadyComplete,
 
+    #[error("Invalid chain code length, must be 32, found {0}")]
+    InvalidChainCodeLength(u32),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }
@@ -212,14 +215,26 @@ impl TapSignerReader {
 
 #[uniffi::export]
 impl SetupCmd {
-    #[uniffi::constructor]
-    pub fn new(factory_pin: String, new_pin: String) -> Self {
-        let chain_code = rust_cktap::rand_chaincode(&mut secp256k1::rand::thread_rng());
+    #[uniffi::constructor(default(chain_code = None))]
+    pub fn try_new(
+        factory_pin: String,
+        new_pin: String,
+        chain_code: Option<Vec<u8>>,
+    ) -> Result<Self, Error> {
+        let chain_code = match chain_code {
+            Some(chain_code) => {
+                let chain_code_len = chain_code.len() as u32;
+                chain_code
+                    .try_into()
+                    .map_err(|_| Error::InvalidChainCodeLength(chain_code_len))?
+            }
+            None => rust_cktap::rand_chaincode(&mut secp256k1::rand::thread_rng()),
+        };
 
-        Self {
+        Ok(Self {
             factory_pin,
             new_pin,
             chain_code,
-        }
+        })
     }
 }

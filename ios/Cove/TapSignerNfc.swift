@@ -17,7 +17,7 @@ class TapSignerNFC {
         self.nfc = TapCardNFC(tapcard: tapcard)
     }
 
-    public func setupTapSigner(_ factoryPin: String, _ newPin: String) async throws -> TapSignerResponse {
+    public func setupTapSigner(_ factoryPin: String, _ newPin: String, _ chainCode: Data? = nil) async throws -> TapSignerResponse {
         var errorCount = 0
         var lastError: TapSignerReaderError? = nil
 
@@ -46,9 +46,15 @@ class TapSignerNFC {
                 }
 
                 // Start the NFC operation
-                let setupCmd = SetupCmd(factoryPin: factoryPin, newPin: newPin)
-                nfc.tapSignerCmd = TapSignerCmd.setup(setupCmd)
-                nfc.scan()
+                do {
+                    let cmd = try SetupCmd.tryNew(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
+                    nfc.tapSignerCmd = TapSignerCmd.setup(cmd)
+                    nfc.scan()
+                } catch let error as TapSignerReaderError {
+                    throw error
+                } catch {
+                    throw TapSignerReaderError.Unknown(error.localizedDescription)
+                }
             }
         }
 
@@ -66,18 +72,22 @@ class TapSignerNFC {
                 case .success(.setup(.complete(let backup))):
                     nfc.session?.invalidate()
                     return .setup(.complete(backup: backup))
+
                 case .success(.setup(let other)):
                     errorCount += 1
                     lastError = other.error
                     incompleteResponse = other
+
                 case .failure(let error):
                     nfc.session?.invalidate()
-                    throw error
+                    Log.error("Error count: \(errorCount), last error: \(error)")
+                    return .setup(incompleteResponse)
                 }
 
                 if errorCount > 5 {
                     nfc.session?.invalidate()
-                    throw lastError ?? TapSignerReaderError.Unknown("Unknown error, exceeded rety limit")
+                    Log.error("Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))")
+                    return .setup(incompleteResponse)
                 }
             }
         }

@@ -11030,16 +11030,7 @@ open class SetupCmd: SetupCmdProtocol, @unchecked Sendable {
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
         return try! rustCall { uniffi_cove_fn_clone_setupcmd(self.pointer, $0) }
     }
-public convenience init(factoryPin: String, newPin: String) {
-    let pointer =
-        try! rustCall() {
-    uniffi_cove_fn_constructor_setupcmd_new(
-        FfiConverterString.lower(factoryPin),
-        FfiConverterString.lower(newPin),$0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
+    // No primary constructor declared for this class.
 
     deinit {
         guard let pointer = pointer else {
@@ -11049,6 +11040,16 @@ public convenience init(factoryPin: String, newPin: String) {
         try! rustCall { uniffi_cove_fn_free_setupcmd(pointer, $0) }
     }
 
+    
+public static func tryNew(factoryPin: String, newPin: String, chainCode: Data? = nil)throws  -> SetupCmd  {
+    return try  FfiConverterTypeSetupCmd_lift(try rustCallWithError(FfiConverterTypeTapSignerReaderError_lift) {
+    uniffi_cove_fn_constructor_setupcmd_try_new(
+        FfiConverterString.lower(factoryPin),
+        FfiConverterString.lower(newPin),
+        FfiConverterOptionData.lower(chainCode),$0
+    )
+})
+}
     
 
     
@@ -22815,6 +22816,8 @@ public enum TapSignerReaderError: Swift.Error {
     case NonNumericPin(String
     )
     case SetupAlreadyComplete
+    case InvalidChainCodeLength(UInt32
+    )
     case Unknown(String
     )
 }
@@ -22847,7 +22850,10 @@ public struct FfiConverterTypeTapSignerReaderError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 6: return .SetupAlreadyComplete
-        case 7: return .Unknown(
+        case 7: return .InvalidChainCodeLength(
+            try FfiConverterUInt32.read(from: &buf)
+            )
+        case 8: return .Unknown(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -22890,8 +22896,13 @@ public struct FfiConverterTypeTapSignerReaderError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
         
         
-        case let .Unknown(v1):
+        case let .InvalidChainCodeLength(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterUInt32.write(v1, into: &buf)
+            
+        
+        case let .Unknown(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -29896,7 +29907,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_seedqr_new_from_str() != 6520) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_setupcmd_new() != 545) {
+    if (uniffi_cove_checksum_constructor_setupcmd_try_new() != 59849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_tapsignerreader_new() != 46126) {
