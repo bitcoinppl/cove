@@ -19,12 +19,6 @@ struct TapSignerConfirmPin: View {
     @State private var confirmPin: String = ""
     @FocusState private var isFocused
 
-    var pinMap: [Int: String] {
-        confirmPin.enumerated().reduce(into: [:]) { result, pair in
-            result[pair.offset] = String(pair.element)
-        }
-    }
-
     var body: some View {
         ScrollView {
             VStack(spacing: 40) {
@@ -63,10 +57,10 @@ struct TapSignerConfirmPin: View {
                 .padding(.horizontal)
 
                 HStack {
-                    ForEach(0..<6, id: \.self) { index in
+                    ForEach(0 ..< 6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
-                            .fill(pinMap[index] == nil ? Color.clear : .primary)
+                            .fill(confirmPin.count <= index ? Color.clear : .primary)
                             .frame(width: 18)
                             .padding(.horizontal, 10)
                             .id(index)
@@ -113,11 +107,11 @@ struct TapSignerConfirmPin: View {
 #Preview {
     TapSignerContainer(
         route:
-            .confirmPin(
-                tapSigner: tapSignerPreviewNew(preview: true),
-                startingPin: "123456",
-                newPin: "222222"
-            )
+        .confirmPin(
+            tapSigner: tapSignerPreviewNew(preview: true),
+            startingPin: "123456",
+            newPin: "222222"
+        )
     )
     .environment(AppManager.shared)
 }

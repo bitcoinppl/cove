@@ -17,12 +17,6 @@ struct TapSignerStartingPin: View {
     @State private var startingPin: String = ""
     @FocusState private var isFocused
 
-    var pinMap: [Int: String] {
-        startingPin.enumerated().reduce(into: [:]) { result, pair in
-            result[pair.offset] = String(pair.element)
-        }
-    }
-
     var body: some View {
         ScrollView {
             VStack(spacing: 30) {
@@ -63,7 +57,7 @@ struct TapSignerStartingPin: View {
                     ForEach(0..<6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
-                            .fill(pinMap[index] == nil ? Color.clear : .primary)
+                            .fill(startingPin.count <= index ? Color.clear : .primary)
                             .frame(width: 18)
                             .padding(.horizontal, 10)
                             .id(index)
