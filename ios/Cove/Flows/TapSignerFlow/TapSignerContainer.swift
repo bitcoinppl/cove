@@ -7,10 +7,10 @@
 
 import SwiftUI
 
-import SwiftUI
-
 @Observable
 class TapSignerManager {
+    private let logger = Log(id: "TapSignerManager")
+
     var path: [TapSignerRoute] = []
     var initialRoute: TapSignerRoute
 
@@ -19,7 +19,20 @@ class TapSignerManager {
     }
 
     func navigate(to newRoute: TapSignerRoute) {
-        if let lastRoute = path.last, lastRoute == newRoute { return }
+        // don't allow navigating to the same route
+        if let lastRoute = path.last {
+            switch (lastRoute, newRoute) {
+            case (.initSelect, .initSelect),
+                 (.initAdvanced, .initAdvanced),
+                 (.startingPin, .startingPin),
+                 (.newPin, .newPin),
+                 (.confirmPin, .confirmPin):
+                return
+            default: ()
+            }
+        }
+
+        logger.debug("Navigating to \(newRoute), current path: \(path)")
         path.append(newRoute)
     }
 

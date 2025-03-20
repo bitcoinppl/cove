@@ -84,7 +84,7 @@ struct TapSignerNewPin: View {
             .onChange(of: isFocused) { _, _ in isFocused = true }
             .onChange(of: newPin) { old, pin in
                 if pin.count == 6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    return
                         manager.navigate(
                             to: .confirmPin(
                                 tapSigner: tapSigner,
@@ -92,7 +92,6 @@ struct TapSignerNewPin: View {
                                 newPin: pin
                             )
                         )
-                    }
                 }
 
                 if pin.count > 6, old.count < 6 {

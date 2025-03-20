@@ -17,7 +17,18 @@ struct TapSignerConfirmPin: View {
 
     // private
     @State private var confirmPin: String = ""
+
+    @State private var animateField: Bool = false
     @FocusState private var isFocused
+
+    func checkPin() {
+        if confirmPin == newPin {
+            // success
+        } else {
+            animateField.toggle()
+            confirmPin = ""
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -66,6 +77,25 @@ struct TapSignerConfirmPin: View {
                             .id(index)
                     }
                 }
+                .keyframeAnimator(
+                    initialValue: CGFloat.zero,
+                    trigger: animateField,
+                    content: { content, value in
+                        content
+                            .offset(x: value)
+                    },
+                    keyframes: { _ in
+                        KeyframeTrack {
+                            CubicKeyframe(30, duration: 0.07)
+                            CubicKeyframe(-30, duration: 0.07)
+                            CubicKeyframe(20, duration: 0.07)
+                            CubicKeyframe(-20, duration: 0.07)
+                            CubicKeyframe(10, duration: 0.07)
+                            CubicKeyframe(-10, duration: 0.07)
+                            CubicKeyframe(0, duration: 0.07)
+                        }
+                    }
+                )
                 .fixedSize(horizontal: true, vertical: true)
                 .contentShape(Rectangle())
                 .onTapGesture { isFocused = true }
@@ -85,7 +115,9 @@ struct TapSignerConfirmPin: View {
             .onChange(of: isFocused) { _, _ in isFocused = true }
             .onChange(of: confirmPin) { old, pin in
                 if pin.count == 6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {}
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        checkPin()
+                    }
                 }
 
                 if pin.count > 6, old.count < 6 {
