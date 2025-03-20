@@ -54,7 +54,7 @@ struct TapSignerChooseChainCode: View {
             // Automatic Setup Button
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.3)) {
-                    manager.route = .startingPin(tapSigner)
+                    manager.navigate(to: .startingPin(tapSigner))
                 }
             }) {
                 VStack(spacing: 4) {
@@ -113,6 +113,7 @@ struct TapSignerChooseChainCode: View {
             }
             .opacity(0.8)
         )
+        .navigationBarHidden(true)
     }
 }
 

@@ -31,7 +31,7 @@ struct TapSignerNewPin: View {
                     HStack {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                manager.route = .startingPin(tapSigner)
+                                manager.popRoute()
                             }
                         }) {
                             Image(systemName: "chevron.left")
@@ -93,7 +93,7 @@ struct TapSignerNewPin: View {
                 if pin.count == 6 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         withAnimation(.easeInOut(duration: 0.3)) {
-                            manager.route = .confirmPin(tapSigner: tapSigner, startingPin: startingPin, newPin: pin)
+                            manager.navigate(to: .confirmPin(tapSigner: tapSigner, startingPin: startingPin, newPin: pin))
                         }
                     }
                 }
@@ -108,6 +108,7 @@ struct TapSignerNewPin: View {
             }
         }
         .scrollIndicators(.hidden)
+        .navigationBarHidden(true)
     }
 }
 

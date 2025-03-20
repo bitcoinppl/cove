@@ -8,15 +8,10 @@
 import SwiftUI
 
 extension AnyTransition {
-    static var navigationTransitionNext: AnyTransition {
-        let insertion = AnyTransition.move(edge: .trailing)
-        let removal = AnyTransition.move(edge: .leading)
-        return .asymmetric(insertion: insertion, removal: removal)
-    }
-
-    static var navigationTransitionPrevious: AnyTransition {
-        let insertion = AnyTransition.move(edge: .leading)
-        let removal = AnyTransition.move(edge: .trailing)
-        return .asymmetric(insertion: insertion, removal: removal)
+    static var navigationTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .trailing).animation(.easeInOut(duration: 0.3)),
+            removal: .move(edge: .leading).animation(.easeInOut(duration: 0.3))
+        )
     }
 }
