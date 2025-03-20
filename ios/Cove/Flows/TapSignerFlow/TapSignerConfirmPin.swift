@@ -1,5 +1,5 @@
 //
-//  TapSignerStartingPin.swift
+//  TapSignerConfirmPin.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/12/25.
@@ -7,25 +7,27 @@
 
 import SwiftUI
 
-struct TapSignerStartingPin: View {
+struct TapSignerConfirmPin: View {
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
+    let startingPin: String
+    let newPin: String
 
     // private
-    @State private var startingPin: String = ""
+    @State private var confirmPin: String = ""
     @FocusState private var isFocused
 
     var pinMap: [Int: String] {
-        startingPin.enumerated().reduce(into: [:]) { result, pair in
+        confirmPin.enumerated().reduce(into: [:]) { result, pair in
             result[pair.offset] = String(pair.element)
         }
     }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 30) {
+            VStack(spacing: 40) {
                 VStack {
                     HStack {
                         Button(action: { manager.popRoute() }) {
@@ -37,23 +39,24 @@ struct TapSignerStartingPin: View {
                     }
                     .padding(.top, 20)
                     .padding(.horizontal, 10)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .fontWeight(.semibold)
 
-                    Image(.tapSignerCard)
-                        .offset(y: 10)
-                        .clipped()
+                    Image(systemName: "lock")
+                        .font(.system(size: 100))
+                        .foregroundColor(.blue)
+                        .padding(.top, 22)
                 }
-                .background(Color(hex: "3A4254"))
 
                 VStack(spacing: 20) {
-                    Text("Enter Starting PIN")
+                    Text("Confirm New PIN")
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
                     Text(
-                        "The starting PIN is the 6 digit numeric PIN found of the back of your TAPSIGNER"
+                        "The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You'll need it for signing transactions."
                     )
+                    .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 }
@@ -67,38 +70,37 @@ struct TapSignerStartingPin: View {
                             .frame(width: 18)
                             .padding(.horizontal, 10)
                             .id(index)
-                            .foregroundStyle(.primary)
                     }
                 }
+                .fixedSize(horizontal: true, vertical: true)
                 .contentShape(Rectangle())
                 .onTapGesture { isFocused = true }
-                .fixedSize(horizontal: true, vertical: true)
 
-                TextField("Hidden Input", text: $startingPin)
+                TextField("Hidden Input", text: $confirmPin)
                     .opacity(0)
                     .frame(width: 0, height: 0)
                     .focused($isFocused)
                     .keyboardType(.numberPad)
+
+                Spacer()
             }
             .onAppear {
-                startingPin = ""
+                confirmPin = ""
                 isFocused = true
             }
             .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: startingPin) { old, pin in
+            .onChange(of: confirmPin) { old, pin in
                 if pin.count == 6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        manager.navigate(to: .newPin(tapSigner: tapSigner, startingPin: pin))
-                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {}
                 }
 
                 if pin.count > 6, old.count < 6 {
-                    startingPin = old
+                    confirmPin = old
                     return
                 }
 
                 if pin.count > 6 {
-                    startingPin = String(startingPin.prefix(6))
+                    confirmPin = String(startingPin.prefix(6))
                     return
                 }
             }
@@ -109,7 +111,13 @@ struct TapSignerStartingPin: View {
 }
 
 #Preview {
-    TapSignerContainer(route: .startingPin(tapSignerPreviewNew(preview: true)))
-        .environment(AppManager.shared)
-        .environment(AuthManager.shared)
+    TapSignerContainer(
+        route:
+            .confirmPin(
+                tapSigner: tapSignerPreviewNew(preview: true),
+                startingPin: "123456",
+                newPin: "222222"
+            )
+    )
+    .environment(AppManager.shared)
 }

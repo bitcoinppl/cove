@@ -11,7 +11,7 @@ import SwiftUI
 
 @Observable
 class TapSignerManager {
-    var route = NavigationPath()
+    var path: [TapSignerRoute] = []
     var initialRoute: TapSignerRoute
 
     init(_ route: TapSignerRoute) {
@@ -19,11 +19,12 @@ class TapSignerManager {
     }
 
     func navigate(to newRoute: TapSignerRoute) {
-        route.append(newRoute)
+        if let lastRoute = path.last, lastRoute == newRoute { return }
+        path.append(newRoute)
     }
 
     func popRoute() {
-        if !route.isEmpty { route.removeLast() }
+        if !path.isEmpty { path.removeLast() }
     }
 }
 
@@ -36,7 +37,7 @@ struct TapSignerContainer: View {
     }
 
     var body: some View {
-        NavigationStack(path: $manager.route) {
+        NavigationStack(path: $manager.path) {
             // Initial view based on initial route
             routeContent(route: manager.initialRoute)
                 .navigationDestination(for: TapSignerRoute.self) { route in
@@ -65,8 +66,8 @@ struct TapSignerContainer: View {
         case let .newPin(tapSigner: t, startingPin: pin):
             TapSignerNewPin(tapSigner: t, startingPin: pin)
                 .id("newPin")
-        case .confirmPin:
-            EmptyView()
+        case let .confirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin):
+            TapSignerConfirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin)
                 .id("confirmPin")
         }
     }
