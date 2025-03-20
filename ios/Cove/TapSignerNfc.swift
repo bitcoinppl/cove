@@ -69,9 +69,9 @@ class TapSignerNFC {
                 // convert this to a result type
                 let response = await continueSetup(incompleteResponse)
                 switch response {
-                case .success(.setup(.complete(let backup))):
+                case .success(.setup(.complete(let c))):
                     nfc.session?.invalidate()
-                    return .setup(.complete(backup: backup))
+                    return .setup(.complete(c))
 
                 case .success(.setup(let other)):
                     errorCount += 1
@@ -100,6 +100,8 @@ class TapSignerNFC {
         case .continueFromInit(let c):
             c.continueCmd
         case .continueFromBackup(let c):
+            c.continueCmd
+        case .continueFromChange(let c):
             c.continueCmd
         }
 

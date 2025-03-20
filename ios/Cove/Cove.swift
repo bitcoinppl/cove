@@ -13608,6 +13608,92 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 }
 
 
+public struct Complete {
+    public var backup: Data
+    public var xpub: Data
+    public var masterXpub: Data
+    public var chainCode: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(backup: Data, xpub: Data, masterXpub: Data, chainCode: Data) {
+        self.backup = backup
+        self.xpub = xpub
+        self.masterXpub = masterXpub
+        self.chainCode = chainCode
+    }
+}
+
+#if compiler(>=6)
+extension Complete: Sendable {}
+#endif
+
+
+extension Complete: Equatable, Hashable {
+    public static func ==(lhs: Complete, rhs: Complete) -> Bool {
+        if lhs.backup != rhs.backup {
+            return false
+        }
+        if lhs.xpub != rhs.xpub {
+            return false
+        }
+        if lhs.masterXpub != rhs.masterXpub {
+            return false
+        }
+        if lhs.chainCode != rhs.chainCode {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(backup)
+        hasher.combine(xpub)
+        hasher.combine(masterXpub)
+        hasher.combine(chainCode)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeComplete: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Complete {
+        return
+            try Complete(
+                backup: FfiConverterData.read(from: &buf), 
+                xpub: FfiConverterData.read(from: &buf), 
+                masterXpub: FfiConverterData.read(from: &buf), 
+                chainCode: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Complete, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.backup, into: &buf)
+        FfiConverterData.write(value.xpub, into: &buf)
+        FfiConverterData.write(value.masterXpub, into: &buf)
+        FfiConverterData.write(value.chainCode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeComplete_lift(_ buf: RustBuffer) throws -> Complete {
+    return try FfiConverterTypeComplete.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeComplete_lower(_ value: Complete) -> RustBuffer {
+    return FfiConverterTypeComplete.lower(value)
+}
+
+
 public struct ConfirmedDetails {
     public var blockNumber: UInt32
     public var confirmationTime: UInt64
@@ -13731,6 +13817,62 @@ public func FfiConverterTypeContinueFromBackup_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeContinueFromBackup_lower(_ value: ContinueFromBackup) -> RustBuffer {
     return FfiConverterTypeContinueFromBackup.lower(value)
+}
+
+
+public struct ContinueFromChange {
+    public var backup: Data
+    public var continueCmd: SetupCmd
+    public var error: TapSignerReaderError
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(backup: Data, continueCmd: SetupCmd, error: TapSignerReaderError) {
+        self.backup = backup
+        self.continueCmd = continueCmd
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ContinueFromChange: Sendable {}
+#endif
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeContinueFromChange: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContinueFromChange {
+        return
+            try ContinueFromChange(
+                backup: FfiConverterData.read(from: &buf), 
+                continueCmd: FfiConverterTypeSetupCmd.read(from: &buf), 
+                error: FfiConverterTypeTapSignerReaderError.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ContinueFromChange, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.backup, into: &buf)
+        FfiConverterTypeSetupCmd.write(value.continueCmd, into: &buf)
+        FfiConverterTypeTapSignerReaderError.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContinueFromChange_lift(_ buf: RustBuffer) throws -> ContinueFromChange {
+    return try FfiConverterTypeContinueFromChange.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContinueFromChange_lower(_ value: ContinueFromChange) -> RustBuffer {
+    return FfiConverterTypeContinueFromChange.lower(value)
 }
 
 
@@ -22329,11 +22471,13 @@ extension SettingsRoute: Equatable, Hashable {}
 
 public enum SetupCmdResponse {
     
-    case complete(backup: Data
-    )
     case continueFromInit(ContinueFromInit
     )
     case continueFromBackup(ContinueFromBackup
+    )
+    case continueFromChange(ContinueFromChange
+    )
+    case complete(Complete
     )
 }
 
@@ -22352,13 +22496,16 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .complete(backup: try FfiConverterData.read(from: &buf)
+        case 1: return .continueFromInit(try FfiConverterTypeContinueFromInit.read(from: &buf)
         )
         
-        case 2: return .continueFromInit(try FfiConverterTypeContinueFromInit.read(from: &buf)
+        case 2: return .continueFromBackup(try FfiConverterTypeContinueFromBackup.read(from: &buf)
         )
         
-        case 3: return .continueFromBackup(try FfiConverterTypeContinueFromBackup.read(from: &buf)
+        case 3: return .continueFromChange(try FfiConverterTypeContinueFromChange.read(from: &buf)
+        )
+        
+        case 4: return .complete(try FfiConverterTypeComplete.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22369,19 +22516,24 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         switch value {
         
         
-        case let .complete(backup):
-            writeInt(&buf, Int32(1))
-            FfiConverterData.write(backup, into: &buf)
-            
-        
         case let .continueFromInit(v1):
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(1))
             FfiConverterTypeContinueFromInit.write(v1, into: &buf)
             
         
         case let .continueFromBackup(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(2))
             FfiConverterTypeContinueFromBackup.write(v1, into: &buf)
+            
+        
+        case let .continueFromChange(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeContinueFromChange.write(v1, into: &buf)
+            
+        
+        case let .complete(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeComplete.write(v1, into: &buf)
             
         }
     }

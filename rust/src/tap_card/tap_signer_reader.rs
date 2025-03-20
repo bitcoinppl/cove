@@ -63,9 +63,10 @@ pub enum TapSignerResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum SetupCmdResponse {
-    Complete { backup: Vec<u8> },
     ContinueFromInit(ContinueFromInit),
     ContinueFromBackup(ContinueFromBackup),
+    ContinueFromChange(ContinueFromChange),
+    Complete(Complete),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -79,6 +80,21 @@ pub struct ContinueFromBackup {
     pub backup: Vec<u8>,
     pub continue_cmd: Arc<SetupCmd>,
     pub error: TapSignerReaderError,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ContinueFromChange {
+    pub backup: Vec<u8>,
+    pub continue_cmd: Arc<SetupCmd>,
+    pub error: TapSignerReaderError,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Complete {
+    pub backup: Vec<u8>,
+    pub xpub: Vec<u8>,
+    pub master_xpub: Vec<u8>,
+    pub chain_code: Vec<u8>,
 }
 
 #[uniffi::export]
@@ -146,14 +162,17 @@ impl TapSignerReader {
             SetupCmdResponse::ContinueFromInit(c) => self.init_backup_change(c.continue_cmd).await,
 
             SetupCmdResponse::ContinueFromBackup(c) => {
-                let response = self.change(c.continue_cmd, c.backup).await;
+                let response = self.change_and_derive(c.continue_cmd, c.backup).await;
+                Ok(response)
+            }
+
+            SetupCmdResponse::ContinueFromChange(c) => {
+                let response = self.derive(c.continue_cmd, c.backup).await;
                 Ok(response)
             }
 
             // already complete, just return the backup
-            SetupCmdResponse::Complete { backup } => {
-                return Ok(SetupCmdResponse::Complete { backup });
-            }
+            SetupCmdResponse::Complete(c) => Ok(SetupCmdResponse::Complete(c)),
         }
     }
 }
@@ -168,10 +187,10 @@ impl TapSignerReader {
             .await
             .map_err(TransportError::from)?;
 
-        Ok(self.backup_and_change(cmd).await)
+        Ok(self.backup_change_xpub(cmd).await)
     }
 
-    async fn backup_and_change(&self, cmd: Arc<SetupCmd>) -> SetupCmdResponse {
+    async fn backup_change_xpub(&self, cmd: Arc<SetupCmd>) -> SetupCmdResponse {
         let backup_response = self.reader.lock().await.backup(&cmd.factory_pin).await;
 
         let backup = match backup_response {
@@ -187,10 +206,10 @@ impl TapSignerReader {
             }
         };
 
-        self.change(cmd.clone(), backup).await
+        self.change_and_derive(cmd.clone(), backup).await
     }
 
-    async fn change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
+    async fn change_and_derive(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
         let change_response = self
             .reader
             .lock()
@@ -209,7 +228,38 @@ impl TapSignerReader {
             return response;
         }
 
-        SetupCmdResponse::Complete { backup }
+        self.derive(cmd, backup).await
+    }
+
+    async fn derive(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
+        let derive_response = self
+            .reader
+            .lock()
+            .await
+            .derive(&[84, 0, 0], &cmd.factory_pin)
+            .await;
+
+        let derive = match derive_response {
+            Ok(derive) => derive,
+            Err(e) => {
+                let error = TapSignerReaderError::TapSignerError(e.into());
+                let response = SetupCmdResponse::ContinueFromChange(ContinueFromChange {
+                    backup,
+                    continue_cmd: cmd,
+                    error,
+                });
+                return response;
+            }
+        };
+
+        let complete = Complete {
+            backup,
+            xpub: derive.pubkey.expect("gave path 84/0/0"),
+            master_xpub: derive.master_pubkey,
+            chain_code: derive.chain_code,
+        };
+
+        SetupCmdResponse::Complete(complete)
     }
 }
 
