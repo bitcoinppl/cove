@@ -15,8 +15,7 @@ struct TapSignerContainer: View {
         Group {
             switch route {
             case let .initSelect(t):
-                // TapSignerInitSelect()
-                TapSignerStartingPin(tapSigner: t)
+                TapSignerChooseChainCode()
             case .initAdvanced:
                 // TapSignerInitAdvanced()
                 EmptyView()
@@ -31,23 +30,11 @@ struct TapSignerContainer: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .background(
-            ZStack {
-                Color(UIColor.systemGroupedBackground)
-                    .ignoresSafeArea(edges: .all)
-
-                Image(.settingsPattern)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity)
-                    .ignoresSafeArea(edges: .all)
-            }
-        )
         .environment(AuthManager.shared)
         .environment(app)
     }
 }
 
 #Preview {
-    TapSignerContainer(route: .startingPin(tapSignerPreviewNew(preview: true)))
+    TapSignerContainer(route: .initSelect(tapSignerPreviewNew(preview: true)))
 }
