@@ -23008,9 +23008,9 @@ public enum TapSignerRoute {
     )
     case startingPin(TapSigner
     )
-    case newPin(TapSigner
+    case newPin(tapSigner: TapSigner, startingPin: String
     )
-    case confirmPin(TapSigner
+    case confirmPin(tapSigner: TapSigner, startingPin: String, newPin: String
     )
 }
 
@@ -23038,10 +23038,10 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         case 3: return .startingPin(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
-        case 4: return .newPin(try FfiConverterTypeTapSigner.read(from: &buf)
+        case 4: return .newPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf)
         )
         
-        case 5: return .confirmPin(try FfiConverterTypeTapSigner.read(from: &buf)
+        case 5: return .confirmPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23067,14 +23067,17 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
         
-        case let .newPin(v1):
+        case let .newPin(tapSigner,startingPin):
             writeInt(&buf, Int32(4))
-            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
+            FfiConverterString.write(startingPin, into: &buf)
             
         
-        case let .confirmPin(v1):
+        case let .confirmPin(tapSigner,startingPin,newPin):
             writeInt(&buf, Int32(5))
-            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
+            FfiConverterString.write(startingPin, into: &buf)
+            FfiConverterString.write(newPin, into: &buf)
             
         }
     }

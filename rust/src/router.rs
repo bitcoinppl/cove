@@ -108,8 +108,15 @@ pub enum TapSignerRoute {
     InitSelect(TapSigner),
     InitAdvanced(TapSigner),
     StartingPin(TapSigner),
-    NewPin(TapSigner),
-    ConfirmPin(TapSigner),
+    NewPin {
+        tap_signer: TapSigner,
+        starting_pin: String,
+    },
+    ConfirmPin {
+        tap_signer: TapSigner,
+        starting_pin: String,
+        new_pin: String,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]

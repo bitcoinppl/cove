@@ -8,23 +8,24 @@
 import SwiftUI
 
 struct TapSignerChooseChainCode: View {
+    @Environment(AppManager.self) var app
+    @Environment(TapSignerManager.self) var manager
+
+    let tapSigner: TapSigner
+
     var body: some View {
         VStack {
             // Top Cancel Button
             HStack {
-                Button(action: {
-                    // Action for Cancel button
-                }) {
+                Button(action: { app.sheetState = .none }) {
                     Text("Cancel")
-                        .foregroundColor(.primary)
-                        .fontWeight(.semibold)
-                        .padding()
                 }
-                .padding(.top, 10)
-                .padding(.horizontal, 5)
                 Spacer()
             }
-            .padding(.top, 10)
+            .padding(.top, 20)
+            .padding(.horizontal, 10)
+            .foregroundStyle(.primary)
+            .fontWeight(.semibold)
 
             Spacer()
 
@@ -52,7 +53,9 @@ struct TapSignerChooseChainCode: View {
 
             // Automatic Setup Button
             Button(action: {
-                // Action for Automatic Setup
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    manager.route = .startingPin(tapSigner)
+                }
             }) {
                 VStack(spacing: 4) {
                     HStack {
@@ -96,6 +99,7 @@ struct TapSignerChooseChainCode: View {
             }
             .contentShape(Rectangle())
         }
+        .contentTransition(.opacity)
         .edgesIgnoringSafeArea(.all)
         .background(
             VStack {
@@ -113,5 +117,8 @@ struct TapSignerChooseChainCode: View {
 }
 
 #Preview {
-    TapSignerChooseChainCode()
+    let t = tapSignerPreviewNew(preview: true)
+    TapSignerContainer(route: .initSelect(t))
+        .environment(AppManager.shared)
+        .environment(AuthManager.shared)
 }
