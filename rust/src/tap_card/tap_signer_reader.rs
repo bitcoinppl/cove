@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bitcoin::secp256k1;
 use parking_lot::RwLock;
-use rust_cktap::{CkTapCard, commands::CkTransport as _};
+use rust_cktap::{CkTapCard, apdu::DeriveResponse, commands::CkTransport as _};
 use tokio::sync::Mutex;
 
 use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
@@ -65,7 +65,7 @@ pub enum TapSignerResponse {
 pub enum SetupCmdResponse {
     ContinueFromInit(ContinueFromInit),
     ContinueFromBackup(ContinueFromBackup),
-    ContinueFromChange(ContinueFromChange),
+    ContinueFromDerive(ContinueFromDerive),
     Complete(Complete),
 }
 
@@ -83,8 +83,9 @@ pub struct ContinueFromBackup {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ContinueFromChange {
+pub struct ContinueFromDerive {
     pub backup: Vec<u8>,
+    pub derive_info: DeriveInfo,
     pub continue_cmd: Arc<SetupCmd>,
     pub error: TapSignerReaderError,
 }
@@ -92,8 +93,13 @@ pub struct ContinueFromChange {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Complete {
     pub backup: Vec<u8>,
-    pub xpub: Vec<u8>,
+    pub derive_info: DeriveInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DeriveInfo {
     pub master_xpub: Vec<u8>,
+    pub xpub: Vec<u8>,
     pub chain_code: Vec<u8>,
 }
 
@@ -162,12 +168,12 @@ impl TapSignerReader {
             SetupCmdResponse::ContinueFromInit(c) => self.init_backup_change(c.continue_cmd).await,
 
             SetupCmdResponse::ContinueFromBackup(c) => {
-                let response = self.change_and_derive(c.continue_cmd, c.backup).await;
+                let response = self.derive_and_change(c.continue_cmd, c.backup).await;
                 Ok(response)
             }
 
-            SetupCmdResponse::ContinueFromChange(c) => {
-                let response = self.derive(c.continue_cmd, c.backup).await;
+            SetupCmdResponse::ContinueFromDerive(c) => {
+                let response = self.change(c.continue_cmd, c.backup, c.derive_info).await;
                 Ok(response)
             }
 
@@ -206,32 +212,10 @@ impl TapSignerReader {
             }
         };
 
-        self.change_and_derive(cmd.clone(), backup).await
+        self.derive_and_change(cmd.clone(), backup).await
     }
 
-    async fn change_and_derive(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
-        let change_response = self
-            .reader
-            .lock()
-            .await
-            .change(&cmd.new_pin, &cmd.factory_pin)
-            .await;
-
-        if let Err(e) = change_response {
-            let error = TapSignerReaderError::TapSignerError(e.into());
-            let response = SetupCmdResponse::ContinueFromBackup(ContinueFromBackup {
-                backup,
-                continue_cmd: cmd,
-                error,
-            });
-
-            return response;
-        }
-
-        self.derive(cmd, backup).await
-    }
-
-    async fn derive(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
+    async fn derive_and_change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
         let derive_response = self
             .reader
             .lock()
@@ -243,7 +227,7 @@ impl TapSignerReader {
             Ok(derive) => derive,
             Err(e) => {
                 let error = TapSignerReaderError::TapSignerError(e.into());
-                let response = SetupCmdResponse::ContinueFromChange(ContinueFromChange {
+                let response = SetupCmdResponse::ContinueFromBackup(ContinueFromBackup {
                     backup,
                     continue_cmd: cmd,
                     error,
@@ -252,11 +236,38 @@ impl TapSignerReader {
             }
         };
 
+        let derive_info = derive.try_into().expect("path 84/0/0 was sent");
+        self.change(cmd, backup, derive_info).await
+    }
+
+    async fn change(
+        &self,
+        cmd: Arc<SetupCmd>,
+        backup: Vec<u8>,
+        derive_info: DeriveInfo,
+    ) -> SetupCmdResponse {
+        let change_response = self
+            .reader
+            .lock()
+            .await
+            .change(&cmd.new_pin, &cmd.factory_pin)
+            .await;
+
+        if let Err(e) = change_response {
+            let error = TapSignerReaderError::TapSignerError(e.into());
+            let response = SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
+                backup,
+                derive_info,
+                continue_cmd: cmd,
+                error,
+            });
+
+            return response;
+        }
+
         let complete = Complete {
             backup,
-            xpub: derive.pubkey.expect("gave path 84/0/0"),
-            master_xpub: derive.master_pubkey,
-            chain_code: derive.chain_code,
+            derive_info,
         };
 
         SetupCmdResponse::Complete(complete)
@@ -284,6 +295,24 @@ impl SetupCmd {
         Ok(Self {
             factory_pin,
             new_pin,
+            chain_code,
+        })
+    }
+}
+
+impl TryFrom<DeriveResponse> for DeriveInfo {
+    type Error = eyre::Report;
+
+    fn try_from(derive: DeriveResponse) -> Result<Self, Self::Error> {
+        let master_xpub = derive.master_pubkey;
+        let chain_code = derive.chain_code;
+        let xpub = derive
+            .pubkey
+            .ok_or_else(|| eyre::eyre!("expecting pubkey, got None, path must be missing"))?;
+
+        Ok(Self {
+            master_xpub,
+            xpub,
             chain_code,
         })
     }
