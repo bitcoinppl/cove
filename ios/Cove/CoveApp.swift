@@ -94,6 +94,8 @@ struct CoveApp: App {
                 "Error: \(error)"
             case .cantSendOnWatchOnlyWallet:
                 "This is watch-only wallet and cannot send transactions. Please import this wallet again to enable sending transactions."
+            case .uninitializedTapSigner:
+                "This TAPSIGNER has not been setup yet. Would you like to setup it now?"
             }
 
         if case .foundAddress = alert.item {
@@ -113,16 +115,6 @@ struct CoveApp: App {
             Button("OK") {
                 app.alertState = .none
                 try? app.rust.selectWallet(id: walletId)
-            }
-        case .invalidWordGroup,
-            .errorImportingHotWallet,
-            .importedSuccessfully,
-            .unableToSelectWallet,
-            .errorImportingHardwareWallet,
-            .invalidFileFormat,
-            .invalidFormat:
-            Button("OK") {
-                app.alertState = .none
             }
         case let .addressWrongNetwork(address: address, network: _, currentNetwork: _):
             Button("Copy Address") {
@@ -164,10 +156,29 @@ struct CoveApp: App {
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
-        case .failedToScanQr, .noUnsignedTransactionFound:
-            Button("OK") { app.alertState = .none }
-        default:
-            Button("OK") { app.alertState = .none }
+        case let .uninitializedTapSigner(tapSigner):
+            Button("Yes") {
+                app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
+            }
+
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .invalidWordGroup,
+            .errorImportingHotWallet,
+            .importedSuccessfully,
+            .unableToSelectWallet,
+            .errorImportingHardwareWallet,
+            .invalidFileFormat,
+            .importedLabelsSuccessfully,
+            .unableToGetAddress,
+            .failedToScanQr,
+            .noUnsignedTransactionFound,
+            .cantSendOnWatchOnlyWallet,
+            .invalidFormat:
+            Button("OK") {
+                app.alertState = .none
+            }
         }
     }
 
@@ -365,7 +376,7 @@ struct CoveApp: App {
             case let .transaction(transaction):
                 handleTransaction(transaction)
             case let .tapSignerInit(tapSigner):
-                app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
+                app.alertState = .init(.uninitializedTapSigner(tapSigner))
             case .tapSigner:
                 let panic = "TapSigner not implemented"
                 Log.error(panic)

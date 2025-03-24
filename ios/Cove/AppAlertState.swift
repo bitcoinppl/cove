@@ -29,6 +29,9 @@ public enum AppAlertState: Equatable {
     case failedToScanQr(error: String)
     case cantSendOnWatchOnlyWallet
 
+    // action
+    case uninitializedTapSigner(TapSigner)
+
     func title() -> String {
         switch self {
         case .invalidWordGroup:
@@ -50,7 +53,7 @@ public enum AppAlertState: Equatable {
         case .addressWrongNetwork:
             "Wrong Network"
         case .noWalletSelected,
-             .foundAddress:
+            .foundAddress:
             "Found Address"
         case .noCameraPermission:
             "Camera Access is Required"
@@ -62,6 +65,8 @@ public enum AppAlertState: Equatable {
             "Unable to Get Address"
         case .cantSendOnWatchOnlyWallet:
             "Watch Only Wallet"
+        case .uninitializedTapSigner:
+            "Setup TAPSIGNER?"
         }
     }
 }

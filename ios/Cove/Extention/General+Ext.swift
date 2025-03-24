@@ -147,10 +147,10 @@ extension Data {
 extension SetupCmdResponse {
     var error: TapSignerReaderError? {
         switch self {
-        case .complete: nil
+        case .complete: .none
         case let .continueFromInit(continueCmd): continueCmd.error
         case let .continueFromBackup(continueCmd): continueCmd.error
-        case let .continueFromChange(continueCmd): continueCmd.error
+        case let .continueFromDerive(continueCmd): continueCmd.error
         }
     }
 }

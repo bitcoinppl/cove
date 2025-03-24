@@ -95,14 +95,14 @@ class TapSignerNFC {
 
     public func continueSetup(_ response: SetupCmdResponse) async -> Result<TapSignerResponse, TapSignerReaderError> {
         let cmd: SetupCmd? = switch response {
-        case .complete:
-            nil
         case .continueFromInit(let c):
             c.continueCmd
         case .continueFromBackup(let c):
             c.continueCmd
-        case .continueFromChange(let c):
+        case .continueFromDerive(let c):
             c.continueCmd
+        case .complete:
+            .none
         }
 
         guard let cmd else { return .success(.setup(response)) }
