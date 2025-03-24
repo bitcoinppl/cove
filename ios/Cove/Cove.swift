@@ -13610,17 +13610,13 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 
 public struct Complete {
     public var backup: Data
-    public var xpub: Data
-    public var masterXpub: Data
-    public var chainCode: Data
+    public var deriveInfo: DeriveInfo
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(backup: Data, xpub: Data, masterXpub: Data, chainCode: Data) {
+    public init(backup: Data, deriveInfo: DeriveInfo) {
         self.backup = backup
-        self.xpub = xpub
-        self.masterXpub = masterXpub
-        self.chainCode = chainCode
+        self.deriveInfo = deriveInfo
     }
 }
 
@@ -13634,13 +13630,7 @@ extension Complete: Equatable, Hashable {
         if lhs.backup != rhs.backup {
             return false
         }
-        if lhs.xpub != rhs.xpub {
-            return false
-        }
-        if lhs.masterXpub != rhs.masterXpub {
-            return false
-        }
-        if lhs.chainCode != rhs.chainCode {
+        if lhs.deriveInfo != rhs.deriveInfo {
             return false
         }
         return true
@@ -13648,9 +13638,7 @@ extension Complete: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(backup)
-        hasher.combine(xpub)
-        hasher.combine(masterXpub)
-        hasher.combine(chainCode)
+        hasher.combine(deriveInfo)
     }
 }
 
@@ -13664,17 +13652,13 @@ public struct FfiConverterTypeComplete: FfiConverterRustBuffer {
         return
             try Complete(
                 backup: FfiConverterData.read(from: &buf), 
-                xpub: FfiConverterData.read(from: &buf), 
-                masterXpub: FfiConverterData.read(from: &buf), 
-                chainCode: FfiConverterData.read(from: &buf)
+                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf)
         )
     }
 
     public static func write(_ value: Complete, into buf: inout [UInt8]) {
         FfiConverterData.write(value.backup, into: &buf)
-        FfiConverterData.write(value.xpub, into: &buf)
-        FfiConverterData.write(value.masterXpub, into: &buf)
-        FfiConverterData.write(value.chainCode, into: &buf)
+        FfiConverterTypeDeriveInfo.write(value.deriveInfo, into: &buf)
     }
 }
 
@@ -13820,22 +13804,24 @@ public func FfiConverterTypeContinueFromBackup_lower(_ value: ContinueFromBackup
 }
 
 
-public struct ContinueFromChange {
+public struct ContinueFromDerive {
     public var backup: Data
+    public var deriveInfo: DeriveInfo
     public var continueCmd: SetupCmd
     public var error: TapSignerReaderError
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(backup: Data, continueCmd: SetupCmd, error: TapSignerReaderError) {
+    public init(backup: Data, deriveInfo: DeriveInfo, continueCmd: SetupCmd, error: TapSignerReaderError) {
         self.backup = backup
+        self.deriveInfo = deriveInfo
         self.continueCmd = continueCmd
         self.error = error
     }
 }
 
 #if compiler(>=6)
-extension ContinueFromChange: Sendable {}
+extension ContinueFromDerive: Sendable {}
 #endif
 
 
@@ -13843,18 +13829,20 @@ extension ContinueFromChange: Sendable {}
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeContinueFromChange: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContinueFromChange {
+public struct FfiConverterTypeContinueFromDerive: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContinueFromDerive {
         return
-            try ContinueFromChange(
+            try ContinueFromDerive(
                 backup: FfiConverterData.read(from: &buf), 
+                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf), 
                 continueCmd: FfiConverterTypeSetupCmd.read(from: &buf), 
                 error: FfiConverterTypeTapSignerReaderError.read(from: &buf)
         )
     }
 
-    public static func write(_ value: ContinueFromChange, into buf: inout [UInt8]) {
+    public static func write(_ value: ContinueFromDerive, into buf: inout [UInt8]) {
         FfiConverterData.write(value.backup, into: &buf)
+        FfiConverterTypeDeriveInfo.write(value.deriveInfo, into: &buf)
         FfiConverterTypeSetupCmd.write(value.continueCmd, into: &buf)
         FfiConverterTypeTapSignerReaderError.write(value.error, into: &buf)
     }
@@ -13864,15 +13852,15 @@ public struct FfiConverterTypeContinueFromChange: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeContinueFromChange_lift(_ buf: RustBuffer) throws -> ContinueFromChange {
-    return try FfiConverterTypeContinueFromChange.lift(buf)
+public func FfiConverterTypeContinueFromDerive_lift(_ buf: RustBuffer) throws -> ContinueFromDerive {
+    return try FfiConverterTypeContinueFromDerive.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeContinueFromChange_lower(_ value: ContinueFromChange) -> RustBuffer {
-    return FfiConverterTypeContinueFromChange.lower(value)
+public func FfiConverterTypeContinueFromDerive_lower(_ value: ContinueFromDerive) -> RustBuffer {
+    return FfiConverterTypeContinueFromDerive.lower(value)
 }
 
 
@@ -13925,6 +13913,84 @@ public func FfiConverterTypeContinueFromInit_lift(_ buf: RustBuffer) throws -> C
 #endif
 public func FfiConverterTypeContinueFromInit_lower(_ value: ContinueFromInit) -> RustBuffer {
     return FfiConverterTypeContinueFromInit.lower(value)
+}
+
+
+public struct DeriveInfo {
+    public var masterXpub: Data
+    public var xpub: Data
+    public var chainCode: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(masterXpub: Data, xpub: Data, chainCode: Data) {
+        self.masterXpub = masterXpub
+        self.xpub = xpub
+        self.chainCode = chainCode
+    }
+}
+
+#if compiler(>=6)
+extension DeriveInfo: Sendable {}
+#endif
+
+
+extension DeriveInfo: Equatable, Hashable {
+    public static func ==(lhs: DeriveInfo, rhs: DeriveInfo) -> Bool {
+        if lhs.masterXpub != rhs.masterXpub {
+            return false
+        }
+        if lhs.xpub != rhs.xpub {
+            return false
+        }
+        if lhs.chainCode != rhs.chainCode {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(masterXpub)
+        hasher.combine(xpub)
+        hasher.combine(chainCode)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDeriveInfo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DeriveInfo {
+        return
+            try DeriveInfo(
+                masterXpub: FfiConverterData.read(from: &buf), 
+                xpub: FfiConverterData.read(from: &buf), 
+                chainCode: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DeriveInfo, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.masterXpub, into: &buf)
+        FfiConverterData.write(value.xpub, into: &buf)
+        FfiConverterData.write(value.chainCode, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeriveInfo_lift(_ buf: RustBuffer) throws -> DeriveInfo {
+    return try FfiConverterTypeDeriveInfo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeriveInfo_lower(_ value: DeriveInfo) -> RustBuffer {
+    return FfiConverterTypeDeriveInfo.lower(value)
 }
 
 
@@ -22475,7 +22541,7 @@ public enum SetupCmdResponse {
     )
     case continueFromBackup(ContinueFromBackup
     )
-    case continueFromChange(ContinueFromChange
+    case continueFromDerive(ContinueFromDerive
     )
     case complete(Complete
     )
@@ -22502,7 +22568,7 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         case 2: return .continueFromBackup(try FfiConverterTypeContinueFromBackup.read(from: &buf)
         )
         
-        case 3: return .continueFromChange(try FfiConverterTypeContinueFromChange.read(from: &buf)
+        case 3: return .continueFromDerive(try FfiConverterTypeContinueFromDerive.read(from: &buf)
         )
         
         case 4: return .complete(try FfiConverterTypeComplete.read(from: &buf)
@@ -22526,9 +22592,9 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
             FfiConverterTypeContinueFromBackup.write(v1, into: &buf)
             
         
-        case let .continueFromChange(v1):
+        case let .continueFromDerive(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterTypeContinueFromChange.write(v1, into: &buf)
+            FfiConverterTypeContinueFromDerive.write(v1, into: &buf)
             
         
         case let .complete(v1):

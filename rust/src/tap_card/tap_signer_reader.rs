@@ -157,7 +157,7 @@ impl TapSignerReader {
             return Err(TapSignerReaderError::InvalidPinLength(new_pin.len() as u8));
         }
 
-        if cmd.new_pin.chars().all(char::is_numeric) {
+        if !cmd.new_pin.trim().chars().all(char::is_numeric) {
             return Err(TapSignerReaderError::NonNumericPin(cmd.new_pin.to_string()));
         }
 
