@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bitcoin::secp256k1;
+use parking_lot::Mutex as SyncMutex;
 use parking_lot::RwLock;
 use rust_cktap::{CkTapCard, apdu::DeriveResponse, commands::CkTransport as _};
 use tokio::sync::Mutex;
@@ -42,6 +43,9 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 pub struct TapSignerReader {
     reader: Mutex<rust_cktap::TapSigner<TapcardTransport>>,
     cmd: RwLock<Option<TapSignerCmd>>,
+
+    /// Last response from the setup process, has started, if the last response is `Complete` then the setup process is complete
+    last_response: SyncMutex<Option<Arc<SetupCmdResponse>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -126,6 +130,7 @@ impl TapSignerReader {
         Ok(Self {
             reader: Mutex::new(card),
             cmd: RwLock::new(cmd),
+            last_response: SyncMutex::new(None),
         })
     }
 
@@ -208,6 +213,8 @@ impl TapSignerReader {
                     error,
                 });
 
+                *self.last_response.lock() = Some(response.clone().into());
+
                 return response;
             }
         };
@@ -232,6 +239,8 @@ impl TapSignerReader {
                     continue_cmd: cmd,
                     error,
                 });
+
+                *self.last_response.lock() = Some(response.clone().into());
                 return response;
             }
         };
@@ -262,6 +271,7 @@ impl TapSignerReader {
                 error,
             });
 
+            *self.last_response.lock() = Some(response.clone().into());
             return response;
         }
 
@@ -270,6 +280,7 @@ impl TapSignerReader {
             derive_info,
         };
 
+        *self.last_response.lock() = Some(SetupCmdResponse::Complete(complete.clone()).into());
         SetupCmdResponse::Complete(complete)
     }
 }
