@@ -5,6 +5,7 @@ use crate::{
     database::Database,
     mnemonic::NumberOfBip39Words,
     multi_format::tap_card::TapSigner,
+    tap_card::tap_signer_reader::TapSignerImportComplete,
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
 };
@@ -122,6 +123,7 @@ pub enum TapSignerRoute {
         new_pin: String,
         chain_code: Option<String>,
     },
+    ImportSuccess(TapSignerImportComplete),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
