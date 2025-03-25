@@ -28725,6 +28725,12 @@ public func fiatCurrencyToString(fiatCurrency: FiatCurrency) -> String  {
     )
 })
 }
+public func generateRandomChainCode() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_generate_random_chain_code($0
+    )
+})
+}
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[String]]  {
     return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError_lift) {
     uniffi_cove_fn_func_grouped_plain_words_of(
@@ -29004,6 +29010,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fiat_currency_to_string() != 50490) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_generate_random_chain_code() != 15318) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 45802) {

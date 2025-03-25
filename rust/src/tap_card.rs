@@ -157,3 +157,14 @@ pub fn create_transport_error_from_code(code: u16, message: String) -> Transport
 
     TransportError::CiborDe(message)
 }
+
+#[uniffi::export]
+pub fn generate_random_chain_code() -> String {
+    use rand::Rng as _;
+
+    let rng = &mut rand::rng();
+    let mut chain_code = [0u8; 32];
+    rng.fill(&mut chain_code);
+
+    hex::encode(chain_code)
+}
