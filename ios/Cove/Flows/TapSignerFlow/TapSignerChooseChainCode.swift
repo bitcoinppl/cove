@@ -53,9 +53,7 @@ struct TapSignerChooseChainCode: View {
 
             // Automatic Setup Button
             Button(action: {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    manager.navigate(to: .startingPin(tapSigner))
-                }
+                manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: nil))
             }) {
                 VStack(spacing: 4) {
                     HStack {
@@ -90,7 +88,7 @@ struct TapSignerChooseChainCode: View {
 
             // Advanced Setup Link
             Button(action: {
-                // Action for Advanced Setup
+                manager.navigate(to: .initAdvanced(tapSigner))
             }) {
                 Text("Advanced Setup")
                     .font(.footnote)

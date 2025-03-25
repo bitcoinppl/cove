@@ -22,11 +22,13 @@ struct TapSignerAdvancedChainCode: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            // Top Cancel Button
+            // Top Back Button
             HStack {
-                Button(action: { app.sheetState = .none }) {
-                    Text("Cancel")
+                Button(action: { manager.popRoute() }) {
+                    Image(systemName: "chevron.left")
+                    Text("Back")
                 }
+
                 Spacer()
             }
             .padding(.top, 20)
@@ -79,16 +81,18 @@ struct TapSignerAdvancedChainCode: View {
             .contentShape(Rectangle())
             .padding(.bottom, screenHeight * 0.1)
 
-            Button("Continue") {}
-                .buttonStyle(
-                    DarkButtonStyle(
-                        backgroundColor: isButtonDisabled ? .systemGray4 : .midnightBtn,
-                        foregroundColor: isButtonDisabled ? .systemGray6 : .white
-                    )
+            Button("Continue") {
+                manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: chainCode))
+            }
+            .buttonStyle(
+                DarkButtonStyle(
+                    backgroundColor: isButtonDisabled ? .systemGray4 : .midnightBtn,
+                    foregroundColor: isButtonDisabled ? .systemGray6 : .white
                 )
-                .padding()
-                .padding(.bottom, 30)
-                .disabled(isButtonDisabled)
+            )
+            .padding()
+            .padding(.bottom, 30)
+            .disabled(isButtonDisabled)
         }
         .contentTransition(.opacity)
         .edgesIgnoringSafeArea(.all)

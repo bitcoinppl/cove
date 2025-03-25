@@ -12,6 +12,7 @@ struct TapSignerStartingPin: View {
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
+    var chainCode: String? = nil
 
     // private
     @State private var startingPin: String = ""
@@ -54,7 +55,7 @@ struct TapSignerStartingPin: View {
                 .padding(.horizontal)
 
                 HStack {
-                    ForEach(0..<6, id: \.self) { index in
+                    ForEach(0 ..< 6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
                             .fill(startingPin.count <= index ? Color.clear : .primary)
@@ -103,7 +104,11 @@ struct TapSignerStartingPin: View {
 }
 
 #Preview {
-    TapSignerContainer(route: .startingPin(tapSignerPreviewNew(preview: true)))
+    TapSignerContainer(route:
+        .startingPin(
+            tapSigner: tapSignerPreviewNew(preview: true),
+            chainCode: nil
+        ))
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
 }

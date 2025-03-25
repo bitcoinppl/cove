@@ -73,8 +73,8 @@ struct TapSignerContainer: View {
         case let .initAdvanced(t):
             TapSignerAdvancedChainCode(tapSigner: t)
                 .id("initAdvanced")
-        case let .startingPin(t):
-            TapSignerStartingPin(tapSigner: t)
+        case let .startingPin(tapSigner: t, chainCode: chainCode):
+            TapSignerStartingPin(tapSigner: t, chainCode: chainCode)
                 .id("startingPin")
         case let .newPin(tapSigner: t, startingPin: pin):
             TapSignerNewPin(tapSigner: t, startingPin: pin)

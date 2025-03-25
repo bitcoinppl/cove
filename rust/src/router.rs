@@ -107,7 +107,10 @@ pub enum SendRoute {
 pub enum TapSignerRoute {
     InitSelect(TapSigner),
     InitAdvanced(TapSigner),
-    StartingPin(TapSigner),
+    StartingPin {
+        tap_signer: TapSigner,
+        chain_code: Option<String>,
+    },
     NewPin {
         tap_signer: TapSigner,
         starting_pin: String,

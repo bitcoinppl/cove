@@ -23353,7 +23353,7 @@ public enum TapSignerRoute {
     )
     case initAdvanced(TapSigner
     )
-    case startingPin(TapSigner
+    case startingPin(tapSigner: TapSigner, chainCode: String?
     )
     case newPin(tapSigner: TapSigner, startingPin: String
     )
@@ -23382,7 +23382,7 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         case 2: return .initAdvanced(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
-        case 3: return .startingPin(try FfiConverterTypeTapSigner.read(from: &buf)
+        case 3: return .startingPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
         )
         
         case 4: return .newPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf)
@@ -23409,9 +23409,10 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
         
-        case let .startingPin(v1):
+        case let .startingPin(tapSigner,chainCode):
             writeInt(&buf, Int32(3))
-            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
+            FfiConverterOptionString.write(chainCode, into: &buf)
             
         
         case let .newPin(tapSigner,startingPin):
