@@ -1,11 +1,14 @@
 use std::hash::Hasher;
 use std::sync::Arc;
 
+use bitcoin::bip32::Fingerprint;
+use bitcoin::hashes::HashEngine as _;
 use bitcoin::secp256k1;
 use nid::Nanoid;
 use parking_lot::Mutex as SyncMutex;
 use parking_lot::RwLock;
-use rust_cktap::{CkTapCard, apdu::DeriveResponse, commands::CkTransport as _};
+use rust_cktap::apdu::DeriveResponse;
+use rust_cktap::{CkTapCard, commands::CkTransport as _};
 use tokio::sync::Mutex;
 
 use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
@@ -73,7 +76,7 @@ pub enum SetupCmdResponse {
     ContinueFromInit(ContinueFromInit),
     ContinueFromBackup(ContinueFromBackup),
     ContinueFromDerive(ContinueFromDerive),
-    Complete(Complete),
+    Complete(TapSignerImportComplete),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
@@ -98,7 +101,7 @@ pub struct ContinueFromDerive {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
-pub struct Complete {
+pub struct TapSignerImportComplete {
     pub backup: Vec<u8>,
     pub derive_info: DeriveInfo,
 }
@@ -108,6 +111,7 @@ pub struct DeriveInfo {
     pub master_xpub: Vec<u8>,
     pub xpub: Vec<u8>,
     pub chain_code: Vec<u8>,
+    pub path: Vec<u32>,
 }
 
 #[uniffi::export]
@@ -229,11 +233,12 @@ impl TapSignerReader {
     }
 
     async fn derive_and_change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
+        let path: [u32; 3] = [84, 0, 0];
         let derive_response = self
             .reader
             .lock()
             .await
-            .derive(&[84, 0, 0], &cmd.factory_pin)
+            .derive(&path, &cmd.factory_pin)
             .await;
 
         let derive = match derive_response {
@@ -251,7 +256,7 @@ impl TapSignerReader {
             }
         };
 
-        let derive_info = derive.try_into().expect("path 84/0/0 was sent");
+        let derive_info = DeriveInfo::from_response(derive, path.to_vec());
         self.change(cmd, backup, derive_info).await
     }
 
@@ -281,7 +286,7 @@ impl TapSignerReader {
             return response;
         }
 
-        let complete = Complete {
+        let complete = TapSignerImportComplete {
             backup,
             derive_info,
         };
@@ -317,24 +322,6 @@ impl SetupCmd {
     }
 }
 
-impl TryFrom<DeriveResponse> for DeriveInfo {
-    type Error = eyre::Report;
-
-    fn try_from(derive: DeriveResponse) -> Result<Self, Self::Error> {
-        let master_xpub = derive.master_pubkey;
-        let chain_code = derive.chain_code;
-        let xpub = derive
-            .pubkey
-            .ok_or_else(|| eyre::eyre!("expecting pubkey, got None, path must be missing"))?;
-
-        Ok(Self {
-            master_xpub,
-            xpub,
-            chain_code,
-        })
-    }
-}
-
 impl std::hash::Hash for TapSignerReader {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
@@ -352,5 +339,86 @@ impl PartialEq for TapSignerReader {
         self.id == other.id
             && self.cmd.read().as_ref() == other.cmd.read().as_ref()
             && response_lock.as_ref() == other_response_lock.as_ref()
+    }
+}
+
+impl DeriveInfo {
+    pub fn from_response(derive_response: DeriveResponse, path: Vec<u32>) -> Self {
+        let master_xpub = derive_response.master_pubkey;
+        let chain_code = derive_response.chain_code;
+        let xpub = derive_response
+            .pubkey
+            .expect("has pubkey because path was given");
+
+        Self {
+            master_xpub,
+            xpub,
+            chain_code,
+            path,
+        }
+    }
+}
+
+impl TryInto<bitcoin::bip32::Xpub> for DeriveInfo {
+    type Error = Box<dyn std::error::Error>;
+
+    fn try_into(self) -> Result<bitcoin::bip32::Xpub, Self::Error> {
+        use bitcoin::{
+            NetworkKind,
+            bip32::{ChainCode, ChildNumber, Xpub},
+            hashes::{Hash as _, ripemd160, sha256},
+            secp256k1::PublicKey,
+        };
+
+        // TODO: get from derive info
+        let network = NetworkKind::Main;
+
+        // dept is always 3 and always the first (0) child, derives the standard derivation path
+        let depth = 3;
+        let child_number = ChildNumber::Hardened { index: 0 };
+
+        let parent_fingerprint = {
+            let parent_key = bitcoin::PublicKey::from_slice(&self.master_xpub)?;
+            let mut engine = sha256::Hash::engine();
+            engine.input(&parent_key.to_bytes());
+
+            let sha = sha256::Hash::from_engine(engine);
+            let mut ripemd_engine = ripemd160::Hash::engine();
+
+            ripemd_engine.input(&sha[..]);
+            let hash160 = ripemd160::Hash::from_engine(ripemd_engine);
+
+            let hash_bytes: [u8; 4] = hash160[..4].try_into()?;
+            Fingerprint::from(hash_bytes)
+        };
+
+        let public_key = PublicKey::from_slice(&self.xpub)?;
+
+        let chain_code_bytes: [u8; 32] = self.chain_code.try_into().unwrap();
+        let chain_code = ChainCode::from(chain_code_bytes);
+
+        Ok(Xpub {
+            network,
+            depth,
+            parent_fingerprint,
+            child_number,
+            public_key,
+            chain_code,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+
+    use super::*;
+
+    #[test]
+    fn test_derive_info_try_into_xpub() {
+        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
+
+        println!("{:?}", xpub);
     }
 }
