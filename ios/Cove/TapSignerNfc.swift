@@ -321,7 +321,7 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                             }
                     }
                     logger.error(errorMessage)
-                    continuation.resume(throwing: TransportError.CkTap(error: errorMessage, code: UInt64(statusWord)))
+                    continuation.resume(throwing: TransportError(code: statusWord, message: errorMessage))
                     return
                 }
 

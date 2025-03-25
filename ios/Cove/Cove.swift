@@ -16922,6 +16922,135 @@ extension BitcoinTransactionError: Foundation.LocalizedError {
 }
 
 
+
+public enum CkTapError: Swift.Error {
+
+    
+    
+    case UnluckyNumber
+    case BadArguments
+    case BadAuth
+    case NeedsAuth
+    case UnknownCommand
+    case InvalidCommand
+    case InvalidState
+    case WeakNonce
+    case BadCbor
+    case BackupFirst
+    case RateLimited
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCkTapError: FfiConverterRustBuffer {
+    typealias SwiftType = CkTapError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CkTapError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .UnluckyNumber
+        case 2: return .BadArguments
+        case 3: return .BadAuth
+        case 4: return .NeedsAuth
+        case 5: return .UnknownCommand
+        case 6: return .InvalidCommand
+        case 7: return .InvalidState
+        case 8: return .WeakNonce
+        case 9: return .BadCbor
+        case 10: return .BackupFirst
+        case 11: return .RateLimited
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CkTapError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .UnluckyNumber:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .BadArguments:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .BadAuth:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .NeedsAuth:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .UnknownCommand:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .InvalidCommand:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .InvalidState:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .WeakNonce:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .BadCbor:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .BackupFirst:
+            writeInt(&buf, Int32(10))
+        
+        
+        case .RateLimited:
+            writeInt(&buf, Int32(11))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCkTapError_lift(_ buf: RustBuffer) throws -> CkTapError {
+    return try FfiConverterTypeCkTapError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCkTapError_lower(_ value: CkTapError) -> RustBuffer {
+    return FfiConverterTypeCkTapError.lower(value)
+}
+
+
+extension CkTapError: Equatable, Hashable {}
+
+
+
+extension CkTapError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -23789,7 +23918,7 @@ public enum TransportError: Swift.Error {
     )
     case CiborValue(String
     )
-    case CkTap(error: String, code: UInt64
+    case CkTap(CkTapError
     )
     case IncorrectSignature(String
     )
@@ -23820,8 +23949,7 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 3: return .CkTap(
-            error: try FfiConverterString.read(from: &buf), 
-            code: try FfiConverterUInt64.read(from: &buf)
+            try FfiConverterTypeCkTapError.read(from: &buf)
             )
         case 4: return .IncorrectSignature(
             try FfiConverterString.read(from: &buf)
@@ -23854,10 +23982,9 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .CkTap(error,code):
+        case let .CkTap(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(error, into: &buf)
-            FfiConverterUInt64.write(code, into: &buf)
+            FfiConverterTypeCkTapError.write(v1, into: &buf)
             
         
         case let .IncorrectSignature(v1):
@@ -28486,6 +28613,14 @@ public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelect
     )
 })
 }
+public func createTransportErrorFromCode(code: UInt16, message: String) -> TransportError  {
+    return try!  FfiConverterTypeTransportError_lift(try! rustCall() {
+    uniffi_cove_fn_func_create_transport_error_from_code(
+        FfiConverterUInt16.lower(code),
+        FfiConverterString.lower(message),$0
+    )
+})
+}
 public func defaultNodeSelection() -> NodeSelection  {
     return try!  FfiConverterTypeNodeSelection_lift(try! rustCall() {
     uniffi_cove_fn_func_default_node_selection($0
@@ -28821,6 +28956,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_color_scheme_selection_capitalized_string() != 42247) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_create_transport_error_from_code() != 58675) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_node_selection() != 14665) {

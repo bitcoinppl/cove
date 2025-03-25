@@ -70,8 +70,8 @@ struct TapSignerContainer: View {
         case let .initSelect(t):
             TapSignerChooseChainCode(tapSigner: t)
                 .id("initSelect")
-        case .initAdvanced:
-            EmptyView()
+        case let .initAdvanced(t):
+            TapSignerAdvancedChainCode(tapSigner: t)
                 .id("initAdvanced")
         case let .startingPin(t):
             TapSignerStartingPin(tapSigner: t)

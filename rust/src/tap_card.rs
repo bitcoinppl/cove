@@ -109,18 +109,20 @@ impl From<rust_cktap::tap_signer::TapSignerError> for TransportError {
 
 impl From<rust_cktap::apdu::CkTapError> for CkTapError {
     fn from(error: rust_cktap::apdu::CkTapError) -> Self {
+        use rust_cktap::apdu::CkTapError as CTE;
+
         match error {
-            rust_cktap::apdu::CkTapError::UnluckyNumber => CkTapError::UnluckyNumber,
-            rust_cktap::apdu::CkTapError::BadArguments => CkTapError::BadArguments,
-            rust_cktap::apdu::CkTapError::BadAuth => CkTapError::BadAuth,
-            rust_cktap::apdu::CkTapError::NeedsAuth => CkTapError::NeedsAuth,
-            rust_cktap::apdu::CkTapError::UnknownCommand => CkTapError::UnknownCommand,
-            rust_cktap::apdu::CkTapError::InvalidCommand => CkTapError::InvalidCommand,
-            rust_cktap::apdu::CkTapError::InvalidState => CkTapError::InvalidState,
-            rust_cktap::apdu::CkTapError::WeakNonce => CkTapError::WeakNonce,
-            rust_cktap::apdu::CkTapError::BadCBOR => CkTapError::BadCBOR,
-            rust_cktap::apdu::CkTapError::BackupFirst => CkTapError::BackupFirst,
-            rust_cktap::apdu::CkTapError::RateLimited => CkTapError::RateLimited,
+            CTE::UnluckyNumber => CkTapError::UnluckyNumber,
+            CTE::BadArguments => CkTapError::BadArguments,
+            CTE::BadAuth => CkTapError::BadAuth,
+            CTE::NeedsAuth => CkTapError::NeedsAuth,
+            CTE::UnknownCommand => CkTapError::UnknownCommand,
+            CTE::InvalidCommand => CkTapError::InvalidCommand,
+            CTE::InvalidState => CkTapError::InvalidState,
+            CTE::WeakNonce => CkTapError::WeakNonce,
+            CTE::BadCBOR => CkTapError::BadCBOR,
+            CTE::BackupFirst => CkTapError::BackupFirst,
+            CTE::RateLimited => CkTapError::RateLimited,
         }
     }
 }
@@ -141,4 +143,17 @@ impl From<CkTapError> for rust_cktap::apdu::CkTapError {
             CkTapError::RateLimited => rust_cktap::apdu::CkTapError::RateLimited,
         }
     }
+}
+
+#[uniffi::export]
+pub fn create_transport_error_from_code(code: u16, message: String) -> TransportError {
+    use rust_cktap::apdu::CkTapError as CTE;
+    let error = CTE::error_from_code(code);
+
+    if let Some(error) = error {
+        let cktap_error = CkTapError::from(error);
+        return TransportError::CkTap(cktap_error);
+    }
+
+    TransportError::CiborDe(message)
 }
