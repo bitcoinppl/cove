@@ -114,11 +114,13 @@ pub enum TapSignerRoute {
     NewPin {
         tap_signer: TapSigner,
         starting_pin: String,
+        chain_code: Option<String>,
     },
     ConfirmPin {
         tap_signer: TapSigner,
         starting_pin: String,
         new_pin: String,
+        chain_code: Option<String>,
     },
 }
 

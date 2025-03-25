@@ -23355,9 +23355,9 @@ public enum TapSignerRoute {
     )
     case startingPin(tapSigner: TapSigner, chainCode: String?
     )
-    case newPin(tapSigner: TapSigner, startingPin: String
+    case newPin(tapSigner: TapSigner, startingPin: String, chainCode: String?
     )
-    case confirmPin(tapSigner: TapSigner, startingPin: String, newPin: String
+    case confirmPin(tapSigner: TapSigner, startingPin: String, newPin: String, chainCode: String?
     )
 }
 
@@ -23385,10 +23385,10 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         case 3: return .startingPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 4: return .newPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf)
+        case 4: return .newPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 5: return .confirmPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf)
+        case 5: return .confirmPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23415,17 +23415,19 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterOptionString.write(chainCode, into: &buf)
             
         
-        case let .newPin(tapSigner,startingPin):
+        case let .newPin(tapSigner,startingPin,chainCode):
             writeInt(&buf, Int32(4))
             FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
             FfiConverterString.write(startingPin, into: &buf)
+            FfiConverterOptionString.write(chainCode, into: &buf)
             
         
-        case let .confirmPin(tapSigner,startingPin,newPin):
+        case let .confirmPin(tapSigner,startingPin,newPin,chainCode):
             writeInt(&buf, Int32(5))
             FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
             FfiConverterString.write(startingPin, into: &buf)
             FfiConverterString.write(newPin, into: &buf)
+            FfiConverterOptionString.write(chainCode, into: &buf)
             
         }
     }

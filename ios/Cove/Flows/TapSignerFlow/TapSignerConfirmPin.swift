@@ -14,6 +14,7 @@ struct TapSignerConfirmPin: View {
     let tapSigner: TapSigner
     let startingPin: String
     let newPin: String
+    let chainCode: String?
 
     // private
     @State private var confirmPin: String = ""
@@ -142,7 +143,8 @@ struct TapSignerConfirmPin: View {
         .confirmPin(
             tapSigner: tapSignerPreviewNew(preview: true),
             startingPin: "123456",
-            newPin: "222222"
+            newPin: "222222",
+            chainCode: nil
         )
     )
     .environment(AppManager.shared)

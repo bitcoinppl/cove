@@ -83,7 +83,12 @@ struct TapSignerStartingPin: View {
             .onChange(of: startingPin) { old, pin in
                 if pin.count == 6 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        manager.navigate(to: .newPin(tapSigner: tapSigner, startingPin: pin))
+                        manager.navigate(to:
+                            .newPin(
+                                tapSigner: tapSigner,
+                                startingPin: pin,
+                                chainCode: chainCode
+                            ))
                     }
                 }
 

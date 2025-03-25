@@ -76,11 +76,11 @@ struct TapSignerContainer: View {
         case let .startingPin(tapSigner: t, chainCode: chainCode):
             TapSignerStartingPin(tapSigner: t, chainCode: chainCode)
                 .id("startingPin")
-        case let .newPin(tapSigner: t, startingPin: pin):
-            TapSignerNewPin(tapSigner: t, startingPin: pin)
+        case let .newPin(tapSigner: t, startingPin: pin, chainCode: chainCode):
+            TapSignerNewPin(tapSigner: t, startingPin: pin, chainCode: chainCode)
                 .id("newPin")
-        case let .confirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin):
-            TapSignerConfirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin)
+        case let .confirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode):
+            TapSignerConfirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode)
                 .id("confirmPin")
         }
     }

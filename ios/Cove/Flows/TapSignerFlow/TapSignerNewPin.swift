@@ -13,6 +13,7 @@ struct TapSignerNewPin: View {
 
     let tapSigner: TapSigner
     let startingPin: String
+    let chainCode: String?
 
     // private
     @State private var newPin: String = ""
@@ -89,7 +90,8 @@ struct TapSignerNewPin: View {
                             to: .confirmPin(
                                 tapSigner: tapSigner,
                                 startingPin: startingPin,
-                                newPin: pin
+                                newPin: pin,
+                                chainCode: chainCode
                             )
                         )
                 }
@@ -112,7 +114,7 @@ struct TapSignerNewPin: View {
 
 #Preview {
     TapSignerContainer(
-        route: .newPin(tapSigner: tapSignerPreviewNew(preview: true), startingPin: "123456")
+        route: .newPin(tapSigner: tapSignerPreviewNew(preview: true), startingPin: "123456", chainCode: nil)
     )
     .environment(AppManager.shared)
     .environment(AuthManager.shared)
