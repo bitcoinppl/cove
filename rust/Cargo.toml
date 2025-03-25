@@ -160,6 +160,7 @@ tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["bindgen-tests"] }
 # uniffi = { version = "0.29.0", features = ["bindgen-tests"] }
 tempfile = "3.16"
+pretty_assertions = "1.4.1"
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

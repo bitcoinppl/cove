@@ -108,8 +108,8 @@ pub struct TapSignerImportComplete {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
 pub struct DeriveInfo {
-    pub master_xpub: Vec<u8>,
-    pub xpub: Vec<u8>,
+    pub master_pubkey: Vec<u8>,
+    pub pubkey: Vec<u8>,
     pub chain_code: Vec<u8>,
     pub path: Vec<u32>,
 }
@@ -351,18 +351,35 @@ impl DeriveInfo {
             .expect("has pubkey because path was given");
 
         Self {
-            master_xpub,
-            xpub,
+            master_pubkey: master_xpub,
+            pubkey: xpub,
             chain_code,
             path,
         }
     }
+
+    pub fn master_fingerprint(&self) -> Fingerprint {
+        use bitcoin::hashes::{Hash as _, ripemd160, sha256};
+
+        let mut sha_engine = sha256::Hash::engine();
+        sha_engine.input(self.master_pubkey.as_ref());
+        let sha_result = sha256::Hash::from_engine(sha_engine);
+
+        let mut ripemd_engine = ripemd160::Hash::engine();
+        ripemd_engine.input(sha_result.as_ref());
+        let hash160_result = ripemd160::Hash::from_engine(ripemd_engine);
+
+        let mut fingerprint = [0u8; 4];
+        fingerprint.copy_from_slice(&hash160_result[0..4]);
+
+        Fingerprint::from(fingerprint)
+    }
 }
 
-impl TryInto<bitcoin::bip32::Xpub> for DeriveInfo {
+impl TryFrom<DeriveInfo> for bitcoin::bip32::Xpub {
     type Error = Box<dyn std::error::Error>;
 
-    fn try_into(self) -> Result<bitcoin::bip32::Xpub, Self::Error> {
+    fn try_from(value: DeriveInfo) -> Result<bitcoin::bip32::Xpub, Self::Error> {
         use bitcoin::{
             NetworkKind,
             bip32::{ChainCode, ChildNumber, Xpub},
@@ -377,24 +394,45 @@ impl TryInto<bitcoin::bip32::Xpub> for DeriveInfo {
         let depth = 3;
         let child_number = ChildNumber::Hardened { index: 0 };
 
+        // let master_fingerprint = {
+        //     // sha
+        //     let mut sha_engine = sha256::Hash::engine();
+        //     sha_engine.input(value.master_pubkey.as_ref());
+        //     let sha_result = sha256::Hash::from_engine(sha_engine);
+        //
+        //     // ripemd
+        //     let mut ripemd_engine = ripemd160::Hash::engine();
+        //     ripemd_engine.input(sha_result.as_ref());
+        //     let hash160_result = ripemd160::Hash::from_engine(ripemd_engine);
+        //
+        //     // take first 4 bytes
+        //     let mut fingerprint = [0u8; 4];
+        //     fingerprint.copy_from_slice(&hash160_result[0..4]);
+        //
+        //     Fingerprint::from(fingerprint)
+        // };
+
         let parent_fingerprint = {
-            let parent_key = bitcoin::PublicKey::from_slice(&self.master_xpub)?;
-            let mut engine = sha256::Hash::engine();
-            engine.input(&parent_key.to_bytes());
+            // 1. Hash with SHA256
+            let mut sha_engine = sha256::Hash::engine();
+            sha_engine.input(value.pubkey.as_ref());
+            let sha_result = sha256::Hash::from_engine(sha_engine);
 
-            let sha = sha256::Hash::from_engine(engine);
+            // 2. Hash the result with RIPEMD160
             let mut ripemd_engine = ripemd160::Hash::engine();
+            ripemd_engine.input(sha_result.as_ref());
+            let hash160_result = ripemd160::Hash::from_engine(ripemd_engine);
 
-            ripemd_engine.input(&sha[..]);
-            let hash160 = ripemd160::Hash::from_engine(ripemd_engine);
+            // 3. Take first 4 bytes as fingerprint
+            let mut fingerprint = [0u8; 4];
+            fingerprint.copy_from_slice(&hash160_result[0..4]);
 
-            let hash_bytes: [u8; 4] = hash160[..4].try_into()?;
-            Fingerprint::from(hash_bytes)
+            Fingerprint::from(fingerprint)
         };
 
-        let public_key = PublicKey::from_slice(&self.xpub)?;
+        let public_key = PublicKey::from_slice(&value.pubkey)?;
 
-        let chain_code_bytes: [u8; 32] = self.chain_code.try_into().unwrap();
+        let chain_code_bytes: [u8; 32] = value.chain_code.try_into().unwrap();
         let chain_code = ChainCode::from(chain_code_bytes);
 
         Ok(Xpub {
@@ -410,15 +448,36 @@ impl TryInto<bitcoin::bip32::Xpub> for DeriveInfo {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr as _;
-
     use super::*;
+    use bitcoin::bip32::Xpub;
+    use pretty_assertions::assert_eq;
+    use std::str::FromStr as _;
 
     #[test]
     fn test_derive_info_try_into_xpub() {
         let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
-        let xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
+        let original_xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
+        println!("{:#?}", original_xpub.fingerprint());
 
-        println!("{:?}", xpub);
+        let master_xpub = "xpub661MyMwAqRbcFFr2SGY3dUn7g8P9VKNZdKWL2Z2pZMEkBWH2D1KTcwTn7keZQCaScCx7BUDjHFJJHnzBvDgUFgNjYsQTRvo7LWfYEtt78Pb";
+        let master_xpub = bitcoin::bip32::Xpub::from_str(master_xpub).unwrap();
+        println!("{:#?}", master_xpub.fingerprint());
+
+        let master_xpub_bytes = master_xpub.public_key.serialize();
+        let xpub_bytes = original_xpub.public_key.serialize();
+
+        let derive_info = DeriveInfo {
+            master_pubkey: master_xpub_bytes.to_vec(),
+            pubkey: xpub_bytes.to_vec(),
+            chain_code: original_xpub.chain_code.to_bytes().to_vec(),
+            path: vec![84, 0, 0],
+        };
+
+        assert_eq!(derive_info.master_fingerprint(), master_xpub.fingerprint());
+
+        let parsed_xpub = Xpub::try_from(derive_info).unwrap();
+        assert_eq!(original_xpub.to_string(), parsed_xpub.to_string());
+
+        // assert_eq!(parsed_xpub, original_xpub);
     }
 }
