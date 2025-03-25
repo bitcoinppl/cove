@@ -28754,6 +28754,13 @@ public func isRouteEqual(route: Route, routeToCheck: Route) -> Bool  {
     )
 })
 }
+public func isValidChainCode(chainCode: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_is_valid_chain_code(
+        FfiConverterString.lower(chainCode),$0
+    )
+})
+}
 public func networkToString(network: Network) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_network_to_string(
@@ -29022,6 +29029,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_route_equal() != 25732) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_is_valid_chain_code() != 48052) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_network_to_string() != 60660) {

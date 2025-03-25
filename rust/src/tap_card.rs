@@ -168,3 +168,9 @@ pub fn generate_random_chain_code() -> String {
 
     hex::encode(chain_code)
 }
+
+#[uniffi::export]
+pub fn is_valid_chain_code(chain_code: String) -> bool {
+    let Ok(chain_code) = hex::decode(chain_code) else { return false };
+    chain_code.len() == 32
+}

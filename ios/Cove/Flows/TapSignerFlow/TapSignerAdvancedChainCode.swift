@@ -16,6 +16,10 @@ struct TapSignerAdvancedChainCode: View {
     // private
     @State private var chainCode: String = ""
 
+    private var isButtonDisabled: Bool {
+        !isValidChainCode(chainCode: chainCode)
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             // Top Cancel Button
@@ -76,9 +80,15 @@ struct TapSignerAdvancedChainCode: View {
             .padding(.bottom, screenHeight * 0.1)
 
             Button("Continue") {}
-                .buttonStyle(DarkButtonStyle())
+                .buttonStyle(
+                    DarkButtonStyle(
+                        backgroundColor: isButtonDisabled ? .systemGray4 : .midnightBtn,
+                        foregroundColor: isButtonDisabled ? .systemGray6 : .white
+                    )
+                )
                 .padding()
                 .padding(.bottom, 30)
+                .disabled(isButtonDisabled)
         }
         .contentTransition(.opacity)
         .edgesIgnoringSafeArea(.all)
