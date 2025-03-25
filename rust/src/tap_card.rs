@@ -4,7 +4,7 @@ use rust_cktap::{apdu::Error as ApduError, commands::CkTransport};
 use std::fmt::Debug;
 
 // Define error types
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum TransportError {
     #[error("CiborDe: {0}")]
     CiborDe(String),
@@ -25,7 +25,7 @@ pub enum TransportError {
     CvcChangeError(String),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum CkTapError {
     #[error("Rare or unlucky value used/occurred. Start again")]
     UnluckyNumber,

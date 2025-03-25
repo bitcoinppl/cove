@@ -1,6 +1,8 @@
+use std::hash::Hasher;
 use std::sync::Arc;
 
 use bitcoin::secp256k1;
+use nid::Nanoid;
 use parking_lot::Mutex as SyncMutex;
 use parking_lot::RwLock;
 use rust_cktap::{CkTapCard, apdu::DeriveResponse, commands::CkTransport as _};
@@ -8,7 +10,7 @@ use tokio::sync::Mutex;
 
 use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum TapSignerReaderError {
     #[error(transparent)]
     TapSignerError(#[from] TransportError),
@@ -41,6 +43,7 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 // Main interface exposed to Swift
 #[derive(Debug, uniffi::Object)]
 pub struct TapSignerReader {
+    id: String,
     reader: Mutex<rust_cktap::TapSigner<TapcardTransport>>,
     cmd: RwLock<Option<TapSignerCmd>>,
 
@@ -48,12 +51,12 @@ pub struct TapSignerReader {
     last_response: SyncMutex<Option<Arc<SetupCmdResponse>>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum TapSignerCmd {
     Setup(Arc<SetupCmd>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Object)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
 pub struct SetupCmd {
     pub factory_pin: String,
     pub new_pin: String,
@@ -65,7 +68,7 @@ pub enum TapSignerResponse {
     Setup(SetupCmdResponse),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum SetupCmdResponse {
     ContinueFromInit(ContinueFromInit),
     ContinueFromBackup(ContinueFromBackup),
@@ -73,20 +76,20 @@ pub enum SetupCmdResponse {
     Complete(Complete),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
 pub struct ContinueFromInit {
     pub continue_cmd: Arc<SetupCmd>,
     pub error: TapSignerReaderError,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
 pub struct ContinueFromBackup {
     pub backup: Vec<u8>,
     pub continue_cmd: Arc<SetupCmd>,
     pub error: TapSignerReaderError,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
 pub struct ContinueFromDerive {
     pub backup: Vec<u8>,
     pub derive_info: DeriveInfo,
@@ -94,13 +97,13 @@ pub struct ContinueFromDerive {
     pub error: TapSignerReaderError,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
 pub struct Complete {
     pub backup: Vec<u8>,
     pub derive_info: DeriveInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
 pub struct DeriveInfo {
     pub master_xpub: Vec<u8>,
     pub xpub: Vec<u8>,
@@ -127,7 +130,10 @@ impl TapSignerReader {
             )),
         }?;
 
+        let id: Nanoid = Nanoid::new();
+
         Ok(Self {
+            id: id.to_string(),
             reader: Mutex::new(card),
             cmd: RwLock::new(cmd),
             last_response: SyncMutex::new(None),
@@ -326,5 +332,25 @@ impl TryFrom<DeriveResponse> for DeriveInfo {
             xpub,
             chain_code,
         })
+    }
+}
+
+impl std::hash::Hash for TapSignerReader {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.cmd.read().as_ref().hash(state);
+        self.last_response.lock().as_ref().hash(state);
+    }
+}
+
+impl Eq for TapSignerReader {}
+impl PartialEq for TapSignerReader {
+    fn eq(&self, other: &Self) -> bool {
+        let response_lock = self.last_response.lock();
+        let other_response_lock = other.last_response.lock();
+
+        self.id == other.id
+            && self.cmd.read().as_ref() == other.cmd.read().as_ref()
+            && response_lock.as_ref() == other_response_lock.as_ref()
     }
 }
