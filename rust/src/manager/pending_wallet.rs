@@ -211,6 +211,9 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
             WalletError::UnsupportedWallet(error) => {
                 unreachable!("unreachable unsupported wallet: {error}")
             }
+            WalletError::DescriptorKeyParseError(error) => {
+                unreachable!("unreachable descriptor key parse error: {error}")
+            }
         }
     }
 }

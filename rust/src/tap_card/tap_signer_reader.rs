@@ -10,6 +10,7 @@ use parking_lot::RwLock;
 use rust_cktap::apdu::DeriveResponse;
 use rust_cktap::{CkTapCard, commands::CkTransport as _};
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::database::Database;
 use crate::network::Network;
@@ -129,6 +130,7 @@ impl TapSignerReader {
     ) -> Result<Self> {
         let transport = TapcardTransport(transport);
         let card = transport.to_cktap().await.map_err(TransportError::from)?;
+        debug!("tap_card_from_status: {:?}", card);
 
         let card = match card {
             CkTapCard::TapSigner(card) => Ok(card),
@@ -390,5 +392,36 @@ impl DeriveInfo {
         fingerprint.copy_from_slice(&hash160_result[0..4]);
 
         Fingerprint::from(fingerprint)
+    }
+}
+
+// MARK: - FFI PREVIEW
+#[uniffi::export]
+fn tap_signer_import_complete_new(preview: bool) -> TapSignerImportComplete {
+    use std::str::FromStr as _;
+    assert!(preview);
+
+    let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+    let original_xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
+
+    let master_xpub = "xpub661MyMwAqRbcFFr2SGY3dUn7g8P9VKNZdKWL2Z2pZMEkBWH2D1KTcwTn7keZQCaScCx7BUDjHFJJHnzBvDgUFgNjYsQTRvo7LWfYEtt78Pb";
+    let master_xpub = bitcoin::bip32::Xpub::from_str(master_xpub).unwrap();
+
+    let master_xpub_bytes = master_xpub.public_key.serialize();
+    let xpub_bytes = original_xpub.public_key.serialize();
+
+    let derive_info = DeriveInfo {
+        network: Network::Bitcoin,
+        master_pubkey: master_xpub_bytes.to_vec(),
+        pubkey: xpub_bytes.to_vec(),
+        chain_code: original_xpub.chain_code.to_bytes().to_vec(),
+        path: vec![84, 1, 0],
+    };
+
+    let backup = vec![0u8; 32];
+
+    TapSignerImportComplete {
+        backup,
+        derive_info,
     }
 }

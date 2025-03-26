@@ -123,7 +123,7 @@ pub enum TapSignerRoute {
         new_pin: String,
         chain_code: Option<String>,
     },
-    ImportSuccess(TapSignerImportComplete),
+    ImportSuccess(TapSigner, TapSignerImportComplete),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]

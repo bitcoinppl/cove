@@ -8,3 +8,21 @@ where
     t.hash(&mut s);
     s.finish()
 }
+
+mod ffi {
+    #[uniffi::export]
+    fn hex_encode(bytes: Vec<u8>) -> String {
+        hex::encode(bytes)
+    }
+
+    #[uniffi::export]
+    pub fn generate_random_chain_code() -> String {
+        use rand::Rng as _;
+
+        let rng = &mut rand::rng();
+        let mut chain_code = [0u8; 32];
+        rng.fill(&mut chain_code);
+
+        hex::encode(chain_code)
+    }
+}

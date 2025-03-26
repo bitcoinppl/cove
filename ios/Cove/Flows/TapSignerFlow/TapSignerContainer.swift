@@ -82,6 +82,8 @@ struct TapSignerContainer: View {
         case let .confirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode):
             TapSignerConfirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode)
                 .id("confirmPin")
+        case let .importSuccess(tapSigner, tapSignerImport):
+            TapSignerImportSuccess(tapSigner: tapSigner, tapSignerImport: tapSignerImport)
         }
     }
 }

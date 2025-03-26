@@ -159,17 +159,6 @@ pub fn create_transport_error_from_code(code: u16, message: String) -> Transport
 }
 
 #[uniffi::export]
-pub fn generate_random_chain_code() -> String {
-    use rand::Rng as _;
-
-    let rng = &mut rand::rng();
-    let mut chain_code = [0u8; 32];
-    rng.fill(&mut chain_code);
-
-    hex::encode(chain_code)
-}
-
-#[uniffi::export]
 pub fn is_valid_chain_code(chain_code: String) -> bool {
     let Ok(chain_code) = hex::decode(chain_code) else { return false };
     chain_code.len() == 32

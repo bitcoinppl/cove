@@ -13608,76 +13608,6 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 }
 
 
-public struct Complete {
-    public var backup: Data
-    public var deriveInfo: DeriveInfo
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(backup: Data, deriveInfo: DeriveInfo) {
-        self.backup = backup
-        self.deriveInfo = deriveInfo
-    }
-}
-
-#if compiler(>=6)
-extension Complete: Sendable {}
-#endif
-
-
-extension Complete: Equatable, Hashable {
-    public static func ==(lhs: Complete, rhs: Complete) -> Bool {
-        if lhs.backup != rhs.backup {
-            return false
-        }
-        if lhs.deriveInfo != rhs.deriveInfo {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(backup)
-        hasher.combine(deriveInfo)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeComplete: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Complete {
-        return
-            try Complete(
-                backup: FfiConverterData.read(from: &buf), 
-                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Complete, into buf: inout [UInt8]) {
-        FfiConverterData.write(value.backup, into: &buf)
-        FfiConverterTypeDeriveInfo.write(value.deriveInfo, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeComplete_lift(_ buf: RustBuffer) throws -> Complete {
-    return try FfiConverterTypeComplete.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeComplete_lower(_ value: Complete) -> RustBuffer {
-    return FfiConverterTypeComplete.lower(value)
-}
-
-
 public struct ConfirmedDetails {
     public var blockNumber: UInt32
     public var confirmationTime: UInt64
@@ -13917,16 +13847,20 @@ public func FfiConverterTypeContinueFromInit_lower(_ value: ContinueFromInit) ->
 
 
 public struct DeriveInfo {
-    public var masterXpub: Data
-    public var xpub: Data
+    public var masterPubkey: Data
+    public var pubkey: Data
     public var chainCode: Data
+    public var path: [UInt32]
+    public var network: Network
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(masterXpub: Data, xpub: Data, chainCode: Data) {
-        self.masterXpub = masterXpub
-        self.xpub = xpub
+    public init(masterPubkey: Data, pubkey: Data, chainCode: Data, path: [UInt32], network: Network) {
+        self.masterPubkey = masterPubkey
+        self.pubkey = pubkey
         self.chainCode = chainCode
+        self.path = path
+        self.network = network
     }
 }
 
@@ -13937,22 +13871,30 @@ extension DeriveInfo: Sendable {}
 
 extension DeriveInfo: Equatable, Hashable {
     public static func ==(lhs: DeriveInfo, rhs: DeriveInfo) -> Bool {
-        if lhs.masterXpub != rhs.masterXpub {
+        if lhs.masterPubkey != rhs.masterPubkey {
             return false
         }
-        if lhs.xpub != rhs.xpub {
+        if lhs.pubkey != rhs.pubkey {
             return false
         }
         if lhs.chainCode != rhs.chainCode {
+            return false
+        }
+        if lhs.path != rhs.path {
+            return false
+        }
+        if lhs.network != rhs.network {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(masterXpub)
-        hasher.combine(xpub)
+        hasher.combine(masterPubkey)
+        hasher.combine(pubkey)
         hasher.combine(chainCode)
+        hasher.combine(path)
+        hasher.combine(network)
     }
 }
 
@@ -13965,16 +13907,20 @@ public struct FfiConverterTypeDeriveInfo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DeriveInfo {
         return
             try DeriveInfo(
-                masterXpub: FfiConverterData.read(from: &buf), 
-                xpub: FfiConverterData.read(from: &buf), 
-                chainCode: FfiConverterData.read(from: &buf)
+                masterPubkey: FfiConverterData.read(from: &buf), 
+                pubkey: FfiConverterData.read(from: &buf), 
+                chainCode: FfiConverterData.read(from: &buf), 
+                path: FfiConverterSequenceUInt32.read(from: &buf), 
+                network: FfiConverterTypeNetwork.read(from: &buf)
         )
     }
 
     public static func write(_ value: DeriveInfo, into buf: inout [UInt8]) {
-        FfiConverterData.write(value.masterXpub, into: &buf)
-        FfiConverterData.write(value.xpub, into: &buf)
+        FfiConverterData.write(value.masterPubkey, into: &buf)
+        FfiConverterData.write(value.pubkey, into: &buf)
         FfiConverterData.write(value.chainCode, into: &buf)
+        FfiConverterSequenceUInt32.write(value.path, into: &buf)
+        FfiConverterTypeNetwork.write(value.network, into: &buf)
     }
 }
 
@@ -15534,6 +15480,76 @@ public func FfiConverterTypeTapSigner_lift(_ buf: RustBuffer) throws -> TapSigne
 #endif
 public func FfiConverterTypeTapSigner_lower(_ value: TapSigner) -> RustBuffer {
     return FfiConverterTypeTapSigner.lower(value)
+}
+
+
+public struct TapSignerImportComplete {
+    public var backup: Data
+    public var deriveInfo: DeriveInfo
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(backup: Data, deriveInfo: DeriveInfo) {
+        self.backup = backup
+        self.deriveInfo = deriveInfo
+    }
+}
+
+#if compiler(>=6)
+extension TapSignerImportComplete: Sendable {}
+#endif
+
+
+extension TapSignerImportComplete: Equatable, Hashable {
+    public static func ==(lhs: TapSignerImportComplete, rhs: TapSignerImportComplete) -> Bool {
+        if lhs.backup != rhs.backup {
+            return false
+        }
+        if lhs.deriveInfo != rhs.deriveInfo {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(backup)
+        hasher.combine(deriveInfo)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerImportComplete: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerImportComplete {
+        return
+            try TapSignerImportComplete(
+                backup: FfiConverterData.read(from: &buf), 
+                deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TapSignerImportComplete, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.backup, into: &buf)
+        FfiConverterTypeDeriveInfo.write(value.deriveInfo, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerImportComplete_lift(_ buf: RustBuffer) throws -> TapSignerImportComplete {
+    return try FfiConverterTypeTapSignerImportComplete.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerImportComplete_lower(_ value: TapSignerImportComplete) -> RustBuffer {
+    return FfiConverterTypeTapSignerImportComplete.lower(value)
 }
 
 
@@ -22672,7 +22688,7 @@ public enum SetupCmdResponse {
     )
     case continueFromDerive(ContinueFromDerive
     )
-    case complete(Complete
+    case complete(TapSignerImportComplete
     )
 }
 
@@ -22700,7 +22716,7 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         case 3: return .continueFromDerive(try FfiConverterTypeContinueFromDerive.read(from: &buf)
         )
         
-        case 4: return .complete(try FfiConverterTypeComplete.read(from: &buf)
+        case 4: return .complete(try FfiConverterTypeTapSignerImportComplete.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22728,7 +22744,7 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         
         case let .complete(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterTypeComplete.write(v1, into: &buf)
+            FfiConverterTypeTapSignerImportComplete.write(v1, into: &buf)
             
         }
     }
@@ -23359,6 +23375,8 @@ public enum TapSignerRoute {
     )
     case confirmPin(tapSigner: TapSigner, startingPin: String, newPin: String, chainCode: String?
     )
+    case importSuccess(TapSigner,TapSignerImportComplete
+    )
 }
 
 
@@ -23389,6 +23407,9 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         )
         
         case 5: return .confirmPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 6: return .importSuccess(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeTapSignerImportComplete.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23428,6 +23449,12 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterString.write(startingPin, into: &buf)
             FfiConverterString.write(newPin, into: &buf)
             FfiConverterOptionString.write(chainCode, into: &buf)
+            
+        
+        case let .importSuccess(v1,v2):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            FfiConverterTypeTapSignerImportComplete.write(v2, into: &buf)
             
         }
     }
@@ -27835,6 +27862,31 @@ fileprivate struct FfiConverterOptionTypeWalletId: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt32]
+
+    public static func write(_ value: [UInt32], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt32.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt32] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt32]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt32.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -28749,6 +28801,13 @@ public func hashRoute(route: Route) -> UInt64  {
     )
 })
 }
+public func hexEncode(bytes: Data) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_hex_encode(
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
 public func isRouteEqual(route: Route, routeToCheck: Route) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_is_route_equal(
@@ -28825,6 +28884,13 @@ public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  ->
     return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
     uniffi_cove_fn_func_string_or_data_try_into_multi_format(
         FfiConverterTypeStringOrData_lower(stringOrData),$0
+    )
+})
+}
+public func tapSignerImportCompleteNew(preview: Bool) -> TapSignerImportComplete  {
+    return try!  FfiConverterTypeTapSignerImportComplete_lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_import_complete_new(
+        FfiConverterBool.lower(preview),$0
     )
 })
 }
@@ -29031,6 +29097,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_hash_route() != 32817) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_hex_encode() != 38168) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_is_route_equal() != 25732) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29062,6 +29131,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_import_complete_new() != 55484) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {

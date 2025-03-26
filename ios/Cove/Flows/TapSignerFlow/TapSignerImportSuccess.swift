@@ -6,146 +6,108 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TapSignerImportSuccess: View {
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
-    let startingPin: String
-    let newPin: String
-    let chainCode: String?
+    let tapSignerImport: TapSignerImportComplete
 
     // private
-    @State private var confirmPin: String = ""
-
-    @State private var animateField: Bool = false
-    @FocusState private var isFocused
-
-    func checkPin() {
-        if confirmPin == newPin {
-            // success
-        } else {
-            animateField.toggle()
-            confirmPin = ""
-        }
-    }
+    @State private var isExportingBackup: Bool = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 40) {
-                VStack {
-                    HStack {
-                        Button(action: { manager.popRoute() }) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-
-                        Spacer()
+        VStack(spacing: 40) {
+            VStack {
+                HStack {
+                    Button(action: { manager.popRoute() }) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
                     }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 10)
-                    .foregroundStyle(.primary)
-                    .fontWeight(.semibold)
 
-                    Image(systemName: "lock")
-                        .font(.system(size: 100))
-                        .foregroundColor(.blue)
-                        .padding(.top, 22)
+                    Spacer()
                 }
+                .padding(.top, 20)
+                .padding(.horizontal, 10)
+                .foregroundStyle(.primary)
+                .fontWeight(.semibold)
+            }
 
-                VStack(spacing: 20) {
-                    Text("Confirm New PIN")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+            Spacer()
 
-                    Text(
-                        "The PIN code is a security feature that prevents unauthorized access to your key. Please back it up and keep it safe. You'll need it for signing transactions."
-                    )
+            VStack(spacing: 20) {
+                Text("Setup Complete")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+
+                Text("Your TAPSIGNER is all setup an ready to use.")
                     .font(.subheadline)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(.primary.opacity(0.8))
+
+                Text(
+                    "If you haven’t already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore you wallet if you lose your TAPSIGNER."
+                )
+                .font(.subheadline)
+                .foregroundStyle(.primary.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            VStack(spacing: 14) {
+                Button("Continue") {
+                    // TODO:
                 }
+                .buttonStyle(DarkButtonStyle())
                 .padding(.horizontal)
 
-                HStack {
-                    ForEach(0..<6, id: \.self) { index in
-                        Circle()
-                            .stroke(.primary, lineWidth: 1.3)
-                            .fill(confirmPin.count <= index ? Color.clear : .primary)
-                            .frame(width: 18)
-                            .padding(.horizontal, 10)
-                            .id(index)
-                    }
-                }
-                .keyframeAnimator(
-                    initialValue: CGFloat.zero,
-                    trigger: animateField,
-                    content: { content, value in
-                        content
-                            .offset(x: value)
-                    },
-                    keyframes: { _ in
-                        KeyframeTrack {
-                            CubicKeyframe(30, duration: 0.07)
-                            CubicKeyframe(-30, duration: 0.07)
-                            CubicKeyframe(20, duration: 0.07)
-                            CubicKeyframe(-20, duration: 0.07)
-                            CubicKeyframe(10, duration: 0.07)
-                            CubicKeyframe(-10, duration: 0.07)
-                            CubicKeyframe(0, duration: 0.07)
-                        }
-                    }
-                )
-                .fixedSize(horizontal: true, vertical: true)
-                .contentShape(Rectangle())
-                .onTapGesture { isFocused = true }
-
-                TextField("Hidden Input", text: $confirmPin)
-                    .opacity(0)
-                    .frame(width: 0, height: 0)
-                    .focused($isFocused)
-                    .keyboardType(.numberPad)
+                Button("Download Backup") { isExportingBackup = true }
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+        }
+        .background(
+            VStack {
+                Image(.chainCodePattern)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .ignoresSafeArea(edges: .all)
+                    .padding(.top, 5)
 
                 Spacer()
             }
-            .onAppear {
-                confirmPin = ""
-                isFocused = true
-            }
-            .onChange(of: isFocused) { _, _ in isFocused = true }
-            .onChange(of: confirmPin) { old, pin in
-                if pin.count == 6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        checkPin()
-                    }
-                }
-
-                if pin.count > 6, old.count < 6 {
-                    confirmPin = old
-                    return
-                }
-
-                if pin.count > 6 {
-                    confirmPin = String(startingPin.prefix(6))
-                    return
-                }
-            }
-        }
+            .opacity(0.8)
+        )
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
+        .fileExporter(
+            isPresented: $isExportingBackup,
+            document: TextDocument(text: hexEncode(bytes: tapSignerImport.backup)),
+            contentType: .plainText,
+            defaultFilename: "\(tapSigner.cardIdent)_backup.txt"
+        ) { result in
+            switch result {
+            case .success:
+                // TOOO: alert
+                Log.debug("Successfully exported backup")
+            case let .failure(error):
+                // TOOO: alert
+                Log.error("Failed to export backup: \(error.localizedDescription)")
+            }
+        }
     }
 }
 
 #Preview {
     TapSignerContainer(
         route:
-            .confirmPin(
-                tapSigner: tapSignerPreviewNew(preview: true),
-                startingPin: "123456",
-                newPin: "222222",
-                chainCode: nil
-            )
+        .importSuccess(
+            tapSignerPreviewNew(preview: true),
+            tapSignerImportCompleteNew(preview: true)
+        )
     )
     .environment(AppManager.shared)
 }
