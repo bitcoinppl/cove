@@ -23397,6 +23397,8 @@ public enum TapSignerRoute {
     )
     case importSuccess(TapSigner,TapSignerImportComplete
     )
+    case importRetry(TapSigner,SetupCmdResponse
+    )
 }
 
 
@@ -23430,6 +23432,9 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         )
         
         case 6: return .importSuccess(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeTapSignerImportComplete.read(from: &buf)
+        )
+        
+        case 7: return .importRetry(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeSetupCmdResponse.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23476,6 +23481,12 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             FfiConverterTypeTapSignerImportComplete.write(v2, into: &buf)
             
+        
+        case let .importRetry(v1,v2):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            FfiConverterTypeSetupCmdResponse.write(v2, into: &buf)
+            
         }
     }
 }
@@ -23495,8 +23506,6 @@ public func FfiConverterTypeTapSignerRoute_lower(_ value: TapSignerRoute) -> Rus
     return FfiConverterTypeTapSignerRoute.lower(value)
 }
 
-
-extension TapSignerRoute: Equatable, Hashable {}
 
 
 
@@ -28924,6 +28933,13 @@ public func tapSignerImportCompleteNew(preview: Bool) -> TapSignerImportComplete
     )
 })
 }
+public func tapSignerImportRetryContinueCmd(preview: Bool) -> SetupCmdResponse  {
+    return try!  FfiConverterTypeSetupCmdResponse_lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_import_retry_continue_cmd(
+        FfiConverterBool.lower(preview),$0
+    )
+})
+}
 public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_preview_new(
@@ -29164,6 +29180,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_import_complete_new() != 55484) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_import_retry_continue_cmd() != 44014) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {

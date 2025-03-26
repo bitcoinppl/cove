@@ -395,33 +395,59 @@ impl DeriveInfo {
     }
 }
 
-// MARK: - FFI PREVIEW
-#[uniffi::export]
-fn tap_signer_import_complete_new(preview: bool) -> TapSignerImportComplete {
-    use std::str::FromStr as _;
-    assert!(preview);
+mod ffi {
+    use crate::util::generate_random_chain_code;
 
-    let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
-    let original_xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
+    use super::*;
 
-    let master_xpub = "xpub661MyMwAqRbcFFr2SGY3dUn7g8P9VKNZdKWL2Z2pZMEkBWH2D1KTcwTn7keZQCaScCx7BUDjHFJJHnzBvDgUFgNjYsQTRvo7LWfYEtt78Pb";
-    let master_xpub = bitcoin::bip32::Xpub::from_str(master_xpub).unwrap();
+    fn derive_info() -> DeriveInfo {
+        use std::str::FromStr as _;
+        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let original_xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
 
-    let master_xpub_bytes = master_xpub.public_key.serialize();
-    let xpub_bytes = original_xpub.public_key.serialize();
+        let master_xpub = "xpub661MyMwAqRbcFFr2SGY3dUn7g8P9VKNZdKWL2Z2pZMEkBWH2D1KTcwTn7keZQCaScCx7BUDjHFJJHnzBvDgUFgNjYsQTRvo7LWfYEtt78Pb";
+        let master_xpub = bitcoin::bip32::Xpub::from_str(master_xpub).unwrap();
 
-    let derive_info = DeriveInfo {
-        network: Network::Bitcoin,
-        master_pubkey: master_xpub_bytes.to_vec(),
-        pubkey: xpub_bytes.to_vec(),
-        chain_code: original_xpub.chain_code.to_bytes().to_vec(),
-        path: vec![84, 1, 0],
-    };
+        let master_xpub_bytes = master_xpub.public_key.serialize();
+        let xpub_bytes = original_xpub.public_key.serialize();
 
-    let backup = vec![0u8; 32];
+        DeriveInfo {
+            network: Network::Bitcoin,
+            master_pubkey: master_xpub_bytes.to_vec(),
+            pubkey: xpub_bytes.to_vec(),
+            chain_code: original_xpub.chain_code.to_bytes().to_vec(),
+            path: vec![84, 1, 0],
+        }
+    }
 
-    TapSignerImportComplete {
-        backup,
-        derive_info,
+    // MARK: - FFI PREVIEW
+    #[uniffi::export]
+    fn tap_signer_import_complete_new(preview: bool) -> TapSignerImportComplete {
+        assert!(preview);
+
+        let backup = vec![0u8; 32];
+        TapSignerImportComplete {
+            backup,
+            derive_info: derive_info(),
+        }
+    }
+
+    #[uniffi::export]
+    fn tap_signer_import_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
+        assert!(preview);
+
+        let backup = vec![0u8; 32];
+        let setup_cmd = SetupCmd {
+            factory_pin: "123456".to_string(),
+            new_pin: "000000".to_string(),
+            chain_code: generate_random_chain_code(),
+        };
+
+        SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
+            backup,
+            derive_info: derive_info(),
+            continue_cmd: Arc::new(setup_cmd),
+            error: TapSignerReaderError::NoCommand,
+        })
     }
 }
