@@ -386,3 +386,8 @@ impl From<SettingsRoute> for Route {
         Route::Settings(settings_route)
     }
 }
+
+#[uniffi::export]
+fn is_tap_signer_route_equal(lhs: TapSignerRoute, rhs: TapSignerRoute) -> bool {
+    lhs == rhs
+}

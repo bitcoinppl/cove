@@ -156,4 +156,12 @@ extension SetupCmdResponse {
     }
 }
 
-extension TapSignerRoute: Equatable, Hashable {}
+extension TapSignerRoute: Equatable, Hashable {
+    public static func == (lhs: TapSignerRoute, rhs: TapSignerRoute) -> Bool {
+        isTapSignerRouteEqual(lhs: lhs, rhs: rhs)
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self)
+    }
+}

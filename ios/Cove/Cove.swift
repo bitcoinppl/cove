@@ -28855,6 +28855,14 @@ public func isRouteEqual(route: Route, routeToCheck: Route) -> Bool  {
     )
 })
 }
+public func isTapSignerRouteEqual(lhs: TapSignerRoute, rhs: TapSignerRoute) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_is_tap_signer_route_equal(
+        FfiConverterTypeTapSignerRoute_lower(lhs),
+        FfiConverterTypeTapSignerRoute_lower(rhs),$0
+    )
+})
+}
 public func isValidChainCode(chainCode: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_is_valid_chain_code(
@@ -29147,6 +29155,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_route_equal() != 25732) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_is_tap_signer_route_equal() != 46761) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_valid_chain_code() != 48052) {
