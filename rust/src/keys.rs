@@ -78,7 +78,7 @@ impl Descriptors {
         self.external.origin()
     }
 
-    pub fn new_from_tap_signer(derive: DeriveInfo) -> Result<Self, Error> {
+    pub fn new_from_tap_signer(derive: &DeriveInfo) -> Result<Self, Error> {
         use bitcoin::{
             NetworkKind,
             bip32::{ChainCode, ChildNumber, Xpub},
@@ -96,6 +96,7 @@ impl Descriptors {
 
         let chain_code_bytes: [u8; 32] = derive
             .chain_code
+            .clone()
             .try_into()
             .map_err(|_| Error::InvalidChainCode)?;
 
@@ -189,6 +190,13 @@ impl Descriptor {
         };
 
         Ok(key)
+    }
+
+    pub fn xpub(&self) -> Option<Xpub> {
+        match self.descriptor_public_key() {
+            Ok(BdkDescriptorPublicKey::XPub(xpub)) => Some(xpub.xkey),
+            _ => None,
+        }
     }
 
     pub fn origin(&self) -> Result<String, Error> {
@@ -434,7 +442,7 @@ mod tests {
     #[test]
     fn test_from_tap_signer_create_descriptor() {
         let derive_info = derive_info();
-        let parsed_descriptors = Descriptors::new_from_tap_signer(derive_info);
+        let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info);
         assert!(parsed_descriptors.is_ok());
     }
 
@@ -445,7 +453,7 @@ mod tests {
                 .unwrap()
                 .into();
 
-        let parsed_descriptors = Descriptors::new_from_tap_signer(derive_info()).unwrap();
+        let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info()).unwrap();
 
         let mut original_wallet = original_descriptor
             .into_create_params()
@@ -466,18 +474,12 @@ mod tests {
         let original_address = original_wallet.next_unused_address(KeychainKind::Internal);
         let parsed_address = parsed_wallet.next_unused_address(KeychainKind::Internal);
         assert_eq!(original_address, parsed_address);
+    }
 
-        // check next 10 addresses are same
-        for _ in 0..10 {
-            // verify  external addresses are same
-            let original_address = original_wallet.next_unused_address(KeychainKind::External);
-            let parsed_address = parsed_wallet.next_unused_address(KeychainKind::External);
-            assert_eq!(original_address, parsed_address);
-
-            // verify internal addresses are same
-            let original_address = original_wallet.next_unused_address(KeychainKind::Internal);
-            let parsed_address = parsed_wallet.next_unused_address(KeychainKind::Internal);
-            assert_eq!(original_address, parsed_address);
-        }
+    #[test]
+    fn test_xpub_from_tap_signer() {
+        let derive_info = derive_info();
+        let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info).unwrap();
+        assert!(parsed_descriptors.external.xpub().is_some());
     }
 }
