@@ -18,6 +18,20 @@ struct TapSignerImportSuccess: View {
     // private
     @State private var isExportingBackup: Bool = false
 
+    func saveWallet() {
+        do {
+            let manager = try WalletManager(
+                tapSigner: tapSigner,
+                deriveInfo: tapSignerImport.deriveInfo,
+                backup: tapSignerImport.backup
+            )
+            app.loadAndReset(to: .selectedWallet(manager.id))
+        }
+        catch {
+            Log.error("Failed to save wallet: \(error.localizedDescription)")
+        }
+    }
+
     var body: some View {
         VStack(spacing: 40) {
             VStack {
@@ -58,11 +72,9 @@ struct TapSignerImportSuccess: View {
             Spacer()
 
             VStack(spacing: 14) {
-                Button("Continue") {
-                    // TODO:
-                }
-                .buttonStyle(DarkButtonStyle())
-                .padding(.horizontal)
+                Button("Continue") { saveWallet() }
+                    .buttonStyle(DarkButtonStyle())
+                    .padding(.horizontal)
 
                 Button("Download Backup") { isExportingBackup = true }
                     .font(.footnote)

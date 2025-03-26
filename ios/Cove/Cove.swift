@@ -9975,6 +9975,16 @@ public static func previewNewWalletWithMetadata(metadata: WalletMetadata) -> Rus
 })
 }
     
+public static func tryNewFromTapSigner(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil)throws  -> RustWalletManager  {
+    return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
+    uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_tap_signer(
+        FfiConverterTypeTapSigner_lower(tapSigner),
+        FfiConverterTypeDeriveInfo_lower(deriveInfo),
+        FfiConverterOptionData.lower(backup),$0
+    )
+})
+}
+    
 public static func tryNewFromXpub(xpub: String)throws  -> RustWalletManager  {
     return try  FfiConverterTypeRustWalletManager_lift(try rustCallWithError(FfiConverterTypeWalletManagerError_lift) {
     uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(
@@ -15648,6 +15658,10 @@ public struct WalletMetadata {
     public var fiatOrBtc: FiatOrBtc
     public var origin: String?
     /**
+     * And ID for the hardware wallet, if this  wallet is a hardware wallet
+     */
+    public var hardwareId: String?
+    /**
      * Show labels for transactions i the transaction list
      * If false, we only show either `Sent` or `Received` labels
      */
@@ -15657,6 +15671,9 @@ public struct WalletMetadata {
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
+        /**
+         * And ID for the hardware wallet, if this  wallet is a hardware wallet
+         */hardwareId: String?, 
         /**
          * Show labels for transactions i the transaction list
          * If false, we only show either `Sent` or `Received` labels
@@ -15676,6 +15693,7 @@ public struct WalletMetadata {
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
         self.origin = origin
+        self.hardwareId = hardwareId
         self.showLabels = showLabels
         self.`internal` = `internal`
     }
@@ -15709,6 +15727,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
                 origin: FfiConverterOptionString.read(from: &buf), 
+                hardwareId: FfiConverterOptionString.read(from: &buf), 
                 showLabels: FfiConverterBool.read(from: &buf), 
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
         )
@@ -15730,6 +15749,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
         FfiConverterOptionString.write(value.origin, into: &buf)
+        FfiConverterOptionString.write(value.hardwareId, into: &buf)
         FfiConverterBool.write(value.showLabels, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, into: &buf)
     }
@@ -24900,6 +24920,8 @@ public enum WalletError: Swift.Error {
     )
     case MultiFormatError(MultiFormatError
     )
+    case DescriptorKeyParseError(String
+    )
 }
 
 
@@ -24944,6 +24966,9 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
             )
         case 11: return .MultiFormatError(
             try FfiConverterTypeMultiFormatError.read(from: &buf)
+            )
+        case 12: return .DescriptorKeyParseError(
+            try FfiConverterString.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -25008,6 +25033,11 @@ public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
         case let .MultiFormatError(v1):
             writeInt(&buf, Int32(11))
             FfiConverterTypeMultiFormatError.write(v1, into: &buf)
+            
+        
+        case let .DescriptorKeyParseError(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
             
         }
     }
@@ -30349,6 +30379,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 31333) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 44731) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 28304) {

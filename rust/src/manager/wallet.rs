@@ -23,8 +23,10 @@ use crate::{
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     label_manager::LabelManager,
+    multi_format::tap_card::TapSigner,
     psbt::Psbt,
     router::Route,
+    tap_card::tap_signer_reader::DeriveInfo,
     task::{self, spawn_actor},
     transaction::{
         Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
@@ -201,7 +203,7 @@ pub enum WalletManagerError {
 impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = crossbeam::channel::bounded(100);
 
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
@@ -268,9 +270,9 @@ impl RustWalletManager {
         Amount::from_sat(sat_amount)
     }
 
-    #[uniffi::constructor(name = "try_new_from_xpub")]
+    #[uniffi::constructor]
     pub fn try_new_from_xpub(xpub: String) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = crossbeam::channel::bounded(100);
 
         let wallet = Wallet::try_new_persisted_from_xpub(xpub)?;
         let id = wallet.id.clone();
@@ -291,6 +293,32 @@ impl RustWalletManager {
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             scanner,
+        })
+    }
+
+    #[uniffi::constructor(default(backup = None))]
+    pub fn try_new_from_tap_signer(
+        tap_signer: TapSigner,
+        derive_info: DeriveInfo,
+        backup: Option<Vec<u8>>,
+    ) -> Result<Self, Error> {
+        let (sender, receiver) = crossbeam::channel::bounded(100);
+
+        let wallet = Wallet::try_new_persisted_from_tap_signer(tap_signer, derive_info, backup)?;
+        let id = wallet.id.clone();
+        let metadata = wallet.metadata.clone();
+
+        let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
+        let label_manager = LabelManager::new(id.clone()).into();
+
+        Ok(Self {
+            id,
+            actor,
+            metadata: Arc::new(RwLock::new(metadata)),
+            reconciler: sender,
+            reconcile_receiver: Arc::new(receiver),
+            label_manager,
+            scanner: None,
         })
     }
 
@@ -1178,7 +1206,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor]
     pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = crossbeam::channel::bounded(100);
 
         let wallet = Wallet::preview_new_wallet();
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();
