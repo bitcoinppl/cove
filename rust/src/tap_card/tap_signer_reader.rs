@@ -241,7 +241,11 @@ impl TapSignerReader {
     }
 
     async fn derive_and_change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
-        let path: [u32; 3] = [84, 0, 0];
+        let path: [u32; 3] = match self.network {
+            Network::Bitcoin => [84, 0, 0],
+            _ => [84, 1, 0],
+        };
+
         let derive_response = self
             .reader
             .lock()
