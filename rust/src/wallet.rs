@@ -279,31 +279,11 @@ impl Wallet {
 
         // make sure its not already imported
         if let Some(fingerprint) = fingerprint.as_ref() {
-            let fingerprint: Fingerprint = (*fingerprint).into();
-
             // update the fingerprint
+            let fingerprint: Fingerprint = (*fingerprint).into();
             metadata.master_fingerprint = Some(fingerprint.into());
 
-            let all_fingerprints: Vec<(WalletId, Arc<Fingerprint>)> = Database::global()
-                .wallets
-                .get_all(network, mode)
-                .map(|wallets| {
-                    wallets
-                        .into_iter()
-                        .filter_map(|wallet_metadata| {
-                            let fingerprint = wallet_metadata.master_fingerprint?;
-                            Some((wallet_metadata.id, fingerprint))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            if let Some((id, _)) = all_fingerprints
-                .into_iter()
-                .find(|(_, f)| f.as_ref() == &fingerprint)
-            {
-                return Err(WalletError::WalletAlreadyExists(id));
-            }
+            check_for_duplicate_wallet(network, mode, fingerprint)?;
         }
 
         let fingerprint = fingerprint.map(|s| s.to_string());
@@ -381,14 +361,19 @@ impl Wallet {
         let descriptors = Descriptors::new_from_tap_signer(&derive)
             .map_err(|error| WalletError::DescriptorKeyParseError(error.to_string()))?;
 
+        let fingerprint = Fingerprint::from(derive.master_fingerprint());
+
         // set metadata
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
         metadata.name = "TapSigner".to_string();
         metadata.wallet_mode = mode;
         metadata.hardware_id = Some(tap_signer.card_ident);
         metadata.origin = descriptors.origin().ok();
-        metadata.master_fingerprint = Some(Arc::new(derive.master_fingerprint().into()));
+        metadata.master_fingerprint = Some(Arc::new(fingerprint));
         metadata.wallet_type = WalletType::Cold;
+
+        // make sure its not already imported
+        check_for_duplicate_wallet(network, mode, fingerprint)?;
 
         let xpub = descriptors
             .external
@@ -411,6 +396,11 @@ impl Wallet {
             descriptors.external.extended_descriptor,
             descriptors.internal.extended_descriptor,
         )?;
+
+        // if theres a backup for this wallet, save it in the keychain
+        if let Some(backup) = backup {
+            keychain.save_tap_signer_backup(&id, backup.as_slice())?;
+        }
 
         database
             .wallets
@@ -647,6 +637,35 @@ impl Wallet {
 
         Ok(())
     }
+}
+
+fn check_for_duplicate_wallet(
+    network: Network,
+    mode: metadata::WalletMode,
+    fingerprint: Fingerprint,
+) -> Result<(), WalletError> {
+    let all_fingerprints: Vec<(WalletId, Arc<Fingerprint>)> = Database::global()
+        .wallets
+        .get_all(network, mode)
+        .map(|wallets| {
+            wallets
+                .into_iter()
+                .filter_map(|wallet_metadata| {
+                    let fingerprint = wallet_metadata.master_fingerprint?;
+                    Some((wallet_metadata.id, fingerprint))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Some((id, _)) = all_fingerprints
+        .into_iter()
+        .find(|(_, f)| f.as_ref() == &fingerprint)
+    {
+        return Err(WalletError::WalletAlreadyExists(id));
+    }
+
+    Ok(())
 }
 
 #[uniffi::export]
