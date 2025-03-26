@@ -11,6 +11,9 @@ use rust_cktap::apdu::DeriveResponse;
 use rust_cktap::{CkTapCard, commands::CkTransport as _};
 use tokio::sync::Mutex;
 
+use crate::database::Database;
+use crate::network::Network;
+
 use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
@@ -52,6 +55,8 @@ pub struct TapSignerReader {
 
     /// Last response from the setup process, has started, if the last response is `Complete` then the setup process is complete
     last_response: SyncMutex<Option<Arc<SetupCmdResponse>>>,
+
+    network: Network,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -112,6 +117,7 @@ pub struct DeriveInfo {
     pub pubkey: Vec<u8>,
     pub chain_code: Vec<u8>,
     pub path: Vec<u32>,
+    pub network: Network,
 }
 
 #[uniffi::export]
@@ -135,12 +141,14 @@ impl TapSignerReader {
         }?;
 
         let id: Nanoid = Nanoid::new();
+        let network = Database::global().global_config.selected_network();
 
         Ok(Self {
             id: id.to_string(),
             reader: Mutex::new(card),
             cmd: RwLock::new(cmd),
             last_response: SyncMutex::new(None),
+            network,
         })
     }
 
@@ -256,7 +264,7 @@ impl TapSignerReader {
             }
         };
 
-        let derive_info = DeriveInfo::from_response(derive, path.to_vec());
+        let derive_info = DeriveInfo::from_response(derive, path.to_vec(), self.network);
         self.change(cmd, backup, derive_info).await
     }
 
@@ -343,7 +351,11 @@ impl PartialEq for TapSignerReader {
 }
 
 impl DeriveInfo {
-    pub fn from_response(derive_response: DeriveResponse, path: Vec<u32>) -> Self {
+    pub fn from_response(
+        derive_response: DeriveResponse,
+        path: Vec<u32>,
+        network: Network,
+    ) -> Self {
         let master_xpub = derive_response.master_pubkey;
         let chain_code = derive_response.chain_code;
         let xpub = derive_response
@@ -355,6 +367,7 @@ impl DeriveInfo {
             pubkey: xpub,
             chain_code,
             path,
+            network,
         }
     }
 
@@ -373,111 +386,5 @@ impl DeriveInfo {
         fingerprint.copy_from_slice(&hash160_result[0..4]);
 
         Fingerprint::from(fingerprint)
-    }
-}
-
-impl TryFrom<DeriveInfo> for bitcoin::bip32::Xpub {
-    type Error = Box<dyn std::error::Error>;
-
-    fn try_from(value: DeriveInfo) -> Result<bitcoin::bip32::Xpub, Self::Error> {
-        use bitcoin::{
-            NetworkKind,
-            bip32::{ChainCode, ChildNumber, Xpub},
-            hashes::{Hash as _, ripemd160, sha256},
-            secp256k1::PublicKey,
-        };
-
-        // TODO: get from derive info
-        let network = NetworkKind::Main;
-
-        // dept is always 3 and always the first (0) child, derives the standard derivation path
-        let depth = 3;
-        let child_number = ChildNumber::Hardened { index: 0 };
-
-        // let master_fingerprint = {
-        //     // sha
-        //     let mut sha_engine = sha256::Hash::engine();
-        //     sha_engine.input(value.master_pubkey.as_ref());
-        //     let sha_result = sha256::Hash::from_engine(sha_engine);
-        //
-        //     // ripemd
-        //     let mut ripemd_engine = ripemd160::Hash::engine();
-        //     ripemd_engine.input(sha_result.as_ref());
-        //     let hash160_result = ripemd160::Hash::from_engine(ripemd_engine);
-        //
-        //     // take first 4 bytes
-        //     let mut fingerprint = [0u8; 4];
-        //     fingerprint.copy_from_slice(&hash160_result[0..4]);
-        //
-        //     Fingerprint::from(fingerprint)
-        // };
-
-        let parent_fingerprint = {
-            // 1. Hash with SHA256
-            let mut sha_engine = sha256::Hash::engine();
-            sha_engine.input(value.pubkey.as_ref());
-            let sha_result = sha256::Hash::from_engine(sha_engine);
-
-            // 2. Hash the result with RIPEMD160
-            let mut ripemd_engine = ripemd160::Hash::engine();
-            ripemd_engine.input(sha_result.as_ref());
-            let hash160_result = ripemd160::Hash::from_engine(ripemd_engine);
-
-            // 3. Take first 4 bytes as fingerprint
-            let mut fingerprint = [0u8; 4];
-            fingerprint.copy_from_slice(&hash160_result[0..4]);
-
-            Fingerprint::from(fingerprint)
-        };
-
-        let public_key = PublicKey::from_slice(&value.pubkey)?;
-
-        let chain_code_bytes: [u8; 32] = value.chain_code.try_into().unwrap();
-        let chain_code = ChainCode::from(chain_code_bytes);
-
-        Ok(Xpub {
-            network,
-            depth,
-            parent_fingerprint,
-            child_number,
-            public_key,
-            chain_code,
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bitcoin::bip32::Xpub;
-    use pretty_assertions::assert_eq;
-    use std::str::FromStr as _;
-
-    #[test]
-    fn test_derive_info_try_into_xpub() {
-        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
-        let original_xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
-        println!("{:#?}", original_xpub.fingerprint());
-
-        let master_xpub = "xpub661MyMwAqRbcFFr2SGY3dUn7g8P9VKNZdKWL2Z2pZMEkBWH2D1KTcwTn7keZQCaScCx7BUDjHFJJHnzBvDgUFgNjYsQTRvo7LWfYEtt78Pb";
-        let master_xpub = bitcoin::bip32::Xpub::from_str(master_xpub).unwrap();
-        println!("{:#?}", master_xpub.fingerprint());
-
-        let master_xpub_bytes = master_xpub.public_key.serialize();
-        let xpub_bytes = original_xpub.public_key.serialize();
-
-        let derive_info = DeriveInfo {
-            master_pubkey: master_xpub_bytes.to_vec(),
-            pubkey: xpub_bytes.to_vec(),
-            chain_code: original_xpub.chain_code.to_bytes().to_vec(),
-            path: vec![84, 0, 0],
-        };
-
-        assert_eq!(derive_info.master_fingerprint(), master_xpub.fingerprint());
-
-        let parsed_xpub = Xpub::try_from(derive_info).unwrap();
-        assert_eq!(original_xpub.to_string(), parsed_xpub.to_string());
-
-        // assert_eq!(parsed_xpub, original_xpub);
     }
 }

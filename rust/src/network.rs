@@ -1,5 +1,6 @@
 use bdk_chain::bitcoin::params::Params;
 use bdk_wallet::bitcoin;
+use bitcoin::NetworkKind;
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -74,6 +75,15 @@ impl From<Network> for Params {
             Network::Bitcoin => Params::MAINNET,
             Network::Testnet => Params::TESTNET3,
             Network::Signet => Params::SIGNET,
+        }
+    }
+}
+
+impl From<Network> for NetworkKind {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => NetworkKind::Main,
+            _ => NetworkKind::Test,
         }
     }
 }
