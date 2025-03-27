@@ -82,7 +82,7 @@ pub enum SetupCmdResponse {
     ContinueFromInit(ContinueFromInit),
     ContinueFromBackup(ContinueFromBackup),
     ContinueFromDerive(ContinueFromDerive),
-    Complete(TapSignerImportComplete),
+    Complete(TapSignerSetupComplete),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
@@ -107,7 +107,7 @@ pub struct ContinueFromDerive {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
-pub struct TapSignerImportComplete {
+pub struct TapSignerSetupComplete {
     pub backup: Vec<u8>,
     pub derive_info: DeriveInfo,
 }
@@ -308,7 +308,7 @@ impl TapSignerReader {
             return response;
         }
 
-        let complete = TapSignerImportComplete {
+        let complete = TapSignerSetupComplete {
             backup,
             derive_info,
         };
@@ -449,7 +449,7 @@ mod ffi {
     }
 
     #[uniffi::export]
-    fn tap_signer_import_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
+    fn tap_signer_setup_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
         assert!(preview);
 
         let backup = vec![0u8; 32];
@@ -469,11 +469,11 @@ mod ffi {
 
     // MARK: - FFI PREVIEW
     #[uniffi::export]
-    fn tap_signer_import_complete_new(preview: bool) -> TapSignerImportComplete {
+    fn tap_signer_setup_complete_new(preview: bool) -> TapSignerSetupComplete {
         assert!(preview);
 
         let backup = vec![0u8; 32];
-        TapSignerImportComplete {
+        TapSignerSetupComplete {
             backup,
             derive_info: derive_info(),
         }

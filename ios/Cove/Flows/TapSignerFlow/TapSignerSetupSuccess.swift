@@ -1,5 +1,5 @@
 //
-//  TapSignerImportSuccess.swift
+//  TapSignerSetupSuccess.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/25/25.
@@ -8,12 +8,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct TapSignerImportSuccess: View {
+struct TapSignerSetupSuccess: View {
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
-    let tapSignerImport: TapSignerImportComplete
+    let setup: TapSignerSetupComplete
 
     // private
     @State private var isExportingBackup: Bool = false
@@ -22,8 +22,8 @@ struct TapSignerImportSuccess: View {
         do {
             let manager = try WalletManager(
                 tapSigner: tapSigner,
-                deriveInfo: tapSignerImport.deriveInfo,
-                backup: tapSignerImport.backup
+                deriveInfo: setup.deriveInfo,
+                backup: setup.backup
             )
             app.loadAndReset(to: .selectedWallet(manager.id))
         } catch {
@@ -129,7 +129,7 @@ struct TapSignerImportSuccess: View {
         .navigationBarHidden(true)
         .fileExporter(
             isPresented: $isExportingBackup,
-            document: TextDocument(text: hexEncode(bytes: tapSignerImport.backup)),
+            document: TextDocument(text: hexEncode(bytes: setup.backup)),
             contentType: .plainText,
             defaultFilename: "\(tapSigner.cardIdent)_backup.txt"
         ) { result in
@@ -148,9 +148,9 @@ struct TapSignerImportSuccess: View {
 #Preview {
     TapSignerContainer(
         route:
-        .importSuccess(
+        .setupSuccess(
             tapSignerPreviewNew(preview: true),
-            tapSignerImportCompleteNew(preview: true)
+            TapSignerSetupCompleteNew(preview: true)
         )
     )
     .environment(AppManager.shared)

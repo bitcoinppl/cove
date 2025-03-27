@@ -25,10 +25,10 @@ class TapSignerManager {
         if let lastRoute = path.last {
             switch (lastRoute, newRoute) {
             case (.initSelect, .initSelect),
-                 (.initAdvanced, .initAdvanced),
-                 (.startingPin, .startingPin),
-                 (.newPin, .newPin),
-                 (.confirmPin, .confirmPin):
+                (.initAdvanced, .initAdvanced),
+                (.startingPin, .startingPin),
+                (.newPin, .newPin),
+                (.confirmPin, .confirmPin):
                 return
             default: ()
             }
@@ -78,26 +78,33 @@ struct TapSignerContainer: View {
         switch route {
         case let .initSelect(t):
             TapSignerChooseChainCode(tapSigner: t)
-                .id("initSelect-\(manager.id)")
+                .id(id("initSelect"))
         case let .initAdvanced(t):
             TapSignerAdvancedChainCode(tapSigner: t)
-                .id("initAdvanced-\(manager.id)")
+                .id(id("initAdvanced"))
         case let .startingPin(tapSigner: t, chainCode: chainCode):
             TapSignerStartingPin(tapSigner: t, chainCode: chainCode)
-                .id("startingPin-\(manager.id)")
+                .id(id("startingPin"))
         case let .newPin(tapSigner: t, startingPin: pin, chainCode: chainCode):
             TapSignerNewPin(tapSigner: t, startingPin: pin, chainCode: chainCode)
-                .id("newPin-\(manager.id)")
-        case let .confirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode):
-            TapSignerConfirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode)
-                .id("confirmPin-\(manager.id)")
-        case let .importSuccess(tapSigner, tapSignerImport):
-            TapSignerImportSuccess(tapSigner: tapSigner, tapSignerImport: tapSignerImport)
-                .id("importSuccess-\(manager.id)")
-        case let .importRetry(tapSigner, response):
-            TapSignerImportRetry(tapSigner: tapSigner, response: response)
-                .id("importRetry-\(manager.id)")
+                .id(id("newPin"))
+        case let .confirmPin(
+            tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode):
+            TapSignerConfirmPin(
+                tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode
+            )
+            .id(id("confirmPin"))
+        case let .setupSuccess(tapSigner, setup):
+            TapSignerSetupSuccess(tapSigner: tapSigner, setup: setup)
+                .id(id("setupSuccess"))
+        case let .setupRetry(tapSigner, response):
+            TapSignerSetupRetry(tapSigner: tapSigner, response: response)
+                .id(id("setupRetry"))
         }
+    }
+
+    private func id(_ id: String) -> String {
+        "\(id)-\(manager.id)"
     }
 }
 

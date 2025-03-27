@@ -16,7 +16,7 @@ private enum SheetState: Equatable {
 }
 
 private enum AlertState: Equatable {
-    case importSuccess
+    case setupSuccess
     case exportSuccess
     case unableToImportLabels(String)
     case unableToExportLabels(String)
@@ -252,7 +252,7 @@ struct SelectedWalletScreen: View {
                 let file = try result.get()
                 let fileContents = try FileReader(for: file).read()
                 try labelManager.import(jsonl: fileContents)
-                alertState = .init(.importSuccess)
+                alertState = .init(.setupSuccess)
 
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
@@ -274,7 +274,7 @@ struct SelectedWalletScreen: View {
         guard let labels else { return }
         do {
             try labelManager.import(jsonl: labels.item)
-            alertState = .init(.importSuccess)
+            alertState = .init(.setupSuccess)
         } catch {
             alertState = .init(.unableToImportLabels("Invalid QR code \(error.localizedDescription)"))
         }
@@ -356,7 +356,7 @@ struct SelectedWalletScreen: View {
                 message: error,
                 actions: okButton
             ).eraseToAny()
-        case .importSuccess:
+        case .setupSuccess:
             AlertBuilder(
                 title: "Success!",
                 message: "Labels have been imported successfully.",

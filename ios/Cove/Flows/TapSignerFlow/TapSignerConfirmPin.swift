@@ -43,19 +43,19 @@ struct TapSignerConfirmPin: View {
             await MainActor.run {
                 switch response {
                 case let .success(.complete(c)):
-                    manager.resetRoute(to: .importSuccess(tapSigner, c))
+                    manager.resetRoute(to: .setupSuccess(tapSigner, c))
                 case let .success(incomplete):
-                    manager.resetRoute(to: .importRetry(tapSigner, incomplete))
+                    manager.resetRoute(to: .setupRetry(tapSigner, incomplete))
                 case let .failure(error):
                     // failed to setup but we can continue
                     if let incomplete = nfc.lastResponse()?.setupResponse {
-                        return manager.resetRoute(to: .importRetry(tapSigner, incomplete))
+                        return manager.resetRoute(to: .setupRetry(tapSigner, incomplete))
                     }
 
                     // failed to setup and can't continue from a screen, send back to home and ask them to restart the process
                     Log.error("Failed to setup TapSigner: \(error)")
                     app.sheetState = .none
-                    app.alertState = .init(.tapSignerSetupFailed(error.describe))
+                    app.alertState = .init(.TapSignerSetupFailed(error.describe))
                 }
             }
         }

@@ -15508,7 +15508,7 @@ public func FfiConverterTypeTapSigner_lower(_ value: TapSigner) -> RustBuffer {
 }
 
 
-public struct TapSignerImportComplete {
+public struct TapSignerSetupComplete {
     public var backup: Data
     public var deriveInfo: DeriveInfo
 
@@ -15521,12 +15521,12 @@ public struct TapSignerImportComplete {
 }
 
 #if compiler(>=6)
-extension TapSignerImportComplete: Sendable {}
+extension TapSignerSetupComplete: Sendable {}
 #endif
 
 
-extension TapSignerImportComplete: Equatable, Hashable {
-    public static func ==(lhs: TapSignerImportComplete, rhs: TapSignerImportComplete) -> Bool {
+extension TapSignerSetupComplete: Equatable, Hashable {
+    public static func ==(lhs: TapSignerSetupComplete, rhs: TapSignerSetupComplete) -> Bool {
         if lhs.backup != rhs.backup {
             return false
         }
@@ -15547,16 +15547,16 @@ extension TapSignerImportComplete: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeTapSignerImportComplete: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerImportComplete {
+public struct FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerSetupComplete {
         return
-            try TapSignerImportComplete(
+            try TapSignerSetupComplete(
                 backup: FfiConverterData.read(from: &buf), 
                 deriveInfo: FfiConverterTypeDeriveInfo.read(from: &buf)
         )
     }
 
-    public static func write(_ value: TapSignerImportComplete, into buf: inout [UInt8]) {
+    public static func write(_ value: TapSignerSetupComplete, into buf: inout [UInt8]) {
         FfiConverterData.write(value.backup, into: &buf)
         FfiConverterTypeDeriveInfo.write(value.deriveInfo, into: &buf)
     }
@@ -15566,15 +15566,15 @@ public struct FfiConverterTypeTapSignerImportComplete: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeTapSignerImportComplete_lift(_ buf: RustBuffer) throws -> TapSignerImportComplete {
-    return try FfiConverterTypeTapSignerImportComplete.lift(buf)
+public func FfiConverterTypeTapSignerSetupComplete_lift(_ buf: RustBuffer) throws -> TapSignerSetupComplete {
+    return try FfiConverterTypeTapSignerSetupComplete.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeTapSignerImportComplete_lower(_ value: TapSignerImportComplete) -> RustBuffer {
-    return FfiConverterTypeTapSignerImportComplete.lower(value)
+public func FfiConverterTypeTapSignerSetupComplete_lower(_ value: TapSignerSetupComplete) -> RustBuffer {
+    return FfiConverterTypeTapSignerSetupComplete.lower(value)
 }
 
 
@@ -22723,7 +22723,7 @@ public enum SetupCmdResponse {
     )
     case continueFromDerive(ContinueFromDerive
     )
-    case complete(TapSignerImportComplete
+    case complete(TapSignerSetupComplete
     )
 }
 
@@ -22751,7 +22751,7 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         case 3: return .continueFromDerive(try FfiConverterTypeContinueFromDerive.read(from: &buf)
         )
         
-        case 4: return .complete(try FfiConverterTypeTapSignerImportComplete.read(from: &buf)
+        case 4: return .complete(try FfiConverterTypeTapSignerSetupComplete.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22779,7 +22779,7 @@ public struct FfiConverterTypeSetupCmdResponse: FfiConverterRustBuffer {
         
         case let .complete(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterTypeTapSignerImportComplete.write(v1, into: &buf)
+            FfiConverterTypeTapSignerSetupComplete.write(v1, into: &buf)
             
         }
     }
@@ -23410,9 +23410,9 @@ public enum TapSignerRoute {
     )
     case confirmPin(tapSigner: TapSigner, startingPin: String, newPin: String, chainCode: String?
     )
-    case importSuccess(TapSigner,TapSignerImportComplete
+    case setupSuccess(TapSigner,TapSignerSetupComplete
     )
-    case importRetry(TapSigner,SetupCmdResponse
+    case setupRetry(TapSigner,SetupCmdResponse
     )
 }
 
@@ -23446,10 +23446,10 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         case 5: return .confirmPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 6: return .importSuccess(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeTapSignerImportComplete.read(from: &buf)
+        case 6: return .setupSuccess(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeTapSignerSetupComplete.read(from: &buf)
         )
         
-        case 7: return .importRetry(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeSetupCmdResponse.read(from: &buf)
+        case 7: return .setupRetry(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeSetupCmdResponse.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23491,13 +23491,13 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterOptionString.write(chainCode, into: &buf)
             
         
-        case let .importSuccess(v1,v2):
+        case let .setupSuccess(v1,v2):
             writeInt(&buf, Int32(6))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
-            FfiConverterTypeTapSignerImportComplete.write(v2, into: &buf)
+            FfiConverterTypeTapSignerSetupComplete.write(v2, into: &buf)
             
         
-        case let .importRetry(v1,v2):
+        case let .setupRetry(v1,v2):
             writeInt(&buf, Int32(7))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             FfiConverterTypeSetupCmdResponse.write(v2, into: &buf)
@@ -29011,20 +29011,6 @@ public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  ->
     )
 })
 }
-public func tapSignerImportCompleteNew(preview: Bool) -> TapSignerImportComplete  {
-    return try!  FfiConverterTypeTapSignerImportComplete_lift(try! rustCall() {
-    uniffi_cove_fn_func_tap_signer_import_complete_new(
-        FfiConverterBool.lower(preview),$0
-    )
-})
-}
-public func tapSignerImportRetryContinueCmd(preview: Bool) -> SetupCmdResponse  {
-    return try!  FfiConverterTypeSetupCmdResponse_lift(try! rustCall() {
-    uniffi_cove_fn_func_tap_signer_import_retry_continue_cmd(
-        FfiConverterBool.lower(preview),$0
-    )
-})
-}
 public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_preview_new(
@@ -29036,6 +29022,20 @@ public func tapSignerResponseSetupResponse(response: TapSignerResponse) -> Setup
     return try!  FfiConverterOptionTypeSetupCmdResponse.lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_response_setup_response(
         FfiConverterTypeTapSignerResponse_lower(response),$0
+    )
+})
+}
+public func tapSignerSetupCompleteNew(preview: Bool) -> TapSignerSetupComplete  {
+    return try!  FfiConverterTypeTapSignerSetupComplete_lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_setup_complete_new(
+        FfiConverterBool.lower(preview),$0
+    )
+})
+}
+public func tapSignerSetupRetryContinueCmd(preview: Bool) -> SetupCmdResponse  {
+    return try!  FfiConverterTypeSetupCmdResponse_lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_setup_retry_continue_cmd(
+        FfiConverterBool.lower(preview),$0
     )
 })
 }
@@ -29280,16 +29280,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_tap_signer_import_complete_new() != 55484) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_tap_signer_import_retry_continue_cmd() != 44014) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_response_setup_response() != 1061) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_setup_complete_new() != 48955) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_setup_retry_continue_cmd() != 32514) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 43706) {

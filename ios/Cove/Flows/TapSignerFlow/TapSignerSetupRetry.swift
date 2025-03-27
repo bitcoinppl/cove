@@ -1,5 +1,5 @@
 //
-//  TapSignerImportRetry.swift
+//  TapSignerSetupRetry.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/25/25.
@@ -8,7 +8,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct TapSignerImportRetry: View {
+struct TapSignerSetupRetry: View {
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
@@ -61,17 +61,17 @@ struct TapSignerImportRetry: View {
                     Task {
                         switch await manager.nfc?.continueSetup(response) {
                         case let .success(.complete(c)):
-                            manager.resetRoute(to: .importSuccess(tapSigner, c))
+                            manager.resetRoute(to: .setupSuccess(tapSigner, c))
                         case let .success(incomplete):
                             Log.error("Failed to complete TAPSIGNER setup, won't retry anymore \(incomplete)")
                             app.sheetState = nil
-                            app.alertState = .init(.tapSignerSetupFailed("Failed to setup TapSigner"))
+                            app.alertState = .init(.TapSignerSetupFailed("Failed to setup TapSigner"))
                         case let .failure(error):
                             app.sheetState = nil
-                            app.alertState = .init(.tapSignerSetupFailed(error.describe))
+                            app.alertState = .init(.TapSignerSetupFailed(error.describe))
                         case .none:
                             app.sheetState = nil
-                            app.alertState = .init(.tapSignerSetupFailed("Failed to get NFC reader"))
+                            app.alertState = .init(.TapSignerSetupFailed("Failed to get NFC reader"))
                         }
                     }
                 }
@@ -99,9 +99,9 @@ struct TapSignerImportRetry: View {
 #Preview {
     TapSignerContainer(
         route:
-        .importRetry(
+        .setupRetry(
             tapSignerPreviewNew(preview: true),
-            tapSignerImportRetryContinueCmd(preview: true)
+            TapSignerSetupRetryContinueCmd(preview: true)
         )
     )
     .environment(AppManager.shared)
