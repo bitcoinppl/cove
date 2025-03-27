@@ -52,16 +52,23 @@ struct TapSignerImportSuccess: View {
             Spacer()
 
             VStack(spacing: 20) {
-                Text("Setup Complete")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 100))
+                    .foregroundStyle(.green)
+                    .fontWeight(.light)
 
-                Text("Your TAPSIGNER is all setup an ready to use.")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary.opacity(0.8))
+                VStack(spacing: 12) {
+                    Text("Setup Complete")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+
+                    Text("Your TAPSIGNER ready to use.")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary.opacity(0.8))
+                }
 
                 Text(
-                    "If you haven’t already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore you wallet if you lose your TAPSIGNER."
+                    "If you haven’t already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore you wallet."
                 )
                 .font(.subheadline)
                 .foregroundStyle(.primary.opacity(0.8))
@@ -69,18 +76,44 @@ struct TapSignerImportSuccess: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
+            Button(action: { isExportingBackup = true }) {
+                HStack {
+                    VStack(spacing: 4) {
+                        HStack {
+                            Text("Download Backup")
+                                .font(.footnote)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color.primary)
+                            Spacer()
+                        }
+
+                        HStack {
+                            Text("You need this backup to restore your wallet.")
+                                .foregroundStyle(Color.secondary)
+                            Spacer()
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(Color.secondary)
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+            }
+            .font(.footnote)
+            .fontWeight(.semibold)
+
             Spacer()
 
             VStack(spacing: 14) {
                 Button("Continue") { saveWallet() }
                     .buttonStyle(DarkButtonStyle())
-                    .padding(.horizontal)
-
-                Button("Download Backup") { isExportingBackup = true }
-                    .font(.footnote)
-                    .fontWeight(.semibold)
             }
         }
+        .padding(.horizontal)
         .background(
             VStack {
                 Image(.chainCodePattern)

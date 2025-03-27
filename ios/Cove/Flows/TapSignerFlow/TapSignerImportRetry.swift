@@ -35,22 +35,24 @@ struct TapSignerImportRetry: View {
             Spacer()
 
             VStack(spacing: 20) {
-                Text("Please try again")
-                    .font(.largeTitle)
+                Image(systemName: "x.circle.fill")
+                    .font(.system(size: 100))
+                    .foregroundStyle(.red)
+                    .fontWeight(.light)
+
+                Text("Couldn't complete setup")
+                    .font(.title)
                     .fontWeight(.bold)
 
-                Text("Something went wrong while setting up your TAPSIGNER")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary.opacity(0.8))
-
                 Text(
-                    "Please try again, and hold the TAPSIGNER still until the setup process completes"
+                    "Please try again and hold your TAPSIGNER steady until setup is complete."
                 )
                 .font(.subheadline)
                 .foregroundStyle(.primary.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.horizontal)
 
             Spacer()
 
