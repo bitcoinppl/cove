@@ -85,11 +85,11 @@ class TapSignerNFC {
                 // convert this to a result type
                 let response = await continueSetup(incompleteResponse)
                 switch response {
-                case .success(.setup(.complete(let c))):
+                case .success(.complete(let c)):
                     nfc.session?.invalidate()
                     return .complete(c)
 
-                case .success(.setup(let other)):
+                case .success(let other):
                     errorCount += 1
                     lastError = other.error
                     incompleteResponse = other
@@ -109,7 +109,7 @@ class TapSignerNFC {
         }
     }
 
-    public func continueSetup(_ response: SetupCmdResponse) async -> Result<TapSignerResponse, TapSignerReaderError> {
+    public func continueSetup(_ response: SetupCmdResponse) async -> Result<SetupCmdResponse, TapSignerReaderError> {
         let cmd: SetupCmd? = switch response {
         case .continueFromInit(let c):
             c.continueCmd
@@ -121,7 +121,7 @@ class TapSignerNFC {
             .none
         }
 
-        guard let cmd else { return .success(.setup(response)) }
+        guard let cmd else { return .success(response) }
 
         // Create a continuation to bridge between async world and property changes
         do {
@@ -136,7 +136,7 @@ class TapSignerNFC {
                         // Re-register for changes
                         Task {
                             // Check if we got a response or error
-                            if let response = self.nfc.tapSignerResponse {
+                            if let response = self.nfc.tapSignerResponse?.setupResponse {
                                 continuation.resume(returning: Result.success(response))
                                 return
                             }
