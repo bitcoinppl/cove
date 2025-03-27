@@ -55,9 +55,11 @@ struct TapSignerImportRetry: View {
             Spacer()
 
             VStack(spacing: 14) {
-                Button("Retry") {}
-                    .buttonStyle(DarkButtonStyle())
-                    .padding(.horizontal)
+                Button("Retry") {
+                    // TODO: launch NFC again
+                }
+                .buttonStyle(DarkButtonStyle())
+                .padding(.horizontal)
             }
         }
         .background(

@@ -22,12 +22,42 @@ struct TapSignerConfirmPin: View {
     @State private var animateField: Bool = false
     @FocusState private var isFocused
 
+    var chainCodeBytes: Data? {
+        guard let chainCode else { return nil }
+        return hexDecode(hex: chainCode)
+    }
+
     func checkPin() {
-        if confirmPin == newPin {
-            // success
-        } else {
+        if confirmPin != newPin {
             animateField.toggle()
             confirmPin = ""
+            return
+        }
+
+        // success, start the NFC scanning process
+        let nfc = TapSignerNFC(tapSigner)
+        manager.nfc = nfc
+
+        Task {
+            let response = await nfc.setupTapSigner(factoryPin: startingPin, newPin: newPin, chainCode: chainCodeBytes)
+            await MainActor.run {
+                switch response {
+                    case let .success(.complete(c)):
+                        manager.resetRoute(to: .importSuccess(tapSigner, c))
+                    case let .success(incomplete):
+                        manager.resetRoute(to: .importRetry(tapSigner, incomplete))
+                    case let .failure(error):
+                        // failed to setup but we can continue
+                        if let incomplete = nfc.lastResponse()?.setupResponse {
+                            return manager.resetRoute(to: .importRetry(tapSigner, incomplete))
+                        }
+
+                        // failed to setup and can't continue from a screen, send back to home and ask them to restart the process
+                        Log.error("Failed to setup TapSigner: \(error)")
+                        app.sheetState = .none
+                        app.alertState = .init(.tapSignerSetupFailed(error.describe))
+                }
+            }
         }
     }
 

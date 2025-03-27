@@ -165,3 +165,9 @@ extension TapSignerRoute: Equatable, Hashable {
         hasher.combine(self)
     }
 }
+
+extension TapSignerResponse {
+    var setupResponse: SetupCmdResponse? {
+        tapSignerResponseSetupResponse(response: self)
+    }
+}

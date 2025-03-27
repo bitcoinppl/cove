@@ -12,12 +12,27 @@ private let logger = Log(id: "TapCardNFC")
 
 class TapSignerNFC {
     private var nfc: TapCardNFC
+    private var lastResponse_: TapSignerResponse?
 
-    init(tapcard: TapCard) {
-        self.nfc = TapCardNFC(tapcard: tapcard)
+    init(_ card: TapSigner) {
+        self.nfc = TapCardNFC(tapcard: .tapSigner(card))
     }
 
-    public func setupTapSigner(_ factoryPin: String, _ newPin: String, _ chainCode: Data? = nil) async throws -> TapSignerResponse {
+    public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async -> Result<SetupCmdResponse, TapSignerReaderError> {
+        do {
+            return try await .success(doSetupTapSigner(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode))
+        } catch let error as TapSignerReaderError {
+            return .failure(error)
+        } catch {
+            return .failure(TapSignerReaderError.Unknown(error.localizedDescription))
+        }
+    }
+
+    public func lastResponse() -> TapSignerResponse? {
+        nfc.tapSignerReader?.lastResponse() ?? lastResponse_
+    }
+
+    private func doSetupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async throws -> SetupCmdResponse {
         var errorCount = 0
         var lastError: TapSignerReaderError? = nil
 
@@ -33,7 +48,7 @@ class TapSignerNFC {
                     // Re-register for changes
                     Task {
                         // Check if we got a response or error
-                        if let response = self.nfc.tapSignerResponse {
+                        if let response = self.nfc.tapSignerResponse?.setupResponse {
                             continuation.resume(returning: response)
                             return
                         }
@@ -59,19 +74,20 @@ class TapSignerNFC {
         }
 
         switch response {
-        case .setup(.complete):
+        case .complete:
             nfc.session?.invalidate()
             return response
-        case .setup(let incomplete):
+        case let incomplete:
             while true {
                 var incompleteResponse = incomplete
+                lastResponse_ = .setup(incompleteResponse)
 
                 // convert this to a result type
                 let response = await continueSetup(incompleteResponse)
                 switch response {
                 case .success(.setup(.complete(let c))):
                     nfc.session?.invalidate()
-                    return .setup(.complete(c))
+                    return .complete(c)
 
                 case .success(.setup(let other)):
                     errorCount += 1
@@ -81,13 +97,13 @@ class TapSignerNFC {
                 case .failure(let error):
                     nfc.session?.invalidate()
                     Log.error("Error count: \(errorCount), last error: \(error)")
-                    return .setup(incompleteResponse)
+                    return incompleteResponse
                 }
 
                 if errorCount > 5 {
                     nfc.session?.invalidate()
                     Log.error("Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))")
-                    return .setup(incompleteResponse)
+                    return incompleteResponse
                 }
             }
         }

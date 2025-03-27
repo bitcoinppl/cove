@@ -11,6 +11,8 @@ import SwiftUI
 class TapSignerManager {
     private let logger = Log(id: "TapSignerManager")
 
+    var id = UUID()
+    var nfc: TapSignerNFC?
     var path: [TapSignerRoute] = []
     var initialRoute: TapSignerRoute
 
@@ -39,6 +41,12 @@ class TapSignerManager {
     func popRoute() {
         if !path.isEmpty { path.removeLast() }
     }
+
+    func resetRoute(to route: TapSignerRoute) {
+        path = []
+        initialRoute = route
+        id = UUID()
+    }
 }
 
 struct TapSignerContainer: View {
@@ -62,6 +70,7 @@ struct TapSignerContainer: View {
         .environment(app)
         .environment(manager)
         .frame(width: screenWidth)
+        .id(manager.id)
     }
 
     @ViewBuilder
@@ -69,23 +78,25 @@ struct TapSignerContainer: View {
         switch route {
         case let .initSelect(t):
             TapSignerChooseChainCode(tapSigner: t)
-                .id("initSelect")
+                .id("initSelect-\(manager.id)")
         case let .initAdvanced(t):
             TapSignerAdvancedChainCode(tapSigner: t)
-                .id("initAdvanced")
+                .id("initAdvanced-\(manager.id)")
         case let .startingPin(tapSigner: t, chainCode: chainCode):
             TapSignerStartingPin(tapSigner: t, chainCode: chainCode)
-                .id("startingPin")
+                .id("startingPin-\(manager.id)")
         case let .newPin(tapSigner: t, startingPin: pin, chainCode: chainCode):
             TapSignerNewPin(tapSigner: t, startingPin: pin, chainCode: chainCode)
-                .id("newPin")
+                .id("newPin-\(manager.id)")
         case let .confirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode):
             TapSignerConfirmPin(tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode)
-                .id("confirmPin")
+                .id("confirmPin-\(manager.id)")
         case let .importSuccess(tapSigner, tapSignerImport):
             TapSignerImportSuccess(tapSigner: tapSigner, tapSignerImport: tapSignerImport)
+                .id("importSuccess-\(manager.id)")
         case let .importRetry(tapSigner, response):
             TapSignerImportRetry(tapSigner: tapSigner, response: response)
+                .id("importRetry-\(manager.id)")
         }
     }
 }

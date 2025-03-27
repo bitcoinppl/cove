@@ -26,6 +26,11 @@ mod ffi {
     }
 
     #[uniffi::export]
+    fn hex_decode(hex: &str) -> Option<Vec<u8>> {
+        hex::decode(hex).ok()
+    }
+
+    #[uniffi::export]
     pub fn generate_random_chain_code() -> String {
         use rand::Rng as _;
 

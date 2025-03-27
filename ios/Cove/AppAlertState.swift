@@ -28,6 +28,7 @@ public enum AppAlertState: Equatable {
     case noCameraPermission
     case failedToScanQr(error: String)
     case cantSendOnWatchOnlyWallet
+    case tapSignerSetupFailed(String)
 
     // action
     case uninitializedTapSigner(TapSigner)
@@ -53,7 +54,7 @@ public enum AppAlertState: Equatable {
         case .addressWrongNetwork:
             "Wrong Network"
         case .noWalletSelected,
-            .foundAddress:
+             .foundAddress:
             "Found Address"
         case .noCameraPermission:
             "Camera Access is Required"
@@ -67,6 +68,8 @@ public enum AppAlertState: Equatable {
             "Watch Only Wallet"
         case .uninitializedTapSigner:
             "Setup TAPSIGNER?"
+        case .tapSignerSetupFailed:
+            "Setup Failed"
         }
     }
 }

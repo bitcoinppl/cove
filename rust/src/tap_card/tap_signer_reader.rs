@@ -206,6 +206,14 @@ impl TapSignerReader {
             SetupCmdResponse::Complete(c) => Ok(SetupCmdResponse::Complete(c)),
         }
     }
+
+    /// Get the last response from the reader
+    pub fn last_response(&self) -> Option<TapSignerResponse> {
+        let response = self.last_response.lock().clone()?;
+        let response = Arc::unwrap_or_clone(response);
+        let tap_signer_response = TapSignerResponse::Setup(response);
+        Some(tap_signer_response)
+    }
 }
 
 impl TapSignerReader {
@@ -395,6 +403,16 @@ impl DeriveInfo {
     }
 }
 
+impl TapSignerResponse {
+    pub fn setup_response(&self) -> Option<&SetupCmdResponse> {
+        match self {
+            TapSignerResponse::Setup(response) => Some(response),
+            #[allow(unreachable_patterns)]
+            _ => None,
+        }
+    }
+}
+
 mod ffi {
     use crate::util::generate_random_chain_code;
 
@@ -420,16 +438,14 @@ mod ffi {
         }
     }
 
-    // MARK: - FFI PREVIEW
     #[uniffi::export]
-    fn tap_signer_import_complete_new(preview: bool) -> TapSignerImportComplete {
-        assert!(preview);
+    fn tap_signer_response_setup_response(response: TapSignerResponse) -> Option<SetupCmdResponse> {
+        response.setup_response().cloned()
+    }
 
-        let backup = vec![0u8; 32];
-        TapSignerImportComplete {
-            backup,
-            derive_info: derive_info(),
-        }
+    #[uniffi::export]
+    fn display_tap_signer_reader_error(error: TapSignerReaderError) -> String {
+        error.to_string()
     }
 
     #[uniffi::export]
@@ -449,5 +465,17 @@ mod ffi {
             continue_cmd: Arc::new(setup_cmd),
             error: TapSignerReaderError::NoCommand,
         })
+    }
+
+    // MARK: - FFI PREVIEW
+    #[uniffi::export]
+    fn tap_signer_import_complete_new(preview: bool) -> TapSignerImportComplete {
+        assert!(preview);
+
+        let backup = vec![0u8; 32];
+        TapSignerImportComplete {
+            backup,
+            derive_info: derive_info(),
+        }
     }
 }

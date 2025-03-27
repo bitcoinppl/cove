@@ -35,8 +35,8 @@ struct SafeAreaInsetsKey: EnvironmentKey {
     }
 }
 
-extension EnvironmentValues {
-    public var safeAreaInsets: EdgeInsets {
+public extension EnvironmentValues {
+    var safeAreaInsets: EdgeInsets {
         self[SafeAreaInsetsKey.self]
     }
 }
@@ -82,7 +82,7 @@ struct CoveApp: App {
             ):
                 "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
-                let .foundAddress(address, _):
+                 let .foundAddress(address, _):
                 address.unformatted()
             case .noCameraPermission:
                 "Please allow camera access in Settings to use this feature."
@@ -96,6 +96,8 @@ struct CoveApp: App {
                 "This is watch-only wallet and cannot send transactions. Please import this wallet again to enable sending transactions."
             case .uninitializedTapSigner:
                 "This TAPSIGNER has not been setup yet. Would you like to setup it now?"
+            case let .tapSignerSetupFailed(error):
+                "Please try again.\nError: \(error)"
             }
 
         if case .foundAddress = alert.item {
@@ -165,17 +167,18 @@ struct CoveApp: App {
                 app.alertState = .none
             }
         case .invalidWordGroup,
-            .errorImportingHotWallet,
-            .importedSuccessfully,
-            .unableToSelectWallet,
-            .errorImportingHardwareWallet,
-            .invalidFileFormat,
-            .importedLabelsSuccessfully,
-            .unableToGetAddress,
-            .failedToScanQr,
-            .noUnsignedTransactionFound,
-            .cantSendOnWatchOnlyWallet,
-            .invalidFormat:
+             .errorImportingHotWallet,
+             .importedSuccessfully,
+             .unableToSelectWallet,
+             .errorImportingHardwareWallet,
+             .invalidFileFormat,
+             .importedLabelsSuccessfully,
+             .unableToGetAddress,
+             .failedToScanQr,
+             .noUnsignedTransactionFound,
+             .cantSendOnWatchOnlyWallet,
+             .tapSignerSetupFailed,
+             .invalidFormat:
             Button("OK") {
                 app.alertState = .none
             }
@@ -548,9 +551,9 @@ struct CoveApp: App {
 
         // PIN auth active, no biometrics, leaving app
         if auth.isAuthEnabled,
-            !auth.isUsingBiometrics,
-            oldPhase == .active,
-            newPhase == .inactive
+           !auth.isUsingBiometrics,
+           oldPhase == .active,
+           newPhase == .inactive
         {
             Log.debug("[scene] app going inactive")
             coverClearTask?.cancel()
@@ -609,7 +612,7 @@ struct CoveApp: App {
 
         // sanity check, get out of decoy mode if PIN is disabled
         if auth.isInDecoyMode(), newPhase == .active,
-            auth.type == .none || auth.type == .biometric
+           auth.type == .none || auth.type == .biometric
         {
             auth.switchToMainMode()
         }
@@ -642,20 +645,20 @@ struct CoveApp: App {
                 .gesture(
                     app.router.routes.isEmpty
                         ? DragGesture()
-                            .onChanged { gesture in
-                                if gesture.startLocation.x < 25, gesture.translation.width > 100 {
-                                    withAnimation(.spring()) {
-                                        app.isSidebarVisible = true
-                                    }
+                        .onChanged { gesture in
+                            if gesture.startLocation.x < 25, gesture.translation.width > 100 {
+                                withAnimation(.spring()) {
+                                    app.isSidebarVisible = true
                                 }
                             }
-                            .onEnded { gesture in
-                                if gesture.startLocation.x < 20, gesture.translation.width > 50 {
-                                    withAnimation(.spring()) {
-                                        app.isSidebarVisible = true
-                                    }
+                        }
+                        .onEnded { gesture in
+                            if gesture.startLocation.x < 20, gesture.translation.width > 50 {
+                                withAnimation(.spring()) {
+                                    app.isSidebarVisible = true
                                 }
-                            } : nil
+                            }
+                        } : nil
                 )
                 .task {
                     await app.rust.initOnStart()

@@ -11128,6 +11128,11 @@ public protocol TapSignerReaderProtocol: AnyObject, Sendable {
      */
     func continueSetup(response: SetupCmdResponse) async throws  -> SetupCmdResponse
     
+    /**
+     * Get the last response from the reader
+     */
+    func lastResponse()  -> TapSignerResponse?
+    
     func run() async throws  -> TapSignerResponse
     
     /**
@@ -11222,6 +11227,16 @@ open func continueSetup(response: SetupCmdResponse)async throws  -> SetupCmdResp
             liftFunc: FfiConverterTypeSetupCmdResponse_lift,
             errorHandler: FfiConverterTypeTapSignerReaderError_lift
         )
+}
+    
+    /**
+     * Get the last response from the reader
+     */
+open func lastResponse() -> TapSignerResponse?  {
+    return try!  FfiConverterOptionTypeTapSignerResponse.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsignerreader_last_response(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func run()async throws  -> TapSignerResponse  {
@@ -27829,6 +27844,30 @@ fileprivate struct FfiConverterOptionTypeRoute: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSetupCmdResponse: FfiConverterRustBuffer {
+    typealias SwiftType = SetupCmdResponse?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSetupCmdResponse.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSetupCmdResponse.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTapSignerCmd: FfiConverterRustBuffer {
     typealias SwiftType = TapSignerCmd?
 
@@ -27845,6 +27884,30 @@ fileprivate struct FfiConverterOptionTypeTapSignerCmd: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeTapSignerCmd.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeTapSignerResponse: FfiConverterRustBuffer {
+    typealias SwiftType = TapSignerResponse?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTapSignerResponse.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTapSignerResponse.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -28742,6 +28805,13 @@ public func displayMultiFormatError(error: MultiFormatError) -> String  {
     )
 })
 }
+public func displayTapSignerReaderError(error: TapSignerReaderError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_display_tap_signer_reader_error(
+        FfiConverterTypeTapSignerReaderError_lower(error),$0
+    )
+})
+}
 public func displayWalletError(error: WalletError) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_display_wallet_error(
@@ -28837,6 +28907,13 @@ public func hashRoute(route: Route) -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_cove_fn_func_hash_route(
         FfiConverterTypeRoute_lower(route),$0
+    )
+})
+}
+public func hexDecode(hex: String) -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_cove_fn_func_hex_decode(
+        FfiConverterString.lower(hex),$0
     )
 })
 }
@@ -28952,6 +29029,13 @@ public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_preview_new(
         FfiConverterBool.lower(preview),$0
+    )
+})
+}
+public func tapSignerResponseSetupResponse(response: TapSignerResponse) -> SetupCmdResponse?  {
+    return try!  FfiConverterOptionTypeSetupCmdResponse.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_response_setup_response(
+        FfiConverterTypeTapSignerResponse_lower(response),$0
     )
 })
 }
@@ -29109,6 +29193,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_display_multi_format_error() != 20531) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_display_tap_signer_reader_error() != 26195) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_display_wallet_error() != 59170) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29149,6 +29236,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_hash_route() != 32817) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_hex_decode() != 62551) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_hex_encode() != 38168) {
@@ -29197,6 +29287,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_response_setup_response() != 1061) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 43706) {
@@ -30121,6 +30214,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 43346) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsignerreader_last_response() != 39609) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsignerreader_run() != 2710) {
