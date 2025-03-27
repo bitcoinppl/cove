@@ -72,7 +72,8 @@ extension Color {
             red: Double(r) / 255,
             green: Double(g) / 255,
             blue: Double(b) / 255,
-            opacity: Double(a) / 255)
+            opacity: Double(a) / 255
+        )
     }
 
     func getRGB() -> (red: Int, green: Int, blue: Int, opacity: Double) {
@@ -104,7 +105,8 @@ extension Color {
             format: "#%02lX%02lX%02lX",
             lround(r * 255),
             lround(g * 255),
-            lround(b * 255))
+            lround(b * 255)
+        )
     }
 
     var hasDarkVariant: Bool {
@@ -196,7 +198,7 @@ extension Color {
         (pastelRed, "pastelRed"),
         (pastelTeal, "pastelTeal"),
         (pastelYellow, "pastelYellow"),
-        
+
         // SwiftUI Colors
         (white, "white"),
         (black, "black"),

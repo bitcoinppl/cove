@@ -1,5 +1,5 @@
 //
-//  TapSigner.swift
+//  TapSignerNfc.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/13/25.
@@ -15,7 +15,7 @@ class TapSignerNFC {
     private var lastResponse_: TapSignerResponse?
 
     init(_ card: TapSigner) {
-        self.nfc = TapCardNFC(tapcard: .tapSigner(card))
+        nfc = TapCardNFC(tapcard: .tapSigner(card))
     }
 
     public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async -> Result<SetupCmdResponse, TapSignerReaderError> {
@@ -85,16 +85,16 @@ class TapSignerNFC {
                 // convert this to a result type
                 let response = await continueSetup(incompleteResponse)
                 switch response {
-                case .success(.complete(let c)):
+                case let .success(.complete(c)):
                     nfc.session?.invalidate()
                     return .complete(c)
 
-                case .success(let other):
+                case let .success(other):
                     errorCount += 1
                     lastError = other.error
                     incompleteResponse = other
 
-                case .failure(let error):
+                case let .failure(error):
                     nfc.session?.invalidate()
                     Log.error("Error count: \(errorCount), last error: \(error)")
                     return incompleteResponse
@@ -111,11 +111,11 @@ class TapSignerNFC {
 
     public func continueSetup(_ response: SetupCmdResponse) async -> Result<SetupCmdResponse, TapSignerReaderError> {
         let cmd: SetupCmd? = switch response {
-        case .continueFromInit(let c):
+        case let .continueFromInit(c):
             c.continueCmd
-        case .continueFromBackup(let c):
+        case let .continueFromBackup(c):
             c.continueCmd
-        case .continueFromDerive(let c):
+        case let .continueFromDerive(c):
             c.continueCmd
         case .complete:
             .none
@@ -184,15 +184,15 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     init(tapcard: TapCard) {
         self.tapcard = tapcard
 
-        self.tapSignerReader = nil
-        self.tapSignerCmd = nil
+        tapSignerReader = nil
+        tapSignerCmd = nil
 
         //  self.satsCardReader = nil
         //  self.satsCardReader = nil
 
-        self.tag = nil
-        self.session = nil
-        self.transport = nil
+        tag = nil
+        session = nil
+        transport = nil
     }
 
     func scan() {
@@ -223,7 +223,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             case .iso15693:
                 logger.error("found tag iso15693Tag")
                 session.invalidate(errorMessage: "Unsupported tag type.")
-            case .iso7816(let iso7816Tag):
+            case let .iso7816(iso7816Tag):
                 Log.debug("found tag iso7816")
 
                 let readingMessage = "Reading tag, please hold still"
@@ -283,7 +283,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         case .none:
             tapSignerError = .Unknown("Unable to read NFC tag, try again")
             session.invalidate(errorMessage: "Unable to read NFC tag, try again")
-        case .some(let error):
+        case let .some(error):
             switch error.code {
             case .readerTransceiveErrorTagConnectionLost:
                 tapSignerError = .Unknown("Tag connection lost, please hold your phone still")
@@ -303,7 +303,7 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
     var tag: NFCISO7816Tag
 
     init(session: NFCTagReaderSession, tag: NFCISO7816Tag) {
-        self.nfcSession = session
+        nfcSession = session
         self.tag = tag
     }
 
@@ -329,7 +329,7 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                     // Handle specific error codes
                     var errorMessage = ""
                     switch statusWord {
-                    case 0x6d00:
+                    case 0x6D00:
                         errorMessage = "Instruction code not supported or invalid"
                     default:
                         errorMessage =

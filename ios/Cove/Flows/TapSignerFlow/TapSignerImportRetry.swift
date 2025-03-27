@@ -60,18 +60,18 @@ struct TapSignerImportRetry: View {
                 Button("Retry") {
                     Task {
                         switch await manager.nfc?.continueSetup(response) {
-                            case let .success(.complete(c)):
-                                manager.resetRoute(to: .importSuccess(tapSigner, c))
-                            case let .success(incomplete):
-                                Log.error("Failed to complete TAPSIGNER setup, won't retry anymore \(incomplete)")
-                                app.sheetState = nil
-                                app.alertState = .init(.tapSignerSetupFailed("Failed to setup TapSigner"))
-                            case let .failure(error):
-                                app.sheetState = nil
-                                app.alertState = .init(.tapSignerSetupFailed(error.describe))
-                            case .none:
-                                app.sheetState = nil
-                                app.alertState = .init(.tapSignerSetupFailed("Failed to get NFC reader"))
+                        case let .success(.complete(c)):
+                            manager.resetRoute(to: .importSuccess(tapSigner, c))
+                        case let .success(incomplete):
+                            Log.error("Failed to complete TAPSIGNER setup, won't retry anymore \(incomplete)")
+                            app.sheetState = nil
+                            app.alertState = .init(.tapSignerSetupFailed("Failed to setup TapSigner"))
+                        case let .failure(error):
+                            app.sheetState = nil
+                            app.alertState = .init(.tapSignerSetupFailed(error.describe))
+                        case .none:
+                            app.sheetState = nil
+                            app.alertState = .init(.tapSignerSetupFailed("Failed to get NFC reader"))
                         }
                     }
                 }

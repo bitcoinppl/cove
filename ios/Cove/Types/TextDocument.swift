@@ -19,7 +19,7 @@ struct TextDocument: FileDocument {
         }
     }
 
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
         let data = Data(text.utf8)
         return FileWrapper(regularFileWithContents: data)
     }

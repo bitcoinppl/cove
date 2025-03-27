@@ -17,7 +17,7 @@ class TapSignerManager {
     var initialRoute: TapSignerRoute
 
     init(_ route: TapSignerRoute) {
-        self.initialRoute = route
+        initialRoute = route
     }
 
     func navigate(to newRoute: TapSignerRoute) {
@@ -54,7 +54,7 @@ struct TapSignerContainer: View {
     @State var manager: TapSignerManager
 
     init(route: TapSignerRoute) {
-        self.manager = TapSignerManager(route)
+        manager = TapSignerManager(route)
     }
 
     var body: some View {

@@ -26,8 +26,7 @@ struct TapSignerImportSuccess: View {
                 backup: tapSignerImport.backup
             )
             app.loadAndReset(to: .selectedWallet(manager.id))
-        }
-        catch {
+        } catch {
             Log.error("Failed to save wallet: \(error.localizedDescription)")
         }
     }

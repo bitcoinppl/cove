@@ -105,7 +105,7 @@ fn parse_card(url_encoded: &str) -> Result<TapCard> {
         .ok_or_else(|| Error::InvalidUrl(url_encoded.to_string()))?;
 
     // Parse URL-encoded string into a HashMap
-    let params: HashMap<&str, &str> = serde_urlencoded::from_str(&url_encoded)?;
+    let params: HashMap<&str, &str> = serde_urlencoded::from_str(url_encoded)?;
 
     let nonce = params
         .get("n")

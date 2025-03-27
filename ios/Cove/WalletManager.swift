@@ -46,7 +46,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
     public init(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil) throws {
         let rust = try RustWalletManager.tryNewFromTapSigner(
-            tapSigner: tapSigner, deriveInfo: deriveInfo, backup: backup)
+            tapSigner: tapSigner, deriveInfo: deriveInfo, backup: backup
+        )
 
         let metadata = rust.walletMetadata()
 
