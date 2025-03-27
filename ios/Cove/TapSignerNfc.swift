@@ -281,13 +281,16 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         Log.error("tapcard reader session did invalidate with error: \(error.localizedDescription)")
         switch error as? NFCReaderError {
         case .none:
+            tapSignerError = .Unknown("Unable to read NFC tag, try again")
             session.invalidate(errorMessage: "Unable to read NFC tag, try again")
         case .some(let error):
             switch error.code {
             case .readerTransceiveErrorTagConnectionLost:
+                tapSignerError = .Unknown("Tag connection lost, please hold your phone still")
                 session.invalidate(
                     errorMessage: "Tag connection lost, please hold your phone still")
             default:
+                tapSignerError = .Unknown("Unable to read NFC tag, try again")
                 session.invalidate(errorMessage: "Unable to read NFC tag, try again")
             }
         }
