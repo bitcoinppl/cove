@@ -327,7 +327,8 @@ struct CoveApp: App {
             case let .tapSignerInit(tapSigner):
                 app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
             case let .tapSigner(tapSigner):
-                let panic = "TapSigner not implemented \(tapSigner)"
+                let panic =
+                    "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
                 Log.error(panic)
             case let .bip329Labels(labels):
                 if let selectedWallet = Database().globalConfig().selectedWallet() {
@@ -380,8 +381,8 @@ struct CoveApp: App {
                 handleTransaction(transaction)
             case let .tapSignerInit(tapSigner):
                 app.alertState = .init(.uninitializedTapSigner(tapSigner))
-            case .tapSigner:
-                let panic = "TapSigner not implemented"
+            case let .tapSigner(tapSigner):
+                let panic = "TAPSIGNER not implemented: \(tapSigner)"
                 Log.error(panic)
             case let .bip329Labels(labels):
                 guard let manager = app.walletManager else { return setInvalidlabels() }
