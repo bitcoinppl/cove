@@ -102,6 +102,8 @@ struct CoveApp: App {
                 "Please try again.\nError: \(error)"
             case .tapSignerInvalidAuth:
                 "The PIN you entered was incorrect. Please try again."
+            case .general(title: _, message: let message):
+                message
             }
 
         if case .foundAddress = alert.item {
@@ -184,6 +186,7 @@ struct CoveApp: App {
              .tapSignerSetupFailed,
              .tapSignerInvalidAuth,
              .tapSignerDeriveFailed,
+             .general,
              .invalidFormat:
             Button("OK") {
                 app.alertState = .none
