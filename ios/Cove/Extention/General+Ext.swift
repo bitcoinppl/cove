@@ -175,3 +175,9 @@ extension TapSignerResponse {
         tapSignerResponseDeriveResponse(response: self)
     }
 }
+
+extension AfterPinAction {
+    var userMessage: String {
+        afterPinActionUserMessage(action: self)
+    }
+}

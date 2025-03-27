@@ -37,6 +37,8 @@ public enum AppAlertState: Equatable {
 
     // action
     case uninitializedTapSigner(TapSigner)
+    case tapSignerWalletFound(WalletId)
+    case intializedTapSigner(TapSigner)
 
     func title() -> String {
         switch self {
@@ -59,7 +61,7 @@ public enum AppAlertState: Equatable {
         case .addressWrongNetwork:
             "Wrong Network"
         case .noWalletSelected,
-             .foundAddress:
+            .foundAddress:
             "Found Address"
         case .noCameraPermission:
             "Camera Access is Required"
@@ -79,6 +81,10 @@ public enum AppAlertState: Equatable {
             "TAPSIGNER Import Failed"
         case .tapSignerInvalidAuth:
             "Wrong PIN"
+        case .tapSignerWalletFound:
+            "Wallet Found"
+        case let .intializedTapSigner:
+            "Import TAPSIGNER?"
         case let .general(title: title, message: _):
             title
         }

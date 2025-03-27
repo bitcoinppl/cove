@@ -18,7 +18,7 @@ struct TapSignerImportSuccess: View {
     func saveWallet() {
         do {
             let manager = try WalletManager(tapSigner: tapSigner, deriveInfo: deriveInfo)
-            app.loadAndReset(to: .selectedWallet(manager.id))
+            app.selectWallet(manager.id)
         } catch {
             Log.error("Failed to save wallet: \(error.localizedDescription)")
         }

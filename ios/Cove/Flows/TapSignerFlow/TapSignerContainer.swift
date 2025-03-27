@@ -103,9 +103,9 @@ struct TapSignerContainer: View {
         case let .setupRetry(tapSigner, response):
             TapSignerSetupRetry(tapSigner: tapSigner, response: response)
                 .id(id("setupRetry"))
-        case let .enterPin(tapSigner: t, userMessage: message, cmd: cmd):
-            TapSignerEnterPin(tapSigner: t, message: message, cmd: cmd)
-                .id(id("enterPin"))
+        case let .enterPin(tapSigner: t, action: action):
+            TapSignerEnterPin(tapSigner: t, action: action)
+                .id(id("enterPin-\(action)"))
         case let .importSuccess(t, deriveInfo):
             TapSignerImportSuccess(tapSigner: t, deriveInfo: deriveInfo)
                 .id(id("importSuccess"))

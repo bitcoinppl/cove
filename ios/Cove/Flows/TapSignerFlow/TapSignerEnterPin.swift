@@ -12,12 +12,30 @@ struct TapSignerEnterPin: View {
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
-    let message: String
-    let cmd: TapSignerCmd
+    let action: AfterPinAction
+
+    var message: String {
+        action.userMessage
+    }
 
     // private
     @State private var pin: String = ""
     @FocusState private var isFocused
+
+    func deriveAction(_ nfc: TapSignerNFC, _ pin: String) {
+        Task {
+            switch await nfc.derive(pin: pin) {
+            case let .success(deriveInfo):
+                manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
+            case let .failure(error):
+                if error.isAuthError {
+                    app.alertState = .init(.tapSignerInvalidAuth)
+                } else {
+                    app.alertState = .init(.tapSignerDeriveFailed(error.describe))
+                }
+            }
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -54,7 +72,7 @@ struct TapSignerEnterPin: View {
                 .padding(.horizontal)
 
                 HStack {
-                    ForEach(0..<6, id: \.self) { index in
+                    ForEach(0 ..< 6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
                             .fill(pin.count <= index ? Color.clear : .primary)
@@ -86,17 +104,8 @@ struct TapSignerEnterPin: View {
                     let nfc = TapSignerNFC(tapSigner)
                     manager.nfc = nfc
 
-                    Task {
-                        switch await nfc.derive(pin: newPin) {
-                        case let .success(deriveInfo):
-                            manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
-                        case let .failure(error):
-                            if error.isAuthError {
-                                app.alertState = .init(.tapSignerInvalidAuth)
-                            } else {
-                                app.alertState = .init(.tapSignerDeriveFailed(error.describe))
-                            }
-                        }
+                    switch action {
+                    case .derive: deriveAction(nfc, newPin)
                     }
 
                     pin = ""
@@ -122,9 +131,7 @@ struct TapSignerEnterPin: View {
     TapSignerContainer(
         route: .enterPin(
             tapSigner: tapSignerPreviewNew(preview: true),
-            userMessage:
-                "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet",
-            cmd: .derive(pin: "012345")
+            action: .derive
         )
     )
     .environment(AppManager.shared)

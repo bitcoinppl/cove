@@ -15895,6 +15895,66 @@ extension AddressError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum AfterPinAction {
+    
+    case derive
+}
+
+
+#if compiler(>=6)
+extension AfterPinAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
+    typealias SwiftType = AfterPinAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AfterPinAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .derive
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AfterPinAction, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .derive:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAfterPinAction_lift(_ buf: RustBuffer) throws -> AfterPinAction {
+    return try FfiConverterTypeAfterPinAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAfterPinAction_lower(_ value: AfterPinAction) -> RustBuffer {
+    return FfiConverterTypeAfterPinAction.lower(value)
+}
+
+
+extension AfterPinAction: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum ApiType {
     
     case esplora
@@ -23438,7 +23498,7 @@ public enum TapSignerRoute {
     )
     case importRetry(TapSigner
     )
-    case enterPin(tapSigner: TapSigner, userMessage: String, cmd: TapSignerCmd
+    case enterPin(tapSigner: TapSigner, action: AfterPinAction
     )
 }
 
@@ -23484,7 +23544,7 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         case 9: return .importRetry(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
-        case 10: return .enterPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), userMessage: try FfiConverterString.read(from: &buf), cmd: try FfiConverterTypeTapSignerCmd.read(from: &buf)
+        case 10: return .enterPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), action: try FfiConverterTypeAfterPinAction.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23549,11 +23609,10 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
         
-        case let .enterPin(tapSigner,userMessage,cmd):
+        case let .enterPin(tapSigner,action):
             writeInt(&buf, Int32(10))
             FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
-            FfiConverterString.write(userMessage, into: &buf)
-            FfiConverterTypeTapSignerCmd.write(cmd, into: &buf)
+            FfiConverterTypeAfterPinAction.write(action, into: &buf)
             
         }
     }
@@ -28809,6 +28868,13 @@ public func addressStringSpacedOut(address: String) -> String  {
     )
 })
 }
+public func afterPinActionUserMessage(action: AfterPinAction) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_after_pin_action_user_message(
+        FfiConverterTypeAfterPinAction_lower(action),$0
+    )
+})
+}
 public func allColorSchemes() -> [ColorSchemeSelection]  {
     return try!  FfiConverterSequenceTypeColorSchemeSelection.lift(try! rustCall() {
     uniffi_cove_fn_func_all_color_schemes($0
@@ -29249,6 +29315,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_address_string_spaced_out() != 60902) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_after_pin_action_user_message() != 26922) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_all_color_schemes() != 24835) {

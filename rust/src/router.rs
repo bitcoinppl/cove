@@ -5,9 +5,7 @@ use crate::{
     database::Database,
     mnemonic::NumberOfBip39Words,
     multi_format::tap_card::TapSigner,
-    tap_card::tap_signer_reader::{
-        DeriveInfo, SetupCmdResponse, TapSignerCmd, TapSignerSetupComplete,
-    },
+    tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
 };
@@ -136,8 +134,7 @@ pub enum TapSignerRoute {
     // shared routes
     EnterPin {
         tap_signer: TapSigner,
-        user_message: String,
-        cmd: TapSignerCmd,
+        action: AfterPinAction,
     },
 }
 
@@ -146,6 +143,11 @@ pub struct Router {
     pub app: Arc<FfiApp>,
     pub default: Route,
     pub routes: Vec<Route>,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum AfterPinAction {
+    Derive,
 }
 
 impl_default_for!(Router);
@@ -404,4 +406,17 @@ impl From<SettingsRoute> for Route {
 #[uniffi::export]
 fn is_tap_signer_route_equal(lhs: TapSignerRoute, rhs: TapSignerRoute) -> bool {
     lhs == rhs
+}
+
+impl AfterPinAction {
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string()
+        }
+    }
+}
+
+#[uniffi::export]
+fn after_pin_action_user_message(action: AfterPinAction) -> String {
+    action.user_message()
 }

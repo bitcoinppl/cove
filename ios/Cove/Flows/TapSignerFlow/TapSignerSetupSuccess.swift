@@ -25,7 +25,8 @@ struct TapSignerSetupSuccess: View {
                 deriveInfo: setup.deriveInfo,
                 backup: setup.backup
             )
-            app.loadAndReset(to: .selectedWallet(manager.id))
+
+            app.selectWallet(manager.id)
         } catch {
             Log.error("Failed to save wallet: \(error.localizedDescription)")
         }
@@ -147,10 +148,10 @@ struct TapSignerSetupSuccess: View {
 #Preview {
     TapSignerContainer(
         route:
-            .setupSuccess(
-                tapSignerPreviewNew(preview: true),
-                tapSignerSetupCompleteNew(preview: true)
-            )
+        .setupSuccess(
+            tapSignerPreviewNew(preview: true),
+            tapSignerSetupCompleteNew(preview: true)
+        )
     )
     .environment(AppManager.shared)
 }
