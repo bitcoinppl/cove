@@ -69,6 +69,10 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub origin: Option<String>,
 
+    /// And ID for the hardware wallet, if this  wallet is a hardware wallet
+    #[serde(default)]
+    pub hardware_id: Option<String>,
+
     /// Show labels for transactions i the transaction list
     /// If false, we only show either `Sent` or `Received` labels
     #[serde(default = "default_true")]
@@ -208,6 +212,7 @@ impl WalletMetadata {
             address_type: WalletAddressType::default(),
             wallet_type: WalletType::Hot,
             wallet_mode,
+            hardware_id: None,
             show_labels: true,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
@@ -258,6 +263,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             sensitive_visible: true,
             details_expanded: false,
+            hardware_id: None,
             wallet_type: WalletType::Hot,
             wallet_mode: WalletMode::Main,
             show_labels: true,

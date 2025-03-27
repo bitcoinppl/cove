@@ -28,6 +28,10 @@ public enum AppAlertState: Equatable {
     case noCameraPermission
     case failedToScanQr(error: String)
     case cantSendOnWatchOnlyWallet
+    case tapSignerSetupFailed(String)
+
+    // action
+    case uninitializedTapSigner(TapSigner)
 
     func title() -> String {
         switch self {
@@ -62,6 +66,10 @@ public enum AppAlertState: Equatable {
             "Unable to Get Address"
         case .cantSendOnWatchOnlyWallet:
             "Watch Only Wallet"
+        case .uninitializedTapSigner:
+            "Setup TAPSIGNER?"
+        case .tapSignerSetupFailed:
+            "Setup Failed"
         }
     }
 }

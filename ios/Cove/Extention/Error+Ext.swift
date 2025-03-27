@@ -22,3 +22,15 @@ extension WalletError {
         displayWalletError(error: self)
     }
 }
+
+extension TransportError {
+    init(code: Int, message: String) {
+        self = createTransportErrorFromCode(code: UInt16(code), message: message)
+    }
+}
+
+extension TapSignerReaderError {
+    var describe: String {
+        displayTapSignerReaderError(error: self)
+    }
+}

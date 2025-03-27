@@ -90,8 +90,8 @@ watch-build profile="debug" device="false":
 test test="":
     cd rust && cargo nextest run {{test}}
 
-ctest test="":
-    cd rust && cargo test {{test}}
+ctest test="" flags="":
+    cd rust && cargo test {{test}} -- {{flags}}
 
 btest test="":
     cd rust && bacon nextest -- {{test}}

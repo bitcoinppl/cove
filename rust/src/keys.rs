@@ -14,9 +14,11 @@ use bdk_wallet::{
     miniscript::descriptor::{DescriptorXKey, Wildcard},
     template::{Bip44, Bip49, Bip84, Bip84Public, DescriptorTemplate as _},
 };
+use bitcoin::bip32::Xpub;
 use bitcoin::secp256k1;
 
 use crate::network::Network;
+use crate::tap_card::tap_signer_reader::DeriveInfo;
 
 pub type Seed = [u8; 64];
 
@@ -38,9 +40,15 @@ pub enum DescriptorKeyParseError {
 
     #[error("no origin found")]
     NoOrigin,
+
+    #[error("invalid public key")]
+    InvalidPublicKey,
+
+    #[error("invalid chain code")]
+    InvalidChainCode,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Descriptors {
     /// The external descriptor, main account
     pub external: Descriptor,
@@ -48,7 +56,7 @@ pub struct Descriptors {
     pub internal: Descriptor,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Descriptor {
     pub extended_descriptor: ExtendedDescriptor,
     pub key_map: KeyMap,
@@ -68,6 +76,51 @@ impl Descriptors {
 
     pub fn origin(&self) -> Result<String, Error> {
         self.external.origin()
+    }
+
+    pub fn new_from_tap_signer(derive: &DeriveInfo) -> Result<Self, Error> {
+        use bitcoin::{
+            NetworkKind,
+            bip32::{ChainCode, ChildNumber, Xpub},
+            secp256k1::PublicKey,
+        };
+
+        // dept is always 3 and always the first (0) child, derives the standard derivation path
+        let depth = 3;
+        let child_number = ChildNumber::Hardened { index: 0 };
+
+        // using the master fingerprint as the parent fingerprint )
+        let master_fingerprint = derive.master_fingerprint();
+        let public_key =
+            PublicKey::from_slice(&derive.pubkey).map_err(|_| Error::InvalidPublicKey)?;
+
+        let chain_code_bytes: [u8; 32] = derive
+            .chain_code
+            .clone()
+            .try_into()
+            .map_err(|_| Error::InvalidChainCode)?;
+
+        let chain_code = ChainCode::from(chain_code_bytes);
+
+        let xpub = Xpub {
+            network: NetworkKind::from(derive.network),
+            depth,
+            parent_fingerprint: master_fingerprint,
+            child_number,
+            public_key,
+            chain_code,
+        };
+
+        Ok(Self::new_bip84(xpub, master_fingerprint))
+    }
+
+    pub fn new_bip84(xpub: Xpub, master_fingerprint: Fingerprint) -> Self {
+        let derivation_path = "84h/0h/0h";
+        let desc_string = format!("wpkh([{master_fingerprint}/{derivation_path}]{xpub}/<0;1>/*)");
+        let desc = pubport::descriptor::Descriptors::try_from_line(&desc_string)
+            .expect("valid descriptor, because xpub is valid");
+
+        Self::from(desc)
     }
 
     pub fn fingerprint(&self) -> Option<Fingerprint> {
@@ -137,6 +190,13 @@ impl Descriptor {
         };
 
         Ok(key)
+    }
+
+    pub fn xpub(&self) -> Option<Xpub> {
+        match self.descriptor_public_key() {
+            Ok(BdkDescriptorPublicKey::XPub(xpub)) => Some(xpub.xkey),
+            _ => None,
+        }
     }
 
     pub fn origin(&self) -> Result<String, Error> {
@@ -325,18 +385,40 @@ impl From<pubport::descriptor::Descriptors> for Descriptors {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
+
+    fn desc() -> &'static str {
+        "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7"
+    }
+
+    fn derive_info() -> DeriveInfo {
+        let xpub = "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let original_xpub = bitcoin::bip32::Xpub::from_str(xpub).unwrap();
+
+        let master_xpub = "xpub661MyMwAqRbcFFr2SGY3dUn7g8P9VKNZdKWL2Z2pZMEkBWH2D1KTcwTn7keZQCaScCx7BUDjHFJJHnzBvDgUFgNjYsQTRvo7LWfYEtt78Pb";
+        let master_xpub = bitcoin::bip32::Xpub::from_str(master_xpub).unwrap();
+
+        let master_xpub_bytes = master_xpub.public_key.serialize();
+        let xpub_bytes = original_xpub.public_key.serialize();
+
+        DeriveInfo {
+            network: Network::Bitcoin,
+            master_pubkey: master_xpub_bytes.to_vec(),
+            pubkey: xpub_bytes.to_vec(),
+            chain_code: original_xpub.chain_code.to_bytes().to_vec(),
+            path: vec![84, 0, 0],
+        }
+    }
 
     #[test]
     fn test_descriptor_parse() {
-        let desc = "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
-        let descriptor = Descriptor::parse_public_descriptor(desc);
+        let descriptor = Descriptor::parse_public_descriptor(desc());
         assert!(descriptor.is_ok());
     }
 
     #[test]
     fn test_descriptor_into_descriptor_public_key() {
-        let desc = "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
-        let descriptor = Descriptor::parse_public_descriptor(desc);
+        let descriptor = Descriptor::parse_public_descriptor(desc());
         assert!(descriptor.is_ok());
         let descriptor = descriptor.unwrap();
 
@@ -346,8 +428,7 @@ mod tests {
 
     #[test]
     fn test_descriptor_into_origin() {
-        let desc = "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)#60tjs4c7";
-        let descriptor = Descriptor::parse_public_descriptor(desc);
+        let descriptor = Descriptor::parse_public_descriptor(desc());
         assert!(descriptor.is_ok());
         let descriptor = descriptor.unwrap();
 
@@ -356,5 +437,49 @@ mod tests {
 
         let origin = origin.unwrap();
         assert_eq!(origin, "wpkh([817e7be0/84'/0'/0'])");
+    }
+
+    #[test]
+    fn test_from_tap_signer_create_descriptor() {
+        let derive_info = derive_info();
+        let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info);
+        assert!(parsed_descriptors.is_ok());
+    }
+
+    #[test]
+    fn test_from_tap_signer_creates_same_address() {
+        let original_descriptor: Descriptors =
+            pubport::descriptor::Descriptors::try_from_line(desc())
+                .unwrap()
+                .into();
+
+        let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info()).unwrap();
+
+        let mut original_wallet = original_descriptor
+            .into_create_params()
+            .create_wallet_no_persist()
+            .unwrap();
+
+        let mut parsed_wallet = parsed_descriptors
+            .into_create_params()
+            .create_wallet_no_persist()
+            .unwrap();
+
+        // verify  external addresses are same
+        let original_address = original_wallet.next_unused_address(KeychainKind::External);
+        let parsed_address = parsed_wallet.next_unused_address(KeychainKind::External);
+        assert_eq!(original_address, parsed_address);
+
+        // verify internal addresses are same
+        let original_address = original_wallet.next_unused_address(KeychainKind::Internal);
+        let parsed_address = parsed_wallet.next_unused_address(KeychainKind::Internal);
+        assert_eq!(original_address, parsed_address);
+    }
+
+    #[test]
+    fn test_xpub_from_tap_signer() {
+        let derive_info = derive_info();
+        let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info).unwrap();
+        assert!(parsed_descriptors.external.xpub().is_some());
     }
 }

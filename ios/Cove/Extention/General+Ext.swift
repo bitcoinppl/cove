@@ -137,3 +137,36 @@ extension NfcMessage: Equatable {
         nfcMessageIsEqual(lhs: lhs, rhs: rhs)
     }
 }
+
+extension Data {
+    func hexEncodedString() -> String {
+        map { String(format: "%02hhx", $0) }.joined()
+    }
+}
+
+extension SetupCmdResponse {
+    var error: TapSignerReaderError? {
+        switch self {
+        case .complete: .none
+        case let .continueFromInit(continueCmd): continueCmd.error
+        case let .continueFromBackup(continueCmd): continueCmd.error
+        case let .continueFromDerive(continueCmd): continueCmd.error
+        }
+    }
+}
+
+extension TapSignerRoute: Equatable, Hashable {
+    public static func == (lhs: TapSignerRoute, rhs: TapSignerRoute) -> Bool {
+        isTapSignerRouteEqual(lhs: lhs, rhs: rhs)
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self)
+    }
+}
+
+extension TapSignerResponse {
+    var setupResponse: SetupCmdResponse? {
+        tapSignerResponseSetupResponse(response: self)
+    }
+}

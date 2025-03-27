@@ -30,13 +30,25 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
-        Task {
-            await updateFiatBalance()
-        }
+        Task { await updateFiatBalance() }
     }
 
     public init(xpub: String) throws {
         let rust = try RustWalletManager.tryNewFromXpub(xpub: xpub)
+        let metadata = rust.walletMetadata()
+
+        self.rust = rust
+        walletMetadata = metadata
+        id = metadata.id
+
+        rust.listenForUpdates(reconciler: WeakReconciler(self))
+    }
+
+    public init(tapSigner: TapSigner, deriveInfo: DeriveInfo, backup: Data? = nil) throws {
+        let rust = try RustWalletManager.tryNewFromTapSigner(
+            tapSigner: tapSigner, deriveInfo: deriveInfo, backup: backup
+        )
+
         let metadata = rust.walletMetadata()
 
         self.rust = rust

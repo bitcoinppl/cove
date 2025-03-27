@@ -36,6 +36,7 @@ mod psbt;
 mod push_tx;
 mod redb;
 mod seed_qr;
+pub mod tap_card;
 mod task;
 mod transaction;
 mod unblock;

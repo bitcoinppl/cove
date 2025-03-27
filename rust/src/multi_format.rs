@@ -1,5 +1,8 @@
+pub mod tap_card;
+
 use std::sync::Arc;
 
+use tap_card::TapSigner;
 use tracing::{debug, warn};
 
 use crate::{
@@ -23,6 +26,10 @@ pub enum MultiFormat {
     Mnemonic(Arc<crate::mnemonic::Mnemonic>),
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
+    /// TAPSIGNER has not been initialized yet
+    TapSigner(TapSigner),
+    /// TAPSIGNER has not been initialized yet
+    TapSignerInit(TapSigner),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -40,6 +47,9 @@ pub enum MultiFormatError {
 
     #[error("UR format not supported, please use a plain QR or a BBQr")]
     UrFormatNotSupported,
+
+    #[error("Invalid TapSigner {0}")]
+    InvalidTapSigner(tap_card::ffi::TapCardParseError),
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
@@ -109,6 +119,21 @@ impl MultiFormat {
             return Ok(Self::Bip329Labels(Arc::new(labels.into())));
         }
 
+        if string.contains("tapsigner.com/start") {
+            let tap_card = tap_card::TapCard::parse(string)
+                .map_err(|e| MultiFormatError::InvalidTapSigner(e.into()))?;
+
+            match tap_card {
+                tap_card::TapCard::TapSigner(card) => {
+                    return Ok(MultiFormat::from(card));
+                }
+
+                tap_card::TapCard::SatsCard(_card) => {
+                    unreachable!("tap card should not be a sats card");
+                }
+            }
+        }
+
         warn!("could not parse string as MultiFormat: {string}");
         Err(MultiFormatError::UnrecognizedFormat)
     }
@@ -160,3 +185,13 @@ fn display_multi_format_error(error: MultiFormatError) -> String {
 )]
 
 pub struct Bip329Labels(pub bip329::Labels);
+
+impl From<TapSigner> for MultiFormat {
+    fn from(tap_signer: TapSigner) -> Self {
+        if tap_signer.state == tap_card::TapSignerState::Unused {
+            Self::TapSignerInit(tap_signer)
+        } else {
+            Self::TapSigner(tap_signer)
+        }
+    }
+}

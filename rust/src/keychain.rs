@@ -167,12 +167,65 @@ impl Keychain {
         self.0.delete(key)
     }
 
+    pub fn save_tap_signer_backup(
+        &self,
+        id: &WalletId,
+        backup: &[u8],
+    ) -> Result<(), KeychainError> {
+        // create the backup hex
+        let backup_key = wallet_tap_signer_backup_key_name(id);
+        let backup_hex = hex::encode(backup);
+
+        let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
+        let cryptor = Cryptor::new();
+
+        // encrypt the backup
+        let encrypted_backup = cryptor
+            .encrypt_to_string(backup_hex)
+            .map_err(|error| KeychainError::Encrypt(error.to_string()))?;
+
+        // get the encryption key as a string
+        let encryption_key = cryptor.serialize_to_string();
+
+        // save the backup and encryption key
+        self.0.save(backup_key, encrypted_backup)?;
+        self.0.save(encryption_key_key, encryption_key)?;
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn get_tap_signer_backup(&self, id: &WalletId) -> Option<Vec<u8>> {
+        let cryptor = {
+            let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
+            let encryption_secret_key = self.0.get(encryption_key_key)?;
+            Cryptor::try_from_string(encryption_secret_key).ok()?
+        };
+
+        let backup_key = wallet_tap_signer_backup_key_name(id);
+        let encrypted_backup = self.0.get(backup_key)?;
+
+        let backup_hex = cryptor.decrypt_from_string(&encrypted_backup).ok()?;
+        let backup = hex::decode(backup_hex).ok()?;
+
+        Some(backup)
+    }
+
+    pub fn delete_tap_signer_backup(&self, id: &WalletId) -> bool {
+        let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);
+        let backup_key = wallet_tap_signer_backup_key_name(id);
+
+        self.0.delete(encryption_key_key);
+        self.0.delete(backup_key)
+    }
+
     // MARK: Delete
     // deletes all items saved in the keychain for the given wallet id
     pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
         self.delete_wallet_key(id)
             && self.delete_wallet_xpub(id)
             && self.delete_public_descriptor(id)
+            && self.delete_tap_signer_backup(id)
     }
 }
 
@@ -190,4 +243,12 @@ fn wallet_mnemonic_encryption_and_nonce_key_name(id: &WalletId) -> String {
 
 fn wallet_public_descriptor_key_name(id: &WalletId) -> String {
     format!("{id}::wallet_public_descriptor")
+}
+
+fn wallet_tap_signer_encryption_key_and_nonce_key_name(id: &WalletId) -> String {
+    format!("{id}::wallet_tap_signer_encryption_key_and_nonce_key_name")
+}
+
+fn wallet_tap_signer_backup_key_name(id: &WalletId) -> String {
+    format!("{id}::tap_signer_backup")
 }

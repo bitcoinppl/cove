@@ -94,6 +94,10 @@ struct CoveApp: App {
                 "Error: \(error)"
             case .cantSendOnWatchOnlyWallet:
                 "This is watch-only wallet and cannot send transactions. Please import this wallet again to enable sending transactions."
+            case .uninitializedTapSigner:
+                "This TAPSIGNER has not been setup yet. Would you like to setup it now?"
+            case let .tapSignerSetupFailed(error):
+                "Please try again.\nError: \(error)"
             }
 
         if case .foundAddress = alert.item {
@@ -113,16 +117,6 @@ struct CoveApp: App {
             Button("OK") {
                 app.alertState = .none
                 try? app.rust.selectWallet(id: walletId)
-            }
-        case .invalidWordGroup,
-             .errorImportingHotWallet,
-             .importedSuccessfully,
-             .unableToSelectWallet,
-             .errorImportingHardwareWallet,
-             .invalidFileFormat,
-             .invalidFormat:
-            Button("OK") {
-                app.alertState = .none
             }
         case let .addressWrongNetwork(address: address, network: _, currentNetwork: _):
             Button("Copy Address") {
@@ -164,10 +158,30 @@ struct CoveApp: App {
                 let url = URL(string: UIApplication.openSettingsURLString)!
                 UIApplication.shared.open(url)
             }
-        case .failedToScanQr, .noUnsignedTransactionFound:
-            Button("OK") { app.alertState = .none }
-        default:
-            Button("OK") { app.alertState = .none }
+        case let .uninitializedTapSigner(tapSigner):
+            Button("Yes") {
+                app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
+            }
+
+            Button("Cancel", role: .cancel) {
+                app.alertState = .none
+            }
+        case .invalidWordGroup,
+             .errorImportingHotWallet,
+             .importedSuccessfully,
+             .unableToSelectWallet,
+             .errorImportingHardwareWallet,
+             .invalidFileFormat,
+             .importedLabelsSuccessfully,
+             .unableToGetAddress,
+             .failedToScanQr,
+             .noUnsignedTransactionFound,
+             .cantSendOnWatchOnlyWallet,
+             .tapSignerSetupFailed,
+             .invalidFormat:
+            Button("OK") {
+                app.alertState = .none
+            }
         }
     }
 
@@ -310,6 +324,12 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(txn):
                 handleTransaction(txn)
+            case let .tapSignerInit(tapSigner):
+                app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
+            case let .tapSigner(tapSigner):
+                let panic =
+                    "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
+                Log.error(panic)
             case let .bip329Labels(labels):
                 if let selectedWallet = Database().globalConfig().selectedWallet() {
                     return try LabelManager(id: selectedWallet).import(labels: labels)
@@ -359,6 +379,11 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(transaction):
                 handleTransaction(transaction)
+            case let .tapSignerInit(tapSigner):
+                app.alertState = .init(.uninitializedTapSigner(tapSigner))
+            case let .tapSigner(tapSigner):
+                let panic = "TAPSIGNER not implemented: \(tapSigner)"
+                Log.error(panic)
             case let .bip329Labels(labels):
                 guard let manager = app.walletManager else { return setInvalidlabels() }
                 guard let selectedWallet = Database().globalConfig().selectedWallet() else {
@@ -392,6 +417,9 @@ struct CoveApp: App {
         switch state.item {
         case .qr:
             QrCodeScanView(app: app, scannedCode: $scannedCode)
+        case let .tapSigner(route):
+            TapSignerContainer(route: route)
+                .environment(app)
         }
     }
 

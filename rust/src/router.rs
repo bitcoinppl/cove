@@ -4,6 +4,8 @@ use crate::{
     app::FfiApp,
     database::Database,
     mnemonic::NumberOfBip39Words,
+    multi_format::tap_card::TapSigner,
+    tap_card::tap_signer_reader::{SetupCmdResponse, TapSignerImportComplete},
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
 };
@@ -100,6 +102,29 @@ pub enum SendRoute {
         details: Arc<ConfirmDetails>,
         signed_transaction: Option<Arc<BitcoinTransaction>>,
     },
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum TapSignerRoute {
+    InitSelect(TapSigner),
+    InitAdvanced(TapSigner),
+    StartingPin {
+        tap_signer: TapSigner,
+        chain_code: Option<String>,
+    },
+    NewPin {
+        tap_signer: TapSigner,
+        starting_pin: String,
+        chain_code: Option<String>,
+    },
+    ConfirmPin {
+        tap_signer: TapSigner,
+        starting_pin: String,
+        new_pin: String,
+        chain_code: Option<String>,
+    },
+    ImportSuccess(TapSigner, TapSignerImportComplete),
+    ImportRetry(TapSigner, SetupCmdResponse),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -360,4 +385,9 @@ impl From<SettingsRoute> for Route {
     fn from(settings_route: SettingsRoute) -> Self {
         Route::Settings(settings_route)
     }
+}
+
+#[uniffi::export]
+fn is_tap_signer_route_equal(lhs: TapSignerRoute, rhs: TapSignerRoute) -> bool {
+    lhs == rhs
 }

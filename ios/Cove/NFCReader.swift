@@ -283,21 +283,17 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
         Log.debug("num of records: \(message.records.count)")
         for record in message.records {
-            Log.debug("Record type: \(record.typeNameFormat)")
+            Log.debug("record type: \(record.typeNameFormat)")
             if let type = String(data: record.type, encoding: .utf8) {
-                _message += "\(type): "
-                Log.debug("Type: \(type)")
+                Log.debug("type: \(type)")
             }
             if let payload = String(data: record.payload, encoding: .utf8) {
-                _message += "\(payload)\n"
-                Log.debug("Payload: \(payload)")
+                _message = payload
             }
-
-            Log.debug("ID: \(record.identifier)")
-            _message += "----\n"
-            Log.debug("---")
+            Log.debug("id: \(record.identifier)")
         }
 
+        Log.debug("NDEF message: \(_message)")
         isScanning = false
         scannedMessage = try? NfcMessage.tryNew(string: _message)
     }
