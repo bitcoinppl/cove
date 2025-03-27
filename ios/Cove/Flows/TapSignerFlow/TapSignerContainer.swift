@@ -16,6 +16,8 @@ class TapSignerManager {
     var path: [TapSignerRoute] = []
     var initialRoute: TapSignerRoute
 
+    var enteredPin: String?
+
     init(_ route: TapSignerRoute) {
         initialRoute = route
     }
@@ -25,10 +27,10 @@ class TapSignerManager {
         if let lastRoute = path.last {
             switch (lastRoute, newRoute) {
             case (.initSelect, .initSelect),
-                (.initAdvanced, .initAdvanced),
-                (.startingPin, .startingPin),
-                (.newPin, .newPin),
-                (.confirmPin, .confirmPin):
+                 (.initAdvanced, .initAdvanced),
+                 (.startingPin, .startingPin),
+                 (.newPin, .newPin),
+                 (.confirmPin, .confirmPin):
                 return
             default: ()
             }
@@ -89,7 +91,8 @@ struct TapSignerContainer: View {
             TapSignerNewPin(tapSigner: t, startingPin: pin, chainCode: chainCode)
                 .id(id("newPin"))
         case let .confirmPin(
-            tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode):
+            tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode
+        ):
             TapSignerConfirmPin(
                 tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode
             )
@@ -100,6 +103,14 @@ struct TapSignerContainer: View {
         case let .setupRetry(tapSigner, response):
             TapSignerSetupRetry(tapSigner: tapSigner, response: response)
                 .id(id("setupRetry"))
+        case let .enterPin(tapSigner: t, userMessage: message, cmd: cmd):
+            TapSignerEnterPin(tapSigner: t, message: message, cmd: cmd)
+                .id(id("enterPin"))
+        case let .importSuccess(t, deriveInfo):
+            TapSignerImportSuccess(tapSigner: t, deriveInfo: deriveInfo)
+                .id(id("importSuccess"))
+        case let .importRetry(t):
+            TapSignerImportRetry(tapSigner: t)
         }
     }
 

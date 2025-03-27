@@ -29,6 +29,8 @@ public enum AppAlertState: Equatable {
     case failedToScanQr(error: String)
     case cantSendOnWatchOnlyWallet
     case tapSignerSetupFailed(String)
+    case tapSignerDeriveFailed(String)
+    case tapSignerInvalidAuth
 
     // action
     case uninitializedTapSigner(TapSigner)
@@ -70,6 +72,10 @@ public enum AppAlertState: Equatable {
             "Setup TAPSIGNER?"
         case .tapSignerSetupFailed:
             "Setup Failed"
+        case .tapSignerDeriveFailed:
+            "TAPSIGNER Import Failed"
+        case .tapSignerInvalidAuth:
+            "Wrong PIN"
         }
     }
 }

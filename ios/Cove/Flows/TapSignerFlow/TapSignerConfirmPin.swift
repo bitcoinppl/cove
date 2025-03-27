@@ -18,7 +18,6 @@ struct TapSignerConfirmPin: View {
 
     // private
     @State private var confirmPin: String = ""
-
     @State private var animateField: Bool = false
     @FocusState private var isFocused
 
@@ -55,7 +54,7 @@ struct TapSignerConfirmPin: View {
                     // failed to setup and can't continue from a screen, send back to home and ask them to restart the process
                     Log.error("Failed to setup TapSigner: \(error)")
                     app.sheetState = .none
-                    app.alertState = .init(.TapSignerSetupFailed(error.describe))
+                    app.alertState = .init(.tapSignerSetupFailed(error.describe))
                 }
             }
         }

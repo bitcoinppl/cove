@@ -35,9 +35,8 @@ struct TapSignerSetupSuccess: View {
         VStack(spacing: 40) {
             VStack {
                 HStack {
-                    Button(action: { manager.popRoute() }) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
+                    Button(action: { app.sheetState = .none }) {
+                        Text("Cancel")
                     }
 
                     Spacer()
@@ -148,10 +147,10 @@ struct TapSignerSetupSuccess: View {
 #Preview {
     TapSignerContainer(
         route:
-        .setupSuccess(
-            tapSignerPreviewNew(preview: true),
-            TapSignerSetupCompleteNew(preview: true)
-        )
+            .setupSuccess(
+                tapSignerPreviewNew(preview: true),
+                tapSignerSetupCompleteNew(preview: true)
+            )
     )
     .environment(AppManager.shared)
 }

@@ -8,6 +8,7 @@ use nid::Nanoid;
 use parking_lot::Mutex as SyncMutex;
 use parking_lot::RwLock;
 use rust_cktap::apdu::DeriveResponse;
+use rust_cktap::tap_signer::TapSignerError;
 use rust_cktap::{CkTapCard, commands::CkTransport as _};
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -15,6 +16,7 @@ use tracing::debug;
 use crate::database::Database;
 use crate::network::Network;
 
+use super::CkTapError;
 use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
@@ -63,6 +65,7 @@ pub struct TapSignerReader {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum TapSignerCmd {
     Setup(Arc<SetupCmd>),
+    Derive { pin: String },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
@@ -75,6 +78,7 @@ pub struct SetupCmd {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum, derive_more::From)]
 pub enum TapSignerResponse {
     Setup(SetupCmdResponse),
+    Import(DeriveInfo),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -167,6 +171,10 @@ impl TapSignerReader {
                 let response = self.setup(cmd).await?;
                 Ok(TapSignerResponse::Setup(response))
             }
+            TapSignerCmd::Derive { pin } => {
+                let response = self.derive(&pin).await?;
+                Ok(TapSignerResponse::Import(response))
+            }
         }
     }
 
@@ -251,22 +259,9 @@ impl TapSignerReader {
     }
 
     async fn derive_and_change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
-        let path: [u32; 3] = match self.network {
-            Network::Bitcoin => [84, 0, 0],
-            _ => [84, 1, 0],
-        };
-
-        let derive_response = self
-            .reader
-            .lock()
-            .await
-            .derive(&path, &cmd.factory_pin)
-            .await;
-
-        let derive = match derive_response {
+        let derive_info = match self.derive(&cmd.factory_pin).await {
             Ok(derive) => derive,
-            Err(e) => {
-                let error = TapSignerReaderError::TapSignerError(e.into());
+            Err(error) => {
                 let response = SetupCmdResponse::ContinueFromBackup(ContinueFromBackup {
                     backup,
                     continue_cmd: cmd,
@@ -278,7 +273,6 @@ impl TapSignerReader {
             }
         };
 
-        let derive_info = DeriveInfo::from_response(derive, path.to_vec(), self.network);
         self.change(cmd, backup, derive_info).await
     }
 
@@ -315,6 +309,18 @@ impl TapSignerReader {
 
         *self.last_response.lock() = Some(SetupCmdResponse::Complete(complete.clone()).into());
         SetupCmdResponse::Complete(complete)
+    }
+
+    async fn derive(&self, pin: &str) -> Result<DeriveInfo, Error> {
+        let path: [u32; 3] = match self.network {
+            Network::Bitcoin => [84, 0, 0],
+            _ => [84, 1, 0],
+        };
+
+        let derive_response = self.reader.lock().await.derive(&path, pin).await?;
+        let derive_info = DeriveInfo::from_response(derive_response, path.to_vec(), self.network);
+
+        Ok(derive_info)
     }
 }
 
@@ -407,9 +413,30 @@ impl TapSignerResponse {
     pub fn setup_response(&self) -> Option<&SetupCmdResponse> {
         match self {
             TapSignerResponse::Setup(response) => Some(response),
-            #[allow(unreachable_patterns)]
             _ => None,
         }
+    }
+
+    pub fn derive_response(&self) -> Option<&DeriveInfo> {
+        match self {
+            TapSignerResponse::Import(response) => Some(response),
+            _ => None,
+        }
+    }
+}
+
+impl From<TapSignerError> for TapSignerReaderError {
+    fn from(error: TapSignerError) -> Self {
+        TapSignerReaderError::TapSignerError(error.into())
+    }
+}
+
+impl TapSignerReaderError {
+    pub fn is_auth_error(&self) -> bool {
+        matches!(
+            self,
+            TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BadAuth))
+        )
     }
 }
 
@@ -444,6 +471,11 @@ mod ffi {
     }
 
     #[uniffi::export]
+    fn tap_signer_response_derive_response(response: TapSignerResponse) -> Option<DeriveInfo> {
+        response.derive_response().cloned()
+    }
+
+    #[uniffi::export]
     fn display_tap_signer_reader_error(error: TapSignerReaderError) -> String {
         error.to_string()
     }
@@ -465,6 +497,11 @@ mod ffi {
             continue_cmd: Arc::new(setup_cmd),
             error: TapSignerReaderError::NoCommand,
         })
+    }
+
+    #[uniffi::export]
+    fn tap_signer_error_is_auth_error(error: TapSignerReaderError) -> bool {
+        error.is_auth_error()
     }
 
     // MARK: - FFI PREVIEW

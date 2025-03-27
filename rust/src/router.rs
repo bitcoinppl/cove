@@ -5,7 +5,9 @@ use crate::{
     database::Database,
     mnemonic::NumberOfBip39Words,
     multi_format::tap_card::TapSigner,
-    tap_card::tap_signer_reader::{SetupCmdResponse, TapSignerSetupComplete},
+    tap_card::tap_signer_reader::{
+        DeriveInfo, SetupCmdResponse, TapSignerCmd, TapSignerSetupComplete,
+    },
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
 };
@@ -126,9 +128,17 @@ pub enum TapSignerRoute {
     },
     SetupSuccess(TapSigner, TapSignerSetupComplete),
     SetupRetry(TapSigner, SetupCmdResponse),
+
     // import routes
+    ImportSuccess(TapSigner, DeriveInfo),
+    ImportRetry(TapSigner),
 
     // shared routes
+    EnterPin {
+        tap_signer: TapSigner,
+        user_message: String,
+        cmd: TapSignerCmd,
+    },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]

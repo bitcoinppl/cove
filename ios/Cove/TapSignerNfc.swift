@@ -18,9 +18,12 @@ class TapSignerNFC {
         nfc = TapCardNFC(tapcard: .tapSigner(card))
     }
 
-    public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async -> Result<SetupCmdResponse, TapSignerReaderError> {
+    public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async
+        -> Result<SetupCmdResponse, TapSignerReaderError>
+    {
         do {
-            return try await .success(doSetupTapSigner(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode))
+            return try await .success(
+                doSetupTapSigner(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode))
         } catch let error as TapSignerReaderError {
             return .failure(error)
         } catch {
@@ -28,11 +31,50 @@ class TapSignerNFC {
         }
     }
 
+    public func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
+        do {
+            return try await withCheckedThrowingContinuation { continuation in
+                // Set up observation tracking before starting the operation
+                Task {
+                    withObservationTracking {
+                        // Access the properties to track them
+                        _ = nfc.tapSignerResponse
+                        _ = nfc.tapSignerError
+                    } onChange: {
+                        // Re-register for changes
+                        Task {
+                            // Check if we got a response or error
+                            if let response = self.nfc.tapSignerResponse?.deriveResponse {
+                                continuation.resume(returning: Result.success(response))
+                                return
+                            }
+
+                            if let error = self.nfc.tapSignerError {
+                                continuation.resume(returning: Result.failure(error))
+                                return
+                            }
+                        }
+                    }
+
+                    // Start the NFC operation
+                    nfc.tapSignerCmd = TapSignerCmd.derive(pin: pin)
+                    nfc.scan()
+                }
+            }
+        } catch let error as TapSignerReaderError {
+            return Result.failure(error)
+        } catch {
+            return Result.failure(TapSignerReaderError.Unknown(error.localizedDescription))
+        }
+    }
+
     public func lastResponse() -> TapSignerResponse? {
         nfc.tapSignerReader?.lastResponse() ?? lastResponse_
     }
 
-    private func doSetupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async throws -> SetupCmdResponse {
+    private func doSetupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil)
+        async throws -> SetupCmdResponse
+    {
         var errorCount = 0
         var lastError: TapSignerReaderError? = nil
 
@@ -62,7 +104,8 @@ class TapSignerNFC {
 
                 // Start the NFC operation
                 do {
-                    let cmd = try SetupCmd.tryNew(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
+                    let cmd = try SetupCmd.tryNew(
+                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
                     nfc.tapSignerCmd = TapSignerCmd.setup(cmd)
                     nfc.scan()
                 } catch let error as TapSignerReaderError {
@@ -102,24 +145,29 @@ class TapSignerNFC {
 
                 if errorCount > 5 {
                     nfc.session?.invalidate()
-                    Log.error("Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))")
+                    Log.error(
+                        "Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))"
+                    )
                     return incompleteResponse
                 }
             }
         }
     }
 
-    public func continueSetup(_ response: SetupCmdResponse) async -> Result<SetupCmdResponse, TapSignerReaderError> {
-        let cmd: SetupCmd? = switch response {
-        case let .continueFromInit(c):
-            c.continueCmd
-        case let .continueFromBackup(c):
-            c.continueCmd
-        case let .continueFromDerive(c):
-            c.continueCmd
-        case .complete:
-            .none
-        }
+    public func continueSetup(_ response: SetupCmdResponse) async -> Result<
+        SetupCmdResponse, TapSignerReaderError
+    > {
+        let cmd: SetupCmd? =
+            switch response {
+            case let .continueFromInit(c):
+                c.continueCmd
+            case let .continueFromBackup(c):
+                c.continueCmd
+            case let .continueFromDerive(c):
+                c.continueCmd
+            case .complete:
+                .none
+            }
 
         guard let cmd else { return .success(response) }
 
@@ -252,12 +300,12 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             let transport = TapCardTransport(session: session, tag: tag)
             switch tapcard {
             case .satsCard:
-                (
-                    // TODO: Implement SatsCardReader
+                ( // TODO: Implement SatsCardReader
                 )
 
             case .tapSigner:
-                let tapSignerReader = try await TapSignerReader(transport: transport, cmd: tapSignerCmd)
+                let tapSignerReader = try await TapSignerReader(
+                    transport: transport, cmd: tapSignerCmd)
                 self.tapSignerReader = tapSignerReader
 
                 let response = try await tapSignerReader.run()
@@ -340,7 +388,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                             }
                     }
                     logger.error(errorMessage)
-                    continuation.resume(throwing: TransportError(code: statusWord, message: errorMessage))
+                    continuation.resume(
+                        throwing: TransportError(code: statusWord, message: errorMessage))
                     return
                 }
 

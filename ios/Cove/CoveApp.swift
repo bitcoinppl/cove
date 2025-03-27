@@ -98,6 +98,10 @@ struct CoveApp: App {
                 "This TAPSIGNER has not been setup yet. Would you like to setup it now?"
             case let .tapSignerSetupFailed(error):
                 "Please try again.\nError: \(error)"
+            case let .tapSignerDeriveFailed(error):
+                "Please try again.\nError: \(error)"
+            case .tapSignerInvalidAuth:
+                "The PIN you entered was incorrect. Please try again."
             }
 
         if case .foundAddress = alert.item {
@@ -178,6 +182,8 @@ struct CoveApp: App {
              .noUnsignedTransactionFound,
              .cantSendOnWatchOnlyWallet,
              .tapSignerSetupFailed,
+             .tapSignerInvalidAuth,
+             .tapSignerDeriveFailed,
              .invalidFormat:
             Button("OK") {
                 app.alertState = .none
