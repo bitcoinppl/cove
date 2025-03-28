@@ -8,6 +8,8 @@ use nid::Nanoid;
 use parking_lot::Mutex as SyncMutex;
 use parking_lot::RwLock;
 use rust_cktap::apdu::DeriveResponse;
+use rust_cktap::commands::Authentication;
+use rust_cktap::commands::Wait as _;
 use rust_cktap::tap_signer::TapSignerError;
 use rust_cktap::{CkTapCard, commands::CkTransport as _};
 use tokio::sync::Mutex;
@@ -55,6 +57,7 @@ pub struct TapSignerReader {
     id: String,
     reader: Mutex<rust_cktap::TapSigner<TapcardTransport>>,
     cmd: RwLock<Option<TapSignerCmd>>,
+    transport: TapcardTransport,
 
     /// Last response from the setup process, has started, if the last response is `Complete` then the setup process is complete
     last_response: SyncMutex<Option<Arc<SetupCmdResponse>>>,
@@ -132,8 +135,13 @@ impl TapSignerReader {
         transport: Box<dyn TapcardTransportProtocol>,
         cmd: Option<TapSignerCmd>,
     ) -> Result<Self> {
-        let transport = TapcardTransport(transport);
-        let card = transport.to_cktap().await.map_err(TransportError::from)?;
+        let transport = TapcardTransport(Arc::new(transport));
+        let card = transport
+            .clone()
+            .to_cktap()
+            .await
+            .map_err(TransportError::from)?;
+
         debug!("tap_card_from_status: {:?}", card);
 
         let card = match card {
@@ -149,13 +157,19 @@ impl TapSignerReader {
         let id: Nanoid = Nanoid::new();
         let network = Database::global().global_config.selected_network();
 
-        Ok(Self {
+        let me = Self {
             id: id.to_string(),
             reader: Mutex::new(card),
+            transport,
             cmd: RwLock::new(cmd),
             last_response: SyncMutex::new(None),
             network,
-        })
+        };
+
+        // if the card has a required auth delay, wait for it
+        me.wait_if_needed().await?;
+
+        Ok(me)
     }
 
     #[uniffi::method]
@@ -171,6 +185,7 @@ impl TapSignerReader {
                 let response = self.setup(cmd).await?;
                 Ok(TapSignerResponse::Setup(response))
             }
+
             TapSignerCmd::Derive { pin } => {
                 let response = self.derive(&pin).await?;
                 Ok(TapSignerResponse::Import(response))
@@ -225,6 +240,27 @@ impl TapSignerReader {
 }
 
 impl TapSignerReader {
+    async fn wait_if_needed(&self) -> Result<(), Error> {
+        let mut auth_delay = self.reader.lock().await.auth_delay;
+
+        while let Some(delay) = auth_delay {
+            let message = format!("Too many PIN attempts, waiting for {} seconds...", delay);
+
+            self.reader
+                .lock()
+                .await
+                .wait(None)
+                .await
+                .map_err(TransportError::from)?;
+
+            self.transport.set_message(message);
+            auth_delay = self.reader.lock().await.auth_delay;
+        }
+
+        self.reader.lock().await.set_auth_delay(None);
+        Ok(())
+    }
+
     async fn init_backup_change(&self, cmd: Arc<SetupCmd>) -> Result<SetupCmdResponse, Error> {
         let _init_response = self
             .reader
@@ -312,6 +348,8 @@ impl TapSignerReader {
     }
 
     async fn derive(&self, pin: &str) -> Result<DeriveInfo, Error> {
+        debug!("starting derive");
+
         let path: [u32; 3] = match self.network {
             Network::Bitcoin => [84, 0, 0],
             _ => [84, 1, 0],

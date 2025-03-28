@@ -1,7 +1,7 @@
 pub mod tap_signer_reader;
 
 use rust_cktap::{apdu::Error as ApduError, commands::CkTransport};
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
 // Define error types
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
@@ -55,12 +55,24 @@ pub enum CkTapError {
 #[uniffi::export(callback_interface)]
 #[async_trait::async_trait]
 pub trait TapcardTransportProtocol: Send + Sync + std::fmt::Debug + 'static {
+    fn set_message(&self, message: String);
+    fn append_message(&self, message: String);
     async fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, TransportError>;
 }
 
 // Implement the CkTransport trait for our callback-based transport
-#[derive(Debug)]
-pub struct TapcardTransport(Box<dyn TapcardTransportProtocol>);
+#[derive(Debug, Clone)]
+pub struct TapcardTransport(Arc<Box<dyn TapcardTransportProtocol>>);
+
+impl TapcardTransport {
+    pub fn set_message(&self, message: String) {
+        self.0.set_message(message);
+    }
+
+    pub fn append_message(&self, message: String) {
+        self.0.append_message(message);
+    }
+}
 
 impl CkTransport for TapcardTransport {
     async fn transmit_apdu(&self, command_apdu: Vec<u8>) -> Result<Vec<u8>, ApduError> {
