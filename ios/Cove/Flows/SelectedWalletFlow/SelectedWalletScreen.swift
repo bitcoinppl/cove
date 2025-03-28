@@ -158,7 +158,7 @@ struct SelectedWalletScreen: View {
     var MainToolBar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
             HStack(spacing: 10) {
-                if metadata.walletType == .cold {
+                if case .cold = metadata.walletType {
                     BitcoinShieldIcon(width: 13, color: .white)
                 }
 

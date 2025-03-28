@@ -15673,9 +15673,9 @@ public struct WalletMetadata {
     public var fiatOrBtc: FiatOrBtc
     public var origin: String?
     /**
-     * And ID for the hardware wallet, if this  wallet is a hardware wallet
+     * Metadata data specific to different hardware wallets
      */
-    public var hardwareId: String?
+    public var hardwareMetadata: HardwareWalletMetadata?
     /**
      * Show labels for transactions i the transaction list
      * If false, we only show either `Sent` or `Received` labels
@@ -15687,8 +15687,8 @@ public struct WalletMetadata {
     // declare one manually.
     public init(id: WalletId, name: String, color: WalletColor, verified: Bool, network: Network, masterFingerprint: Fingerprint?, selectedUnit: Unit, sensitiveVisible: Bool, detailsExpanded: Bool, walletType: WalletType, walletMode: WalletMode, discoveryState: DiscoveryState, addressType: WalletAddressType, fiatOrBtc: FiatOrBtc, origin: String?, 
         /**
-         * And ID for the hardware wallet, if this  wallet is a hardware wallet
-         */hardwareId: String?, 
+         * Metadata data specific to different hardware wallets
+         */hardwareMetadata: HardwareWalletMetadata?, 
         /**
          * Show labels for transactions i the transaction list
          * If false, we only show either `Sent` or `Received` labels
@@ -15708,7 +15708,7 @@ public struct WalletMetadata {
         self.addressType = addressType
         self.fiatOrBtc = fiatOrBtc
         self.origin = origin
-        self.hardwareId = hardwareId
+        self.hardwareMetadata = hardwareMetadata
         self.showLabels = showLabels
         self.`internal` = `internal`
     }
@@ -15742,7 +15742,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
                 addressType: FfiConverterTypeWalletAddressType.read(from: &buf), 
                 fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf), 
                 origin: FfiConverterOptionString.read(from: &buf), 
-                hardwareId: FfiConverterOptionString.read(from: &buf), 
+                hardwareMetadata: FfiConverterOptionTypeHardwareWalletMetadata.read(from: &buf), 
                 showLabels: FfiConverterBool.read(from: &buf), 
                 internal: FfiConverterTypeInternalOnlyMetadata.read(from: &buf)
         )
@@ -15764,7 +15764,7 @@ public struct FfiConverterTypeWalletMetadata: FfiConverterRustBuffer {
         FfiConverterTypeWalletAddressType.write(value.addressType, into: &buf)
         FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
         FfiConverterOptionString.write(value.origin, into: &buf)
-        FfiConverterOptionString.write(value.hardwareId, into: &buf)
+        FfiConverterOptionTypeHardwareWalletMetadata.write(value.hardwareMetadata, into: &buf)
         FfiConverterBool.write(value.showLabels, into: &buf)
         FfiConverterTypeInternalOnlyMetadata.write(value.`internal`, into: &buf)
     }
@@ -19155,6 +19155,69 @@ extension GlobalFlagTableError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum HardwareWalletMetadata {
+    
+    case tapSigner(TapSigner
+    )
+}
+
+
+#if compiler(>=6)
+extension HardwareWalletMetadata: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHardwareWalletMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = HardwareWalletMetadata
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HardwareWalletMetadata {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .tapSigner(try FfiConverterTypeTapSigner.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HardwareWalletMetadata, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .tapSigner(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeTapSigner.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHardwareWalletMetadata_lift(_ buf: RustBuffer) throws -> HardwareWalletMetadata {
+    return try FfiConverterTypeHardwareWalletMetadata.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHardwareWalletMetadata_lower(_ value: HardwareWalletMetadata) -> RustBuffer {
+    return FfiConverterTypeHardwareWalletMetadata.lower(value)
+}
+
+
+extension HardwareWalletMetadata: Equatable, Hashable {}
+
 
 
 // Note that we don't yet support `indirect` for enums.
@@ -27924,6 +27987,30 @@ fileprivate struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeMessageInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeHardwareWalletMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = HardwareWalletMetadata?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHardwareWalletMetadata.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHardwareWalletMetadata.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

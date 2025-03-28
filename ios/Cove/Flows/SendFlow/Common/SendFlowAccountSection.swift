@@ -24,7 +24,7 @@ struct SendFlowAccountSection: View {
                         .padding(.trailing, 6)
                 }
 
-                if metadata.walletType == .cold {
+                if case .cold = metadata.walletType {
                     BitcoinShieldIcon(width: 24, color: .orange)
                 }
 
