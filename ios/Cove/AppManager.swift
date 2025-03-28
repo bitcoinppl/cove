@@ -116,7 +116,12 @@ import SwiftUI
 
     // this will select the wallet and reset the route to the selectedWalletRoute
     func selectWallet(_ id: WalletId) {
-        try? rust.selectWallet(id: id)
+        do {
+            try rust.selectWallet(id: id)
+            isSidebarVisible = false
+        } catch {
+            Log.error("Unabel to select wallet \(id), error: \(error)")
+        }
     }
 
     func toggleSidebar() {

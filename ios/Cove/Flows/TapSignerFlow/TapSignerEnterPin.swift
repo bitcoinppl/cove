@@ -72,7 +72,7 @@ struct TapSignerEnterPin: View {
                 .padding(.horizontal)
 
                 HStack {
-                    ForEach(0..<6, id: \.self) { index in
+                    ForEach(0 ..< 6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
                             .fill(pin.count <= index ? Color.clear : .primary)

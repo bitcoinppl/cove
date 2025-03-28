@@ -46,11 +46,13 @@ class TapSignerNFC {
                             // Check if we got a response or error
                             if let response = self.nfc.tapSignerResponse?.deriveResponse {
                                 continuation.resume(returning: Result.success(response))
+                                self.nfc.session?.invalidate()
                                 return
                             }
 
                             if let error = self.nfc.tapSignerError {
                                 continuation.resume(returning: Result.failure(error))
+                                self.nfc.session?.invalidate(errorMessage: error.describe)
                                 return
                             }
                         }
@@ -62,8 +64,10 @@ class TapSignerNFC {
                 }
             }
         } catch let error as TapSignerReaderError {
+            self.nfc.session?.invalidate(errorMessage: error.describe)
             return Result.failure(error)
         } catch {
+            nfc.session?.invalidate(errorMessage: "Something went wrong!")
             return Result.failure(TapSignerReaderError.Unknown(error.localizedDescription))
         }
     }
@@ -105,7 +109,8 @@ class TapSignerNFC {
                 // Start the NFC operation
                 do {
                     let cmd = try SetupCmd.tryNew(
-                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
+                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode
+                    )
                     nfc.tapSignerCmd = TapSignerCmd.setup(cmd)
                     nfc.scan()
                 } catch let error as TapSignerReaderError {
@@ -308,7 +313,8 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
             case .tapSigner:
                 let tapSignerReader = try await TapSignerReader(
-                    transport: transport, cmd: tapSignerCmd)
+                    transport: transport, cmd: tapSignerCmd
+                )
 
                 self.tapSignerReader = tapSignerReader
 

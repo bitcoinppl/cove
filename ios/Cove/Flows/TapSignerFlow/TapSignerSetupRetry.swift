@@ -102,10 +102,10 @@ struct TapSignerSetupRetry: View {
 #Preview {
     TapSignerContainer(
         route:
-            .setupRetry(
-                tapSignerPreviewNew(preview: true),
-                tapSignerSetupRetryContinueCmd(preview: true)
-            )
+        .setupRetry(
+            tapSignerPreviewNew(preview: true),
+            tapSignerSetupRetryContinueCmd(preview: true)
+        )
     )
     .environment(AppManager.shared)
 }
