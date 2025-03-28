@@ -15,6 +15,7 @@ class TapSignerNFC {
     private var lastResponse_: TapSignerResponse?
 
     init(_ card: TapSigner) {
+        Log.debug("Initializing TapSignerNFC")
         nfc = TapCardNFC(tapcard: .tapSigner(card))
     }
 
@@ -378,7 +379,7 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
     }
 
     func transmitApdu(commandApdu: Data) async throws -> Data {
-        logger.debug("Transmitting APDU: \(commandApdu.count)")
+        logger.debug("Transmitting APDU: \(commandApdu) bytes")
 
         guard let apdu = NFCISO7816APDU(data: commandApdu) else {
             logger.error("Invalid APDU")
@@ -387,6 +388,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
 
         return try await withCheckedThrowingContinuation { continuation in
             tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
+                Log.debug("APDU response: \(response.count) bytes")
+
                 if let error {
                     logger.error("APDU error: \(error)")
                     continuation.resume(throwing: error)

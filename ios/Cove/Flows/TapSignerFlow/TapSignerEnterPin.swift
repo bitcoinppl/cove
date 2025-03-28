@@ -94,16 +94,22 @@ struct TapSignerEnterPin: View {
                 Spacer()
             }
             .onAppear {
+                if manager.nfc == nil {
+                    let nfc = TapSignerNFC(tapSigner)
+                    manager.nfc = nfc
+                }
+
                 pin = ""
                 isFocused = true
             }
             .onChange(of: isFocused) { _, _ in isFocused = true }
             .onChange(of: pin) { old, newPin in
+                guard let nfc = manager.nfc else {
+                    return Log.warn("No NFC")
+                }
+
                 if newPin.count == 6 {
                     manager.enteredPin = newPin
-                    let nfc = TapSignerNFC(tapSigner)
-                    manager.nfc = nfc
-
                     switch action {
                     case .derive: deriveAction(nfc, newPin)
                     }
