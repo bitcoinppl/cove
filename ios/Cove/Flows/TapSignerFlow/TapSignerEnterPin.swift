@@ -28,12 +28,12 @@ struct TapSignerEnterPin: View {
             case let .success(deriveInfo):
                 manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
             case let .failure(error):
-                if error.isAuthError {
-                    app.alertState = .init(.tapSignerInvalidAuth)
-                } else {
+                if !error.isAuthError {
                     app.alertState = .init(.tapSignerDeriveFailed(error.describe))
                 }
             }
+
+            await MainActor.run { self.pin = "" }
         }
     }
 
@@ -72,7 +72,7 @@ struct TapSignerEnterPin: View {
                 .padding(.horizontal)
 
                 HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
+                    ForEach(0..<6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
                             .fill(pin.count <= index ? Color.clear : .primary)
@@ -107,8 +107,6 @@ struct TapSignerEnterPin: View {
                     switch action {
                     case .derive: deriveAction(nfc, newPin)
                     }
-
-                    pin = ""
                 }
 
                 if newPin.count > 6, old.count < 6 {

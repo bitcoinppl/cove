@@ -7,7 +7,7 @@ use crate::{
     app::reconcile::{AppStateReconcileMessage, Update, Updater},
     network::Network,
     redb::Json,
-    wallet::metadata::{WalletId, WalletMetadata, WalletMode},
+    wallet::metadata::{HardwareWalletMetadata, WalletId, WalletMetadata, WalletMode},
 };
 
 use super::{Database, Error};
@@ -268,6 +268,27 @@ impl WalletsTable {
         Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
         Ok(())
+    }
+
+    pub fn find_by_tap_signer_ident(
+        &self,
+        ident: &str,
+        network: Network,
+        mode: WalletMode,
+    ) -> Result<Option<WalletMetadata>, Error> {
+        let wallets = self.get_all(network, mode)?;
+
+        let wallet = wallets.into_iter().find(|wallet| {
+            wallet
+                .hardware_metadata
+                .as_ref()
+                .map(|hw| match hw {
+                    HardwareWalletMetadata::TapSigner(t) => t.card_ident == ident,
+                })
+                .unwrap_or(false)
+        });
+
+        Ok(wallet)
     }
 
     fn read_table<'a>(&self) -> Result<ReadOnlyTable<&'a str, Json<Vec<WalletMetadata>>>, Error> {

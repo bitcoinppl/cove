@@ -245,7 +245,10 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
     func scan() {
         guard let tapSignerCmd else { return Log.error("cmd not set") }
-        logger.info("started scanning \(tapSignerCmd)")
+        switch tapSignerCmd {
+        case .setup: logger.info("started scanning for setup")
+        case .derive: logger.info("started scanning for derive")
+        }
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
@@ -306,15 +309,19 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             case .tapSigner:
                 let tapSignerReader = try await TapSignerReader(
                     transport: transport, cmd: tapSignerCmd)
+
                 self.tapSignerReader = tapSignerReader
 
                 let response = try await tapSignerReader.run()
                 tapSignerResponse = response
             }
         } catch let error as TapSignerReaderError {
-            logger.error("TapSigner error: \(error)")
+            logger.error("TAPSIGNER error: \(error)")
             tapSignerError = error
-            session.invalidate(errorMessage: "TapSigner error: \(error.localizedDescription)")
+            if case .TapSignerError(.CkTap(.BadAuth)) = error {
+                return session.invalidate(errorMessage: "Wrong PIN, please try again")
+            }
+            session.invalidate(errorMessage: "TapSigner error: \(error.describe)")
         } catch {
             logger.error("Error creating reader: \(error)")
             session.invalidate(errorMessage: "Error creating reader: \(error.localizedDescription)")
@@ -355,6 +362,15 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
         self.tag = tag
     }
 
+    func setMessage(message: String) {
+        nfcSession.alertMessage = message
+    }
+
+    func appendMessage(message: String) {
+        let msg = nfcSession.alertMessage
+        nfcSession.alertMessage = msg + message
+    }
+
     func transmitApdu(commandApdu: Data) async throws -> Data {
         logger.debug("Transmitting APDU: \(commandApdu.count)")
 
@@ -387,7 +403,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                                 "Card error: SW=\(String(format: "0x%04X", statusWord))"
                             }
                     }
-                    logger.error(errorMessage)
+
+                    logger.error("APDU ERROR: \(errorMessage)")
                     continuation.resume(
                         throwing: TransportError(code: statusWord, message: errorMessage))
                     return

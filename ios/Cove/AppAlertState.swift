@@ -83,7 +83,7 @@ public enum AppAlertState: Equatable {
             "Wrong PIN"
         case .tapSignerWalletFound:
             "Wallet Found"
-        case let .intializedTapSigner:
+        case .intializedTapSigner:
             "Import TAPSIGNER?"
         case let .general(title: title, message: _):
             title

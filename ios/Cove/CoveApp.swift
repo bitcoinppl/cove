@@ -97,7 +97,7 @@ struct CoveApp: App {
             case .uninitializedTapSigner:
                 "This TAPSIGNER has not been setup yet. Would you like to setup it now?"
             case let .tapSignerSetupFailed(error):
-                "Please try again.\nError: \(error)"
+                "Please try again.\(error)"
             case let .tapSignerDeriveFailed(error):
                 "Please try again.\nError: \(error)"
             case .tapSignerInvalidAuth:
@@ -407,8 +407,11 @@ struct CoveApp: App {
             case let .tapSignerInit(tapSigner):
                 app.alertState = .init(.uninitializedTapSigner(tapSigner))
             case let .tapSigner(tapSigner):
-                // TODO: see if the wallet exists already or not
-                Log.debug("TAPSIGNER not implemented: \(tapSigner)")
+                if let wallet = app.findTapSignerWalletByCardIdent(tapSigner.cardIdent) {
+                    app.alertState = .init(.tapSignerWalletFound(wallet.id))
+                } else {
+                    app.alertState = .init(.intializedTapSigner(tapSigner))
+                }
             case let .bip329Labels(labels):
                 guard let manager = app.walletManager else { return setInvalidlabels() }
                 guard let selectedWallet = Database().globalConfig().selectedWallet() else {

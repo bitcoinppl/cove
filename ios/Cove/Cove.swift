@@ -4750,6 +4750,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     
     func fees() async throws  -> FeeResponse
     
+    /**
+     * Find tapsigner wallet by card ident
+     */
+    func findTapSignerWalletByCardIdent(ident: String)  -> WalletMetadata?
+    
     func gitShortHash()  -> String
     
     /**
@@ -4938,6 +4943,17 @@ open func fees()async throws  -> FeeResponse  {
             liftFunc: FfiConverterTypeFeeResponse_lift,
             errorHandler: FfiConverterTypeAppError_lift
         )
+}
+    
+    /**
+     * Find tapsigner wallet by card ident
+     */
+open func findTapSignerWalletByCardIdent(ident: String) -> WalletMetadata?  {
+    return try!  FfiConverterOptionTypeWalletMetadata.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet_by_card_ident(self.uniffiClonePointer(),
+        FfiConverterString.lower(ident),$0
+    )
+})
 }
     
 open func gitShortHash() -> String  {
@@ -27287,6 +27303,10 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 
 public protocol TapcardTransportProtocol: AnyObject, Sendable {
     
+    func setMessage(message: String) 
+    
+    func appendMessage(message: String) 
+    
     func transmitApdu(commandApdu: Data) async throws  -> Data
     
 }
@@ -27301,6 +27321,54 @@ fileprivate struct UniffiCallbackInterfaceTapcardTransportProtocol {
     // This creates 1-element array, since this seems to be the only way to construct a const
     // pointer that we can pass to the Rust code.
     static let vtable: [UniffiVTableCallbackInterfaceTapcardTransportProtocol] = [UniffiVTableCallbackInterfaceTapcardTransportProtocol(
+        setMessage: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.setMessage(
+                     message: try FfiConverterString.lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        appendMessage: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceTapcardTransportProtocol.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.appendMessage(
+                     message: try FfiConverterString.lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
         transmitApdu: { (
             uniffiHandle: UInt64,
             commandApdu: RustBuffer,
@@ -27987,6 +28055,30 @@ fileprivate struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeMessageInfo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeWalletMetadata: FfiConverterRustBuffer {
+    typealias SwiftType = WalletMetadata?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWalletMetadata.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWalletMetadata.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -29884,6 +29976,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_fees() != 44559) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet_by_card_ident() != 14938) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_git_short_hash() != 10133) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30835,7 +30930,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 39280) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 4530) {
+    if (uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 41763) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapcardtransportprotocol_append_message() != 6492) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 5326) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 1495) {

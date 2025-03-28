@@ -88,6 +88,10 @@ import SwiftUI
         walletManager = vm
     }
 
+    public func findTapSignerWalletByCardIdent(_ ident: String) -> WalletMetadata? {
+        rust.findTapSignerWalletByCardIdent(ident: ident)
+    }
+
     /// Reset the manager state
     public func reset() {
         rust = FfiApp()
