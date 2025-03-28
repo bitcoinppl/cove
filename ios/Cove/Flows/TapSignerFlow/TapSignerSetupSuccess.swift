@@ -17,6 +17,7 @@ struct TapSignerSetupSuccess: View {
 
     // private
     @State private var isExportingBackup: Bool = false
+    @State private var walletId: WalletId? = nil
 
     func saveWallet() {
         do {
@@ -26,7 +27,7 @@ struct TapSignerSetupSuccess: View {
                 backup: setup.backup
             )
 
-            app.selectWallet(manager.id)
+            walletId = manager.id
         } catch {
             Log.error("Failed to save wallet: \(error.localizedDescription)")
         }
@@ -108,8 +109,12 @@ struct TapSignerSetupSuccess: View {
             Spacer()
 
             VStack(spacing: 14) {
-                Button("Continue") { saveWallet() }
-                    .buttonStyle(DarkButtonStyle())
+                Button("Continue") {
+                    guard let walletId else { return saveWallet() }
+                    app.selectWallet(walletId)
+                    app.sheetState = .none
+                }
+                .buttonStyle(DarkButtonStyle())
             }
         }
         .padding(.horizontal)
@@ -127,6 +132,9 @@ struct TapSignerSetupSuccess: View {
         )
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
+        .onAppear {
+            saveWallet()
+        }
         .fileExporter(
             isPresented: $isExportingBackup,
             document: TextDocument(text: hexEncode(bytes: setup.backup)),

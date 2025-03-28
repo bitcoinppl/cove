@@ -15,11 +15,13 @@ struct TapSignerImportSuccess: View {
     let tapSigner: TapSigner
     let deriveInfo: DeriveInfo
 
+    // private
+    @State private var walletId: WalletId? = nil
+
     func saveWallet() {
         do {
             let manager = try WalletManager(tapSigner: tapSigner, deriveInfo: deriveInfo)
-            app.selectWallet(manager.id)
-            app.sheetState = .none
+            walletId = manager.id
         } catch {
             Log.error("Failed to save wallet: \(error.localizedDescription)")
         }
@@ -63,11 +65,18 @@ struct TapSignerImportSuccess: View {
             Spacer()
 
             VStack(spacing: 14) {
-                Button("Continue") { saveWallet() }
-                    .buttonStyle(DarkButtonStyle())
+                Button("Continue") {
+                    guard let walletId else { return saveWallet() }
+                    app.selectWallet(walletId)
+                    app.sheetState = .none
+                }
+                .buttonStyle(DarkButtonStyle())
             }
         }
         .padding(.horizontal)
+        .onAppear {
+            saveWallet()
+        }
         .background(
             VStack {
                 Image(.chainCodePattern)
