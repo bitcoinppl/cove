@@ -34,8 +34,7 @@ struct TapSignerConfirmPin: View {
         }
 
         // success, start the NFC scanning process
-        let nfc = TapSignerNFC(tapSigner)
-        manager.nfc = nfc
+        let nfc = manager.getOrCreateNfc(tapSigner)
 
         Task {
             let response = await nfc.setupTapSigner(factoryPin: startingPin, newPin: newPin, chainCode: chainCodeBytes)

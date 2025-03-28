@@ -61,8 +61,7 @@ struct TapSignerImportRetry: View {
                         return
                     }
 
-                    let nfc = TapSignerNFC(tapSigner)
-                    manager.nfc = nfc
+                    let nfc = manager.getOrCreateNfc(tapSigner)
 
                     Task {
                         switch await nfc.derive(pin: pin) {

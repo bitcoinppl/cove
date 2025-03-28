@@ -12,7 +12,7 @@ class TapSignerManager {
     private let logger = Log(id: "TapSignerManager")
 
     var id = UUID()
-    var nfc: TapSignerNFC?
+    private var nfc: TapSignerNFC?
     var path: [TapSignerRoute] = []
     var initialRoute: TapSignerRoute
 
@@ -20,6 +20,15 @@ class TapSignerManager {
 
     init(_ route: TapSignerRoute) {
         initialRoute = route
+    }
+
+    func getOrCreateNfc(_ tapSigner: TapSigner) -> TapSignerNFC {
+        if let nfc { return nfc }
+
+        let nfc = TapSignerNFC(tapSigner)
+        self.nfc = nfc
+
+        return self.nfc!
     }
 
     func navigate(to newRoute: TapSignerRoute) {
