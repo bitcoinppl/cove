@@ -69,9 +69,9 @@ pub struct WalletMetadata {
     #[serde(default)]
     pub origin: Option<String>,
 
-    /// And ID for the hardware wallet, if this  wallet is a hardware wallet
+    /// Metadata data specific to different hardware wallets
     #[serde(default)]
-    pub hardware_id: Option<String>,
+    pub hardware_metadata: Option<HardwareWalletMetadata>,
 
     /// Show labels for transactions i the transaction list
     /// If false, we only show either `Sent` or `Received` labels
@@ -174,6 +174,11 @@ pub enum WalletType {
     WatchOnly,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum HardwareWalletMetadata {
+    TapSigner(crate::multi_format::tap_card::TapSigner),
+}
+
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum,
 )]
@@ -212,7 +217,7 @@ impl WalletMetadata {
             address_type: WalletAddressType::default(),
             wallet_type: WalletType::Hot,
             wallet_mode,
-            hardware_id: None,
+            hardware_metadata: None,
             show_labels: true,
             internal: InternalOnlyMetadata::default(),
             discovery_state: DiscoveryState::default(),
@@ -263,7 +268,7 @@ impl WalletMetadata {
             selected_unit: Unit::default(),
             sensitive_visible: true,
             details_expanded: false,
-            hardware_id: None,
+            hardware_metadata: None,
             wallet_type: WalletType::Hot,
             wallet_mode: WalletMode::Main,
             show_labels: true,

@@ -97,7 +97,17 @@ struct CoveApp: App {
             case .uninitializedTapSigner:
                 "This TAPSIGNER has not been setup yet. Would you like to setup it now?"
             case let .tapSignerSetupFailed(error):
+                "Please try again.\(error)"
+            case let .tapSignerDeriveFailed(error):
                 "Please try again.\nError: \(error)"
+            case .tapSignerInvalidAuth:
+                "The PIN you entered was incorrect. Please try again."
+            case .intializedTapSigner:
+                "Would you like to start using this TAPSIGNER with Cove?"
+            case .tapSignerWalletFound:
+                "Would you like to go to this wallet?"
+            case .general(title: _, let message):
+                message
             }
 
         if case .foundAddress = alert.item {
@@ -116,6 +126,7 @@ struct CoveApp: App {
         case let .duplicateWallet(walletId):
             Button("OK") {
                 app.alertState = .none
+                app.isSidebarVisible = false
                 try? app.rust.selectWallet(id: walletId)
             }
         case let .addressWrongNetwork(address: address, network: _, currentNetwork: _):
@@ -160,12 +171,25 @@ struct CoveApp: App {
             }
         case let .uninitializedTapSigner(tapSigner):
             Button("Yes") {
+                app.isSidebarVisible = false
                 app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
             }
 
             Button("Cancel", role: .cancel) {
                 app.alertState = .none
             }
+        case let .tapSignerWalletFound(id):
+            Button("Yes") { app.selectWallet(id) }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
+        case let .intializedTapSigner(t):
+            Button("Yes") {
+                app.sheetState = .init(
+                    .tapSigner(
+                        .enterPin(tapSigner: t, action: .derive)
+                    )
+                )
+            }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
         case .invalidWordGroup,
              .errorImportingHotWallet,
              .importedSuccessfully,
@@ -178,6 +202,9 @@ struct CoveApp: App {
              .noUnsignedTransactionFound,
              .cantSendOnWatchOnlyWallet,
              .tapSignerSetupFailed,
+             .tapSignerInvalidAuth,
+             .tapSignerDeriveFailed,
+             .general,
              .invalidFormat:
             Button("OK") {
                 app.alertState = .none
@@ -382,8 +409,11 @@ struct CoveApp: App {
             case let .tapSignerInit(tapSigner):
                 app.alertState = .init(.uninitializedTapSigner(tapSigner))
             case let .tapSigner(tapSigner):
-                let panic = "TAPSIGNER not implemented: \(tapSigner)"
-                Log.error(panic)
+                if let wallet = app.findTapSignerWalletByCardIdent(tapSigner.cardIdent) {
+                    app.alertState = .init(.tapSignerWalletFound(wallet.id))
+                } else {
+                    app.alertState = .init(.intializedTapSigner(tapSigner))
+                }
             case let .bip329Labels(labels):
                 guard let manager = app.walletManager else { return setInvalidlabels() }
                 guard let selectedWallet = Database().globalConfig().selectedWallet() else {

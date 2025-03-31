@@ -33,4 +33,8 @@ extension TapSignerReaderError {
     var describe: String {
         displayTapSignerReaderError(error: self)
     }
+
+    var isAuthError: Bool {
+        tapSignerErrorIsAuthError(error: self)
+    }
 }

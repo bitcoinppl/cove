@@ -18,7 +18,6 @@ struct TapSignerConfirmPin: View {
 
     // private
     @State private var confirmPin: String = ""
-
     @State private var animateField: Bool = false
     @FocusState private var isFocused
 
@@ -35,21 +34,20 @@ struct TapSignerConfirmPin: View {
         }
 
         // success, start the NFC scanning process
-        let nfc = TapSignerNFC(tapSigner)
-        manager.nfc = nfc
+        let nfc = manager.getOrCreateNfc(tapSigner)
 
         Task {
             let response = await nfc.setupTapSigner(factoryPin: startingPin, newPin: newPin, chainCode: chainCodeBytes)
             await MainActor.run {
                 switch response {
                 case let .success(.complete(c)):
-                    manager.resetRoute(to: .importSuccess(tapSigner, c))
+                    manager.resetRoute(to: .setupSuccess(tapSigner, c))
                 case let .success(incomplete):
-                    manager.resetRoute(to: .importRetry(tapSigner, incomplete))
+                    manager.resetRoute(to: .setupRetry(tapSigner, incomplete))
                 case let .failure(error):
                     // failed to setup but we can continue
                     if let incomplete = nfc.lastResponse()?.setupResponse {
-                        return manager.resetRoute(to: .importRetry(tapSigner, incomplete))
+                        return manager.resetRoute(to: .setupRetry(tapSigner, incomplete))
                     }
 
                     // failed to setup and can't continue from a screen, send back to home and ask them to restart the process

@@ -17,7 +17,7 @@ use crate::{
     node::Node,
     router::{Route, RouteFactory, Router},
     transaction::fees::client::{FEE_CLIENT, FeeResponse},
-    wallet::metadata::{WalletId, WalletType},
+    wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use crossbeam::channel::{Receiver, Sender};
 use macros::impl_default_for;
@@ -253,6 +253,17 @@ impl FfiApp {
         }
 
         Ok(())
+    }
+
+    /// Find tapsigner wallet by card ident
+    pub fn find_tap_signer_wallet_by_card_ident(&self, ident: &str) -> Option<WalletMetadata> {
+        let network = Database::global().global_config.selected_network();
+        let mode = Database::global().global_config.wallet_mode();
+
+        Database::global()
+            .wallets()
+            .find_by_tap_signer_ident(ident, network, mode)
+            .unwrap_or(None)
     }
 
     pub fn version(&self) -> String {

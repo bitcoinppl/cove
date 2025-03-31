@@ -213,8 +213,10 @@ struct SendFlowSetAmountScreen: View {
                     feeRate: feeRate.feeRate()
                 )
 
-                if metadata.walletType == .cold || metadata.walletType == .xpubOnly {
+                switch metadata.walletType {
+                case .xpubOnly, .cold:
                     try manager.rust.saveUnsignedTransaction(details: confirmDetails)
+                default: ()
                 }
 
                 let route =
@@ -951,7 +953,7 @@ struct SendFlowSetAmountScreen: View {
                         .padding(.trailing, 6)
                 }
 
-                if metadata.walletType == .cold {
+                if case .cold = metadata.walletType {
                     BitcoinShieldIcon(width: 24, color: .orange)
                 }
 

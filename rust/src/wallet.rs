@@ -25,7 +25,7 @@ use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorP
 use bip39::Mnemonic;
 use eyre::Context as _;
 use fingerprint::Fingerprint;
-use metadata::{DiscoveryState, WalletId, WalletMetadata, WalletType};
+use metadata::{DiscoveryState, HardwareWalletMetadata, WalletId, WalletMetadata, WalletType};
 use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
@@ -367,7 +367,7 @@ impl Wallet {
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
         metadata.name = "TapSigner".to_string();
         metadata.wallet_mode = mode;
-        metadata.hardware_id = Some(tap_signer.card_ident);
+        metadata.hardware_metadata = Some(HardwareWalletMetadata::TapSigner(tap_signer));
         metadata.origin = descriptors.origin().ok();
         metadata.master_fingerprint = Some(Arc::new(fingerprint));
         metadata.wallet_type = WalletType::Cold;

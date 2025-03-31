@@ -2,7 +2,7 @@
 //  TapSignerImportSuccess.swift
 //  Cove
 //
-//  Created by Praveen Perera on 3/25/25.
+//  Created by Praveen Perera on 3/27/25.
 //
 
 import SwiftUI
@@ -13,19 +13,15 @@ struct TapSignerImportSuccess: View {
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
-    let tapSignerImport: TapSignerImportComplete
+    let deriveInfo: DeriveInfo
 
     // private
-    @State private var isExportingBackup: Bool = false
+    @State private var walletId: WalletId? = nil
 
     func saveWallet() {
         do {
-            let manager = try WalletManager(
-                tapSigner: tapSigner,
-                deriveInfo: tapSignerImport.deriveInfo,
-                backup: tapSignerImport.backup
-            )
-            app.loadAndReset(to: .selectedWallet(manager.id))
+            let manager = try WalletManager(tapSigner: tapSigner, deriveInfo: deriveInfo)
+            walletId = manager.id
         } catch {
             Log.error("Failed to save wallet: \(error.localizedDescription)")
         }
@@ -35,9 +31,8 @@ struct TapSignerImportSuccess: View {
         VStack(spacing: 40) {
             VStack {
                 HStack {
-                    Button(action: { manager.popRoute() }) {
-                        Image(systemName: "chevron.left")
-                        Text("Back")
+                    Button(action: { app.sheetState = .none }) {
+                        Text("Cancel")
                     }
 
                     Spacer()
@@ -57,7 +52,7 @@ struct TapSignerImportSuccess: View {
                     .fontWeight(.light)
 
                 VStack(spacing: 12) {
-                    Text("Setup Complete")
+                    Text("Import Complete")
                         .font(.largeTitle)
                         .fontWeight(.bold)
 
@@ -65,54 +60,23 @@ struct TapSignerImportSuccess: View {
                         .font(.subheadline)
                         .foregroundStyle(.primary.opacity(0.8))
                 }
-
-                Text(
-                    "If you haven’t already done so please download your backup and store it in a safe place. You will need this and the backup password on the back of the card to restore you wallet."
-                )
-                .font(.subheadline)
-                .foregroundStyle(.primary.opacity(0.8))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
             }
-
-            Button(action: { isExportingBackup = true }) {
-                HStack {
-                    VStack(spacing: 4) {
-                        HStack {
-                            Text("Download Backup")
-                                .font(.footnote)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Color.primary)
-                            Spacer()
-                        }
-
-                        HStack {
-                            Text("You need this backup to restore your wallet.")
-                                .foregroundStyle(Color.secondary)
-                            Spacer()
-                        }
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(Color.secondary)
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-            }
-            .font(.footnote)
-            .fontWeight(.semibold)
 
             Spacer()
 
             VStack(spacing: 14) {
-                Button("Continue") { saveWallet() }
-                    .buttonStyle(DarkButtonStyle())
+                Button("Continue") {
+                    guard let walletId else { return saveWallet() }
+                    app.selectWallet(walletId)
+                    app.sheetState = .none
+                }
+                .buttonStyle(DarkButtonStyle())
             }
         }
         .padding(.horizontal)
+        .onAppear {
+            saveWallet()
+        }
         .background(
             VStack {
                 Image(.chainCodePattern)
@@ -127,21 +91,6 @@ struct TapSignerImportSuccess: View {
         )
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
-        .fileExporter(
-            isPresented: $isExportingBackup,
-            document: TextDocument(text: hexEncode(bytes: tapSignerImport.backup)),
-            contentType: .plainText,
-            defaultFilename: "\(tapSigner.cardIdent)_backup.txt"
-        ) { result in
-            switch result {
-            case .success:
-                // TOOO: alert
-                Log.debug("Successfully exported backup")
-            case let .failure(error):
-                // TOOO: alert
-                Log.error("Failed to export backup: \(error.localizedDescription)")
-            }
-        }
     }
 }
 
@@ -150,7 +99,7 @@ struct TapSignerImportSuccess: View {
         route:
         .importSuccess(
             tapSignerPreviewNew(preview: true),
-            tapSignerImportCompleteNew(preview: true)
+            tapSignerSetupCompleteNew(preview: true).deriveInfo
         )
     )
     .environment(AppManager.shared)

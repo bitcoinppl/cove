@@ -8,6 +8,9 @@ use nid::Nanoid;
 use parking_lot::Mutex as SyncMutex;
 use parking_lot::RwLock;
 use rust_cktap::apdu::DeriveResponse;
+use rust_cktap::commands::Authentication;
+use rust_cktap::commands::Wait as _;
+use rust_cktap::tap_signer::TapSignerError;
 use rust_cktap::{CkTapCard, commands::CkTransport as _};
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -15,6 +18,7 @@ use tracing::debug;
 use crate::database::Database;
 use crate::network::Network;
 
+use super::CkTapError;
 use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
@@ -53,6 +57,7 @@ pub struct TapSignerReader {
     id: String,
     reader: Mutex<rust_cktap::TapSigner<TapcardTransport>>,
     cmd: RwLock<Option<TapSignerCmd>>,
+    transport: TapcardTransport,
 
     /// Last response from the setup process, has started, if the last response is `Complete` then the setup process is complete
     last_response: SyncMutex<Option<Arc<SetupCmdResponse>>>,
@@ -63,6 +68,7 @@ pub struct TapSignerReader {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum TapSignerCmd {
     Setup(Arc<SetupCmd>),
+    Derive { pin: String },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
@@ -75,6 +81,7 @@ pub struct SetupCmd {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum, derive_more::From)]
 pub enum TapSignerResponse {
     Setup(SetupCmdResponse),
+    Import(DeriveInfo),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -82,7 +89,7 @@ pub enum SetupCmdResponse {
     ContinueFromInit(ContinueFromInit),
     ContinueFromBackup(ContinueFromBackup),
     ContinueFromDerive(ContinueFromDerive),
-    Complete(TapSignerImportComplete),
+    Complete(TapSignerSetupComplete),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
@@ -107,7 +114,7 @@ pub struct ContinueFromDerive {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Record)]
-pub struct TapSignerImportComplete {
+pub struct TapSignerSetupComplete {
     pub backup: Vec<u8>,
     pub derive_info: DeriveInfo,
 }
@@ -128,8 +135,13 @@ impl TapSignerReader {
         transport: Box<dyn TapcardTransportProtocol>,
         cmd: Option<TapSignerCmd>,
     ) -> Result<Self> {
-        let transport = TapcardTransport(transport);
-        let card = transport.to_cktap().await.map_err(TransportError::from)?;
+        let transport = TapcardTransport(Arc::new(transport));
+        let card = transport
+            .clone()
+            .to_cktap()
+            .await
+            .map_err(TransportError::from)?;
+
         debug!("tap_card_from_status: {:?}", card);
 
         let card = match card {
@@ -145,13 +157,19 @@ impl TapSignerReader {
         let id: Nanoid = Nanoid::new();
         let network = Database::global().global_config.selected_network();
 
-        Ok(Self {
+        let me = Self {
             id: id.to_string(),
             reader: Mutex::new(card),
+            transport,
             cmd: RwLock::new(cmd),
             last_response: SyncMutex::new(None),
             network,
-        })
+        };
+
+        // if the card has a required auth delay, wait for it
+        me.wait_if_needed().await?;
+
+        Ok(me)
     }
 
     #[uniffi::method]
@@ -166,6 +184,11 @@ impl TapSignerReader {
             TapSignerCmd::Setup(cmd) => {
                 let response = self.setup(cmd).await?;
                 Ok(TapSignerResponse::Setup(response))
+            }
+
+            TapSignerCmd::Derive { pin } => {
+                let response = self.derive(&pin).await?;
+                Ok(TapSignerResponse::Import(response))
             }
         }
     }
@@ -217,6 +240,27 @@ impl TapSignerReader {
 }
 
 impl TapSignerReader {
+    async fn wait_if_needed(&self) -> Result<(), Error> {
+        let mut auth_delay = self.reader.lock().await.auth_delay;
+
+        while let Some(delay) = auth_delay {
+            let message = format!("Too many PIN attempts, waiting for {} seconds...", delay);
+
+            self.reader
+                .lock()
+                .await
+                .wait(None)
+                .await
+                .map_err(TransportError::from)?;
+
+            self.transport.set_message(message);
+            auth_delay = self.reader.lock().await.auth_delay;
+        }
+
+        self.reader.lock().await.set_auth_delay(None);
+        Ok(())
+    }
+
     async fn init_backup_change(&self, cmd: Arc<SetupCmd>) -> Result<SetupCmdResponse, Error> {
         let _init_response = self
             .reader
@@ -251,22 +295,9 @@ impl TapSignerReader {
     }
 
     async fn derive_and_change(&self, cmd: Arc<SetupCmd>, backup: Vec<u8>) -> SetupCmdResponse {
-        let path: [u32; 3] = match self.network {
-            Network::Bitcoin => [84, 0, 0],
-            _ => [84, 1, 0],
-        };
-
-        let derive_response = self
-            .reader
-            .lock()
-            .await
-            .derive(&path, &cmd.factory_pin)
-            .await;
-
-        let derive = match derive_response {
+        let derive_info = match self.derive(&cmd.factory_pin).await {
             Ok(derive) => derive,
-            Err(e) => {
-                let error = TapSignerReaderError::TapSignerError(e.into());
+            Err(error) => {
                 let response = SetupCmdResponse::ContinueFromBackup(ContinueFromBackup {
                     backup,
                     continue_cmd: cmd,
@@ -278,7 +309,6 @@ impl TapSignerReader {
             }
         };
 
-        let derive_info = DeriveInfo::from_response(derive, path.to_vec(), self.network);
         self.change(cmd, backup, derive_info).await
     }
 
@@ -308,13 +338,27 @@ impl TapSignerReader {
             return response;
         }
 
-        let complete = TapSignerImportComplete {
+        let complete = TapSignerSetupComplete {
             backup,
             derive_info,
         };
 
         *self.last_response.lock() = Some(SetupCmdResponse::Complete(complete.clone()).into());
         SetupCmdResponse::Complete(complete)
+    }
+
+    async fn derive(&self, pin: &str) -> Result<DeriveInfo, Error> {
+        debug!("starting derive");
+
+        let path: [u32; 3] = match self.network {
+            Network::Bitcoin => [84, 0, 0],
+            _ => [84, 1, 0],
+        };
+
+        let derive_response = self.reader.lock().await.derive(&path, pin).await?;
+        let derive_info = DeriveInfo::from_response(derive_response, path.to_vec(), self.network);
+
+        Ok(derive_info)
     }
 }
 
@@ -407,9 +451,30 @@ impl TapSignerResponse {
     pub fn setup_response(&self) -> Option<&SetupCmdResponse> {
         match self {
             TapSignerResponse::Setup(response) => Some(response),
-            #[allow(unreachable_patterns)]
             _ => None,
         }
+    }
+
+    pub fn derive_response(&self) -> Option<&DeriveInfo> {
+        match self {
+            TapSignerResponse::Import(response) => Some(response),
+            _ => None,
+        }
+    }
+}
+
+impl From<TapSignerError> for TapSignerReaderError {
+    fn from(error: TapSignerError) -> Self {
+        TapSignerReaderError::TapSignerError(error.into())
+    }
+}
+
+impl TapSignerReaderError {
+    pub fn is_auth_error(&self) -> bool {
+        matches!(
+            self,
+            TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BadAuth))
+        )
     }
 }
 
@@ -444,12 +509,17 @@ mod ffi {
     }
 
     #[uniffi::export]
+    fn tap_signer_response_derive_response(response: TapSignerResponse) -> Option<DeriveInfo> {
+        response.derive_response().cloned()
+    }
+
+    #[uniffi::export]
     fn display_tap_signer_reader_error(error: TapSignerReaderError) -> String {
         error.to_string()
     }
 
     #[uniffi::export]
-    fn tap_signer_import_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
+    fn tap_signer_setup_retry_continue_cmd(preview: bool) -> SetupCmdResponse {
         assert!(preview);
 
         let backup = vec![0u8; 32];
@@ -467,13 +537,18 @@ mod ffi {
         })
     }
 
+    #[uniffi::export]
+    fn tap_signer_error_is_auth_error(error: TapSignerReaderError) -> bool {
+        error.is_auth_error()
+    }
+
     // MARK: - FFI PREVIEW
     #[uniffi::export]
-    fn tap_signer_import_complete_new(preview: bool) -> TapSignerImportComplete {
+    fn tap_signer_setup_complete_new(preview: bool) -> TapSignerSetupComplete {
         assert!(preview);
 
         let backup = vec![0u8; 32];
-        TapSignerImportComplete {
+        TapSignerSetupComplete {
             backup,
             derive_info: derive_info(),
         }

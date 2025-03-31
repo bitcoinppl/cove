@@ -88,6 +88,10 @@ import SwiftUI
         walletManager = vm
     }
 
+    public func findTapSignerWalletByCardIdent(_ ident: String) -> WalletMetadata? {
+        rust.findTapSignerWalletByCardIdent(ident: ident)
+    }
+
     /// Reset the manager state
     public func reset() {
         rust = FfiApp()
@@ -108,6 +112,16 @@ import SwiftUI
 
     var numberOfWallets: Int {
         Int(rust.numWallets())
+    }
+
+    // this will select the wallet and reset the route to the selectedWalletRoute
+    func selectWallet(_ id: WalletId) {
+        do {
+            try rust.selectWallet(id: id)
+            isSidebarVisible = false
+        } catch {
+            Log.error("Unabel to select wallet \(id), error: \(error)")
+        }
     }
 
     func toggleSidebar() {

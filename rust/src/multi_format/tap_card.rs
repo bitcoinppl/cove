@@ -1,8 +1,8 @@
 use std::{collections::HashMap, num::ParseIntError};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
 pub enum TapSignerState {
     Sealed,
     Unused,
@@ -25,7 +25,7 @@ pub struct SatsCard {
     pub signature: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Record)]
 pub struct TapSigner {
     pub state: TapSignerState,
     pub card_ident: String,

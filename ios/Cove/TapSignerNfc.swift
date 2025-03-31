@@ -15,12 +15,16 @@ class TapSignerNFC {
     private var lastResponse_: TapSignerResponse?
 
     init(_ card: TapSigner) {
+        Log.debug("Initializing TapSignerNFC")
         nfc = TapCardNFC(tapcard: .tapSigner(card))
     }
 
-    public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async -> Result<SetupCmdResponse, TapSignerReaderError> {
+    public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async
+        -> Result<SetupCmdResponse, TapSignerReaderError>
+    {
         do {
-            return try await .success(doSetupTapSigner(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode))
+            return try await .success(
+                doSetupTapSigner(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode))
         } catch let error as TapSignerReaderError {
             return .failure(error)
         } catch {
@@ -28,11 +32,54 @@ class TapSignerNFC {
         }
     }
 
+    public func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
+        do {
+            return try await withCheckedThrowingContinuation { continuation in
+                // Set up observation tracking before starting the operation
+                Task {
+                    withObservationTracking {
+                        // Access the properties to track them
+                        _ = nfc.tapSignerResponse
+                        _ = nfc.tapSignerError
+                    } onChange: {
+                        // Re-register for changes
+                        Task {
+                            // Check if we got a response or error
+                            if let response = self.nfc.tapSignerResponse?.deriveResponse {
+                                continuation.resume(returning: Result.success(response))
+                                self.nfc.session?.invalidate()
+                                return
+                            }
+
+                            if let error = self.nfc.tapSignerError {
+                                continuation.resume(returning: Result.failure(error))
+                                self.nfc.session?.invalidate(errorMessage: error.describe)
+                                return
+                            }
+                        }
+                    }
+
+                    // Start the NFC operation
+                    nfc.tapSignerCmd = TapSignerCmd.derive(pin: pin)
+                    nfc.scan()
+                }
+            }
+        } catch let error as TapSignerReaderError {
+            self.nfc.session?.invalidate(errorMessage: error.describe)
+            return Result.failure(error)
+        } catch {
+            nfc.session?.invalidate(errorMessage: "Something went wrong!")
+            return Result.failure(TapSignerReaderError.Unknown(error.localizedDescription))
+        }
+    }
+
     public func lastResponse() -> TapSignerResponse? {
         nfc.tapSignerReader?.lastResponse() ?? lastResponse_
     }
 
-    private func doSetupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async throws -> SetupCmdResponse {
+    private func doSetupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil)
+        async throws -> SetupCmdResponse
+    {
         var errorCount = 0
         var lastError: TapSignerReaderError? = nil
 
@@ -62,7 +109,9 @@ class TapSignerNFC {
 
                 // Start the NFC operation
                 do {
-                    let cmd = try SetupCmd.tryNew(factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
+                    let cmd = try SetupCmd.tryNew(
+                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode
+                    )
                     nfc.tapSignerCmd = TapSignerCmd.setup(cmd)
                     nfc.scan()
                 } catch let error as TapSignerReaderError {
@@ -102,24 +151,29 @@ class TapSignerNFC {
 
                 if errorCount > 5 {
                     nfc.session?.invalidate()
-                    Log.error("Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))")
+                    Log.error(
+                        "Error count: \(errorCount), last error: \(lastError ?? .Unknown("unknown error, no error found"))"
+                    )
                     return incompleteResponse
                 }
             }
         }
     }
 
-    public func continueSetup(_ response: SetupCmdResponse) async -> Result<SetupCmdResponse, TapSignerReaderError> {
-        let cmd: SetupCmd? = switch response {
-        case let .continueFromInit(c):
-            c.continueCmd
-        case let .continueFromBackup(c):
-            c.continueCmd
-        case let .continueFromDerive(c):
-            c.continueCmd
-        case .complete:
-            .none
-        }
+    public func continueSetup(_ response: SetupCmdResponse) async -> Result<
+        SetupCmdResponse, TapSignerReaderError
+    > {
+        let cmd: SetupCmd? =
+            switch response {
+            case let .continueFromInit(c):
+                c.continueCmd
+            case let .continueFromBackup(c):
+                c.continueCmd
+            case let .continueFromDerive(c):
+                c.continueCmd
+            case .complete:
+                .none
+            }
 
         guard let cmd else { return .success(response) }
 
@@ -197,7 +251,10 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
     func scan() {
         guard let tapSignerCmd else { return Log.error("cmd not set") }
-        logger.info("started scanning \(tapSignerCmd)")
+        switch tapSignerCmd {
+        case .setup: logger.info("started scanning for setup")
+        case .derive: logger.info("started scanning for derive")
+        }
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
@@ -252,21 +309,26 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             let transport = TapCardTransport(session: session, tag: tag)
             switch tapcard {
             case .satsCard:
-                (
-                    // TODO: Implement SatsCardReader
+                ( // TODO: Implement SatsCardReader
                 )
 
             case .tapSigner:
-                let tapSignerReader = try await TapSignerReader(transport: transport, cmd: tapSignerCmd)
+                let tapSignerReader = try await TapSignerReader(
+                    transport: transport, cmd: tapSignerCmd
+                )
+
                 self.tapSignerReader = tapSignerReader
 
                 let response = try await tapSignerReader.run()
                 tapSignerResponse = response
             }
         } catch let error as TapSignerReaderError {
-            logger.error("TapSigner error: \(error)")
+            logger.error("TAPSIGNER error: \(error)")
             tapSignerError = error
-            session.invalidate(errorMessage: "TapSigner error: \(error.localizedDescription)")
+            if case .TapSignerError(.CkTap(.BadAuth)) = error {
+                return session.invalidate(errorMessage: "Wrong PIN, please try again")
+            }
+            session.invalidate(errorMessage: "TapSigner error: \(error.describe)")
         } catch {
             logger.error("Error creating reader: \(error)")
             session.invalidate(errorMessage: "Error creating reader: \(error.localizedDescription)")
@@ -307,8 +369,17 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
         self.tag = tag
     }
 
+    func setMessage(message: String) {
+        nfcSession.alertMessage = message
+    }
+
+    func appendMessage(message: String) {
+        let msg = nfcSession.alertMessage
+        nfcSession.alertMessage = msg + message
+    }
+
     func transmitApdu(commandApdu: Data) async throws -> Data {
-        logger.debug("Transmitting APDU: \(commandApdu.count)")
+        logger.debug("Transmitting APDU: \(commandApdu) bytes")
 
         guard let apdu = NFCISO7816APDU(data: commandApdu) else {
             logger.error("Invalid APDU")
@@ -317,6 +388,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
 
         return try await withCheckedThrowingContinuation { continuation in
             tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
+                Log.debug("APDU response: \(response.count) bytes")
+
                 if let error {
                     logger.error("APDU error: \(error)")
                     continuation.resume(throwing: error)
@@ -339,8 +412,10 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
                                 "Card error: SW=\(String(format: "0x%04X", statusWord))"
                             }
                     }
-                    logger.error(errorMessage)
-                    continuation.resume(throwing: TransportError(code: statusWord, message: errorMessage))
+
+                    logger.error("APDU ERROR: \(errorMessage)")
+                    continuation.resume(
+                        throwing: TransportError(code: statusWord, message: errorMessage))
                     return
                 }
 

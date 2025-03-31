@@ -29,9 +29,16 @@ public enum AppAlertState: Equatable {
     case failedToScanQr(error: String)
     case cantSendOnWatchOnlyWallet
     case tapSignerSetupFailed(String)
+    case tapSignerDeriveFailed(String)
+    case tapSignerInvalidAuth
+
+    // genericMessage or error
+    case general(title: String, message: String)
 
     // action
     case uninitializedTapSigner(TapSigner)
+    case tapSignerWalletFound(WalletId)
+    case intializedTapSigner(TapSigner)
 
     func title() -> String {
         switch self {
@@ -70,6 +77,16 @@ public enum AppAlertState: Equatable {
             "Setup TAPSIGNER?"
         case .tapSignerSetupFailed:
             "Setup Failed"
+        case .tapSignerDeriveFailed:
+            "TAPSIGNER Import Failed"
+        case .tapSignerInvalidAuth:
+            "Wrong PIN"
+        case .tapSignerWalletFound:
+            "Wallet Found"
+        case .intializedTapSigner:
+            "Import TAPSIGNER?"
+        case let .general(title: title, message: _):
+            title
         }
     }
 }

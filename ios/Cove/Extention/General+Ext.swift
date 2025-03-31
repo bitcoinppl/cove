@@ -169,4 +169,14 @@ extension TapSignerResponse {
     var setupResponse: SetupCmdResponse? {
         tapSignerResponseSetupResponse(response: self)
     }
+
+    var deriveResponse: DeriveInfo? {
+        tapSignerResponseDeriveResponse(response: self)
+    }
+}
+
+extension AfterPinAction {
+    var userMessage: String {
+        afterPinActionUserMessage(action: self)
+    }
 }
