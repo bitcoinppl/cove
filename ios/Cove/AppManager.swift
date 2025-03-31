@@ -92,6 +92,22 @@ import SwiftUI
         rust.findTapSignerWalletByCardIdent(ident: ident)
     }
 
+    public func getTapSignerBackup(_ indent: String) -> Data? {
+        rust.getTapSignerBackup(ident: indent)
+    }
+
+    public func getTapSignerBackup(_ ts: TapSigner) -> Data? {
+        getTapSignerBackup(ts.cardIdent)
+    }
+
+    public func saveTapSignerBackup(_ indent: String, _ backup: Data) -> Bool {
+        rust.saveTapSignerBackup(ident: indent, backup: backup)
+    }
+
+    public func saveTapSignerBackup(_ ts: TapSigner, _ backup: Data) -> Bool {
+        saveTapSignerBackup(ts.cardIdent, backup)
+    }
+
     /// Reset the manager state
     public func reset() {
         rust = FfiApp()

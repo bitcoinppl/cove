@@ -194,7 +194,6 @@ impl Keychain {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn get_tap_signer_backup(&self, id: &WalletId) -> Option<Vec<u8>> {
         let cryptor = {
             let encryption_key_key = wallet_tap_signer_encryption_key_and_nonce_key_name(id);

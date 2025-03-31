@@ -12,6 +12,7 @@ struct MoreInfoPopover: View {
 
     // args
     let manager: WalletManager
+    @Binding var exportingBackup: ExportingBackup?
 
     // confirmation dialogs
     @Binding var isExportingLabels: Bool
@@ -41,6 +42,34 @@ struct MoreInfoPopover: View {
         labelManager.exportDefaultFileName(name: metadata.name)
     }
 
+    @ViewBuilder
+    func ChangePinButton(_ t: TapSigner) -> some View {
+        let route = TapSignerRoute.enterPin(tapSigner: t, action: .change)
+        let action = { app.sheetState = .init(.tapSigner(route)) }
+        Button(action: action) {
+            Label("Change PIN", systemImage: "key")
+        }
+    }
+
+    @ViewBuilder
+    func DownloadBackupButton(_ t: TapSigner) -> some View {
+        let action = {
+            if let backup = app.getTapSignerBackup(t) {
+                return {
+                    Log.debug("Downloading backup...")
+                    exportingBackup = ExportingBackup(tapSigner: t, backup: backup)
+                }
+            }
+
+            let route = TapSignerRoute.enterPin(tapSigner: t, action: .backup)
+            return { app.sheetState = .init(.tapSigner(route)) }
+        }()
+
+        Button(action: action) {
+            Label("Download Backup", systemImage: "square.and.arrow.down")
+        }
+    }
+
     var body: some View {
         VStack {
             Button(action: app.nfcReader.scan) {
@@ -58,11 +87,8 @@ struct MoreInfoPopover: View {
             }
 
             if case let .tapSigner(t) = metadata.hardwareMetadata {
-                let route = TapSignerRoute.enterPin(tapSigner: t, action: .change)
-                let action = { app.sheetState = .init(.tapSigner(route)) }
-                Button(action: action) {
-                    Label("Change PIN", systemImage: "key")
-                }
+                ChangePinButton(t)
+                DownloadBackupButton(t)
             }
 
             // wallet settings last button
@@ -77,6 +103,7 @@ struct MoreInfoPopover: View {
     AsyncPreview {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
+            exportingBackup: Binding.constant(nil),
             isExportingLabels: Binding.constant(false),
             isImportingLabels: Binding.constant(false)
         )

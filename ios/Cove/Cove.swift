@@ -4755,6 +4755,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func findTapSignerWalletByCardIdent(ident: String)  -> WalletMetadata?
     
+    /**
+     * Get the backup for the tap signer
+     */
+    func getTapSignerBackup(ident: String)  -> Data?
+    
     func gitShortHash()  -> String
     
     /**
@@ -4803,6 +4808,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      * Reset the default route, with a nested route
      */
     func resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: [Route]) 
+    
+    /**
+     * Save the backup for the tap signer in the keychain
+     */
+    func saveTapSignerBackup(ident: String, backup: Data)  -> Bool
     
     /**
      * Select a wallet
@@ -4956,6 +4966,17 @@ open func findTapSignerWalletByCardIdent(ident: String) -> WalletMetadata?  {
 })
 }
     
+    /**
+     * Get the backup for the tap signer
+     */
+open func getTapSignerBackup(ident: String) -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(self.uniffiClonePointer(),
+        FfiConverterString.lower(ident),$0
+    )
+})
+}
+    
 open func gitShortHash() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_ffiapp_git_short_hash(self.uniffiClonePointer(),$0
@@ -5086,6 +5107,18 @@ open func resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: [Route])  {try!
         FfiConverterSequenceTypeRoute.lower(nestedRoutes),$0
     )
 }
+}
+    
+    /**
+     * Save the backup for the tap signer in the keychain
+     */
+open func saveTapSignerBackup(ident: String, backup: Data) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(self.uniffiClonePointer(),
+        FfiConverterString.lower(ident),
+        FfiConverterData.lower(backup),$0
+    )
+})
 }
     
     /**
@@ -9869,6 +9902,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func getFeeOptions() async throws  -> FeeRateOptions
     
+    func getTapSignerBackup()  -> Data?
+    
     /**
      * gets the transactions for the wallet that are currently available
      */
@@ -10378,6 +10413,13 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
             liftFunc: FfiConverterTypeFeeRateOptions_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
+}
+    
+open func getTapSignerBackup() -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_get_tap_signer_backup(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -30318,6 +30360,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet_by_card_ident() != 14938) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 8335) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_git_short_hash() != 10133) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30352,6 +30397,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 13093) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 25516) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 31318) {
@@ -30808,6 +30856,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 9964) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_get_tap_signer_backup() != 24904) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 31100) {

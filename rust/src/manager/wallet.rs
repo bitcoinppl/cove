@@ -342,6 +342,13 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn get_tap_signer_backup(&self) -> Option<Vec<u8>> {
+        let keychain = Keychain::global();
+        let wallet_id = self.id.clone();
+        keychain.get_tap_signer_backup(&wallet_id)
+    }
+
+    #[uniffi::method]
     pub fn save_unsigned_transaction(&self, details: Arc<ConfirmDetails>) -> Result<(), Error> {
         let wallet_id = self.id.clone();
         let tx_id = details.psbt.tx_id();
