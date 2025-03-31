@@ -22,6 +22,23 @@ struct TapSignerEnterPin: View {
     @State private var pin: String = ""
     @FocusState private var isFocused
 
+    // confirmed pin is correct, now run the action
+    func runAction(_ nfc: TapSignerNFC, _ pin: String) {
+        switch action {
+        case .derive: deriveAction(nfc, pin)
+        case .change: manager.navigate(to:
+                .newPin(
+                    TapSignerNewPinArgs(
+                        tapSigner: tapSigner,
+                        startingPin: pin,
+                        chainCode: .none,
+                        action: .change
+                    )))
+        case .backup:
+            backupAction(nfc, pin)
+        }
+    }
+
     func deriveAction(_ nfc: TapSignerNFC, _ pin: String) {
         Task {
             switch await nfc.derive(pin: pin) {
@@ -35,6 +52,10 @@ struct TapSignerEnterPin: View {
 
             await MainActor.run { self.pin = "" }
         }
+    }
+
+    func backupAction(_: TapSignerNFC, _: String) {
+        Task {}
     }
 
     var body: some View {
@@ -103,27 +124,15 @@ struct TapSignerEnterPin: View {
 
                 if newPin.count == 6 {
                     manager.enteredPin = newPin
-                    switch action {
-                    case .derive: deriveAction(nfc, newPin)
-                    case .change: manager.navigate(to:
-                            .newPin(
-                                TapSignerNewPinArgs(
-                                    tapSigner: tapSigner,
-                                    startingPin: newPin,
-                                    chainCode: .none,
-                                    action: .change
-                                )))
-                    }
+                    return runAction(nfc, newPin)
                 }
 
                 if newPin.count > 6, old.count < 6 {
-                    pin = old
-                    return
+                    return pin = old
                 }
 
                 if newPin.count > 6 {
-                    pin = String(pin.prefix(6))
-                    return
+                    return pin = String(pin.prefix(6))
                 }
             }
         }
