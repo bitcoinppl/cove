@@ -584,7 +584,7 @@ mod ffi {
 
     #[uniffi::export]
     fn tap_signer_response_backup_response(response: TapSignerResponse) -> Option<Vec<u8>> {
-        response.backup_response().as_deref().map(Into::into)
+        response.backup_response().map(Into::into)
     }
 
     #[uniffi::export]

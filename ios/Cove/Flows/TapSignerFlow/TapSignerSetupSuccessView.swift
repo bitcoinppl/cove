@@ -160,10 +160,10 @@ struct TapSignerSetupSuccess: View {
 #Preview {
     TapSignerContainer(
         route:
-            .setupSuccess(
-                tapSignerPreviewNew(preview: true),
-                tapSignerSetupCompleteNew(preview: true)
-            )
+        .setupSuccess(
+            tapSignerPreviewNew(preview: true),
+            tapSignerSetupCompleteNew(preview: true)
+        )
     )
     .environment(AppManager.shared)
 }
