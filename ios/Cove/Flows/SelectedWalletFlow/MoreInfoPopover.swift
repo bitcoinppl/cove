@@ -57,7 +57,7 @@ struct MoreInfoPopover: View {
                 }
             }
 
-            if case .tapSigner(let t) = metadata.hardwareMetadata {
+            if case let .tapSigner(t) = metadata.hardwareMetadata {
                 let route = TapSignerRoute.enterPin(tapSigner: t, action: .change)
                 let action = { app.sheetState = .init(.tapSigner(route)) }
                 Button(action: action) {
@@ -69,7 +69,6 @@ struct MoreInfoPopover: View {
             Button(action: { app.pushRoute(.settings(.wallet(id: metadata.id, route: .main))) }) {
                 Label("Wallet Settings", systemImage: "gear")
             }
-
         }
     }
 }

@@ -1,5 +1,5 @@
 //
-//  TapSignerImportRetry.swift
+//  TapSignerImportRetryView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/25/25.

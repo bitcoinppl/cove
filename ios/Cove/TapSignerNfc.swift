@@ -151,7 +151,8 @@ class TapSignerNFC {
                 // Start the NFC operation
                 do {
                     let cmd = try SetupCmd.tryNew(
-                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
+                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode
+                    )
                     nfc.tapSignerCmd = TapSignerCmd.setup(cmd)
                     nfc.scan()
                 } catch let error as TapSignerReaderError {
@@ -355,7 +356,8 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
             case .tapSigner:
                 let tapSignerReader = try await TapSignerReader(
-                    transport: transport, cmd: tapSignerCmd)
+                    transport: transport, cmd: tapSignerCmd
+                )
 
                 self.tapSignerReader = tapSignerReader
 

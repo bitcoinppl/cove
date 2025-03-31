@@ -1,5 +1,5 @@
 //
-//  TapSignerStartingPin.swift
+//  TapSignerStartingPinView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/12/25.
