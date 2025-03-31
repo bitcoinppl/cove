@@ -1,5 +1,5 @@
 //
-//  TapSignerSetupRetry.swift
+//  TapSignerImportRetryView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/25/25.
@@ -8,12 +8,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct TapSignerSetupRetry: View {
+struct TapSignerImportRetry: View {
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
-    let response: SetupCmdResponse
 
     var body: some View {
         VStack(spacing: 40) {
@@ -39,12 +38,12 @@ struct TapSignerSetupRetry: View {
                     .foregroundStyle(.red)
                     .fontWeight(.light)
 
-                Text("Could not complete setup")
+                Text("Could not complete import")
                     .font(.title)
                     .fontWeight(.bold)
 
                 Text(
-                    "Please try again and hold your TAPSIGNER steady until setup is complete."
+                    "Please try again and hold your TAPSIGNER steady until import is complete."
                 )
                 .font(.subheadline)
                 .foregroundStyle(.primary.opacity(0.8))
@@ -57,21 +56,19 @@ struct TapSignerSetupRetry: View {
 
             VStack(spacing: 14) {
                 Button("Retry") {
+                    guard let pin = manager.enteredPin else {
+                        app.alertState = .init(.tapSignerDeriveFailed("No PIN entered"))
+                        return
+                    }
+
+                    let nfc = manager.getOrCreateNfc(tapSigner)
+
                     Task {
-                        let nfc = manager.getOrCreateNfc(tapSigner)
-                        switch await nfc.continueSetup(response) {
-                        case let .success(.complete(c)):
-                            manager.resetRoute(to: .setupSuccess(tapSigner, c))
-                        case let .success(incomplete):
-                            Log.error(
-                                "Failed to complete TAPSIGNER setup, won't retry anymore \(incomplete)"
-                            )
-                            app.sheetState = nil
-                            app.alertState = .init(
-                                .tapSignerSetupFailed("Failed to setup TapSigner"))
+                        switch await nfc.derive(pin: pin) {
+                        case let .success(deriveInfo):
+                            manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
                         case let .failure(error):
-                            app.sheetState = nil
-                            app.alertState = .init(.tapSignerSetupFailed(error.describe))
+                            app.alertState = .init(.tapSignerDeriveFailed(error.describe))
                         }
                     }
                 }
@@ -98,11 +95,7 @@ struct TapSignerSetupRetry: View {
 
 #Preview {
     TapSignerContainer(
-        route:
-        .setupRetry(
-            tapSignerPreviewNew(preview: true),
-            tapSignerSetupRetryContinueCmd(preview: true)
-        )
+        route: .importRetry(tapSignerPreviewNew(preview: true))
     )
     .environment(AppManager.shared)
 }

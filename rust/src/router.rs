@@ -104,6 +104,23 @@ pub enum SendRoute {
     },
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct TapSignerNewPinArgs {
+    pub tap_signer: TapSigner,
+    pub starting_pin: String,
+    pub chain_code: Option<String>,
+    pub action: TapSignerPinAction,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct TapSignerConfirmPinArgs {
+    pub tap_signer: TapSigner,
+    pub starting_pin: String,
+    pub new_pin: String,
+    pub chain_code: Option<String>,
+    pub action: TapSignerPinAction,
+}
+
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum TapSignerRoute {
     // setup routes
@@ -113,17 +130,8 @@ pub enum TapSignerRoute {
         tap_signer: TapSigner,
         chain_code: Option<String>,
     },
-    NewPin {
-        tap_signer: TapSigner,
-        starting_pin: String,
-        chain_code: Option<String>,
-    },
-    ConfirmPin {
-        tap_signer: TapSigner,
-        starting_pin: String,
-        new_pin: String,
-        chain_code: Option<String>,
-    },
+    NewPin(TapSignerNewPinArgs),
+    ConfirmPin(TapSignerConfirmPinArgs),
     SetupSuccess(TapSigner, TapSignerSetupComplete),
     SetupRetry(TapSigner, SetupCmdResponse),
 
@@ -148,6 +156,15 @@ pub struct Router {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum AfterPinAction {
     Derive,
+    Change,
+}
+
+/// When the user goes through entering the PIN and setting a new one, they are either setting up a new tapsigner
+/// or changing the PIN on an existing one
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum TapSignerPinAction {
+    Setup,
+    Change,
 }
 
 impl_default_for!(Router);
@@ -385,6 +402,18 @@ impl Route {
     }
 }
 
+impl TapSignerConfirmPinArgs {
+    pub fn new_from_new_pin(args: TapSignerNewPinArgs, new_pin: String) -> Self {
+        Self {
+            tap_signer: args.tap_signer,
+            starting_pin: args.starting_pin,
+            chain_code: args.chain_code,
+            new_pin,
+            action: args.action,
+        }
+    }
+}
+
 #[uniffi::export]
 fn is_route_equal(route: Route, route_to_check: Route) -> bool {
     route == route_to_check
@@ -411,7 +440,8 @@ fn is_tap_signer_route_equal(lhs: TapSignerRoute, rhs: TapSignerRoute) -> bool {
 impl AfterPinAction {
     pub fn user_message(&self) -> String {
         match self {
-            Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string()
+            Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
+            Self::Change => "Please enter your current PIN".to_string(),
         }
     }
 }
@@ -419,4 +449,12 @@ impl AfterPinAction {
 #[uniffi::export]
 fn after_pin_action_user_message(action: AfterPinAction) -> String {
     action.user_message()
+}
+
+#[uniffi::export]
+fn tap_signer_confirm_pin_args_new_from_new_pin(
+    args: TapSignerNewPinArgs,
+    new_pin: String,
+) -> TapSignerConfirmPinArgs {
+    TapSignerConfirmPinArgs::new_from_new_pin(args, new_pin)
 }

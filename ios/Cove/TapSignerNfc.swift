@@ -73,6 +73,47 @@ class TapSignerNFC {
         }
     }
 
+    public func changePin(currentPin: String, newPin: String) async -> Result<Void, TapSignerReaderError> {
+        do {
+            return try await withCheckedThrowingContinuation { continuation in
+                // Set up observation tracking before starting the operation
+                Task {
+                    withObservationTracking {
+                        // Access the properties to track them
+                        _ = nfc.tapSignerResponse
+                        _ = nfc.tapSignerError
+                    } onChange: {
+                        // Re-register for changes
+                        Task {
+                            // Check if we got a response or error
+                            if self.nfc.tapSignerResponse?.isChangeResponse ?? false {
+                                continuation.resume(returning: Result.success(()))
+                                self.nfc.session?.invalidate()
+                                return
+                            }
+
+                            if let error = self.nfc.tapSignerError {
+                                continuation.resume(returning: Result.failure(error))
+                                self.nfc.session?.invalidate(errorMessage: error.describe)
+                                return
+                            }
+                        }
+                    }
+
+                    // Start the NFC operation
+                    nfc.tapSignerCmd = TapSignerCmd.change(currentPin: currentPin, newPin: newPin)
+                    nfc.scan()
+                }
+            }
+        } catch let error as TapSignerReaderError {
+            self.nfc.session?.invalidate(errorMessage: error.describe)
+            return Result.failure(error)
+        } catch {
+            nfc.session?.invalidate(errorMessage: "Something went wrong!")
+            return Result.failure(TapSignerReaderError.Unknown(error.localizedDescription))
+        }
+    }
+
     public func lastResponse() -> TapSignerResponse? {
         nfc.tapSignerReader?.lastResponse() ?? lastResponse_
     }
@@ -254,6 +295,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         switch tapSignerCmd {
         case .setup: logger.info("started scanning for setup")
         case .derive: logger.info("started scanning for derive")
+        case .change: logger.info("started scanning for change pin cmd")
         }
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)

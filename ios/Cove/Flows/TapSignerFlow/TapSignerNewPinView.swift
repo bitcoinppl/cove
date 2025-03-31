@@ -1,5 +1,5 @@
 //
-//  TapSignerNewPin.swift
+//  TapSignerNewPinView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/12/25.
@@ -7,13 +7,11 @@
 
 import SwiftUI
 
-struct TapSignerNewPin: View {
+struct TapSignerNewPinView: View {
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
-    let tapSigner: TapSigner
-    let startingPin: String
-    let chainCode: String?
+    let args: TapSignerNewPinArgs
 
     // private
     @State private var newPin: String = ""
@@ -87,12 +85,7 @@ struct TapSignerNewPin: View {
                 if pin.count == 6 {
                     return
                         manager.navigate(
-                            to: .confirmPin(
-                                tapSigner: tapSigner,
-                                startingPin: startingPin,
-                                newPin: pin,
-                                chainCode: chainCode
-                            )
+                            to: .confirmPin(TapSignerConfirmPinArgs(from: args, newPin: pin))
                         )
                 }
 
@@ -102,7 +95,7 @@ struct TapSignerNewPin: View {
                 }
 
                 if pin.count > 6 {
-                    newPin = String(startingPin.prefix(6))
+                    newPin = String(args.startingPin.prefix(6))
                     return
                 }
             }
@@ -114,7 +107,14 @@ struct TapSignerNewPin: View {
 
 #Preview {
     TapSignerContainer(
-        route: .newPin(tapSigner: tapSignerPreviewNew(preview: true), startingPin: "123456", chainCode: nil)
+        route: .newPin(
+            TapSignerNewPinArgs(
+                tapSigner: tapSignerPreviewNew(preview: true),
+                startingPin: "123456",
+                chainCode: nil,
+                action: .setup
+            )
+        )
     )
     .environment(AppManager.shared)
     .environment(AuthManager.shared)

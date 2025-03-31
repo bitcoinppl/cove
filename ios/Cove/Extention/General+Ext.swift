@@ -173,10 +173,20 @@ extension TapSignerResponse {
     var deriveResponse: DeriveInfo? {
         tapSignerResponseDeriveResponse(response: self)
     }
+
+    var isChangeResponse: Bool {
+        tapSignerResponseChangeResponse(response: self)
+    }
 }
 
 extension AfterPinAction {
     var userMessage: String {
         afterPinActionUserMessage(action: self)
+    }
+}
+
+extension TapSignerConfirmPinArgs {
+    init(from: TapSignerNewPinArgs, newPin: String) {
+        self = tapSignerConfirmPinArgsNewFromNewPin(args: from, newPin: newPin)
     }
 }

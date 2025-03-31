@@ -106,6 +106,8 @@ struct CoveApp: App {
                 "Would you like to start using this TAPSIGNER with Cove?"
             case .tapSignerWalletFound:
                 "Would you like to go to this wallet?"
+            case let .tapSignerNoBackup(tapSigner):
+                "Can't change the PIN without taking a backup of the wallet. Would you like to take a backup now?"
             case .general(title: _, let message):
                 message
             }
@@ -188,6 +190,12 @@ struct CoveApp: App {
                         .enterPin(tapSigner: t, action: .derive)
                     )
                 )
+            }
+            Button("Cancel", role: .cancel) { app.alertState = .none }
+        case let .tapSignerNoBackup(tapSigner):
+            Button("Yes") {
+                print("TODO: go to backup screen \(tapSigner)}")
+                // TODO: go to backup screen
             }
             Button("Cancel", role: .cancel) { app.alertState = .none }
         case .invalidWordGroup,

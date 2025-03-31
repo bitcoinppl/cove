@@ -1,5 +1,5 @@
 //
-//  TapSignerConfirmPin.swift
+//  TapSignerConfirmPinView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/12/25.
@@ -7,14 +7,11 @@
 
 import SwiftUI
 
-struct TapSignerConfirmPin: View {
+struct TapSignerConfirmPinView: View {
     @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
-    let tapSigner: TapSigner
-    let startingPin: String
-    let newPin: String
-    let chainCode: String?
+    let args: TapSignerConfirmPinArgs
 
     // private
     @State private var confirmPin: String = ""
@@ -22,32 +19,42 @@ struct TapSignerConfirmPin: View {
     @FocusState private var isFocused
 
     var chainCodeBytes: Data? {
-        guard let chainCode else { return nil }
+        guard let chainCode = args.chainCode else { return nil }
         return hexDecode(hex: chainCode)
     }
 
     func checkPin() {
-        if confirmPin != newPin {
+        if confirmPin != args.newPin {
             animateField.toggle()
             confirmPin = ""
             return
         }
 
-        // success, start the NFC scanning process
-        let nfc = manager.getOrCreateNfc(tapSigner)
+        switch args.action {
+        case .setup:
+            setupTapSigner()
+        case .change:
+            changeTapSignerPin()
+        }
+    }
+
+    func setupTapSigner() {
+        let nfc = manager.getOrCreateNfc(args.tapSigner)
 
         Task {
-            let response = await nfc.setupTapSigner(factoryPin: startingPin, newPin: newPin, chainCode: chainCodeBytes)
+            let response = await nfc.setupTapSigner(
+                factoryPin: args.startingPin, newPin: args.newPin, chainCode: chainCodeBytes
+            )
             await MainActor.run {
                 switch response {
                 case let .success(.complete(c)):
-                    manager.resetRoute(to: .setupSuccess(tapSigner, c))
+                    manager.resetRoute(to: .setupSuccess(args.tapSigner, c))
                 case let .success(incomplete):
-                    manager.resetRoute(to: .setupRetry(tapSigner, incomplete))
+                    manager.resetRoute(to: .setupRetry(args.tapSigner, incomplete))
                 case let .failure(error):
                     // failed to setup but we can continue
                     if let incomplete = nfc.lastResponse()?.setupResponse {
-                        return manager.resetRoute(to: .setupRetry(tapSigner, incomplete))
+                        return manager.resetRoute(to: .setupRetry(args.tapSigner, incomplete))
                     }
 
                     // failed to setup and can't continue from a screen, send back to home and ask them to restart the process
@@ -55,6 +62,29 @@ struct TapSignerConfirmPin: View {
                     app.sheetState = .none
                     app.alertState = .init(.tapSignerSetupFailed(error.describe))
                 }
+            }
+        }
+    }
+
+    func changeTapSignerPin() {
+        let nfc = manager.getOrCreateNfc(args.tapSigner)
+        Task {
+            let response = await nfc.changePin(
+                currentPin: args.startingPin, newPin: args.newPin
+            )
+            switch response {
+            case .success:
+                app.alertState = .init(
+                    .general(
+                        title: "PIN Changed",
+                        message: "Your TAPSIGNER PIN was changed successfully!"
+                    )
+                )
+            case let .failure(error):
+                if error.isAuthError { return app.alertState = .init(.tapSignerInvalidAuth) }
+                if error.isNoBackupError { return app.alertState = .init(.tapSignerNoBackup(args.tapSigner)) }
+
+                app.alertState = .init(.general(title: "Error", message: error.describe))
             }
         }
     }
@@ -155,7 +185,7 @@ struct TapSignerConfirmPin: View {
                 }
 
                 if pin.count > 6 {
-                    confirmPin = String(startingPin.prefix(6))
+                    confirmPin = String(args.startingPin.prefix(6))
                     return
                 }
             }
@@ -169,10 +199,13 @@ struct TapSignerConfirmPin: View {
     TapSignerContainer(
         route:
         .confirmPin(
-            tapSigner: tapSignerPreviewNew(preview: true),
-            startingPin: "123456",
-            newPin: "222222",
-            chainCode: nil
+            TapSignerConfirmPinArgs(
+                tapSigner: tapSignerPreviewNew(preview: true),
+                startingPin: "123456",
+                newPin: "222222",
+                chainCode: nil,
+                action: .setup
+            )
         )
     )
     .environment(AppManager.shared)

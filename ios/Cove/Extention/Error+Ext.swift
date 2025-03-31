@@ -37,4 +37,8 @@ extension TapSignerReaderError {
     var isAuthError: Bool {
         tapSignerErrorIsAuthError(error: self)
     }
+
+    var isNoBackupError: Bool {
+        tapSignerErrorIsNoBackupError(error: self)
+    }
 }

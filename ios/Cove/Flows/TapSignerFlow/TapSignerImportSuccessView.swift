@@ -1,5 +1,5 @@
 //
-//  TapSignerImportSuccess.swift
+//  TapSignerImportSuccessView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/27/25.

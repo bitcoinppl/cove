@@ -15524,6 +15524,186 @@ public func FfiConverterTypeTapSigner_lower(_ value: TapSigner) -> RustBuffer {
 }
 
 
+public struct TapSignerConfirmPinArgs {
+    public var tapSigner: TapSigner
+    public var startingPin: String
+    public var newPin: String
+    public var chainCode: String?
+    public var action: TapSignerPinAction
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tapSigner: TapSigner, startingPin: String, newPin: String, chainCode: String?, action: TapSignerPinAction) {
+        self.tapSigner = tapSigner
+        self.startingPin = startingPin
+        self.newPin = newPin
+        self.chainCode = chainCode
+        self.action = action
+    }
+}
+
+#if compiler(>=6)
+extension TapSignerConfirmPinArgs: Sendable {}
+#endif
+
+
+extension TapSignerConfirmPinArgs: Equatable, Hashable {
+    public static func ==(lhs: TapSignerConfirmPinArgs, rhs: TapSignerConfirmPinArgs) -> Bool {
+        if lhs.tapSigner != rhs.tapSigner {
+            return false
+        }
+        if lhs.startingPin != rhs.startingPin {
+            return false
+        }
+        if lhs.newPin != rhs.newPin {
+            return false
+        }
+        if lhs.chainCode != rhs.chainCode {
+            return false
+        }
+        if lhs.action != rhs.action {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tapSigner)
+        hasher.combine(startingPin)
+        hasher.combine(newPin)
+        hasher.combine(chainCode)
+        hasher.combine(action)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerConfirmPinArgs: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerConfirmPinArgs {
+        return
+            try TapSignerConfirmPinArgs(
+                tapSigner: FfiConverterTypeTapSigner.read(from: &buf), 
+                startingPin: FfiConverterString.read(from: &buf), 
+                newPin: FfiConverterString.read(from: &buf), 
+                chainCode: FfiConverterOptionString.read(from: &buf), 
+                action: FfiConverterTypeTapSignerPinAction.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TapSignerConfirmPinArgs, into buf: inout [UInt8]) {
+        FfiConverterTypeTapSigner.write(value.tapSigner, into: &buf)
+        FfiConverterString.write(value.startingPin, into: &buf)
+        FfiConverterString.write(value.newPin, into: &buf)
+        FfiConverterOptionString.write(value.chainCode, into: &buf)
+        FfiConverterTypeTapSignerPinAction.write(value.action, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerConfirmPinArgs_lift(_ buf: RustBuffer) throws -> TapSignerConfirmPinArgs {
+    return try FfiConverterTypeTapSignerConfirmPinArgs.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerConfirmPinArgs_lower(_ value: TapSignerConfirmPinArgs) -> RustBuffer {
+    return FfiConverterTypeTapSignerConfirmPinArgs.lower(value)
+}
+
+
+public struct TapSignerNewPinArgs {
+    public var tapSigner: TapSigner
+    public var startingPin: String
+    public var chainCode: String?
+    public var action: TapSignerPinAction
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(tapSigner: TapSigner, startingPin: String, chainCode: String?, action: TapSignerPinAction) {
+        self.tapSigner = tapSigner
+        self.startingPin = startingPin
+        self.chainCode = chainCode
+        self.action = action
+    }
+}
+
+#if compiler(>=6)
+extension TapSignerNewPinArgs: Sendable {}
+#endif
+
+
+extension TapSignerNewPinArgs: Equatable, Hashable {
+    public static func ==(lhs: TapSignerNewPinArgs, rhs: TapSignerNewPinArgs) -> Bool {
+        if lhs.tapSigner != rhs.tapSigner {
+            return false
+        }
+        if lhs.startingPin != rhs.startingPin {
+            return false
+        }
+        if lhs.chainCode != rhs.chainCode {
+            return false
+        }
+        if lhs.action != rhs.action {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(tapSigner)
+        hasher.combine(startingPin)
+        hasher.combine(chainCode)
+        hasher.combine(action)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerNewPinArgs: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerNewPinArgs {
+        return
+            try TapSignerNewPinArgs(
+                tapSigner: FfiConverterTypeTapSigner.read(from: &buf), 
+                startingPin: FfiConverterString.read(from: &buf), 
+                chainCode: FfiConverterOptionString.read(from: &buf), 
+                action: FfiConverterTypeTapSignerPinAction.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TapSignerNewPinArgs, into buf: inout [UInt8]) {
+        FfiConverterTypeTapSigner.write(value.tapSigner, into: &buf)
+        FfiConverterString.write(value.startingPin, into: &buf)
+        FfiConverterOptionString.write(value.chainCode, into: &buf)
+        FfiConverterTypeTapSignerPinAction.write(value.action, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerNewPinArgs_lift(_ buf: RustBuffer) throws -> TapSignerNewPinArgs {
+    return try FfiConverterTypeTapSignerNewPinArgs.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerNewPinArgs_lower(_ value: TapSignerNewPinArgs) -> RustBuffer {
+    return FfiConverterTypeTapSignerNewPinArgs.lower(value)
+}
+
+
 public struct TapSignerSetupComplete {
     public var backup: Data
     public var deriveInfo: DeriveInfo
@@ -15914,6 +16094,7 @@ extension AddressError: Foundation.LocalizedError {
 public enum AfterPinAction {
     
     case derive
+    case change
 }
 
 
@@ -15933,6 +16114,8 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         
         case 1: return .derive
         
+        case 2: return .change
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -15943,6 +16126,10 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         
         case .derive:
             writeInt(&buf, Int32(1))
+        
+        
+        case .change:
+            writeInt(&buf, Int32(2))
         
         }
     }
@@ -23286,6 +23473,8 @@ public enum TapSignerCmd {
     )
     case derive(pin: String
     )
+    case change(currentPin: String, newPin: String
+    )
 }
 
 
@@ -23309,6 +23498,9 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
         case 2: return .derive(pin: try FfiConverterString.read(from: &buf)
         )
         
+        case 3: return .change(currentPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23325,6 +23517,12 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
         case let .derive(pin):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(pin, into: &buf)
+            
+        
+        case let .change(currentPin,newPin):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(currentPin, into: &buf)
+            FfiConverterString.write(newPin, into: &buf)
             
         }
     }
@@ -23345,6 +23543,77 @@ public func FfiConverterTypeTapSignerCmd_lower(_ value: TapSignerCmd) -> RustBuf
     return FfiConverterTypeTapSignerCmd.lower(value)
 }
 
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * When the user goes through entering the PIN and setting a new one, they are either setting up a new tapsigner
+ * or changing the PIN on an existing one
+ */
+
+public enum TapSignerPinAction {
+    
+    case setup
+    case change
+}
+
+
+#if compiler(>=6)
+extension TapSignerPinAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSignerPinAction: FfiConverterRustBuffer {
+    typealias SwiftType = TapSignerPinAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSignerPinAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setup
+        
+        case 2: return .change
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TapSignerPinAction, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .setup:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .change:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerPinAction_lift(_ buf: RustBuffer) throws -> TapSignerPinAction {
+    return try FfiConverterTypeTapSignerPinAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSignerPinAction_lower(_ value: TapSignerPinAction) -> RustBuffer {
+    return FfiConverterTypeTapSignerPinAction.lower(value)
+}
+
+
+extension TapSignerPinAction: Equatable, Hashable {}
 
 
 
@@ -23492,6 +23761,7 @@ public enum TapSignerResponse {
     )
     case `import`(DeriveInfo
     )
+    case change
 }
 
 
@@ -23515,6 +23785,8 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
         case 2: return .`import`(try FfiConverterTypeDeriveInfo.read(from: &buf)
         )
         
+        case 3: return .change
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23532,6 +23804,10 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterTypeDeriveInfo.write(v1, into: &buf)
             
+        
+        case .change:
+            writeInt(&buf, Int32(3))
+        
         }
     }
 }
@@ -23565,9 +23841,9 @@ public enum TapSignerRoute {
     )
     case startingPin(tapSigner: TapSigner, chainCode: String?
     )
-    case newPin(tapSigner: TapSigner, startingPin: String, chainCode: String?
+    case newPin(TapSignerNewPinArgs
     )
-    case confirmPin(tapSigner: TapSigner, startingPin: String, newPin: String, chainCode: String?
+    case confirmPin(TapSignerConfirmPinArgs
     )
     case setupSuccess(TapSigner,TapSignerSetupComplete
     )
@@ -23605,10 +23881,10 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
         case 3: return .startingPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
         )
         
-        case 4: return .newPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
+        case 4: return .newPin(try FfiConverterTypeTapSignerNewPinArgs.read(from: &buf)
         )
         
-        case 5: return .confirmPin(tapSigner: try FfiConverterTypeTapSigner.read(from: &buf), startingPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf), chainCode: try FfiConverterOptionString.read(from: &buf)
+        case 5: return .confirmPin(try FfiConverterTypeTapSignerConfirmPinArgs.read(from: &buf)
         )
         
         case 6: return .setupSuccess(try FfiConverterTypeTapSigner.read(from: &buf), try FfiConverterTypeTapSignerSetupComplete.read(from: &buf)
@@ -23650,19 +23926,14 @@ public struct FfiConverterTypeTapSignerRoute: FfiConverterRustBuffer {
             FfiConverterOptionString.write(chainCode, into: &buf)
             
         
-        case let .newPin(tapSigner,startingPin,chainCode):
+        case let .newPin(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
-            FfiConverterString.write(startingPin, into: &buf)
-            FfiConverterOptionString.write(chainCode, into: &buf)
+            FfiConverterTypeTapSignerNewPinArgs.write(v1, into: &buf)
             
         
-        case let .confirmPin(tapSigner,startingPin,newPin,chainCode):
+        case let .confirmPin(v1):
             writeInt(&buf, Int32(5))
-            FfiConverterTypeTapSigner.write(tapSigner, into: &buf)
-            FfiConverterString.write(startingPin, into: &buf)
-            FfiConverterString.write(newPin, into: &buf)
-            FfiConverterOptionString.write(chainCode, into: &buf)
+            FfiConverterTypeTapSignerConfirmPinArgs.write(v1, into: &buf)
             
         
         case let .setupSuccess(v1,v2):
@@ -29333,9 +29604,24 @@ public func stringOrDataTryIntoMultiFormat(stringOrData: StringOrData)throws  ->
     )
 })
 }
+public func tapSignerConfirmPinArgsNewFromNewPin(args: TapSignerNewPinArgs, newPin: String) -> TapSignerConfirmPinArgs  {
+    return try!  FfiConverterTypeTapSignerConfirmPinArgs_lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_confirm_pin_args_new_from_new_pin(
+        FfiConverterTypeTapSignerNewPinArgs_lower(args),
+        FfiConverterString.lower(newPin),$0
+    )
+})
+}
 public func tapSignerErrorIsAuthError(error: TapSignerReaderError) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_error_is_auth_error(
+        FfiConverterTypeTapSignerReaderError_lower(error),$0
+    )
+})
+}
+public func tapSignerErrorIsNoBackupError(error: TapSignerReaderError) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_error_is_no_backup_error(
         FfiConverterTypeTapSignerReaderError_lower(error),$0
     )
 })
@@ -29344,6 +29630,13 @@ public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_preview_new(
         FfiConverterBool.lower(preview),$0
+    )
+})
+}
+public func tapSignerResponseChangeResponse(response: TapSignerResponse) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_response_change_response(
+        FfiConverterTypeTapSignerResponse_lower(response),$0
     )
 })
 }
@@ -29619,10 +29912,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_string_or_data_try_into_multi_format() != 34953) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_tap_signer_confirm_pin_args_new_from_new_pin() != 45606) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_tap_signer_error_is_auth_error() != 29742) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_tap_signer_error_is_no_backup_error() != 60157) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_response_change_response() != 53410) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_response_derive_response() != 27872) {

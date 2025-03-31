@@ -1,5 +1,5 @@
 //
-//  TapSignerStartingPin.swift
+//  TapSignerStartingPinView.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/12/25.
@@ -84,11 +84,13 @@ struct TapSignerStartingPin: View {
                 if pin.count == 6 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                         manager.navigate(to:
-                            .newPin(
+                            .newPin(TapSignerNewPinArgs(
                                 tapSigner: tapSigner,
                                 startingPin: pin,
-                                chainCode: chainCode
+                                chainCode: chainCode,
+                                action: .setup
                             ))
+                        )
                     }
                 }
 

@@ -68,7 +68,13 @@ pub struct TapSignerReader {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum TapSignerCmd {
     Setup(Arc<SetupCmd>),
-    Derive { pin: String },
+    Derive {
+        pin: String,
+    },
+    Change {
+        current_pin: String,
+        new_pin: String,
+    },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
@@ -82,6 +88,7 @@ pub struct SetupCmd {
 pub enum TapSignerResponse {
     Setup(SetupCmdResponse),
     Import(DeriveInfo),
+    Change,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -190,6 +197,14 @@ impl TapSignerReader {
                 let response = self.derive(&pin).await?;
                 Ok(TapSignerResponse::Import(response))
             }
+
+            TapSignerCmd::Change {
+                current_pin,
+                new_pin,
+            } => {
+                self.change(&new_pin, &current_pin).await?;
+                Ok(TapSignerResponse::Change)
+            }
         }
     }
 
@@ -221,7 +236,9 @@ impl TapSignerReader {
             }
 
             SetupCmdResponse::ContinueFromDerive(c) => {
-                let response = self.change(c.continue_cmd, c.backup, c.derive_info).await;
+                let response = self
+                    .setup_change_pin(c.continue_cmd, c.backup, c.derive_info)
+                    .await;
                 Ok(response)
             }
 
@@ -309,24 +326,19 @@ impl TapSignerReader {
             }
         };
 
-        self.change(cmd, backup, derive_info).await
+        self.setup_change_pin(cmd, backup, derive_info).await
     }
 
-    async fn change(
+    async fn setup_change_pin(
         &self,
         cmd: Arc<SetupCmd>,
         backup: Vec<u8>,
         derive_info: DeriveInfo,
     ) -> SetupCmdResponse {
-        let change_response = self
-            .reader
-            .lock()
-            .await
-            .change(&cmd.new_pin, &cmd.factory_pin)
-            .await;
+        debug!("starting pin change during setup");
+        let change_response = self.change(&cmd.new_pin, &cmd.factory_pin).await;
 
-        if let Err(e) = change_response {
-            let error = TapSignerReaderError::TapSignerError(e.into());
+        if let Err(error) = change_response {
             let response = SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
                 backup,
                 derive_info,
@@ -345,6 +357,19 @@ impl TapSignerReader {
 
         *self.last_response.lock() = Some(SetupCmdResponse::Complete(complete.clone()).into());
         SetupCmdResponse::Complete(complete)
+    }
+
+    async fn change(&self, new_pin: &str, current_pin: &str) -> Result<(), Error> {
+        debug!("starting pin change");
+
+        self.reader
+            .lock()
+            .await
+            .change(new_pin, current_pin)
+            .await
+            .map_err(TransportError::from)?;
+
+        Ok(())
     }
 
     async fn derive(&self, pin: &str) -> Result<DeriveInfo, Error> {
@@ -461,6 +486,13 @@ impl TapSignerResponse {
             _ => None,
         }
     }
+
+    pub fn change_response(&self) -> Option<()> {
+        match self {
+            TapSignerResponse::Change => Some(()),
+            _ => None,
+        }
+    }
 }
 
 impl From<TapSignerError> for TapSignerReaderError {
@@ -474,6 +506,13 @@ impl TapSignerReaderError {
         matches!(
             self,
             TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BadAuth))
+        )
+    }
+
+    pub fn is_no_backup_error(&self) -> bool {
+        matches!(
+            self,
+            TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BackupFirst))
         )
     }
 }
@@ -514,6 +553,11 @@ mod ffi {
     }
 
     #[uniffi::export]
+    fn tap_signer_response_change_response(response: TapSignerResponse) -> bool {
+        response.change_response().is_some()
+    }
+
+    #[uniffi::export]
     fn display_tap_signer_reader_error(error: TapSignerReaderError) -> String {
         error.to_string()
     }
@@ -540,6 +584,11 @@ mod ffi {
     #[uniffi::export]
     fn tap_signer_error_is_auth_error(error: TapSignerReaderError) -> bool {
         error.is_auth_error()
+    }
+
+    #[uniffi::export]
+    fn tap_signer_error_is_no_backup_error(error: TapSignerReaderError) -> bool {
+        error.is_no_backup_error()
     }
 
     // MARK: - FFI PREVIEW
