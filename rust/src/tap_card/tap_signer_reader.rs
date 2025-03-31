@@ -338,12 +338,12 @@ impl TapSignerReader {
         debug!("starting pin change during setup");
         let change_response = self.change(&cmd.new_pin, &cmd.factory_pin).await;
 
-        if let Err(e) = change_response {
+        if let Err(error) = change_response {
             let response = SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
                 backup,
                 derive_info,
                 continue_cmd: cmd,
-                error: e.into(),
+                error,
             });
 
             *self.last_response.lock() = Some(response.clone().into());
