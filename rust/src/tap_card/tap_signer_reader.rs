@@ -68,6 +68,9 @@ pub struct TapSignerReader {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum TapSignerCmd {
     Setup(Arc<SetupCmd>),
+    Backup {
+        pin: String,
+    },
     Derive {
         pin: String,
     },
@@ -87,6 +90,7 @@ pub struct SetupCmd {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum, derive_more::From)]
 pub enum TapSignerResponse {
     Setup(SetupCmdResponse),
+    Backup(Vec<u8>),
     Import(DeriveInfo),
     Change,
 }
@@ -193,6 +197,11 @@ impl TapSignerReader {
                 Ok(TapSignerResponse::Setup(response))
             }
 
+            TapSignerCmd::Backup { pin } => {
+                let response = self.backup(&pin).await?;
+                Ok(TapSignerResponse::Backup(response))
+            }
+
             TapSignerCmd::Derive { pin } => {
                 let response = self.derive(&pin).await?;
                 Ok(TapSignerResponse::Import(response))
@@ -291,19 +300,17 @@ impl TapSignerReader {
     }
 
     async fn backup_change_xpub(&self, cmd: Arc<SetupCmd>) -> SetupCmdResponse {
-        let backup_response = self.reader.lock().await.backup(&cmd.factory_pin).await;
+        let backup_response = self.backup(&cmd.factory_pin).await;
 
         let backup = match backup_response {
-            Ok(backup) => backup.data,
-            Err(e) => {
-                let error = TapSignerReaderError::TapSignerError(e.into());
+            Ok(backup) => backup,
+            Err(error) => {
                 let response = SetupCmdResponse::ContinueFromInit(ContinueFromInit {
                     continue_cmd: cmd,
                     error,
                 });
 
                 *self.last_response.lock() = Some(response.clone().into());
-
                 return response;
             }
         };
@@ -357,6 +364,18 @@ impl TapSignerReader {
 
         *self.last_response.lock() = Some(SetupCmdResponse::Complete(complete.clone()).into());
         SetupCmdResponse::Complete(complete)
+    }
+
+    async fn backup(&self, pin: &str) -> Result<Vec<u8>, Error> {
+        let backup_response = self
+            .reader
+            .lock()
+            .await
+            .backup(pin)
+            .await
+            .map_err(TransportError::from)?;
+
+        Ok(backup_response.data)
     }
 
     async fn change(&self, new_pin: &str, current_pin: &str) -> Result<(), Error> {
@@ -493,6 +512,13 @@ impl TapSignerResponse {
             _ => None,
         }
     }
+
+    pub fn backup_response(&self) -> Option<&[u8]> {
+        match self {
+            TapSignerResponse::Backup(response) => Some(response),
+            _ => None,
+        }
+    }
 }
 
 impl From<TapSignerError> for TapSignerReaderError {
@@ -518,9 +544,8 @@ impl TapSignerReaderError {
 }
 
 mod ffi {
-    use crate::util::generate_random_chain_code;
-
     use super::*;
+    use crate::util::generate_random_chain_code;
 
     fn derive_info() -> DeriveInfo {
         use std::str::FromStr as _;
@@ -555,6 +580,11 @@ mod ffi {
     #[uniffi::export]
     fn tap_signer_response_change_response(response: TapSignerResponse) -> bool {
         response.change_response().is_some()
+    }
+
+    #[uniffi::export]
+    fn tap_signer_response_backup_response(response: TapSignerResponse) -> Option<Vec<u8>> {
+        response.backup_response().map(Into::into)
     }
 
     #[uniffi::export]

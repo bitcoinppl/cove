@@ -4755,6 +4755,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func findTapSignerWalletByCardIdent(ident: String)  -> WalletMetadata?
     
+    /**
+     * Get the backup for the tap signer
+     */
+    func getTapSignerBackup(ident: String)  -> Data?
+    
     func gitShortHash()  -> String
     
     /**
@@ -4803,6 +4808,11 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      * Reset the default route, with a nested route
      */
     func resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: [Route]) 
+    
+    /**
+     * Save the backup for the tap signer in the keychain
+     */
+    func saveTapSignerBackup(ident: String, backup: Data)  -> Bool
     
     /**
      * Select a wallet
@@ -4956,6 +4966,17 @@ open func findTapSignerWalletByCardIdent(ident: String) -> WalletMetadata?  {
 })
 }
     
+    /**
+     * Get the backup for the tap signer
+     */
+open func getTapSignerBackup(ident: String) -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(self.uniffiClonePointer(),
+        FfiConverterString.lower(ident),$0
+    )
+})
+}
+    
 open func gitShortHash() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_ffiapp_git_short_hash(self.uniffiClonePointer(),$0
@@ -5086,6 +5107,18 @@ open func resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: [Route])  {try!
         FfiConverterSequenceTypeRoute.lower(nestedRoutes),$0
     )
 }
+}
+    
+    /**
+     * Save the backup for the tap signer in the keychain
+     */
+open func saveTapSignerBackup(ident: String, backup: Data) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(self.uniffiClonePointer(),
+        FfiConverterString.lower(ident),
+        FfiConverterData.lower(backup),$0
+    )
+})
 }
     
     /**
@@ -9869,6 +9902,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func getFeeOptions() async throws  -> FeeRateOptions
     
+    func getTapSignerBackup()  -> Data?
+    
     /**
      * gets the transactions for the wallet that are currently available
      */
@@ -10378,6 +10413,13 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
             liftFunc: FfiConverterTypeFeeRateOptions_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
+}
+    
+open func getTapSignerBackup() -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_get_tap_signer_backup(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -16095,6 +16137,7 @@ public enum AfterPinAction {
     
     case derive
     case change
+    case backup
 }
 
 
@@ -16116,6 +16159,8 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         
         case 2: return .change
         
+        case 3: return .backup
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -16130,6 +16175,10 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         
         case .change:
             writeInt(&buf, Int32(2))
+        
+        
+        case .backup:
+            writeInt(&buf, Int32(3))
         
         }
     }
@@ -23471,6 +23520,8 @@ public enum TapSignerCmd {
     
     case setup(SetupCmd
     )
+    case backup(pin: String
+    )
     case derive(pin: String
     )
     case change(currentPin: String, newPin: String
@@ -23495,10 +23546,13 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
         case 1: return .setup(try FfiConverterTypeSetupCmd.read(from: &buf)
         )
         
-        case 2: return .derive(pin: try FfiConverterString.read(from: &buf)
+        case 2: return .backup(pin: try FfiConverterString.read(from: &buf)
         )
         
-        case 3: return .change(currentPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf)
+        case 3: return .derive(pin: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .change(currentPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23514,13 +23568,18 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
             FfiConverterTypeSetupCmd.write(v1, into: &buf)
             
         
-        case let .derive(pin):
+        case let .backup(pin):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(pin, into: &buf)
             
         
-        case let .change(currentPin,newPin):
+        case let .derive(pin):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(pin, into: &buf)
+            
+        
+        case let .change(currentPin,newPin):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(currentPin, into: &buf)
             FfiConverterString.write(newPin, into: &buf)
             
@@ -23759,6 +23818,8 @@ public enum TapSignerResponse {
     
     case setup(SetupCmdResponse
     )
+    case backup(Data
+    )
     case `import`(DeriveInfo
     )
     case change
@@ -23782,10 +23843,13 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
         case 1: return .setup(try FfiConverterTypeSetupCmdResponse.read(from: &buf)
         )
         
-        case 2: return .`import`(try FfiConverterTypeDeriveInfo.read(from: &buf)
+        case 2: return .backup(try FfiConverterData.read(from: &buf)
         )
         
-        case 3: return .change
+        case 3: return .`import`(try FfiConverterTypeDeriveInfo.read(from: &buf)
+        )
+        
+        case 4: return .change
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23800,13 +23864,18 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
             FfiConverterTypeSetupCmdResponse.write(v1, into: &buf)
             
         
-        case let .`import`(v1):
+        case let .backup(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterData.write(v1, into: &buf)
+            
+        
+        case let .`import`(v1):
+            writeInt(&buf, Int32(3))
             FfiConverterTypeDeriveInfo.write(v1, into: &buf)
             
         
         case .change:
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
         
         }
     }
@@ -29633,6 +29702,13 @@ public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     )
 })
 }
+public func tapSignerResponseBackupResponse(response: TapSignerResponse) -> Data?  {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_response_backup_response(
+        FfiConverterTypeTapSignerResponse_lower(response),$0
+    )
+})
+}
 public func tapSignerResponseChangeResponse(response: TapSignerResponse) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_response_change_response(
@@ -29922,6 +29998,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_response_backup_response() != 38008) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_response_change_response() != 53410) {
@@ -30281,6 +30360,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet_by_card_ident() != 14938) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 8335) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_ffiapp_git_short_hash() != 10133) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30315,6 +30397,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 13093) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 25516) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 31318) {
@@ -30771,6 +30856,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 9964) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_get_tap_signer_backup() != 24904) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 31100) {

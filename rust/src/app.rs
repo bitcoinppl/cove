@@ -24,7 +24,7 @@ use macros::impl_default_for;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
-use tap::TapFallible as _;
+use tap::{TapFallible as _, TapOptional};
 use tracing::{debug, error, warn};
 
 pub static APP: OnceCell<App> = OnceCell::new();
@@ -264,6 +264,32 @@ impl FfiApp {
             .wallets()
             .find_by_tap_signer_ident(ident, network, mode)
             .unwrap_or(None)
+    }
+
+    /// Get the backup for the tap signer
+    #[uniffi::method]
+    pub fn get_tap_signer_backup(&self, ident: &str) -> Option<Vec<u8>> {
+        let metadata = self
+            .find_tap_signer_wallet_by_card_ident(ident)
+            .tap_none(|| debug!("Unable to find wallet with card ident {ident}"))?;
+
+        let keychain = Keychain::global();
+        keychain.get_tap_signer_backup(&metadata.id)
+    }
+
+    /// Save the backup for the tap signer in the keychain
+    #[uniffi::method]
+    pub fn save_tap_signer_backup(&self, ident: &str, backup: &[u8]) -> bool {
+        let run = || {
+            let metadata = self
+                .find_tap_signer_wallet_by_card_ident(ident)
+                .tap_none(|| debug!("Unable to find wallet with card ident {ident}"))?;
+
+            let keychain = Keychain::global();
+            keychain.save_tap_signer_backup(&metadata.id, backup).ok()
+        };
+
+        run().is_some()
     }
 
     pub fn version(&self) -> String {

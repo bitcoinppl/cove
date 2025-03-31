@@ -8,6 +8,11 @@
 import ActivityIndicatorView
 import SwiftUI
 
+struct ExportingBackup: Equatable {
+    var tapSigner: TapSigner
+    var backup: Data
+}
+
 private enum SheetState: Equatable {
     case receive
     case chooseAddressType([FoundAddress])
@@ -46,6 +51,8 @@ struct SelectedWalletScreen: View {
     @State private var isExportingLabels = false
     @State private var isImportingLabels = false
     @State private var scannedLabels: TaggedString? = nil
+    @State private var exportingBackup: ExportingBackup? = nil
+    @State private var isExportingBackup = false
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -194,6 +201,7 @@ struct SelectedWalletScreen: View {
                 Menu {
                     MoreInfoPopover(
                         manager: manager,
+                        exportingBackup: $exportingBackup,
                         isExportingLabels: $isExportingLabels,
                         isImportingLabels: $isImportingLabels
                     )
@@ -230,6 +238,12 @@ struct SelectedWalletScreen: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(Color.midnightBlue, for: .navigationBar)
         .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
+        .onChange(of: exportingBackup) { _, new in
+            if new != nil { isExportingBackup = true } else { isExportingBackup = false }
+        }
+        .onChange(of: isExportingBackup) { _, new in
+            if !new { exportingBackup = nil }
+        }
         .sheet(item: $sheetState, content: SheetContent)
         .fileExporter(
             isPresented: $isExportingLabels,
@@ -242,6 +256,26 @@ struct SelectedWalletScreen: View {
                 alertState = .init(.exportSuccess)
             case let .failure(error):
                 alertState = .init(.unableToExportLabels(error.localizedDescription))
+            }
+        }
+        .fileExporter(
+            isPresented: $isExportingBackup,
+            document: TextDocument(text: hexEncode(bytes: exportingBackup?.backup ?? Data())),
+            contentType: .plainText,
+            defaultFilename: "\(exportingBackup?.tapSigner.cardIdent ?? "TAPSIGNER")_backup.txt"
+        ) { result in
+            switch result {
+            case .success:
+                app.sheetState = .none
+                app.alertState = .init(
+                    .general(
+                        title: "Backup Saved!",
+                        message: "Your backup has been save successfully!"
+                    )
+                )
+            case let .failure(error):
+                app.alertState = .init(
+                    .general(title: "Saving Backup Failed!", message: error.localizedDescription))
             }
         }
         .fileImporter(

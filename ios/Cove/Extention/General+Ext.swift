@@ -174,6 +174,10 @@ extension TapSignerResponse {
         tapSignerResponseDeriveResponse(response: self)
     }
 
+    var backupResponse: Data? {
+        tapSignerResponseBackupResponse(response: self)
+    }
+
     var isChangeResponse: Bool {
         tapSignerResponseChangeResponse(response: self)
     }

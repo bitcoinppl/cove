@@ -21,6 +21,26 @@ struct TapSignerEnterPin: View {
     // private
     @State private var pin: String = ""
     @FocusState private var isFocused
+    @State private var exportingBackup: Data? = nil
+
+    // confirmed pin is correct, now run the action
+    func runAction(_ nfc: TapSignerNFC, _ pin: String) {
+        switch action {
+        case .derive: deriveAction(nfc, pin)
+        case .change:
+            manager.navigate(
+                to:
+                .newPin(
+                    TapSignerNewPinArgs(
+                        tapSigner: tapSigner,
+                        startingPin: pin,
+                        chainCode: .none,
+                        action: .change
+                    )))
+        case .backup:
+            backupAction(nfc, pin)
+        }
+    }
 
     func deriveAction(_ nfc: TapSignerNFC, _ pin: String) {
         Task {
@@ -34,6 +54,22 @@ struct TapSignerEnterPin: View {
             }
 
             await MainActor.run { self.pin = "" }
+        }
+    }
+
+    func backupAction(_ nfc: TapSignerNFC, _ pin: String) {
+        Task {
+            switch await nfc.backup(pin: pin) {
+            case let .success(backup):
+                let _ = app.saveTapSignerBackup(tapSigner, backup)
+                await MainActor.run { exportingBackup = backup }
+            case let .failure(error):
+                if !error.isAuthError {
+                    app.alertState = .init(.general(title: "Backup Failed!", message: error.describe))
+                }
+
+                await MainActor.run { self.pin = "" }
+            }
         }
     }
 
@@ -103,17 +139,7 @@ struct TapSignerEnterPin: View {
 
                 if newPin.count == 6 {
                     manager.enteredPin = newPin
-                    switch action {
-                    case .derive: deriveAction(nfc, newPin)
-                    case .change: manager.navigate(to:
-                            .newPin(
-                                TapSignerNewPinArgs(
-                                    tapSigner: tapSigner,
-                                    startingPin: newPin,
-                                    chainCode: .none,
-                                    action: .change
-                                )))
-                    }
+                    return runAction(nfc, newPin)
                 }
 
                 if newPin.count > 6, old.count < 6 {
@@ -129,6 +155,29 @@ struct TapSignerEnterPin: View {
         }
         .scrollIndicators(.hidden)
         .navigationBarHidden(true)
+        .fileExporter(
+            isPresented: Binding(
+                get: { exportingBackup != nil },
+                set: { enabled in if !enabled { exportingBackup = nil } }
+            ),
+            document: TextDocument(text: hexEncode(bytes: exportingBackup ?? Data())),
+            contentType: .plainText,
+            defaultFilename: "\(tapSigner.cardIdent)_backup.txt"
+        ) { result in
+            switch result {
+            case .success:
+                app.sheetState = .none
+                app.alertState = .init(
+                    .general(
+                        title: "Backup Saved!",
+                        message: "Your backup has been save successfully!"
+                    )
+                )
+            case let .failure(error):
+                app.alertState = .init(
+                    .general(title: "Saving Backup Failed!", message: error.localizedDescription))
+            }
+        }
     }
 }
 

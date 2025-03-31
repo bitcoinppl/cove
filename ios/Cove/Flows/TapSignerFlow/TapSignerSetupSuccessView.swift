@@ -143,11 +143,15 @@ struct TapSignerSetupSuccess: View {
         ) { result in
             switch result {
             case .success:
-                // TOOO: alert
-                Log.debug("Successfully exported backup")
+                app.alertState = .init(
+                    .general(
+                        title: "Backup Saved!",
+                        message: "Your backup has been save successfully!"
+                    )
+                )
             case let .failure(error):
-                // TOOO: alert
-                Log.error("Failed to export backup: \(error.localizedDescription)")
+                app.alertState = .init(
+                    .general(title: "Saving Backup Failed!", message: error.localizedDescription))
             }
         }
     }

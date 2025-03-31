@@ -157,6 +157,7 @@ pub struct Router {
 pub enum AfterPinAction {
     Derive,
     Change,
+    Backup,
 }
 
 /// When the user goes through entering the PIN and setting a new one, they are either setting up a new tapsigner
@@ -442,6 +443,7 @@ impl AfterPinAction {
         match self {
             Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
             Self::Change => "Please enter your current PIN".to_string(),
+            Self::Backup => "For security purposes, you need to enter your TAPSIGNER PIN before you can backup your wallet".to_string(),
         }
     }
 }
