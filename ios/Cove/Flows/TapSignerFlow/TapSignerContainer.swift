@@ -96,16 +96,12 @@ struct TapSignerContainer: View {
         case let .startingPin(tapSigner: t, chainCode: chainCode):
             TapSignerStartingPin(tapSigner: t, chainCode: chainCode)
                 .id(id("startingPin"))
-        case let .newPin(tapSigner: t, startingPin: pin, chainCode: chainCode):
-            TapSignerNewPin(tapSigner: t, startingPin: pin, chainCode: chainCode)
+        case let .newPin(args: args):
+            TapSignerNewPinView(args: args)
                 .id(id("newPin"))
-        case let .confirmPin(
-            tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode
-        ):
-            TapSignerConfirmPin(
-                tapSigner: t, startingPin: startingPin, newPin: newPin, chainCode: chainCode
-            )
-            .id(id("confirmPin"))
+        case let .confirmPin(args):
+            TapSignerConfirmPinView(args: args)
+                .id(id("confirmPin"))
         case let .setupSuccess(tapSigner, setup):
             TapSignerSetupSuccess(tapSigner: tapSigner, setup: setup)
                 .id(id("setupSuccess"))

@@ -180,3 +180,9 @@ extension AfterPinAction {
         afterPinActionUserMessage(action: self)
     }
 }
+
+extension TapSignerConfirmPinArgs {
+    init(from: TapSignerNewPinArgs, newPin: String) {
+        self = tapSignerConfirmPinArgsNewFromNewPin(args: from, newPin: newPin)
+    }
+}
