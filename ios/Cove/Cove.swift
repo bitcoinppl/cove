@@ -16094,6 +16094,7 @@ extension AddressError: Foundation.LocalizedError {
 public enum AfterPinAction {
     
     case derive
+    case change
 }
 
 
@@ -16113,6 +16114,8 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         
         case 1: return .derive
         
+        case 2: return .change
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -16123,6 +16126,10 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         
         case .derive:
             writeInt(&buf, Int32(1))
+        
+        
+        case .change:
+            writeInt(&buf, Int32(2))
         
         }
     }
@@ -23466,6 +23473,8 @@ public enum TapSignerCmd {
     )
     case derive(pin: String
     )
+    case change(currentPin: String, newPin: String
+    )
 }
 
 
@@ -23489,6 +23498,9 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
         case 2: return .derive(pin: try FfiConverterString.read(from: &buf)
         )
         
+        case 3: return .change(currentPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23505,6 +23517,12 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
         case let .derive(pin):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(pin, into: &buf)
+            
+        
+        case let .change(currentPin,newPin):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(currentPin, into: &buf)
+            FfiConverterString.write(newPin, into: &buf)
             
         }
     }
@@ -23743,6 +23761,7 @@ public enum TapSignerResponse {
     )
     case `import`(DeriveInfo
     )
+    case change
 }
 
 
@@ -23766,6 +23785,8 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
         case 2: return .`import`(try FfiConverterTypeDeriveInfo.read(from: &buf)
         )
         
+        case 3: return .change
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23783,6 +23804,10 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
             FfiConverterTypeDeriveInfo.write(v1, into: &buf)
             
+        
+        case .change:
+            writeInt(&buf, Int32(3))
+        
         }
     }
 }
@@ -29601,6 +29626,13 @@ public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     )
 })
 }
+public func tapSignerResponseChangeResponse(response: TapSignerResponse) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_response_change_response(
+        FfiConverterTypeTapSignerResponse_lower(response),$0
+    )
+})
+}
 public func tapSignerResponseDeriveResponse(response: TapSignerResponse) -> DeriveInfo?  {
     return try!  FfiConverterOptionTypeDeriveInfo.lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_response_derive_response(
@@ -29880,6 +29912,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_response_change_response() != 53410) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_response_derive_response() != 27872) {

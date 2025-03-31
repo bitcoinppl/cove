@@ -105,6 +105,14 @@ struct TapSignerEnterPin: View {
                     manager.enteredPin = newPin
                     switch action {
                     case .derive: deriveAction(nfc, newPin)
+                    case .change: manager.navigate(to:
+                            .newPin(
+                                TapSignerNewPinArgs(
+                                    tapSigner: tapSigner,
+                                    startingPin: newPin,
+                                    chainCode: .none,
+                                    action: .change
+                                )))
                     }
                 }
 

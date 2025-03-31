@@ -30,12 +30,15 @@ struct TapSignerConfirmPinView: View {
             return
         }
 
-        // setup the tapsigner
-        setupTapSigner()
+        switch args.action {
+        case .setup:
+            setupTapSigner()
+        case .change:
+            changeTapSignerPin()
+        }
     }
 
     func setupTapSigner() {
-        // success, start the NFC scanning process
         let nfc = manager.getOrCreateNfc(args.tapSigner)
 
         Task {
@@ -61,6 +64,11 @@ struct TapSignerConfirmPinView: View {
                 }
             }
         }
+    }
+
+    func changeTapSignerPin() {
+        let nfc = manager.getOrCreateNfc(args.tapSigner)
+        Task {}
     }
 
     var body: some View {

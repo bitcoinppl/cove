@@ -173,6 +173,10 @@ extension TapSignerResponse {
     var deriveResponse: DeriveInfo? {
         tapSignerResponseDeriveResponse(response: self)
     }
+
+    var isChangeResponse: Bool {
+        tapSignerResponseChangeResponse(response: self)
+    }
 }
 
 extension AfterPinAction {

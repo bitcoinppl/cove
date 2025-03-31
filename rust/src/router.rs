@@ -156,6 +156,7 @@ pub struct Router {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum AfterPinAction {
     Derive,
+    Change,
 }
 
 /// When the user goes through entering the PIN and setting a new one, they are either setting up a new tapsigner
@@ -439,7 +440,8 @@ fn is_tap_signer_route_equal(lhs: TapSignerRoute, rhs: TapSignerRoute) -> bool {
 impl AfterPinAction {
     pub fn user_message(&self) -> String {
         match self {
-            Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string()
+            Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
+            Self::Change => "Please enter your current PIN".to_string(),
         }
     }
 }
