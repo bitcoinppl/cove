@@ -29619,6 +29619,13 @@ public func tapSignerErrorIsAuthError(error: TapSignerReaderError) -> Bool  {
     )
 })
 }
+public func tapSignerErrorIsNoBackupError(error: TapSignerReaderError) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_error_is_no_backup_error(
+        FfiConverterTypeTapSignerReaderError_lower(error),$0
+    )
+})
+}
 public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_preview_new(
@@ -29909,6 +29916,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_error_is_auth_error() != 29742) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_error_is_no_backup_error() != 60157) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {

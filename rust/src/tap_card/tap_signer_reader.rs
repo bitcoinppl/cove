@@ -508,6 +508,13 @@ impl TapSignerReaderError {
             TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BadAuth))
         )
     }
+
+    pub fn is_no_backup_error(&self) -> bool {
+        matches!(
+            self,
+            TapSignerReaderError::TapSignerError(TransportError::CkTap(CkTapError::BackupFirst))
+        )
+    }
 }
 
 mod ffi {
@@ -577,6 +584,11 @@ mod ffi {
     #[uniffi::export]
     fn tap_signer_error_is_auth_error(error: TapSignerReaderError) -> bool {
         error.is_auth_error()
+    }
+
+    #[uniffi::export]
+    fn tap_signer_error_is_no_backup_error(error: TapSignerReaderError) -> bool {
+        error.is_no_backup_error()
     }
 
     // MARK: - FFI PREVIEW

@@ -75,13 +75,15 @@ struct TapSignerConfirmPinView: View {
             switch response {
             case .success:
                 app.alertState = .init(
-                    .general(title: "PIN Changed", message: "Your TAPSIGNER PIN was changed succesfully!")
+                    .general(
+                        title: "PIN Changed",
+                        message: "Your TAPSIGNER PIN was changed successfully!"
+                    )
                 )
             case let .failure(error):
-                if error.isAuthError {
-                    app.alertState = .init(.tapSignerInvalidAuth)
-                    return
-                }
+                if error.isAuthError { return app.alertState = .init(.tapSignerInvalidAuth) }
+                if error.isNoBackupError { return app.alertState = .init(.tapSignerNoBackup(args.tapSigner)) }
+
                 app.alertState = .init(.general(title: "Error", message: error.describe))
             }
         }
