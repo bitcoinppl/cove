@@ -68,7 +68,23 @@ struct TapSignerConfirmPinView: View {
 
     func changeTapSignerPin() {
         let nfc = manager.getOrCreateNfc(args.tapSigner)
-        Task {}
+        Task {
+            let response = await nfc.changePin(
+                currentPin: args.startingPin, newPin: args.newPin
+            )
+            switch response {
+            case .success:
+                app.alertState = .init(
+                    .general(title: "PIN Changed", message: "Your TAPSIGNER PIN was changed succesfully!")
+                )
+            case let .failure(error):
+                if error.isAuthError {
+                    app.alertState = .init(.tapSignerInvalidAuth)
+                    return
+                }
+                app.alertState = .init(.general(title: "Error", message: error.describe))
+            }
+        }
     }
 
     var body: some View {

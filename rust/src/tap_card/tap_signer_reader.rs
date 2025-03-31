@@ -202,7 +202,7 @@ impl TapSignerReader {
                 current_pin,
                 new_pin,
             } => {
-                self.change(&current_pin, &new_pin).await?;
+                self.change(&new_pin, &current_pin).await?;
                 Ok(TapSignerResponse::Change)
             }
         }
@@ -359,13 +359,13 @@ impl TapSignerReader {
         SetupCmdResponse::Complete(complete)
     }
 
-    async fn change(&self, current_pin: &str, new_pin: &str) -> Result<(), Error> {
+    async fn change(&self, new_pin: &str, current_pin: &str) -> Result<(), Error> {
         debug!("starting pin change");
 
         self.reader
             .lock()
             .await
-            .change(current_pin, new_pin)
+            .change(new_pin, current_pin)
             .await
             .map_err(TransportError::from)?;
 
