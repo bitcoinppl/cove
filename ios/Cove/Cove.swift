@@ -29586,6 +29586,13 @@ public func hexEncode(bytes: Data) -> String  {
     )
 })
 }
+public func hexToUtf8String(hex: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_func_hex_to_utf8_string(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
 public func isRouteEqual(route: Route, routeToCheck: Route) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_is_route_equal(
@@ -29699,6 +29706,13 @@ public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_preview_new(
         FfiConverterBool.lower(preview),$0
+    )
+})
+}
+public func tapSignerReadableIdentString(card: TapSigner) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_readable_ident_string(
+        FfiConverterTypeTapSigner_lower(card),$0
     )
 })
 }
@@ -29952,6 +29966,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_hex_encode() != 38168) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_func_hex_to_utf8_string() != 60553) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_func_is_route_equal() != 25732) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -29998,6 +30015,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_readable_ident_string() != 25593) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_response_backup_response() != 38008) {

@@ -140,6 +140,7 @@ bbqr = { version = "0.3", default-features = false }
 # hex / base64
 hex = "0.4.3"
 base64 = "0.22.0"
+data-encoding = "2.8.0"
 
 # parsing
 winnow = { version = "0.7", features = ["simd"] }

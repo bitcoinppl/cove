@@ -106,7 +106,7 @@ pub enum SendRoute {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct TapSignerNewPinArgs {
-    pub tap_signer: TapSigner,
+    pub tap_signer: Arc<TapSigner>,
     pub starting_pin: String,
     pub chain_code: Option<String>,
     pub action: TapSignerPinAction,
@@ -114,7 +114,7 @@ pub struct TapSignerNewPinArgs {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct TapSignerConfirmPinArgs {
-    pub tap_signer: TapSigner,
+    pub tap_signer: Arc<TapSigner>,
     pub starting_pin: String,
     pub new_pin: String,
     pub chain_code: Option<String>,
@@ -124,24 +124,24 @@ pub struct TapSignerConfirmPinArgs {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum TapSignerRoute {
     // setup routes
-    InitSelect(TapSigner),
-    InitAdvanced(TapSigner),
+    InitSelect(Arc<TapSigner>),
+    InitAdvanced(Arc<TapSigner>),
     StartingPin {
-        tap_signer: TapSigner,
+        tap_signer: Arc<TapSigner>,
         chain_code: Option<String>,
     },
     NewPin(TapSignerNewPinArgs),
     ConfirmPin(TapSignerConfirmPinArgs),
-    SetupSuccess(TapSigner, TapSignerSetupComplete),
-    SetupRetry(TapSigner, SetupCmdResponse),
+    SetupSuccess(Arc<TapSigner>, TapSignerSetupComplete),
+    SetupRetry(Arc<TapSigner>, SetupCmdResponse),
 
     // import routes
-    ImportSuccess(TapSigner, DeriveInfo),
-    ImportRetry(TapSigner),
+    ImportSuccess(Arc<TapSigner>, DeriveInfo),
+    ImportRetry(Arc<TapSigner>),
 
     // shared routes
     EnterPin {
-        tap_signer: TapSigner,
+        tap_signer: Arc<TapSigner>,
         action: AfterPinAction,
     },
 }
