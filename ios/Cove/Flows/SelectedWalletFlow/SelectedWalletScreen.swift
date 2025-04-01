@@ -262,7 +262,7 @@ struct SelectedWalletScreen: View {
             isPresented: $isExportingBackup,
             document: TextDocument(text: hexEncode(bytes: exportingBackup?.backup ?? Data())),
             contentType: .plainText,
-            defaultFilename: "\(exportingBackup?.tapSigner.cardIdent ?? "TAPSIGNER")_backup.txt"
+            defaultFilename: "\(exportingBackup?.tapSigner.identFileNamePrefix() ?? "TAPSIGNER")_backup.txt"
         ) { result in
             switch result {
             case .success:

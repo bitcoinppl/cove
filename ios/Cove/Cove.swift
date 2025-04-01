@@ -4752,13 +4752,14 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     
     /**
      * Find tapsigner wallet by card ident
+     * Get the backup for the tap signer
      */
-    func findTapSignerWalletByCardIdent(ident: String)  -> WalletMetadata?
+    func findTapSignerWallet(tapSigner: TapSigner)  -> WalletMetadata?
     
     /**
      * Get the backup for the tap signer
      */
-    func getTapSignerBackup(ident: String)  -> Data?
+    func getTapSignerBackup(tapSigner: TapSigner)  -> Data?
     
     func gitShortHash()  -> String
     
@@ -4812,7 +4813,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     /**
      * Save the backup for the tap signer in the keychain
      */
-    func saveTapSignerBackup(ident: String, backup: Data)  -> Bool
+    func saveTapSignerBackup(tapSigner: TapSigner, backup: Data)  -> Bool
     
     /**
      * Select a wallet
@@ -4957,11 +4958,12 @@ open func fees()async throws  -> FeeResponse  {
     
     /**
      * Find tapsigner wallet by card ident
+     * Get the backup for the tap signer
      */
-open func findTapSignerWalletByCardIdent(ident: String) -> WalletMetadata?  {
+open func findTapSignerWallet(tapSigner: TapSigner) -> WalletMetadata?  {
     return try!  FfiConverterOptionTypeWalletMetadata.lift(try! rustCall() {
-    uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet_by_card_ident(self.uniffiClonePointer(),
-        FfiConverterString.lower(ident),$0
+    uniffi_cove_fn_method_ffiapp_find_tap_signer_wallet(self.uniffiClonePointer(),
+        FfiConverterTypeTapSigner_lower(tapSigner),$0
     )
 })
 }
@@ -4969,10 +4971,10 @@ open func findTapSignerWalletByCardIdent(ident: String) -> WalletMetadata?  {
     /**
      * Get the backup for the tap signer
      */
-open func getTapSignerBackup(ident: String) -> Data?  {
+open func getTapSignerBackup(tapSigner: TapSigner) -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
     uniffi_cove_fn_method_ffiapp_get_tap_signer_backup(self.uniffiClonePointer(),
-        FfiConverterString.lower(ident),$0
+        FfiConverterTypeTapSigner_lower(tapSigner),$0
     )
 })
 }
@@ -5112,10 +5114,10 @@ open func resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: [Route])  {try!
     /**
      * Save the backup for the tap signer in the keychain
      */
-open func saveTapSignerBackup(ident: String, backup: Data) -> Bool  {
+open func saveTapSignerBackup(tapSigner: TapSigner, backup: Data) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(self.uniffiClonePointer(),
-        FfiConverterString.lower(ident),
+        FfiConverterTypeTapSigner_lower(tapSigner),
         FfiConverterData.lower(backup),$0
     )
 })
@@ -9902,8 +9904,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func getFeeOptions() async throws  -> FeeRateOptions
     
-    func getTapSignerBackup()  -> Data?
-    
     /**
      * gets the transactions for the wallet that are currently available
      */
@@ -10413,13 +10413,6 @@ open func getFeeOptions()async throws  -> FeeRateOptions  {
             liftFunc: FfiConverterTypeFeeRateOptions_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
-}
-    
-open func getTapSignerBackup() -> Data?  {
-    return try!  FfiConverterOptionData.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustwalletmanager_get_tap_signer_backup(self.uniffiClonePointer(),$0
-    )
-})
 }
     
     /**
@@ -11172,6 +11165,147 @@ public func FfiConverterTypeSetupCmd_lift(_ pointer: UnsafeMutableRawPointer) th
 #endif
 public func FfiConverterTypeSetupCmd_lower(_ value: SetupCmd) -> UnsafeMutableRawPointer {
     return FfiConverterTypeSetupCmd.lower(value)
+}
+
+
+
+
+
+
+public protocol TapSignerProtocol: AnyObject, Sendable {
+    
+    func fullCardIdent()  -> String
+    
+    func identFileNamePrefix()  -> String
+    
+    func isEqual(rhs: TapSigner)  -> Bool
+    
+}
+open class TapSigner: TapSignerProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_tapsigner(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_tapsigner(pointer, $0) }
+    }
+
+    
+
+    
+open func fullCardIdent() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsigner_full_card_ident(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func identFileNamePrefix() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsigner_ident_file_name_prefix(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func isEqual(rhs: TapSigner) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_tapsigner_is_equal(self.uniffiClonePointer(),
+        FfiConverterTypeTapSigner_lower(rhs),$0
+    )
+})
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTapSigner: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = TapSigner
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> TapSigner {
+        return TapSigner(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: TapSigner) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSigner {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: TapSigner, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSigner_lift(_ pointer: UnsafeMutableRawPointer) throws -> TapSigner {
+    return try FfiConverterTypeTapSigner.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTapSigner_lower(_ value: TapSigner) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeTapSigner.lower(value)
 }
 
 
@@ -15480,92 +15614,6 @@ public func FfiConverterTypeSplitOutput_lower(_ value: SplitOutput) -> RustBuffe
 }
 
 
-public struct TapSigner {
-    public var state: TapSignerState
-    public var cardIdent: String
-    public var nonce: String
-    public var signature: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(state: TapSignerState, cardIdent: String, nonce: String, signature: String) {
-        self.state = state
-        self.cardIdent = cardIdent
-        self.nonce = nonce
-        self.signature = signature
-    }
-}
-
-#if compiler(>=6)
-extension TapSigner: Sendable {}
-#endif
-
-
-extension TapSigner: Equatable, Hashable {
-    public static func ==(lhs: TapSigner, rhs: TapSigner) -> Bool {
-        if lhs.state != rhs.state {
-            return false
-        }
-        if lhs.cardIdent != rhs.cardIdent {
-            return false
-        }
-        if lhs.nonce != rhs.nonce {
-            return false
-        }
-        if lhs.signature != rhs.signature {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(state)
-        hasher.combine(cardIdent)
-        hasher.combine(nonce)
-        hasher.combine(signature)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeTapSigner: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TapSigner {
-        return
-            try TapSigner(
-                state: FfiConverterTypeTapSignerState.read(from: &buf), 
-                cardIdent: FfiConverterString.read(from: &buf), 
-                nonce: FfiConverterString.read(from: &buf), 
-                signature: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: TapSigner, into buf: inout [UInt8]) {
-        FfiConverterTypeTapSignerState.write(value.state, into: &buf)
-        FfiConverterString.write(value.cardIdent, into: &buf)
-        FfiConverterString.write(value.nonce, into: &buf)
-        FfiConverterString.write(value.signature, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTapSigner_lift(_ buf: RustBuffer) throws -> TapSigner {
-    return try FfiConverterTypeTapSigner.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeTapSigner_lower(_ value: TapSigner) -> RustBuffer {
-    return FfiConverterTypeTapSigner.lower(value)
-}
-
-
 public struct TapSignerConfirmPinArgs {
     public var tapSigner: TapSigner
     public var startingPin: String
@@ -15587,36 +15635,6 @@ public struct TapSignerConfirmPinArgs {
 #if compiler(>=6)
 extension TapSignerConfirmPinArgs: Sendable {}
 #endif
-
-
-extension TapSignerConfirmPinArgs: Equatable, Hashable {
-    public static func ==(lhs: TapSignerConfirmPinArgs, rhs: TapSignerConfirmPinArgs) -> Bool {
-        if lhs.tapSigner != rhs.tapSigner {
-            return false
-        }
-        if lhs.startingPin != rhs.startingPin {
-            return false
-        }
-        if lhs.newPin != rhs.newPin {
-            return false
-        }
-        if lhs.chainCode != rhs.chainCode {
-            return false
-        }
-        if lhs.action != rhs.action {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(tapSigner)
-        hasher.combine(startingPin)
-        hasher.combine(newPin)
-        hasher.combine(chainCode)
-        hasher.combine(action)
-    }
-}
 
 
 
@@ -15679,32 +15697,6 @@ public struct TapSignerNewPinArgs {
 #if compiler(>=6)
 extension TapSignerNewPinArgs: Sendable {}
 #endif
-
-
-extension TapSignerNewPinArgs: Equatable, Hashable {
-    public static func ==(lhs: TapSignerNewPinArgs, rhs: TapSignerNewPinArgs) -> Bool {
-        if lhs.tapSigner != rhs.tapSigner {
-            return false
-        }
-        if lhs.startingPin != rhs.startingPin {
-            return false
-        }
-        if lhs.chainCode != rhs.chainCode {
-            return false
-        }
-        if lhs.action != rhs.action {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(tapSigner)
-        hasher.combine(startingPin)
-        hasher.combine(chainCode)
-        hasher.combine(action)
-    }
-}
 
 
 
@@ -19467,8 +19459,6 @@ public func FfiConverterTypeHardwareWalletMetadata_lower(_ value: HardwareWallet
     return FfiConverterTypeHardwareWalletMetadata.lower(value)
 }
 
-
-extension HardwareWalletMetadata: Equatable, Hashable {}
 
 
 
@@ -23390,8 +23380,6 @@ public func FfiConverterTypeTapCard_lower(_ value: TapCard) -> RustBuffer {
 }
 
 
-extension TapCard: Equatable, Hashable {}
-
 
 
 
@@ -23410,6 +23398,9 @@ public enum TapCardParseError: Swift.Error {
     case EmptyCardState
     case ParseSlotNumberError(String
     )
+    case UnableToParseSignature(String
+    )
+    case UnableToRecoverPubkey
 }
 
 
@@ -23442,6 +23433,10 @@ public struct FfiConverterTypeTapCardParseError: FfiConverterRustBuffer {
         case 6: return .ParseSlotNumberError(
             try FfiConverterString.read(from: &buf)
             )
+        case 7: return .UnableToParseSignature(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 8: return .UnableToRecoverPubkey
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23482,6 +23477,15 @@ public struct FfiConverterTypeTapCardParseError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case let .UnableToParseSignature(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .UnableToRecoverPubkey:
+            writeInt(&buf, Int32(8))
+        
         }
     }
 }
@@ -29709,13 +29713,6 @@ public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     )
 })
 }
-public func tapSignerReadableIdentString(card: TapSigner) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_tap_signer_readable_ident_string(
-        FfiConverterTypeTapSigner_lower(card),$0
-    )
-})
-}
 public func tapSignerResponseBackupResponse(response: TapSignerResponse) -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_response_backup_response(
@@ -30014,10 +30011,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_tap_signer_error_is_no_backup_error() != 60157) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_tap_signer_preview_new() != 49925) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_tap_signer_readable_ident_string() != 25593) {
+    if (uniffi_cove_checksum_func_tap_signer_preview_new() != 34295) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_response_backup_response() != 38008) {
@@ -30377,10 +30371,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_fees() != 44559) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet_by_card_ident() != 14938) {
+    if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet() != 50418) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 8335) {
+    if (uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 52813) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_git_short_hash() != 10133) {
@@ -30419,7 +30413,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 13093) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 25516) {
+    if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 41109) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 31318) {
@@ -30878,9 +30872,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 9964) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_get_tap_signer_backup() != 24904) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 31100) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30969,6 +30960,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_sentandreceived_sent() != 29124) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsigner_full_card_ident() != 52727) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsigner_ident_file_name_prefix() != 62440) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsigner_is_equal() != 4368) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 43346) {
@@ -31265,7 +31265,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 31333) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 44731) {
+    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 29732) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 28304) {

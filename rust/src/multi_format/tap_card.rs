@@ -51,9 +51,17 @@ impl TapCard {
 
 #[uniffi::export]
 impl TapSigner {
-    pub fn readable_ident(&self) -> String {
+    pub fn full_card_ident(&self) -> String {
         let pubkey_bytes = PublicKey::serialize(&self.pubkey);
         parse::card_pubkey_to_full_ident(&pubkey_bytes).expect("already validated pubkey")
+    }
+
+    pub fn ident_file_name_prefix(&self) -> String {
+        self.full_card_ident().replace("-", "").to_ascii_lowercase()
+    }
+
+    pub fn is_equal(&self, rhs: &Self) -> bool {
+        self == rhs
     }
 }
 

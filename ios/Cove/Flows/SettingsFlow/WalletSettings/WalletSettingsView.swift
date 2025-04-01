@@ -45,7 +45,7 @@ struct WalletSettingsView: View {
                     HStack {
                         Text("Card Identifier")
                         Spacer()
-                        Text(t.friendlyIdent())
+                        Text(t.fullCardIdent())
                             .foregroundColor(.secondary)
                     }
                     .font(.subheadline)

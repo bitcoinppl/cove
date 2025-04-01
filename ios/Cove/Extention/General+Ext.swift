@@ -196,8 +196,9 @@ extension TapSignerConfirmPinArgs {
     }
 }
 
-extension TapSigner {
-    func friendlyIdent() -> String {
-        tapSignerReadableIdentString(card: self)
+extension TapSigner: Equatable {
+    public static func == (lhs: TapSigner, rhs: TapSigner) -> Bool {
+        lhs.isEqual(rhs: rhs)
     }
+
 }
