@@ -72,8 +72,8 @@ extension PriceResponse: Equatable {
     }
 }
 
-public extension SendRoute {
-    func id() -> WalletId {
+extension SendRoute {
+    public func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
         case let .confirm(id: id, details: _, signedTransaction: _): id
@@ -95,7 +95,8 @@ extension [BoxedRoute] {
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
+    {
         feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
 }
@@ -178,6 +179,10 @@ extension TapSignerResponse {
         tapSignerResponseBackupResponse(response: self)
     }
 
+    var signResponse: BitcoinTransaction? {
+        tapSignerResponseSignResponse(response: self)
+    }
+
     var isChangeResponse: Bool {
         tapSignerResponseChangeResponse(response: self)
     }
@@ -204,6 +209,14 @@ extension TapSigner: Equatable {
 extension WalletMetadata {
     func isTapSigner() -> Bool {
         hardwareMetadata?.isTapSigner() ?? false
+    }
+
+    func identOrFingerprint() -> String {
+        if case let .tapSigner(t) = self.hardwareMetadata {
+            return t.fullCardIdent()
+        }
+
+        return self.masterFingerprint?.asUppercase() ?? "No Fingerprint"
     }
 }
 

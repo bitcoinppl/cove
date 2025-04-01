@@ -1,30 +1,35 @@
 use std::hash::Hasher;
 use std::sync::Arc;
 
-use bitcoin::bip32::Fingerprint;
-use bitcoin::hashes::HashEngine as _;
-use bitcoin::secp256k1;
+use bitcoin::{bip32::Fingerprint, hashes::HashEngine as _, secp256k1};
 use nid::Nanoid;
-use parking_lot::Mutex as SyncMutex;
-use parking_lot::RwLock;
-use rust_cktap::apdu::DeriveResponse;
-use rust_cktap::commands::Authentication;
-use rust_cktap::commands::Wait as _;
-use rust_cktap::tap_signer::TapSignerError;
-use rust_cktap::{CkTapCard, commands::CkTransport as _};
+use parking_lot::{Mutex as SyncMutex, RwLock};
+use rust_cktap::{
+    CkTapCard,
+    apdu::DeriveResponse,
+    commands::{Authentication, CkTransport as _, Wait as _},
+    tap_signer::TapSignerError,
+};
+
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::database::Database;
-use crate::network::Network;
+use crate::{
+    database::Database, network::Network, psbt::Psbt, transaction::ffi::BitcoinTransaction,
+};
 
-use super::CkTapError;
-use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
+use super::{CkTapError, TapcardTransport, TapcardTransportProtocol, TransportError};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum TapSignerReaderError {
     #[error(transparent)]
     TapSignerError(#[from] TransportError),
+
+    #[error("PsbtSignError: {0}")]
+    PsbtSignError(String),
+
+    #[error("ExtractTxError: {0}")]
+    ExtractTxError(String),
 
     #[error("UnknownCardType: {0}, expected TapSigner")]
     UnknownCardType(String),
@@ -78,6 +83,10 @@ pub enum TapSignerCmd {
         current_pin: String,
         new_pin: String,
     },
+    Sign {
+        psbt: Arc<Psbt>,
+        pin: String,
+    },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
@@ -93,6 +102,7 @@ pub enum TapSignerResponse {
     Backup(Vec<u8>),
     Import(DeriveInfo),
     Change,
+    Sign(Arc<BitcoinTransaction>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -214,6 +224,11 @@ impl TapSignerReader {
                 self.change(&new_pin, &current_pin).await?;
                 Ok(TapSignerResponse::Change)
             }
+
+            TapSignerCmd::Sign { psbt, pin } => {
+                let signed_tx = self.sign(psbt, &pin).await?;
+                Ok(TapSignerResponse::Sign(signed_tx.into()))
+            }
         }
     }
 
@@ -254,6 +269,25 @@ impl TapSignerReader {
             // already complete, just return the backup
             SetupCmdResponse::Complete(c) => Ok(SetupCmdResponse::Complete(c)),
         }
+    }
+
+    pub async fn sign(&self, psbt: Arc<Psbt>, pin: &str) -> Result<BitcoinTransaction, Error> {
+        let psbt = Arc::unwrap_or_clone(psbt);
+
+        let psbt: bitcoin::Psbt = self
+            .reader
+            .lock()
+            .await
+            .sign_bip84_psbt(psbt.into(), pin)
+            .await
+            .map_err(|e| Error::PsbtSignError(e.to_string()))?;
+
+        let signed_txn: BitcoinTransaction = psbt
+            .extract_tx()
+            .map_err(|e| Error::ExtractTxError(e.to_string()))?
+            .into();
+
+        Ok(signed_txn)
     }
 
     /// Get the last response from the reader
@@ -519,6 +553,13 @@ impl TapSignerResponse {
             _ => None,
         }
     }
+
+    pub fn sign_response(&self) -> Option<Arc<BitcoinTransaction>> {
+        match self {
+            TapSignerResponse::Sign(txn) => Some(Arc::clone(txn)),
+            _ => None,
+        }
+    }
 }
 
 impl From<TapSignerError> for TapSignerReaderError {
@@ -585,6 +626,13 @@ mod ffi {
     #[uniffi::export]
     fn tap_signer_response_backup_response(response: TapSignerResponse) -> Option<Vec<u8>> {
         response.backup_response().map(Into::into)
+    }
+
+    #[uniffi::export]
+    fn tap_signer_response_sign_response(
+        response: TapSignerResponse,
+    ) -> Option<Arc<BitcoinTransaction>> {
+        response.sign_response()
     }
 
     #[uniffi::export]

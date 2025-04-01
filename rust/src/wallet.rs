@@ -365,7 +365,7 @@ impl Wallet {
 
         // set metadata
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
-        metadata.name = "TapSigner".to_string();
+        metadata.name = "TAPSIGNER".to_string();
         metadata.wallet_mode = mode;
         metadata.hardware_metadata = Some(HardwareWalletMetadata::TapSigner(tap_signer));
         metadata.origin = descriptors.origin().ok();

@@ -11332,6 +11332,8 @@ public protocol TapSignerReaderProtocol: AnyObject, Sendable {
      */
     func setup(cmd: SetupCmd) async throws  -> SetupCmdResponse
     
+    func sign(psbt: Psbt, pin: String) async throws  -> BitcoinTransaction
+    
 }
 open class TapSignerReader: TapSignerReaderProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -11464,6 +11466,23 @@ open func setup(cmd: SetupCmd)async throws  -> SetupCmdResponse  {
             completeFunc: ffi_cove_rust_future_complete_rust_buffer,
             freeFunc: ffi_cove_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSetupCmdResponse_lift,
+            errorHandler: FfiConverterTypeTapSignerReaderError_lift
+        )
+}
+    
+open func sign(psbt: Psbt, pin: String)async throws  -> BitcoinTransaction  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_tapsignerreader_sign(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePsbt_lower(psbt),FfiConverterString.lower(pin)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeBitcoinTransaction_lift,
             errorHandler: FfiConverterTypeTapSignerReaderError_lift
         )
 }
@@ -16130,6 +16149,8 @@ public enum AfterPinAction {
     case derive
     case change
     case backup
+    case sign(Psbt
+    )
 }
 
 
@@ -16153,6 +16174,9 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         
         case 3: return .backup
         
+        case 4: return .sign(try FfiConverterTypePsbt.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -16172,6 +16196,11 @@ public struct FfiConverterTypeAfterPinAction: FfiConverterRustBuffer {
         case .backup:
             writeInt(&buf, Int32(3))
         
+        
+        case let .sign(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypePsbt.write(v1, into: &buf)
+            
         }
     }
 }
@@ -16191,8 +16220,6 @@ public func FfiConverterTypeAfterPinAction_lower(_ value: AfterPinAction) -> Rus
     return FfiConverterTypeAfterPinAction.lower(value)
 }
 
-
-extension AfterPinAction: Equatable, Hashable {}
 
 
 
@@ -23530,6 +23557,8 @@ public enum TapSignerCmd {
     )
     case change(currentPin: String, newPin: String
     )
+    case sign(psbt: Psbt, pin: String
+    )
 }
 
 
@@ -23559,6 +23588,9 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
         case 4: return .change(currentPin: try FfiConverterString.read(from: &buf), newPin: try FfiConverterString.read(from: &buf)
         )
         
+        case 5: return .sign(psbt: try FfiConverterTypePsbt.read(from: &buf), pin: try FfiConverterString.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23586,6 +23618,12 @@ public struct FfiConverterTypeTapSignerCmd: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
             FfiConverterString.write(currentPin, into: &buf)
             FfiConverterString.write(newPin, into: &buf)
+            
+        
+        case let .sign(psbt,pin):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypePsbt.write(psbt, into: &buf)
+            FfiConverterString.write(pin, into: &buf)
             
         }
     }
@@ -23687,6 +23725,10 @@ public enum TapSignerReaderError: Swift.Error {
     
     case TapSignerError(TransportError
     )
+    case PsbtSignError(String
+    )
+    case ExtractTxError(String
+    )
     case UnknownCardType(String
     )
     case NoCommand
@@ -23718,21 +23760,27 @@ public struct FfiConverterTypeTapSignerReaderError: FfiConverterRustBuffer {
         case 1: return .TapSignerError(
             try FfiConverterTypeTransportError.read(from: &buf)
             )
-        case 2: return .UnknownCardType(
+        case 2: return .PsbtSignError(
             try FfiConverterString.read(from: &buf)
             )
-        case 3: return .NoCommand
-        case 4: return .InvalidPinLength(
+        case 3: return .ExtractTxError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .UnknownCardType(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 5: return .NoCommand
+        case 6: return .InvalidPinLength(
             try FfiConverterUInt8.read(from: &buf)
             )
-        case 5: return .NonNumericPin(
+        case 7: return .NonNumericPin(
             try FfiConverterString.read(from: &buf)
             )
-        case 6: return .SetupAlreadyComplete
-        case 7: return .InvalidChainCodeLength(
+        case 8: return .SetupAlreadyComplete
+        case 9: return .InvalidChainCodeLength(
             try FfiConverterUInt32.read(from: &buf)
             )
-        case 8: return .Unknown(
+        case 10: return .Unknown(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -23752,36 +23800,46 @@ public struct FfiConverterTypeTapSignerReaderError: FfiConverterRustBuffer {
             FfiConverterTypeTransportError.write(v1, into: &buf)
             
         
-        case let .UnknownCardType(v1):
+        case let .PsbtSignError(v1):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(v1, into: &buf)
             
         
-        case .NoCommand:
+        case let .ExtractTxError(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .UnknownCardType(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .NoCommand:
+            writeInt(&buf, Int32(5))
         
         
         case let .InvalidPinLength(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(6))
             FfiConverterUInt8.write(v1, into: &buf)
             
         
         case let .NonNumericPin(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
             
         
         case .SetupAlreadyComplete:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
         
         
         case let .InvalidChainCodeLength(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterUInt32.write(v1, into: &buf)
             
         
         case let .Unknown(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -23827,6 +23885,8 @@ public enum TapSignerResponse {
     case `import`(DeriveInfo
     )
     case change
+    case sign(BitcoinTransaction
+    )
 }
 
 
@@ -23855,6 +23915,9 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
         
         case 4: return .change
         
+        case 5: return .sign(try FfiConverterTypeBitcoinTransaction.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23881,6 +23944,11 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
         case .change:
             writeInt(&buf, Int32(4))
         
+        
+        case let .sign(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeBitcoinTransaction.write(v1, into: &buf)
+            
         }
     }
 }
@@ -29748,6 +29816,13 @@ public func tapSignerResponseSetupResponse(response: TapSignerResponse) -> Setup
     )
 })
 }
+public func tapSignerResponseSignResponse(response: TapSignerResponse) -> BitcoinTransaction?  {
+    return try!  FfiConverterOptionTypeBitcoinTransaction.lift(try! rustCall() {
+    uniffi_cove_fn_func_tap_signer_response_sign_response(
+        FfiConverterTypeTapSignerResponse_lower(response),$0
+    )
+})
+}
 public func tapSignerSetupCompleteNew(preview: Bool) -> TapSignerSetupComplete  {
     return try!  FfiConverterTypeTapSignerSetupComplete_lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_setup_complete_new(
@@ -30034,6 +30109,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_response_setup_response() != 1061) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_tap_signer_response_sign_response() != 6394) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_setup_complete_new() != 48955) {
@@ -30991,6 +31069,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsignerreader_setup() != 7185) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_tapsignerreader_sign() != 32609) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_address() != 31151) {

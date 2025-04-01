@@ -29,13 +29,10 @@ struct SendFlowAccountSection: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(
-                        metadata.masterFingerprint?.asUppercase()
-                            ?? "No Fingerprint"
-                    )
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    Text(metadata.identOrFingerprint())
+                        .font(.footnote)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
 
                     Text(metadata.name)
                         .font(.footnote)

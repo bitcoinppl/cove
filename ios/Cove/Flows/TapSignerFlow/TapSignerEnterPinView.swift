@@ -26,31 +26,33 @@ struct TapSignerEnterPin: View {
     // confirmed pin is correct, now run the action
     func runAction(_ nfc: TapSignerNFC, _ pin: String) {
         switch action {
-        case .derive: deriveAction(nfc, pin)
-        case .change:
-            manager.navigate(
-                to:
-                .newPin(
-                    TapSignerNewPinArgs(
-                        tapSigner: tapSigner,
-                        startingPin: pin,
-                        chainCode: .none,
-                        action: .change
-                    )))
-        case .backup:
-            backupAction(nfc, pin)
+            case .derive: deriveAction(nfc, pin)
+            case .change:
+                manager.navigate(
+                    to:
+                    .newPin(
+                        TapSignerNewPinArgs(
+                            tapSigner: tapSigner,
+                            startingPin: pin,
+                            chainCode: .none,
+                            action: .change
+                        )))
+            case .backup:
+                backupAction(nfc, pin)
+            case let .sign(psbt):
+                signAction(nfc, psbt, pin)
         }
     }
 
     func deriveAction(_ nfc: TapSignerNFC, _ pin: String) {
         Task {
             switch await nfc.derive(pin: pin) {
-            case let .success(deriveInfo):
-                manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
-            case let .failure(error):
-                if !error.isAuthError {
-                    app.alertState = .init(.tapSignerDeriveFailed(error.describe))
-                }
+                case let .success(deriveInfo):
+                    manager.resetRoute(to: .importSuccess(tapSigner, deriveInfo))
+                case let .failure(error):
+                    if !error.isAuthError {
+                        app.alertState = .init(.tapSignerDeriveFailed(error.describe))
+                    }
             }
 
             await MainActor.run { self.pin = "" }
@@ -60,15 +62,43 @@ struct TapSignerEnterPin: View {
     func backupAction(_ nfc: TapSignerNFC, _ pin: String) {
         Task {
             switch await nfc.backup(pin: pin) {
-            case let .success(backup):
-                let _ = app.saveTapSignerBackup(tapSigner, backup)
-                await MainActor.run { exportingBackup = backup }
-            case let .failure(error):
-                if !error.isAuthError {
-                    app.alertState = .init(.general(title: "Backup Failed!", message: error.describe))
-                }
+                case let .success(backup):
+                    let _ = app.saveTapSignerBackup(tapSigner, backup)
+                    await MainActor.run { exportingBackup = backup }
+                case let .failure(error):
+                    if !error.isAuthError {
+                        app.alertState = .init(.general(title: "Backup Failed!", message: error.describe))
+                    }
 
-                await MainActor.run { self.pin = "" }
+                    await MainActor.run { self.pin = "" }
+            }
+        }
+    }
+
+    func signAction(_ nfc: TapSignerNFC, _ psbt: Psbt, _ pin: String) {
+        Task {
+            switch await nfc.sign(psbt: psbt, pin: pin) {
+                case let .success(signedTxn):
+                    do {
+                        let db = Database().unsignedTransactions()
+                        let record = try db.getTxThrow(txId: signedTxn.txId())
+                        let route = RouteFactory()
+                            .sendConfirm(
+                                id: record.walletId(), details: record.confirmDetails(),
+                                signedTransaction: signedTxn
+                            )
+                        app.pushRoute(route)
+                    } catch {
+                        app.alertState = .init(.general(title: "Error", message: error.localizedDescription))
+                        self.pin = ""
+                        app.sheetState = .none
+                    }
+                case let .failure(error):
+                    if !error.isAuthError {
+                        app.alertState = .init(.general(title: "Backup Failed!", message: error.describe))
+                    }
+
+                    await MainActor.run { self.pin = "" }
             }
         }
     }
@@ -165,17 +195,17 @@ struct TapSignerEnterPin: View {
             defaultFilename: "\(tapSigner.identFileNamePrefix())_backup.txt"
         ) { result in
             switch result {
-            case .success:
-                app.sheetState = .none
-                app.alertState = .init(
-                    .general(
-                        title: "Backup Saved!",
-                        message: "Your backup has been save successfully!"
+                case .success:
+                    app.sheetState = .none
+                    app.alertState = .init(
+                        .general(
+                            title: "Backup Saved!",
+                            message: "Your backup has been save successfully!"
+                        )
                     )
-                )
-            case let .failure(error):
-                app.alertState = .init(
-                    .general(title: "Saving Backup Failed!", message: error.localizedDescription))
+                case let .failure(error):
+                    app.alertState = .init(
+                        .general(title: "Saving Backup Failed!", message: error.localizedDescription))
             }
         }
     }

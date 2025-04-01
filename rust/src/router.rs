@@ -5,6 +5,7 @@ use crate::{
     database::Database,
     mnemonic::NumberOfBip39Words,
     multi_format::tap_card::TapSigner,
+    psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
@@ -158,6 +159,7 @@ pub enum AfterPinAction {
     Derive,
     Change,
     Backup,
+    Sign(Arc<Psbt>),
 }
 
 /// When the user goes through entering the PIN and setting a new one, they are either setting up a new tapsigner
@@ -444,6 +446,7 @@ impl AfterPinAction {
             Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
             Self::Change => "Please enter your current PIN".to_string(),
             Self::Backup => "For security purposes, you need to enter your TAPSIGNER PIN before you can backup your wallet".to_string(),
+            Self::Sign(_) => "For security purposes, you need must enter your TAPSIGNER PIN before you can sign a transaction".to_string(),
         }
     }
 }
