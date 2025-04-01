@@ -36,10 +36,10 @@ class TapSignerManager {
         if let lastRoute = path.last {
             switch (lastRoute, newRoute) {
             case (.initSelect, .initSelect),
-                (.initAdvanced, .initAdvanced),
-                (.startingPin, .startingPin),
-                (.newPin, .newPin),
-                (.confirmPin, .confirmPin):
+                 (.initAdvanced, .initAdvanced),
+                 (.startingPin, .startingPin),
+                 (.newPin, .newPin),
+                 (.confirmPin, .confirmPin):
                 return
             default: ()
             }

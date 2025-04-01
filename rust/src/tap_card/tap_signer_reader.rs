@@ -226,8 +226,8 @@ impl TapSignerReader {
             }
 
             TapSignerCmd::Sign { psbt, pin } => {
-                let signed_tx = self.sign(psbt, &pin).await?;
-                Ok(TapSignerResponse::Sign(signed_tx.into()))
+                let txn = self.sign(psbt, &pin).await?;
+                Ok(TapSignerResponse::Sign(txn.into()))
             }
         }
     }
