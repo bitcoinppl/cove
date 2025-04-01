@@ -56,7 +56,7 @@ extension Double {
     }
 
     func btcFmtWithUnit() -> String {
-        self.btcFmt() + " BTC"
+        btcFmt() + " BTC"
     }
 }
 
@@ -72,8 +72,8 @@ extension PriceResponse: Equatable {
     }
 }
 
-extension SendRoute {
-    public func id() -> WalletId {
+public extension SendRoute {
+    func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
         case let .confirm(id: id, details: _, signedTransaction: _): id
@@ -95,8 +95,7 @@ extension [BoxedRoute] {
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
-    {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
         feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
 }
@@ -200,5 +199,4 @@ extension TapSigner: Equatable {
     public static func == (lhs: TapSigner, rhs: TapSigner) -> Bool {
         lhs.isEqual(rhs: rhs)
     }
-
 }
