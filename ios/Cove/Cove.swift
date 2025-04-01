@@ -29569,6 +29569,13 @@ public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[Str
     )
 })
 }
+public func hardwareWalletIsTapSigner(hardwareWallet: HardwareWalletMetadata) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_func_hardware_wallet_is_tap_signer(
+        FfiConverterTypeHardwareWalletMetadata_lower(hardwareWallet),$0
+    )
+})
+}
 public func hashRoute(route: Route) -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_cove_fn_func_hash_route(
@@ -29952,6 +29959,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 45802) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_hardware_wallet_is_tap_signer() != 55324) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_hash_route() != 32817) {

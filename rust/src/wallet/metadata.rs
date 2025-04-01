@@ -301,6 +301,12 @@ impl InternalOnlyMetadata {
     }
 }
 
+impl HardwareWalletMetadata {
+    pub fn is_tap_signer(&self) -> bool {
+        matches!(self, HardwareWalletMetadata::TapSigner(_))
+    }
+}
+
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletColor {
     Red,
@@ -388,4 +394,9 @@ fn file_store_default() -> StoreType {
 #[uniffi::export]
 fn wallet_type_to_string(wallet_type: WalletType) -> String {
     wallet_type.to_string()
+}
+
+#[uniffi::export]
+fn hardware_wallet_is_tap_signer(hardware_wallet: HardwareWalletMetadata) -> bool {
+    hardware_wallet.is_tap_signer()
 }

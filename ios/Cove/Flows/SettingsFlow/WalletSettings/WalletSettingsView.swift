@@ -31,7 +31,7 @@ struct WalletSettingsView: View {
                 }
                 .font(.subheadline)
 
-                if let masterFingerprint = manager.rust.masterFingerprint() {
+                if let masterFingerprint = manager.rust.masterFingerprint(), !metadata.isTapSigner() {
                     HStack {
                         Text("Fingerprint")
                         Spacer()
@@ -47,6 +47,7 @@ struct WalletSettingsView: View {
                         Spacer()
                         Text(t.fullCardIdent())
                             .foregroundColor(.secondary)
+                            .minimumScaleFactor(0.75)
                     }
                     .font(.subheadline)
                 }

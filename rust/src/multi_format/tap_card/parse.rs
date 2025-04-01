@@ -69,7 +69,7 @@ pub enum SignatureParseError {
     #[error("unable to parse signature: {0}")]
     Secp256k1(#[from] bitcoin::secp256k1::Error),
 
-    #[error("signatrue is not 64 bytes, found {0} bytes")]
+    #[error("signature is not 64 bytes, found {0} bytes")]
     InvalidSignatureLength(u32),
 
     #[error("invalid pubkey length, found {0} bytes, expected 33 bytes")]
