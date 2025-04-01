@@ -139,7 +139,7 @@ struct TapSignerSetupSuccess: View {
             isPresented: $isExportingBackup,
             document: TextDocument(text: hexEncode(bytes: setup.backup)),
             contentType: .plainText,
-            defaultFilename: "\(tapSigner.cardIdent)_backup.txt"
+            defaultFilename: "\(tapSigner.identFileNamePrefix())_backup.txt"
         ) { result in
             switch result {
             case .success:

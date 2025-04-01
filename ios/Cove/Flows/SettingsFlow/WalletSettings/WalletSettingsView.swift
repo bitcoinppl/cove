@@ -41,6 +41,16 @@ struct WalletSettingsView: View {
                     .font(.subheadline)
                 }
 
+                if case let .tapSigner(t) = metadata.hardwareMetadata {
+                    HStack {
+                        Text("Card Identifier")
+                        Spacer()
+                        Text(t.fullCardIdent())
+                            .foregroundColor(.secondary)
+                    }
+                    .font(.subheadline)
+                }
+
                 HStack {
                     Text("Wallet Type")
                     Spacer()

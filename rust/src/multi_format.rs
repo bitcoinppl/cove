@@ -27,9 +27,9 @@ pub enum MultiFormat {
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
     /// TAPSIGNER has not been initialized yet
-    TapSigner(TapSigner),
+    TapSigner(Arc<TapSigner>),
     /// TAPSIGNER has not been initialized yet
-    TapSignerInit(TapSigner),
+    TapSignerInit(Arc<TapSigner>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -125,7 +125,7 @@ impl MultiFormat {
 
             match tap_card {
                 tap_card::TapCard::TapSigner(card) => {
-                    return Ok(MultiFormat::from(card));
+                    return Ok(MultiFormat::TapSigner(card));
                 }
 
                 tap_card::TapCard::SatsCard(_card) => {
@@ -189,9 +189,9 @@ pub struct Bip329Labels(pub bip329::Labels);
 impl From<TapSigner> for MultiFormat {
     fn from(tap_signer: TapSigner) -> Self {
         if tap_signer.state == tap_card::TapSignerState::Unused {
-            Self::TapSignerInit(tap_signer)
+            Self::TapSignerInit(tap_signer.into())
         } else {
-            Self::TapSigner(tap_signer)
+            Self::TapSigner(tap_signer.into())
         }
     }
 }

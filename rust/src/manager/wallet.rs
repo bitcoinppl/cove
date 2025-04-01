@@ -298,13 +298,14 @@ impl RustWalletManager {
 
     #[uniffi::constructor(default(backup = None))]
     pub fn try_new_from_tap_signer(
-        tap_signer: TapSigner,
+        tap_signer: Arc<TapSigner>,
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, Error> {
         let (sender, receiver) = crossbeam::channel::bounded(100);
 
-        let wallet = Wallet::try_new_persisted_from_tap_signer(tap_signer, derive_info, backup)?;
+        let wallet =
+            Wallet::try_new_persisted_from_tap_signer(tap_signer.clone(), derive_info, backup)?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
@@ -339,13 +340,6 @@ impl RustWalletManager {
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
         Ok(fees.into())
-    }
-
-    #[uniffi::method]
-    pub fn get_tap_signer_backup(&self) -> Option<Vec<u8>> {
-        let keychain = Keychain::global();
-        let wallet_id = self.id.clone();
-        keychain.get_tap_signer_backup(&wallet_id)
     }
 
     #[uniffi::method]

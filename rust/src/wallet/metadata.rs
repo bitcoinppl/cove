@@ -176,7 +176,7 @@ pub enum WalletType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum HardwareWalletMetadata {
-    TapSigner(crate::multi_format::tap_card::TapSigner),
+    TapSigner(Arc<crate::multi_format::tap_card::TapSigner>),
 }
 
 #[derive(

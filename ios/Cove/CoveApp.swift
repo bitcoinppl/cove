@@ -417,7 +417,7 @@ struct CoveApp: App {
             case let .tapSignerInit(tapSigner):
                 app.alertState = .init(.uninitializedTapSigner(tapSigner))
             case let .tapSigner(tapSigner):
-                if let wallet = app.findTapSignerWalletByCardIdent(tapSigner.cardIdent) {
+                if let wallet = app.findTapSignerWallet(tapSigner) {
                     app.alertState = .init(.tapSignerWalletFound(wallet.id))
                 } else {
                     app.alertState = .init(.intializedTapSigner(tapSigner))

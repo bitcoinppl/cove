@@ -194,3 +194,9 @@ extension TapSignerConfirmPinArgs {
         self = tapSignerConfirmPinArgsNewFromNewPin(args: from, newPin: newPin)
     }
 }
+
+extension TapSigner: Equatable {
+    public static func == (lhs: TapSigner, rhs: TapSigner) -> Bool {
+        lhs.isEqual(rhs: rhs)
+    }
+}

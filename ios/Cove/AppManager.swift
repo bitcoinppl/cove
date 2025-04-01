@@ -88,24 +88,16 @@ import SwiftUI
         walletManager = vm
     }
 
-    public func findTapSignerWalletByCardIdent(_ ident: String) -> WalletMetadata? {
-        rust.findTapSignerWalletByCardIdent(ident: ident)
-    }
-
-    public func getTapSignerBackup(_ indent: String) -> Data? {
-        rust.getTapSignerBackup(ident: indent)
+    public func findTapSignerWallet(_ ts: TapSigner) -> WalletMetadata? {
+        rust.findTapSignerWallet(tapSigner: ts)
     }
 
     public func getTapSignerBackup(_ ts: TapSigner) -> Data? {
-        getTapSignerBackup(ts.cardIdent)
-    }
-
-    public func saveTapSignerBackup(_ indent: String, _ backup: Data) -> Bool {
-        rust.saveTapSignerBackup(ident: indent, backup: backup)
+        rust.getTapSignerBackup(tapSigner: ts)
     }
 
     public func saveTapSignerBackup(_ ts: TapSigner, _ backup: Data) -> Bool {
-        saveTapSignerBackup(ts.cardIdent, backup)
+        rust.saveTapSignerBackup(tapSigner: ts, backup: backup)
     }
 
     /// Reset the manager state

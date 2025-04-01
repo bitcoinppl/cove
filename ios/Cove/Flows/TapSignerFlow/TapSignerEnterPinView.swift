@@ -162,7 +162,7 @@ struct TapSignerEnterPin: View {
             ),
             document: TextDocument(text: hexEncode(bytes: exportingBackup ?? Data())),
             contentType: .plainText,
-            defaultFilename: "\(tapSigner.cardIdent)_backup.txt"
+            defaultFilename: "\(tapSigner.identFileNamePrefix())_backup.txt"
         ) { result in
             switch result {
             case .success:

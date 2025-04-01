@@ -343,7 +343,7 @@ impl Wallet {
     }
 
     pub fn try_new_persisted_from_tap_signer(
-        tap_signer: TapSigner,
+        tap_signer: Arc<TapSigner>,
         derive: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, WalletError> {
