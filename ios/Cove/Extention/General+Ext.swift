@@ -72,8 +72,8 @@ extension PriceResponse: Equatable {
     }
 }
 
-extension SendRoute {
-    public func id() -> WalletId {
+public extension SendRoute {
+    func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
         case let .confirm(id: id, details: _, signedTransaction: _): id
@@ -95,8 +95,7 @@ extension [BoxedRoute] {
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
-    {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
         feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
 }
@@ -204,7 +203,7 @@ extension TapSigner: Equatable {
 
 extension WalletMetadata {
     func isTapSigner() -> Bool {
-        self.hardwareMetadata?.isTapSigner() ?? false
+        hardwareMetadata?.isTapSigner() ?? false
     }
 }
 
