@@ -202,7 +202,7 @@ fn message_and_signature_to_pubkey(
         }
     }
 
-    Err(SignatureParseError::PubkeyIdentMismatch.into())
+    Err(SignatureParseError::PubkeyIdentMismatch)
 }
 
 fn message_and_signature_to_pubkeys(
@@ -213,7 +213,7 @@ fn message_and_signature_to_pubkeys(
     let mut pubkeys = Vec::with_capacity(4);
 
     for rec_id in 0..4 {
-        let recovery_id = RecoveryId::from_i32(rec_id as i32).expect("recovery id is a valid i32");
+        let recovery_id = RecoveryId::from_i32(rec_id).expect("recovery id is a valid i32");
 
         match try_for_recovery_id(&message, &signature, recovery_id) {
             Ok(pubkey) => pubkeys.push(pubkey),
@@ -225,7 +225,7 @@ fn message_and_signature_to_pubkeys(
     }
 
     if pubkeys.is_empty() {
-        return Err(SignatureParseError::UnableToRecoverPubkey.into());
+        return Err(SignatureParseError::UnableToRecoverPubkey);
     }
 
     Ok(pubkeys)
@@ -263,7 +263,9 @@ pub fn card_pubkey_to_full_ident(card_pubkey: &[u8]) -> Result<String, Signature
     use data_encoding::BASE32;
 
     if card_pubkey.len() != 33 {
-        return Err(SignatureParseError::InvalidPubkeyLength(card_pubkey.len() as u32).into());
+        return Err(SignatureParseError::InvalidPubkeyLength(
+            card_pubkey.len() as u32
+        ));
     }
 
     let pubkey_hash = Hash::hash(card_pubkey);
@@ -339,7 +341,7 @@ mod tests {
             _ => panic!("not a tap signer"),
         };
 
-        let readable_ident = &ts.readable_ident();
+        let readable_ident = &ts.full_card_ident();
         assert_eq!(readable_ident, "XUFC5-2SWY2-PX24Q-IZC7W")
     }
 }

@@ -288,7 +288,7 @@ impl FfiApp {
     #[uniffi::method]
     pub fn save_tap_signer_backup(&self, tap_signer: &TapSigner, backup: &[u8]) -> bool {
         let run = || {
-            let metadata = self.find_tap_signer_wallet(&tap_signer).tap_none(|| {
+            let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
                 debug!(
                     "Unable to find wallet with card ident {}",
                     tap_signer.card_ident
