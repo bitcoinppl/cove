@@ -19,7 +19,7 @@ use bdk_wallet::{KeychainKind, TxOrdering};
 use bitcoin::Amount;
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use crossbeam::channel::Sender;
-use eyre::{Context as _, Result};
+use eyre::Result;
 use std::time::{Duration, UNIX_EPOCH};
 use tap::TapFallible as _;
 use tracing::{debug, error};
@@ -167,7 +167,17 @@ impl WalletActor {
         amount: Amount,
         address: Address,
         fee_rate: BdkFeeRate,
-    ) -> ActorResult<Psbt> {
+    ) -> ActorResult<Result<Psbt, Error>> {
+        let psbt = self.do_build_tx(amount, address, fee_rate).await;
+        Produces::ok(psbt)
+    }
+
+    async fn do_build_tx(
+        &mut self,
+        amount: Amount,
+        address: Address,
+        fee_rate: BdkFeeRate,
+    ) -> Result<Psbt, Error> {
         let mut bdk = self.wallet.bdk.lock();
         let script_pubkey = address.script_pubkey();
 
@@ -176,9 +186,11 @@ impl WalletActor {
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder.finish()?;
+        let psbt = tx_builder
+            .finish()
+            .map_err(|err| Error::BuildTxError(err.to_string()))?;
 
-        Produces::ok(psbt)
+        Ok(psbt)
     }
 
     // Build a transaction but don't advance the change address index
@@ -188,7 +200,7 @@ impl WalletActor {
         address: Address,
         fee: BdkFeeRate,
     ) -> ActorResult<Psbt> {
-        let psbt = self.build_tx(amount, address, fee).await?.await?;
+        let psbt = self.do_build_tx(amount, address, fee).await?;
         self.wallet.bdk.lock().cancel_tx(&psbt.unsigned_tx);
         Produces::ok(psbt)
     }
@@ -243,10 +255,24 @@ impl WalletActor {
         &mut self,
         psbt: Psbt,
         fee_rate: BdkFeeRate,
-    ) -> ActorResult<ConfirmDetails> {
+    ) -> ActorResult<Result<ConfirmDetails, Error>> {
+        let details = self.do_get_confirm_details(psbt, fee_rate).await;
+        Produces::ok(details)
+    }
+
+    async fn do_get_confirm_details(
+        &mut self,
+        psbt: Psbt,
+        fee_rate: BdkFeeRate,
+    ) -> Result<ConfirmDetails, Error> {
         #[inline(always)]
-        fn error(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
-            WalletManagerError::GetConfirmDetailsError(s.to_string()).into()
+        fn error(s: &str) -> WalletManagerError {
+            WalletManagerError::GetConfirmDetailsError(s.to_string())
+        }
+
+        #[inline(always)]
+        fn err_fmt(s: &str, err: impl std::fmt::Display) -> WalletManagerError {
+            WalletManagerError::GetConfirmDetailsError(format!("{s}: {err}"))
         }
 
         let bdk = self.wallet.bdk.lock();
@@ -274,10 +300,13 @@ impl WalletActor {
 
         let params = Params::from(network);
         let sending_to = bitcoin::Address::from_script(&output.script_pubkey, params)
-            .context("unable to get address from script")?;
+            .map_err(|err| err_fmt("unable to get address from script", err))?;
 
         let sending_amount = output.value;
-        let fee = psbt.fee()?;
+        let fee = psbt
+            .fee()
+            .map_err(|err| err_fmt("unable to get fee", err))?;
+
         let spending_amount = sending_amount
             .checked_add(fee)
             .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
@@ -294,12 +323,20 @@ impl WalletActor {
             more_details,
         };
 
-        Produces::ok(details)
+        Ok(details)
     }
 
-    pub async fn sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> ActorResult<()> {
-        fn err(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
-            Error::SignAndBroadcastError(s.to_string()).into()
+    pub async fn sign_and_broadcast_transaction(
+        &mut self,
+        psbt: Psbt,
+    ) -> ActorResult<Result<(), Error>> {
+        let result = self.do_sign_and_broadcast_transaction(psbt).await;
+        Produces::ok(result)
+    }
+
+    async fn do_sign_and_broadcast_transaction(&mut self, mut psbt: Psbt) -> Result<(), Error> {
+        fn err(s: &str) -> Error {
+            Error::SignAndBroadcastError(s.to_string())
         }
 
         let network = self.wallet.network;
@@ -332,24 +369,42 @@ impl WalletActor {
             .tap_err(|error| error!("failed to extract transaction: {error}"))
             .map_err(|_| err("failed to extract transaction"))?;
 
-        self.broadcast_transaction(transaction).await?;
+        self.do_broadcast_transaction(transaction).await?;
 
-        Produces::ok(())
+        Ok(())
     }
 
-    pub async fn broadcast_transaction(&mut self, transaction: BdkTransaction) -> ActorResult<()> {
-        fn err(s: &str) -> Box<dyn std::error::Error + Send + Sync + 'static> {
-            Error::SignAndBroadcastError(s.to_string()).into()
-        }
+    pub async fn broadcast_transaction(
+        &mut self,
+        transaction: BdkTransaction,
+    ) -> ActorResult<Result<(), Error>> {
+        let result = self.do_broadcast_transaction(transaction).await;
+        Produces::ok(result)
+    }
 
-        self.check_node_connection().await?;
+    async fn do_broadcast_transaction(&mut self, transaction: BdkTransaction) -> Result<(), Error> {
+        self.check_node_connection().await.map_err(|error| {
+            let error_string =
+                format!("failed to broadcast transaction, unable to connect to node: {error:?}");
+            Error::SignAndBroadcastError(error_string)
+        })?;
+
         self.node_client()
-            .await?
+            .await
+            .map_err(|_| {
+                Error::SignAndBroadcastError(
+                    "failed to broadcast transaction, could not get node client, try again"
+                        .to_string(),
+                )
+            })?
             .broadcast_transaction(transaction)
             .await
-            .map_err(|_error| err("failed to broadcast transaction, try again"))?;
+            .map_err(|error| {
+                let error_string = format!("failed to broadcast transaction, try again: {error:?}");
+                Error::SignAndBroadcastError(error_string)
+            })?;
 
-        Produces::ok(())
+        Ok(())
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {

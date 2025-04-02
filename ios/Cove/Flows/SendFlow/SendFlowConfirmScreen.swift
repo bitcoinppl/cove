@@ -161,6 +161,9 @@ struct SendFlowConfirmScreen: View {
                         sendState = .sent
                         isShowingAlert = true
                         auth.unlock()
+                    } catch let error as WalletManagerError {
+                        sendState = .error(error.describe)
+                        isShowingErrorAlert = true
                     } catch {
                         sendState = .error(error.localizedDescription)
                         isShowingErrorAlert = true

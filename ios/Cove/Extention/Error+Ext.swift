@@ -19,7 +19,7 @@ extension MultiFormatError {
 
 extension WalletError {
     var describe: String {
-        displayWalletError(error: self)
+        describeWalletError(error: self)
     }
 }
 
@@ -40,5 +40,11 @@ extension TapSignerReaderError {
 
     var isNoBackupError: Bool {
         tapSignerErrorIsNoBackupError(error: self)
+    }
+}
+
+extension WalletManagerError {
+    var describe: String {
+        describeWalletManagerError(error: self)
     }
 }

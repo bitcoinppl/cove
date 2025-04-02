@@ -742,6 +742,6 @@ mod tests {
 }
 
 #[uniffi::export]
-fn display_wallet_error(error: WalletError) -> String {
+fn describe_wallet_error(error: WalletError) -> String {
     error.to_string()
 }

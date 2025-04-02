@@ -30,13 +30,13 @@ struct TapSignerEnterPin: View {
         case .change:
             manager.navigate(
                 to:
-                .newPin(
-                    TapSignerNewPinArgs(
-                        tapSigner: tapSigner,
-                        startingPin: pin,
-                        chainCode: .none,
-                        action: .change
-                    )))
+                    .newPin(
+                        TapSignerNewPinArgs(
+                            tapSigner: tapSigner,
+                            startingPin: pin,
+                            chainCode: .none,
+                            action: .change
+                        )))
         case .backup:
             backupAction(nfc, pin)
         case let .sign(psbt):
@@ -107,6 +107,8 @@ struct TapSignerEnterPin: View {
                 if !error.isAuthError {
                     app.alertState = .init(
                         .general(title: "Signing Failed!", message: error.describe))
+
+                    app.sheetState = .none
                 }
 
                 await MainActor.run { self.pin = "" }
@@ -149,7 +151,7 @@ struct TapSignerEnterPin: View {
                 .padding(.horizontal)
 
                 HStack {
-                    ForEach(0 ..< 6, id: \.self) { index in
+                    ForEach(0..<6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
                             .fill(pin.count <= index ? Color.clear : .primary)

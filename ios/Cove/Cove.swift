@@ -29524,6 +29524,20 @@ public func defaultWalletColors() -> [WalletColor]  {
     )
 })
 }
+public func describeWalletError(error: WalletError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_describe_wallet_error(
+        FfiConverterTypeWalletError_lower(error),$0
+    )
+})
+}
+public func describeWalletManagerError(error: WalletManagerError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_describe_wallet_manager_error(
+        FfiConverterTypeWalletManagerError_lower(error),$0
+    )
+})
+}
 public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_discovery_state_is_equal(
@@ -29986,6 +30000,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_default_wallet_colors() != 39034) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_describe_wallet_error() != 7428) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_describe_wallet_manager_error() != 13784) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {
