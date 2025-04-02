@@ -14,9 +14,7 @@ use rust_cktap::{
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::{
-    database::Database, network::Network, psbt::Psbt, transaction::ffi::BitcoinTransaction,
-};
+use crate::{database::Database, network::Network, psbt::Psbt};
 
 use super::{CkTapError, TapcardTransport, TapcardTransportProtocol, TransportError};
 
@@ -102,7 +100,7 @@ pub enum TapSignerResponse {
     Backup(Vec<u8>),
     Import(DeriveInfo),
     Change,
-    Sign(Arc<BitcoinTransaction>),
+    Sign(Arc<Psbt>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -271,7 +269,7 @@ impl TapSignerReader {
         }
     }
 
-    pub async fn sign(&self, psbt: Arc<Psbt>, pin: &str) -> Result<BitcoinTransaction, Error> {
+    pub async fn sign(&self, psbt: Arc<Psbt>, pin: &str) -> Result<Psbt, Error> {
         let psbt = Arc::unwrap_or_clone(psbt);
 
         let psbt: bitcoin::Psbt = self
@@ -282,12 +280,7 @@ impl TapSignerReader {
             .await
             .map_err(|e| Error::PsbtSignError(e.to_string()))?;
 
-        let signed_txn: BitcoinTransaction = psbt
-            .extract_tx()
-            .map_err(|e| Error::ExtractTxError(e.to_string()))?
-            .into();
-
-        Ok(signed_txn)
+        Ok(psbt.into())
     }
 
     /// Get the last response from the reader
@@ -554,7 +547,7 @@ impl TapSignerResponse {
         }
     }
 
-    pub fn sign_response(&self) -> Option<Arc<BitcoinTransaction>> {
+    pub fn sign_response(&self) -> Option<Arc<Psbt>> {
         match self {
             TapSignerResponse::Sign(txn) => Some(Arc::clone(txn)),
             _ => None,
@@ -629,9 +622,7 @@ mod ffi {
     }
 
     #[uniffi::export]
-    fn tap_signer_response_sign_response(
-        response: TapSignerResponse,
-    ) -> Option<Arc<BitcoinTransaction>> {
+    fn tap_signer_response_sign_response(response: TapSignerResponse) -> Option<Arc<Psbt>> {
         response.sign_response()
     }
 
