@@ -29560,13 +29560,6 @@ public func displayTapSignerReaderError(error: TapSignerReaderError) -> String  
     )
 })
 }
-public func displayWalletError(error: WalletError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_display_wallet_error(
-        FfiConverterTypeWalletError_lower(error),$0
-    )
-})
-}
 public func feeRateOptionsWithTotalFeeIsEqual(lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_func_fee_rate_options_with_total_fee_is_equal(
@@ -30015,9 +30008,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_display_tap_signer_reader_error() != 26195) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_display_wallet_error() != 59170) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fee_rate_options_with_total_fee_is_equal() != 21429) {

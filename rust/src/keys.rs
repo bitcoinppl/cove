@@ -46,6 +46,9 @@ pub enum DescriptorKeyParseError {
 
     #[error("invalid chain code")]
     InvalidChainCode,
+
+    #[error("invalid bip84 path: {0:?}")]
+    InvalidBip84Path(Vec<u32>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -111,16 +114,31 @@ impl Descriptors {
             chain_code,
         };
 
-        Ok(Self::new_bip84(xpub, master_fingerprint))
+        let path = match derive.path.as_slice() {
+            [84, 0, 0] => [84, 0, 0],
+            [84, 1, 0] => [84, 1, 0],
+            path => return Err(Error::InvalidBip84Path(path.to_vec())),
+        };
+
+        Self::try_new_bip84(xpub, path, master_fingerprint)
     }
 
-    pub fn new_bip84(xpub: Xpub, master_fingerprint: Fingerprint) -> Self {
-        let derivation_path = "84h/0h/0h";
+    pub fn try_new_bip84(
+        xpub: Xpub,
+        path: [u32; 3],
+        master_fingerprint: Fingerprint,
+    ) -> Result<Self, Error> {
+        let derivation_path = match path {
+            [84, 0, 0] => "84h/0h/0h",
+            [84, 1, 0] => "84h/1h/0h",
+            path => return Err(Error::InvalidBip84Path(path.to_vec())),
+        };
+
         let desc_string = format!("wpkh([{master_fingerprint}/{derivation_path}]{xpub}/<0;1>/*)");
         let desc = pubport::descriptor::Descriptors::try_from_line(&desc_string)
             .expect("valid descriptor, because xpub is valid");
 
-        Self::from(desc)
+        Ok(Self::from(desc))
     }
 
     pub fn fingerprint(&self) -> Option<Fingerprint> {

@@ -492,16 +492,16 @@ impl DeriveInfo {
         path: Vec<u32>,
         network: Network,
     ) -> Self {
-        let master_xpub = derive_response.master_pubkey;
+        let master_pubkey = derive_response.master_pubkey;
         let chain_code = derive_response.chain_code;
-        let xpub = derive_response
+        let pubkey = derive_response
             .pubkey
             .expect("has pubkey because path was given");
 
         Self {
-            master_pubkey: master_xpub,
-            pubkey: xpub,
-            chain_code,
+            master_pubkey: master_pubkey.to_vec(),
+            pubkey: pubkey.to_vec(),
+            chain_code: chain_code.to_vec(),
             path,
             network,
         }
