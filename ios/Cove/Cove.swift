@@ -16220,6 +16220,7 @@ extension AddressError: Equatable, Hashable {}
 
 
 
+
 extension AddressError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -16380,6 +16381,7 @@ public func FfiConverterTypeApiType_lower(_ value: ApiType) -> RustBuffer {
 
 
 extension ApiType: Equatable, Hashable {}
+
 
 
 
@@ -16571,6 +16573,7 @@ public func FfiConverterTypeAppError_lower(_ value: AppError) -> RustBuffer {
 
 
 extension AppError: Equatable, Hashable {}
+
 
 
 
@@ -16836,6 +16839,7 @@ extension AuthError: Equatable, Hashable {}
 
 
 
+
 extension AuthError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -16952,6 +16956,7 @@ extension AuthManagerAction: Equatable, Hashable {}
 
 
 
+
 public enum AuthManagerError: Swift.Error {
 
     
@@ -17034,6 +17039,7 @@ public func FfiConverterTypeAuthManagerError_lower(_ value: AuthManagerError) ->
 
 
 extension AuthManagerError: Equatable, Hashable {}
+
 
 
 
@@ -17121,6 +17127,7 @@ extension AuthManagerReconcileMessage: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -17199,6 +17206,7 @@ public func FfiConverterTypeAuthType_lower(_ value: AuthType) -> RustBuffer {
 
 
 extension AuthType: Equatable, Hashable {}
+
 
 
 
@@ -17300,6 +17308,7 @@ extension Bip39Error: Equatable, Hashable {}
 
 
 
+
 extension Bip39Error: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -17380,6 +17389,7 @@ public func FfiConverterTypeBitcoinTransactionError_lower(_ value: BitcoinTransa
 
 
 extension BitcoinTransactionError: Equatable, Hashable {}
+
 
 
 
@@ -17512,6 +17522,7 @@ extension CkTapError: Equatable, Hashable {}
 
 
 
+
 extension CkTapError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -17576,6 +17587,7 @@ public func FfiConverterTypeColdWalletRoute_lower(_ value: ColdWalletRoute) -> R
 
 
 extension ColdWalletRoute: Equatable, Hashable {}
+
 
 
 
@@ -17654,6 +17666,7 @@ extension ColorSchemeSelection: Equatable, Hashable {}
 
 
 
+
 public enum ConfirmDetailsError: Swift.Error {
 
     
@@ -17716,6 +17729,7 @@ public func FfiConverterTypeConfirmDetailsError_lower(_ value: ConfirmDetailsErr
 
 
 extension ConfirmDetailsError: Equatable, Hashable {}
+
 
 
 
@@ -17789,6 +17803,7 @@ public func FfiConverterTypeConverterError_lower(_ value: ConverterError) -> Rus
 
 
 extension ConverterError: Equatable, Hashable {}
+
 
 
 
@@ -17932,6 +17947,7 @@ public func FfiConverterTypeDatabaseError_lower(_ value: DatabaseError) -> RustB
 
 
 extension DatabaseError: Equatable, Hashable {}
+
 
 
 
@@ -18099,6 +18115,7 @@ public func FfiConverterTypeDescriptorError_lower(_ value: DescriptorError) -> R
 
 
 extension DescriptorError: Equatable, Hashable {}
+
 
 
 
@@ -18303,6 +18320,7 @@ extension FeeSpeed: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -18477,6 +18495,7 @@ extension FfiColor: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -18541,6 +18560,7 @@ public func FfiConverterTypeFfiColorScheme_lower(_ value: FfiColorScheme) -> Rus
 
 
 extension FfiColorScheme: Equatable, Hashable {}
+
 
 
 
@@ -18610,6 +18630,7 @@ public func FfiConverterTypeFiatAmountError_lower(_ value: FiatAmountError) -> R
 
 
 extension FiatAmountError: Equatable, Hashable {}
+
 
 
 
@@ -18722,6 +18743,7 @@ extension FiatCurrency: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -18786,6 +18808,7 @@ public func FfiConverterTypeFiatOrBtc_lower(_ value: FiatOrBtc) -> RustBuffer {
 
 
 extension FiatOrBtc: Equatable, Hashable {}
+
 
 
 
@@ -18885,6 +18908,7 @@ extension Field: Equatable, Hashable {}
 
 
 
+
 public enum FileHandlerError: Swift.Error {
 
     
@@ -18976,6 +19000,7 @@ extension FileHandlerError: Equatable, Hashable {}
 
 
 
+
 extension FileHandlerError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -19042,6 +19067,7 @@ public func FfiConverterTypeFingerprintError_lower(_ value: FingerprintError) ->
 
 
 extension FingerprintError: Equatable, Hashable {}
+
 
 
 
@@ -19125,6 +19151,7 @@ public func FfiConverterTypeGlobalCacheTableError_lower(_ value: GlobalCacheTabl
 
 
 extension GlobalCacheTableError: Equatable, Hashable {}
+
 
 
 
@@ -19283,6 +19310,7 @@ extension GlobalConfigKey: Equatable, Hashable {}
 
 
 
+
 public enum GlobalConfigTableError: Swift.Error {
 
     
@@ -19364,6 +19392,7 @@ extension GlobalConfigTableError: Equatable, Hashable {}
 
 
 
+
 extension GlobalConfigTableError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -19428,6 +19457,7 @@ public func FfiConverterTypeGlobalFlagKey_lower(_ value: GlobalFlagKey) -> RustB
 
 
 extension GlobalFlagKey: Equatable, Hashable {}
+
 
 
 
@@ -19504,6 +19534,7 @@ public func FfiConverterTypeGlobalFlagTableError_lower(_ value: GlobalFlagTableE
 
 
 extension GlobalFlagTableError: Equatable, Hashable {}
+
 
 
 
@@ -19666,6 +19697,7 @@ extension HotWalletRoute: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -19737,6 +19769,7 @@ public func FfiConverterTypeImportType_lower(_ value: ImportType) -> RustBuffer 
 
 
 extension ImportType: Equatable, Hashable {}
+
 
 
 
@@ -19856,6 +19889,7 @@ extension ImportWalletError: Equatable, Hashable {}
 
 
 
+
 extension ImportWalletError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -19923,6 +19957,7 @@ extension ImportWalletManagerAction: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -19980,6 +20015,7 @@ public func FfiConverterTypeImportWalletManagerReconcileMessage_lower(_ value: I
 
 
 extension ImportWalletManagerReconcileMessage: Equatable, Hashable {}
+
 
 
 
@@ -20053,6 +20089,7 @@ public func FfiConverterTypeInsertOrUpdate_lower(_ value: InsertOrUpdate) -> Rus
 
 
 extension InsertOrUpdate: Equatable, Hashable {}
+
 
 
 
@@ -20154,6 +20191,7 @@ extension KeychainError: Equatable, Hashable {}
 
 
 
+
 extension KeychainError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -20234,6 +20272,7 @@ public func FfiConverterTypeLabelDbError_lower(_ value: LabelDbError) -> RustBuf
 
 
 extension LabelDbError: Equatable, Hashable {}
+
 
 
 
@@ -20400,6 +20439,7 @@ extension LabelManagerError: Equatable, Hashable {}
 
 
 
+
 extension LabelManagerError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -20483,6 +20523,7 @@ extension MnemonicError: Equatable, Hashable {}
 
 
 
+
 extension MnemonicError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -20555,6 +20596,7 @@ public func FfiConverterTypeMnemonicParseError_lower(_ value: MnemonicParseError
 
 
 extension MnemonicParseError: Equatable, Hashable {}
+
 
 
 
@@ -20786,6 +20828,7 @@ extension MultiFormatError: Equatable, Hashable {}
 
 
 
+
 extension MultiFormatError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -20916,6 +20959,7 @@ public func FfiConverterTypeMultiQrError_lower(_ value: MultiQrError) -> RustBuf
 
 
 extension MultiQrError: Equatable, Hashable {}
+
 
 
 
@@ -21090,6 +21134,7 @@ extension NdefPayload: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -21199,6 +21244,7 @@ extension NdefType: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -21270,6 +21316,7 @@ public func FfiConverterTypeNetwork_lower(_ value: Network) -> RustBuffer {
 
 
 extension Network: Equatable, Hashable {}
+
 
 
 
@@ -21354,6 +21401,7 @@ extension NewWalletRoute: Equatable, Hashable {}
 
 
 
+
 public enum NfcMessageError: Swift.Error {
 
     
@@ -21412,6 +21460,7 @@ public func FfiConverterTypeNfcMessageError_lower(_ value: NfcMessageError) -> R
 
 
 extension NfcMessageError: Equatable, Hashable {}
+
 
 
 
@@ -21500,6 +21549,7 @@ extension NfcReaderError: Equatable, Hashable {}
 
 
 
+
 extension NfcReaderError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -21577,6 +21627,7 @@ public func FfiConverterTypeNodeSelection_lower(_ value: NodeSelection) -> RustB
 
 
 extension NodeSelection: Equatable, Hashable {}
+
 
 
 
@@ -21676,6 +21727,7 @@ extension NodeSelectorError: Equatable, Hashable {}
 
 
 
+
 extension NodeSelectorError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -21747,6 +21799,7 @@ public func FfiConverterTypeNumberOfBip39Words_lower(_ value: NumberOfBip39Words
 
 
 extension NumberOfBip39Words: Equatable, Hashable {}
+
 
 
 
@@ -21830,6 +21883,7 @@ extension ParseResult: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -21907,6 +21961,7 @@ extension ParserState: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -21980,6 +22035,7 @@ extension PendingOrConfirmed: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -22040,6 +22096,7 @@ public func FfiConverterTypePendingWalletManagerAction_lower(_ value: PendingWal
 
 
 extension PendingWalletManagerAction: Equatable, Hashable {}
+
 
 
 
@@ -22119,6 +22176,7 @@ extension PendingWalletManagerError: Equatable, Hashable {}
 
 
 
+
 extension PendingWalletManagerError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -22186,6 +22244,7 @@ public func FfiConverterTypePendingWalletManagerReconcileMessage_lower(_ value: 
 
 
 extension PendingWalletManagerReconcileMessage: Equatable, Hashable {}
+
 
 
 
@@ -22270,6 +22329,7 @@ public func FfiConverterTypePsbtError_lower(_ value: PsbtError) -> RustBuffer {
 
 
 extension PsbtError: Equatable, Hashable {}
+
 
 
 
@@ -22382,6 +22442,7 @@ public func FfiConverterTypeResumeError_lower(_ value: ResumeError) -> RustBuffe
 
 
 extension ResumeError: Equatable, Hashable {}
+
 
 
 
@@ -22596,6 +22657,7 @@ extension SatsCardState: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -22673,6 +22735,7 @@ extension ScanState: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -22740,6 +22803,7 @@ public func FfiConverterTypeScannerResponse_lower(_ value: ScannerResponse) -> R
 
 
 extension ScannerResponse: Equatable, Hashable {}
+
 
 
 
@@ -22835,6 +22899,7 @@ extension SeedQrError: Equatable, Hashable {}
 
 
 
+
 extension SeedQrError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -22912,6 +22977,7 @@ public func FfiConverterTypeSendFlowErrorAlert_lower(_ value: SendFlowErrorAlert
 
 
 extension SendFlowErrorAlert: Equatable, Hashable {}
+
 
 
 
@@ -23075,6 +23141,7 @@ extension SerdeError: Equatable, Hashable {}
 
 
 
+
 extension SerdeError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -23185,6 +23252,7 @@ public func FfiConverterTypeSettingsRoute_lower(_ value: SettingsRoute) -> RustB
 
 
 extension SettingsRoute: Equatable, Hashable {}
+
 
 
 
@@ -23346,6 +23414,7 @@ extension StoreType: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
@@ -23419,6 +23488,7 @@ public func FfiConverterTypeStringOrData_lower(_ value: StringOrData) -> RustBuf
 
 
 extension StringOrData: Equatable, Hashable {}
+
 
 
 
@@ -23621,6 +23691,7 @@ extension TapCardParseError: Equatable, Hashable {}
 
 
 
+
 extension TapCardParseError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -23803,6 +23874,7 @@ extension TapSignerPinAction: Equatable, Hashable {}
 
 
 
+
 public enum TapSignerReaderError: Swift.Error {
 
     
@@ -23947,6 +24019,7 @@ public func FfiConverterTypeTapSignerReaderError_lower(_ value: TapSignerReaderE
 
 
 extension TapSignerReaderError: Equatable, Hashable {}
+
 
 
 
@@ -24285,6 +24358,7 @@ extension TapSignerState: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -24349,6 +24423,7 @@ public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) 
 
 
 extension TextPayloadFormat: Equatable, Hashable {}
+
 
 
 
@@ -24529,6 +24604,7 @@ extension TransactionDetailError: Equatable, Hashable {}
 
 
 
+
 extension TransactionDetailError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -24603,6 +24679,7 @@ extension TransactionDirection: Equatable, Hashable {}
 
 
 
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -24667,6 +24744,7 @@ public func FfiConverterTypeTransactionState_lower(_ value: TransactionState) ->
 
 
 extension TransactionState: Equatable, Hashable {}
+
 
 
 
@@ -24786,6 +24864,7 @@ extension TransportError: Equatable, Hashable {}
 
 
 
+
 extension TransportError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -24885,6 +24964,7 @@ extension TrickPinError: Equatable, Hashable {}
 
 
 
+
 extension TrickPinError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -24956,6 +25036,7 @@ public func FfiConverterTypeUnit_lower(_ value: Unit) -> RustBuffer {
 
 
 extension Unit: Equatable, Hashable {}
+
 
 
 
@@ -25041,6 +25122,7 @@ extension UnsignedTransactionsTableError: Equatable, Hashable {}
 
 
 
+
 extension UnsignedTransactionsTableError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -25119,6 +25201,7 @@ public func FfiConverterTypeWalletAddressType_lower(_ value: WalletAddressType) 
 
 
 extension WalletAddressType: Equatable, Hashable {}
+
 
 
 
@@ -25314,6 +25397,7 @@ extension WalletColor: Equatable, Hashable {}
 
 
 
+
 public enum WalletCreationError: Swift.Error {
 
     
@@ -25429,6 +25513,7 @@ extension WalletCreationError: Equatable, Hashable {}
 
 
 
+
 extension WalletCreationError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -25536,6 +25621,7 @@ extension WalletDataError: Equatable, Hashable {}
 
 
 
+
 extension WalletDataError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -25603,6 +25689,7 @@ public func FfiConverterTypeWalletDataKey_lower(_ value: WalletDataKey) -> RustB
 
 
 extension WalletDataKey: Equatable, Hashable {}
+
 
 
 
@@ -25774,6 +25861,7 @@ extension WalletError: Equatable, Hashable {}
 
 
 
+
 extension WalletError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -25848,6 +25936,7 @@ public func FfiConverterTypeWalletErrorAlert_lower(_ value: WalletErrorAlert) ->
 
 
 extension WalletErrorAlert: Equatable, Hashable {}
+
 
 
 
@@ -26071,6 +26160,7 @@ public func FfiConverterTypeWalletManagerAction_lower(_ value: WalletManagerActi
 
 
 extension WalletManagerAction: Equatable, Hashable {}
+
 
 
 
@@ -26350,6 +26440,7 @@ extension WalletManagerError: Equatable, Hashable {}
 
 
 
+
 extension WalletManagerError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -26600,6 +26691,7 @@ extension WalletMode: Equatable, Hashable {}
 
 
 
+
 public enum WalletScannerError: Swift.Error {
 
     
@@ -26681,6 +26773,7 @@ extension WalletScannerError: Equatable, Hashable {}
 
 
 
+
 extension WalletScannerError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
@@ -26752,6 +26845,7 @@ public func FfiConverterTypeWalletSettingsRoute_lower(_ value: WalletSettingsRou
 
 
 extension WalletSettingsRoute: Equatable, Hashable {}
+
 
 
 
@@ -26834,6 +26928,7 @@ public func FfiConverterTypeWalletTableError_lower(_ value: WalletTableError) ->
 
 
 extension WalletTableError: Equatable, Hashable {}
+
 
 
 
@@ -26925,6 +27020,7 @@ public func FfiConverterTypeWalletType_lower(_ value: WalletType) -> RustBuffer 
 
 
 extension WalletType: Equatable, Hashable {}
+
 
 
 
@@ -27033,6 +27129,7 @@ public func FfiConverterTypeXpubError_lower(_ value: XpubError) -> RustBuffer {
 
 
 extension XpubError: Equatable, Hashable {}
+
 
 
 

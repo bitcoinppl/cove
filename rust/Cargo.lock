@@ -2575,7 +2575,7 @@ dependencies = [
 [[package]]
 name = "rust-cktap"
 version = "0.1.0"
-source = "git+https://github.com/bitcoinppl/rust-cktap#09c2f57ce286f2c9fac4f85c9b07fa19f0e8fc79"
+source = "git+https://github.com/bitcoinppl/rust-cktap#3ac5f95ab614e0e93f78f2238216b3a17efc0e8b"
 dependencies = [
  "bitcoin",
  "ciborium",
