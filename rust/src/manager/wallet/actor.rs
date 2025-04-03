@@ -147,9 +147,8 @@ impl WalletActor {
         address: Address,
         fee: FeeRate,
     ) -> ActorResult<Psbt> {
-        let mut bdk = self.wallet.bdk.lock();
         let script_pubkey = address.script_pubkey();
-        let mut tx_builder = bdk.build_tx();
+        let mut tx_builder = self.wallet.bdk.build_tx();
 
         tx_builder
             .drain_wallet()
@@ -157,7 +156,7 @@ impl WalletActor {
             .fee_rate(fee.into());
 
         let psbt = tx_builder.finish()?;
-        bdk.cancel_tx(&psbt.unsigned_tx);
+        self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
 
         Produces::ok(psbt)
     }
@@ -178,10 +177,9 @@ impl WalletActor {
         address: Address,
         fee_rate: BdkFeeRate,
     ) -> Result<Psbt, Error> {
-        let mut bdk = self.wallet.bdk.lock();
         let script_pubkey = address.script_pubkey();
 
-        let mut tx_builder = bdk.build_tx();
+        let mut tx_builder = self.wallet.bdk.build_tx();
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
@@ -201,24 +199,22 @@ impl WalletActor {
         fee: BdkFeeRate,
     ) -> ActorResult<Psbt> {
         let psbt = self.do_build_tx(amount, address, fee).await?;
-        self.wallet.bdk.lock().cancel_tx(&psbt.unsigned_tx);
+        self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
         Produces::ok(psbt)
     }
 
     // cancel a transaction, reset the address & change address index
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
-        self.wallet.bdk.lock().cancel_tx(&txn)
+        self.wallet.bdk.cancel_tx(&txn)
     }
 
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
         let zero = Amount::ZERO.into();
 
-        let bdk = self.wallet.bdk.lock();
-
-        let mut transactions = bdk
+        let mut transactions = self.wallet.bdk
             .transactions()
             .map(|tx| {
-                let sent_and_received = bdk.sent_and_received(&tx.tx_node.tx).into();
+                let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
                 (tx, sent_and_received)
             })
             .map(|(tx, sent_and_received)| Transaction::new(&self.wallet.id, sent_and_received, tx))
@@ -234,17 +230,15 @@ impl WalletActor {
         &mut self,
         outputs: Vec<AddressAndAmount>,
     ) -> ActorResult<SplitOutput> {
-        let bdk = self.wallet.bdk.lock();
-
         let external = outputs
             .iter()
-            .filter(|output| !bdk.is_mine(output.address.script_pubkey()))
+            .filter(|output| !self.wallet.bdk.is_mine(output.address.script_pubkey()))
             .cloned()
             .collect();
 
         let internal = outputs
             .iter()
-            .filter(|output| bdk.is_mine(output.address.script_pubkey()))
+            .filter(|output| self.wallet.bdk.is_mine(output.address.script_pubkey()))
             .cloned()
             .collect();
 
@@ -275,13 +269,12 @@ impl WalletActor {
             WalletManagerError::GetConfirmDetailsError(format!("{s}: {err}"))
         }
 
-        let bdk = self.wallet.bdk.lock();
-        let network = bdk.network();
+        let network = self.wallet.bdk.network();
         let external_outputs = psbt
             .unsigned_tx
             .output
             .iter()
-            .filter(|output| !bdk.is_mine(output.script_pubkey.clone()))
+            .filter(|output| !self.wallet.bdk.is_mine(output.script_pubkey.clone()))
             .collect::<Vec<&bitcoin::TxOut>>();
 
         if external_outputs.len() > 1 {
@@ -421,7 +414,6 @@ impl WalletActor {
         let finalized = self
             .wallet
             .bdk
-            .lock()
             .finalize_psbt(&mut psbt, SignOptions::default())
             .map_err(|e| Error::PsbtFinalizeError(e.to_string()))?;
 
@@ -443,7 +435,6 @@ impl WalletActor {
         let address = self
             .wallet
             .bdk
-            .lock()
             .peek_address(KeychainKind::External, index);
         Produces::ok(address.into())
     }
@@ -584,13 +575,12 @@ impl WalletActor {
     }
 
     pub async fn transaction_details(&mut self, tx_id: TxId) -> ActorResult<TransactionDetails> {
-        let bdk = self.wallet.bdk.lock();
-        let tx = bdk.get_tx(tx_id.0).ok_or(Error::TransactionDetailsError(
+        let tx = self.wallet.bdk.get_tx(tx_id.0).ok_or(Error::TransactionDetailsError(
             "transaction not found".to_string(),
         ))?;
 
         let labels = self.db.labels.all_labels_for_txn(tx.tx_node.txid)?;
-        let details = TransactionDetails::try_new(&bdk, tx, labels.into())
+        let details = TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into())
             .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
 
         Produces::ok(details)
@@ -712,10 +702,9 @@ impl WalletActor {
         &mut self,
     ) -> Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
         let node_client = self.node_client().await?.clone();
-        let bdk = self.wallet.bdk.lock();
-
-        let full_scan_request = bdk.start_full_scan().build();
-        let graph = bdk.tx_graph().clone();
+        
+        let full_scan_request = self.wallet.bdk.start_full_scan().build();
+        let graph = self.wallet.bdk.tx_graph().clone();
 
         Ok((full_scan_request, graph, node_client))
     }
@@ -727,10 +716,9 @@ impl WalletActor {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
         let node_client = self.node_client().await?.clone();
-        let bdk = self.wallet.bdk.lock();
-
-        let full_scan_request = bdk.start_full_scan().build();
-        let graph = bdk.tx_graph().clone();
+        
+        let full_scan_request = self.wallet.bdk.start_full_scan().build();
+        let graph = self.wallet.bdk.tx_graph().clone();
 
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
@@ -757,7 +745,7 @@ impl WalletActor {
 
         match full_scan_result {
             Ok(full_scan_result) => {
-                self.wallet.bdk.lock().apply_update(full_scan_result)?;
+                self.wallet.bdk.apply_update(full_scan_result)?;
                 self.wallet.persist()?;
             }
             Err(error) => {
@@ -794,7 +782,7 @@ impl WalletActor {
         }
 
         let sync_result = scan_result?;
-        self.wallet.bdk.lock().apply_update(sync_result)?;
+        self.wallet.bdk.apply_update(sync_result)?;
         self.wallet.persist()?;
         self.save_last_scan_finished();
 

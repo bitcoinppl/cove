@@ -77,7 +77,7 @@ pub enum WalletError {
 pub struct Wallet {
     pub id: WalletId,
     pub network: Network,
-    pub bdk: Mutex<bdk_wallet::PersistedWallet<Connection>>,
+    pub bdk: bdk_wallet::PersistedWallet<Connection>,
     pub metadata: WalletMetadata,
     db: Mutex<Connection>,
 }
@@ -131,9 +131,8 @@ impl Wallet {
             keychain.save_wallet_xpub(&me.id, xpub)?;
 
             let (external_descriptor, internal_descriptor) = {
-                let bdk = me.bdk.lock();
-                let external_descriptor = bdk.public_descriptor(KeychainKind::External);
-                let internal_descriptor = bdk.public_descriptor(KeychainKind::Internal);
+                let external_descriptor = me.bdk.public_descriptor(KeychainKind::External);
+                let internal_descriptor = me.bdk.public_descriptor(KeychainKind::Internal);
 
                 (external_descriptor.clone(), internal_descriptor.clone())
             };
@@ -222,7 +221,7 @@ impl Wallet {
             id,
             network,
             metadata,
-            bdk: Mutex::new(wallet),
+            bdk: wallet,
             db: Mutex::new(store.conn),
         })
     }
@@ -337,7 +336,7 @@ impl Wallet {
             id,
             metadata,
             network,
-            bdk: Mutex::new(wallet),
+            bdk: wallet,
             db: Mutex::new(store.conn),
         })
     }
@@ -410,7 +409,7 @@ impl Wallet {
             id,
             metadata,
             network,
-            bdk: Mutex::new(wallet),
+            bdk: wallet,
             db: Mutex::new(store.conn),
         })
     }
@@ -443,7 +442,7 @@ impl Wallet {
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
         // switch db and wallet
-        self.bdk = Mutex::new(wallet);
+        self.bdk = wallet;
         self.metadata.address_type = address_type;
         self.metadata.discovery_state = DiscoveryState::ChoseAdressType;
 
@@ -524,20 +523,19 @@ impl Wallet {
             id,
             metadata,
             network,
-            bdk: Mutex::new(wallet),
+            bdk: wallet,
             db: Mutex::new(store.conn),
         })
     }
 
     pub fn balance(&self) -> Balance {
-        self.bdk.lock().balance().into()
+        self.bdk.balance().into()
     }
 
     #[allow(dead_code)]
     pub fn public_external_descriptor(&self) -> crate::keys::Descriptor {
         let extended_descriptor: ExtendedDescriptor = self
             .bdk
-            .lock()
             .public_descriptor(KeychainKind::External)
             .clone();
 
@@ -551,7 +549,6 @@ impl Wallet {
 
         let extended_descriptor: ExtendedDescriptor = self
             .bdk
-            .lock()
             .public_descriptor(KeychainKind::External)
             .clone();
 
@@ -585,7 +582,6 @@ impl Wallet {
 
         let addresses: Vec<AddressInfo> = self
             .bdk
-            .lock()
             .list_unused_addresses(KeychainKind::External)
             .take(MAX_ADDRESSES)
             .map(Into::into)
@@ -595,7 +591,6 @@ impl Wallet {
         if addresses.len() < MAX_ADDRESSES {
             let address_info = self
                 .bdk
-                .lock()
                 .reveal_next_address(KeychainKind::External)
                 .into();
 
@@ -631,7 +626,6 @@ impl Wallet {
 
     pub fn persist(&mut self) -> Result<(), WalletError> {
         self.bdk
-            .lock()
             .persist(&mut self.db.lock())
             .map_err(|error| WalletError::PersistError(error.to_string()))?;
 
