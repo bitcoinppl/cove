@@ -7,13 +7,13 @@
 
 extension AuthManagerError {
     var describe: String {
-        authManagerErrorToString(error: self)
+        describeAuthManagerError(error: self)
     }
 }
 
 extension MultiFormatError {
     var describe: String {
-        displayMultiFormatError(error: self)
+        describeMultiFormatError(error: self)
     }
 }
 
@@ -31,7 +31,7 @@ extension TransportError {
 
 extension TapSignerReaderError {
     var describe: String {
-        displayTapSignerReaderError(error: self)
+        describeTapSignerReaderError(error: self)
     }
 
     var isAuthError: Bool {

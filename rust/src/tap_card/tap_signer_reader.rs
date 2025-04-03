@@ -627,7 +627,7 @@ mod ffi {
     }
 
     #[uniffi::export]
-    fn display_tap_signer_reader_error(error: TapSignerReaderError) -> String {
+    fn describe_tap_signer_reader_error(error: TapSignerReaderError) -> String {
         error.to_string()
     }
 
