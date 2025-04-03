@@ -47,8 +47,17 @@ struct SendFlowConfirmScreen: View {
 
     var body: some View {
         // signed psbt has not been finalized yet
-        if signedTransaction == nil, signedPsbt != nil {
+        if let psbt = signedPsbt, signedTransaction == nil {
             FullPageLoadingView()
+                .task {
+                    do {
+                        signedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
+                    } catch let error as WalletManagerError {
+                        app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.describe))
+                    } catch {
+                        app.alertState = .init(.general(title: "Unknown error", message: error.localizedDescription))
+                    }
+                }
         } else {
             VStack(spacing: 0) {
                 // MARK: HEADER
@@ -187,18 +196,6 @@ struct SendFlowConfirmScreen: View {
                         if Task.isCancelled { return }
 
                         if metadata.walletType == .hot { auth.lock() }
-                    }
-                }
-                .task {
-                    if let psbt = signedPsbt, signedTransaction == nil {
-                        do {
-                            let txn = try await manager.rust.finalizePsbt(psbt: psbt)
-                            signedTransaction = txn
-                        } catch let error as WalletManagerError {
-                            app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.describe))
-                        } catch {
-                            app.alertState = .init(.general(title: "Unknown error", message: error.localizedDescription))
-                        }
                     }
                 }
             }
