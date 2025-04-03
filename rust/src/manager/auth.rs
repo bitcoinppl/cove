@@ -65,7 +65,7 @@ pub enum AuthManagerError {
 }
 
 #[uniffi::export]
-fn auth_manager_error_to_string(error: AuthManagerError) -> String {
+fn describe_auth_manager_error(error: AuthManagerError) -> String {
     error.to_string()
 }
 

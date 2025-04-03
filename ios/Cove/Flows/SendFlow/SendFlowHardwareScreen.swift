@@ -48,8 +48,6 @@ struct SendFlowHardwareScreen: View {
     // file import
     @State private var isPresentingFilePicker = false
 
-    //
-
     var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -143,7 +141,8 @@ struct SendFlowHardwareScreen: View {
                     }
                     .padding(.top, 8)
 
-                    AccountSection.padding(.vertical)
+                    AccountSection
+                        .padding(.vertical)
 
                     Divider()
 
@@ -187,8 +186,11 @@ struct SendFlowHardwareScreen: View {
 
                     Divider()
 
-                    // sign Transaction Section
-                    SignTransactionSection
+                    if case let .tapSigner(ts) = metadata.hardwareMetadata {
+                        SignTapSignerTransactionSection(ts)
+                    } else {
+                        SignTransactionSection
+                    }
 
                     Spacer()
 
@@ -202,9 +204,9 @@ struct SendFlowHardwareScreen: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .background(Color.coveBg)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal)
+            .background(Color.background)
             .sheet(item: $sheetState, content: SheetContent)
             .alert(
                 alertTitle,
@@ -312,13 +314,10 @@ struct SendFlowHardwareScreen: View {
                 BitcoinShieldIcon(width: 24, color: .orange)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(
-                        metadata.masterFingerprint?.asUppercase()
-                            ?? "No Fingerprint"
-                    )
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
+                    Text(metadata.identOrFingerprint())
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
 
                     Text(metadata.name)
                         .font(.footnote)
@@ -371,6 +370,35 @@ struct SendFlowHardwareScreen: View {
                         .font(.caption)
                         .fontWeight(.medium)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    func SignTapSignerTransactionSection(_ ts: TapSigner) -> some View {
+        VStack(spacing: 17) {
+            HStack {
+                Text("Sign Transaction")
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+            }
+
+            Button(action: {
+                let route = TapSignerRoute.enterPin(tapSigner: ts, action: .sign(details.psbt()))
+                app.sheetState = .init(.tapSigner(route))
+            }) {
+                Label("Sign using TAPSIGNER", systemImage: "key.card")
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical)
+                    .foregroundColor(.midnightBlue)
+                    .background(.btnPrimary)
+                    .cornerRadius(10)
+                    .font(.caption)
+                    .fontWeight(.medium)
             }
         }
     }
@@ -540,14 +568,12 @@ struct SendFlowHardwareScreen: View {
 }
 
 #Preview {
-    NavigationStack {
-        AsyncPreview {
-            SendFlowHardwareScreen(
-                id: WalletId(),
-                manager: WalletManager(preview: "preview_only"),
-                details: ConfirmDetails.previewNew()
-            )
-            .environment(AppManager.shared)
-        }
+    AsyncPreview {
+        SendFlowHardwareScreen(
+            id: WalletId(),
+            manager: WalletManager(preview: "preview_only"),
+            details: ConfirmDetails.previewNew()
+        )
+        .environment(AppManager.shared)
     }
 }

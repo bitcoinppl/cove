@@ -1,6 +1,6 @@
 [package]
 name = "cove"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2024"
 
 [lib]
@@ -43,7 +43,6 @@ bitcoin = { version = "0.32", features = ["serde"] }
 
 # tapsigner / satscard
 rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }
-# rust-cktap = { path = "../../rust-cktap/lib" }
 
 # async / actors
 tokio = { version = "1.38", features = ["rt"] }

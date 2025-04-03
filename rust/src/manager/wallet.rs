@@ -65,7 +65,6 @@ pub enum WalletManagerReconcileMessage {
     UnknownError(String),
 
     WalletScannerResponse(ScannerResponse),
-
     UnsignedTransactionsChanged,
 
     SendFlowError(SendFlowErrorAlert),
@@ -197,6 +196,9 @@ pub enum WalletManagerError {
 
     #[error("Unknown error: {0}")]
     UnknownError(String),
+
+    #[error("Error finalizing PSBT: {0}")]
+    PsbtFinalizeError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -441,9 +443,7 @@ impl RustWalletManager {
         let psbt = Arc::unwrap_or_clone(psbt);
         call!(self.actor.sign_and_broadcast_transaction(psbt.into()))
             .await
-            .map_err(|_error| {
-                Error::SignAndBroadcastError("sign and broadcast failed".to_string())
-            })?;
+            .unwrap()?;
 
         self.force_wallet_scan().await;
 
@@ -460,9 +460,7 @@ impl RustWalletManager {
 
         call!(self.actor.broadcast_transaction(txn.into()))
             .await
-            .map_err(|_error| {
-                Error::SignAndBroadcastError("broadcast transaction failed".to_string())
-            })?;
+            .unwrap()?;
 
         if let Err(error) = self.delete_unsigned_transaction(tx_id.into()) {
             error!("unable to delete unsigned transaction record: {error}");
@@ -1012,13 +1010,11 @@ impl RustWalletManager {
 
         let psbt = call!(actor.build_tx(amount, address, fee_rate))
             .await
-            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+            .unwrap()?;
 
         let details = call!(self.actor.get_confirm_details(psbt, fee_rate))
             .await
-            .map_err(|_| {
-                Error::GetConfirmDetailsError("failed to get confirm details".to_string())
-            })?;
+            .unwrap()?;
 
         Ok(details)
     }
@@ -1033,6 +1029,16 @@ impl RustWalletManager {
                 reconciler.reconcile(field);
             }
         });
+    }
+
+    /// Finalize a signed PSBT
+    #[uniffi::method]
+    pub async fn finalize_psbt(&self, psbt: Arc<Psbt>) -> Result<BitcoinTransaction, Error> {
+        let actor = self.actor.clone();
+        let psbt = Arc::unwrap_or_clone(psbt).into();
+        let transaction = call!(actor.finalize_psbt(psbt)).await.unwrap()?;
+
+        Ok(BitcoinTransaction::from(transaction))
     }
 
     #[uniffi::method]
@@ -1234,4 +1240,9 @@ impl Drop for RustWalletManager {
 #[uniffi::export]
 fn wallet_state_is_equal(lhs: WalletLoadState, rhs: WalletLoadState) -> bool {
     lhs == rhs
+}
+
+#[uniffi::export]
+fn describe_wallet_manager_error(error: WalletManagerError) -> String {
+    error.to_string()
 }

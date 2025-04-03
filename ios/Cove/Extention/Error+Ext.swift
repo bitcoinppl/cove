@@ -7,19 +7,19 @@
 
 extension AuthManagerError {
     var describe: String {
-        authManagerErrorToString(error: self)
+        describeAuthManagerError(error: self)
     }
 }
 
 extension MultiFormatError {
     var describe: String {
-        displayMultiFormatError(error: self)
+        describeMultiFormatError(error: self)
     }
 }
 
 extension WalletError {
     var describe: String {
-        displayWalletError(error: self)
+        describeWalletError(error: self)
     }
 }
 
@@ -31,7 +31,7 @@ extension TransportError {
 
 extension TapSignerReaderError {
     var describe: String {
-        displayTapSignerReaderError(error: self)
+        describeTapSignerReaderError(error: self)
     }
 
     var isAuthError: Bool {
@@ -40,5 +40,11 @@ extension TapSignerReaderError {
 
     var isNoBackupError: Bool {
         tapSignerErrorIsNoBackupError(error: self)
+    }
+}
+
+extension WalletManagerError {
+    var describe: String {
+        describeWalletManagerError(error: self)
     }
 }

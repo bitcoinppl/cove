@@ -958,13 +958,10 @@ struct SendFlowSetAmountScreen: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(
-                        metadata.masterFingerprint?.asUppercase()
-                            ?? "No Fingerprint"
-                    )
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .fontWeight(.medium)
+                    Text(metadata.identOrFingerprint())
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
 
                     Text(metadata.name)
                         .font(.footnote)

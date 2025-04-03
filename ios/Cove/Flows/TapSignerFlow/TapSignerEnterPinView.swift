@@ -39,6 +39,8 @@ struct TapSignerEnterPin: View {
                     )))
         case .backup:
             backupAction(nfc, pin)
+        case let .sign(psbt):
+            signAction(nfc, psbt, pin)
         }
     }
 
@@ -65,7 +67,50 @@ struct TapSignerEnterPin: View {
                 await MainActor.run { exportingBackup = backup }
             case let .failure(error):
                 if !error.isAuthError {
-                    app.alertState = .init(.general(title: "Backup Failed!", message: error.describe))
+                    app.alertState = .init(
+                        .general(title: "Backup Failed!", message: error.describe))
+                }
+
+                await MainActor.run { self.pin = "" }
+            }
+        }
+    }
+
+    func signAction(_ nfc: TapSignerNFC, _ psbt: Psbt, _ pin: String) {
+        Task {
+            switch await nfc.sign(psbt: psbt, pin: pin) {
+            case let .success(signedPsbt):
+                do {
+                    let db = Database().unsignedTransactions()
+                    let txId = psbt.txId()
+                    let record = try db.getTxThrow(txId: txId)
+                    let route = RouteFactory()
+                        .sendConfirm(
+                            id: record.walletId(),
+                            details: record.confirmDetails(),
+                            signedPsbt: signedPsbt,
+                        )
+
+                    await MainActor.run {
+                        self.pin = ""
+                        app.sheetState = .none
+                        app.pushRoute(route)
+                    }
+                } catch {
+                    await MainActor.run {
+                        app.alertState = .init(
+                            .general(title: "Error", message: error.localizedDescription))
+
+                        self.pin = ""
+                        app.sheetState = .none
+                    }
+                }
+            case let .failure(error):
+                if !error.isAuthError {
+                    app.alertState = .init(
+                        .general(title: "Signing Failed!", message: error.describe))
+
+                    app.sheetState = .none
                 }
 
                 await MainActor.run { self.pin = "" }

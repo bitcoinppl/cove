@@ -1,5 +1,5 @@
 //
-//  TapSignerNfc.swift
+//  TapSignerNFC.swift
 //  Cove
 //
 //  Created by Praveen Perera on 3/13/25.
@@ -32,6 +32,30 @@ class TapSignerNFC {
         }
     }
 
+    public func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
+        await performTapSignerCmd(cmd: .derive(pin: pin)) { $0?.deriveResponse }
+    }
+
+    public func changePin(currentPin: String, newPin: String) async -> Result<
+        Void, TapSignerReaderError
+    > {
+        await performTapSignerCmd(cmd: .change(currentPin: currentPin, newPin: newPin)) {
+            $0?.isChangeResponse
+        }.map { _ in () }
+    }
+
+    public func backup(pin: String) async -> Result<Data, TapSignerReaderError> {
+        await performTapSignerCmd(cmd: .backup(pin: pin)) { $0?.backupResponse }
+    }
+
+    public func sign(psbt: Psbt, pin: String) async -> Result<Psbt, TapSignerReaderError> {
+        await performTapSignerCmd(cmd: .sign(psbt: psbt, pin: pin)) { $0?.signResponse }
+    }
+
+    public func lastResponse() -> TapSignerResponse? {
+        nfc.tapSignerReader?.lastResponse() ?? lastResponse_
+    }
+
     private func performTapSignerCmd<T>(
         cmd: TapSignerCmd,
         _ successResult: @escaping (TapSignerResponse?) -> T?
@@ -54,6 +78,11 @@ class TapSignerNFC {
                             } else if let error = self.nfc.tapSignerError {
                                 continuation.resume(returning: .failure(error))
                                 self.nfc.session?.invalidate(errorMessage: error.describe)
+                            } else {
+                                Log.error("Unknown error response: \(String(describing: self.nfc.tapSignerResponse)), error: \(String(describing: self.nfc.tapSignerError))")
+                                let error = TapSignerReaderError.Unknown("Unknown error occurred")
+                                continuation.resume(returning: .failure(error))
+                                self.nfc.session?.invalidate(errorMessage: error.describe)
                             }
                         }
                     }
@@ -69,24 +98,6 @@ class TapSignerNFC {
             nfc.session?.invalidate(errorMessage: "Something went wrong!")
             return .failure(.Unknown(error.localizedDescription))
         }
-    }
-
-    public func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
-        await performTapSignerCmd(cmd: .derive(pin: pin)) { $0?.deriveResponse }
-    }
-
-    public func changePin(currentPin: String, newPin: String) async -> Result<Void, TapSignerReaderError> {
-        await performTapSignerCmd(cmd: .change(currentPin: currentPin, newPin: newPin)) {
-            $0?.isChangeResponse
-        }.map { _ in () }
-    }
-
-    public func backup(pin: String) async -> Result<Data, TapSignerReaderError> {
-        await performTapSignerCmd(cmd: .backup(pin: pin)) { $0?.backupResponse }
-    }
-
-    public func lastResponse() -> TapSignerResponse? {
-        nfc.tapSignerReader?.lastResponse() ?? lastResponse_
     }
 
     private func doSetupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil)
@@ -268,6 +279,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         case .derive: logger.info("started scanning for derive")
         case .change: logger.info("started scanning for change pin cmd")
         case .backup: logger.info("started scanning for backup")
+        case .sign: logger.info("started scanning for sign")
         }
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)

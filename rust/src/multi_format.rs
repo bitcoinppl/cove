@@ -168,7 +168,7 @@ fn string_or_data_try_into_multi_format(
 }
 
 #[uniffi::export]
-fn display_multi_format_error(error: MultiFormatError) -> String {
+fn describe_multi_format_error(error: MultiFormatError) -> String {
     error.to_string()
 }
 

@@ -76,7 +76,7 @@ public extension SendRoute {
     func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
-        case let .confirm(id: id, details: _, signedTransaction: _): id
+        case let .confirm(args): args.id
         case let .hardwareExport(id: id, details: _): id
         }
     }
@@ -178,6 +178,10 @@ extension TapSignerResponse {
         tapSignerResponseBackupResponse(response: self)
     }
 
+    var signResponse: Psbt? {
+        tapSignerResponseSignResponse(response: self)
+    }
+
     var isChangeResponse: Bool {
         tapSignerResponseChangeResponse(response: self)
     }
@@ -204,6 +208,14 @@ extension TapSigner: Equatable {
 extension WalletMetadata {
     func isTapSigner() -> Bool {
         hardwareMetadata?.isTapSigner() ?? false
+    }
+
+    func identOrFingerprint() -> String {
+        if case let .tapSigner(t) = hardwareMetadata {
+            return t.fullCardIdent()
+        }
+
+        return masterFingerprint?.asUppercase() ?? "No Fingerprint"
     }
 }
 

@@ -5,6 +5,7 @@ use crate::{
     database::Database,
     mnemonic::NumberOfBip39Words,
     multi_format::tap_card::TapSigner,
+    psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
@@ -97,11 +98,15 @@ pub enum SendRoute {
         id: WalletId,
         details: Arc<ConfirmDetails>,
     },
-    Confirm {
-        id: WalletId,
-        details: Arc<ConfirmDetails>,
-        signed_transaction: Option<Arc<BitcoinTransaction>>,
-    },
+    Confirm(SendRouteConfirmArgs),
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct SendRouteConfirmArgs {
+    pub id: WalletId,
+    pub details: Arc<ConfirmDetails>,
+    pub signed_transaction: Option<Arc<BitcoinTransaction>>,
+    pub signed_psbt: Option<Arc<Psbt>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -158,6 +163,7 @@ pub enum AfterPinAction {
     Derive,
     Change,
     Backup,
+    Sign(Arc<Psbt>),
 }
 
 /// When the user goes through entering the PIN and setting a new one, they are either setting up a new tapsigner
@@ -349,19 +355,22 @@ impl RouteFactory {
         Route::Send(send)
     }
 
-    #[uniffi::method(default(signed_transaction = None))]
+    #[uniffi::method(default(signed_transaction = None, signed_psbt = None))]
     pub fn send_confirm(
         &self,
         id: WalletId,
         details: Arc<ConfirmDetails>,
         signed_transaction: Option<Arc<BitcoinTransaction>>,
+        signed_psbt: Option<Arc<Psbt>>,
     ) -> Route {
-        let send = SendRoute::Confirm {
+        let args = SendRouteConfirmArgs {
             id,
             details,
             signed_transaction,
+            signed_psbt,
         };
 
+        let send = SendRoute::Confirm(args);
         Route::Send(send)
     }
 
@@ -444,6 +453,7 @@ impl AfterPinAction {
             Self::Derive => "For security purposes, you need to enter your TAPSIGNER PIN before you can import your wallet".to_string(),
             Self::Change => "Please enter your current PIN".to_string(),
             Self::Backup => "For security purposes, you need to enter your TAPSIGNER PIN before you can backup your wallet".to_string(),
+            Self::Sign(_) => "For security purposes, you need must enter your TAPSIGNER PIN before you can sign a transaction".to_string(),
         }
     }
 }

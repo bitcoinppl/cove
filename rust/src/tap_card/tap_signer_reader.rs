@@ -1,30 +1,33 @@
 use std::hash::Hasher;
 use std::sync::Arc;
 
-use bitcoin::bip32::Fingerprint;
-use bitcoin::hashes::HashEngine as _;
-use bitcoin::secp256k1;
+use bitcoin::{bip32::Fingerprint, hashes::HashEngine as _, secp256k1};
 use nid::Nanoid;
-use parking_lot::Mutex as SyncMutex;
-use parking_lot::RwLock;
-use rust_cktap::apdu::DeriveResponse;
-use rust_cktap::commands::Authentication;
-use rust_cktap::commands::Wait as _;
-use rust_cktap::tap_signer::TapSignerError;
-use rust_cktap::{CkTapCard, commands::CkTransport as _};
+use parking_lot::{Mutex as SyncMutex, RwLock};
+use rust_cktap::{
+    CkTapCard,
+    apdu::DeriveResponse,
+    commands::{Authentication, CkTransport as _, Wait as _},
+    tap_signer::TapSignerError,
+};
+
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::database::Database;
-use crate::network::Network;
+use crate::{database::Database, network::Network, psbt::Psbt};
 
-use super::CkTapError;
-use super::{TapcardTransport, TapcardTransportProtocol, TransportError};
+use super::{CkTapError, TapcardTransport, TapcardTransportProtocol, TransportError};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum TapSignerReaderError {
     #[error(transparent)]
     TapSignerError(#[from] TransportError),
+
+    #[error("PsbtSignError: {0}")]
+    PsbtSignError(String),
+
+    #[error("ExtractTxError: {0}")]
+    ExtractTxError(String),
 
     #[error("UnknownCardType: {0}, expected TapSigner")]
     UnknownCardType(String),
@@ -78,6 +81,10 @@ pub enum TapSignerCmd {
         current_pin: String,
         new_pin: String,
     },
+    Sign {
+        psbt: Arc<Psbt>,
+        pin: String,
+    },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
@@ -93,6 +100,7 @@ pub enum TapSignerResponse {
     Backup(Vec<u8>),
     Import(DeriveInfo),
     Change,
+    Sign(Arc<Psbt>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
@@ -214,6 +222,11 @@ impl TapSignerReader {
                 self.change(&new_pin, &current_pin).await?;
                 Ok(TapSignerResponse::Change)
             }
+
+            TapSignerCmd::Sign { psbt, pin } => {
+                let txn = self.sign(psbt, &pin).await?;
+                Ok(TapSignerResponse::Sign(txn.into()))
+            }
         }
     }
 
@@ -254,6 +267,20 @@ impl TapSignerReader {
             // already complete, just return the backup
             SetupCmdResponse::Complete(c) => Ok(SetupCmdResponse::Complete(c)),
         }
+    }
+
+    pub async fn sign(&self, psbt: Arc<Psbt>, pin: &str) -> Result<Psbt, Error> {
+        let psbt = Arc::unwrap_or_clone(psbt);
+
+        let psbt: bitcoin::Psbt = self
+            .reader
+            .lock()
+            .await
+            .sign_psbt(psbt.into(), pin)
+            .await
+            .map_err(|e| Error::PsbtSignError(e.to_string()))?;
+
+        Ok(psbt.into())
     }
 
     /// Get the last response from the reader
@@ -458,16 +485,16 @@ impl DeriveInfo {
         path: Vec<u32>,
         network: Network,
     ) -> Self {
-        let master_xpub = derive_response.master_pubkey;
+        let master_pubkey = derive_response.master_pubkey;
         let chain_code = derive_response.chain_code;
-        let xpub = derive_response
+        let pubkey = derive_response
             .pubkey
             .expect("has pubkey because path was given");
 
         Self {
-            master_pubkey: master_xpub,
-            pubkey: xpub,
-            chain_code,
+            master_pubkey: master_pubkey.to_vec(),
+            pubkey: pubkey.to_vec(),
+            chain_code: chain_code.to_vec(),
             path,
             network,
         }
@@ -516,6 +543,13 @@ impl TapSignerResponse {
     pub fn backup_response(&self) -> Option<&[u8]> {
         match self {
             TapSignerResponse::Backup(response) => Some(response),
+            _ => None,
+        }
+    }
+
+    pub fn sign_response(&self) -> Option<Arc<Psbt>> {
+        match self {
+            TapSignerResponse::Sign(txn) => Some(Arc::clone(txn)),
             _ => None,
         }
     }
@@ -588,7 +622,12 @@ mod ffi {
     }
 
     #[uniffi::export]
-    fn display_tap_signer_reader_error(error: TapSignerReaderError) -> String {
+    fn tap_signer_response_sign_response(response: TapSignerResponse) -> Option<Arc<Psbt>> {
+        response.sign_response()
+    }
+
+    #[uniffi::export]
+    fn describe_tap_signer_reader_error(error: TapSignerReaderError) -> String {
         error.to_string()
     }
 
