@@ -350,9 +350,9 @@ dependencies = [
 
 [[package]]
 name = "bdk_wallet"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a13c947be940d32a91b876fc5223a6d839a40bc219496c5c78af74714b1b3f7"
+checksum = "461b92c4e47b688a92740b204f4580e0a51775df16b67dde1d2db6ede1f0ba09"
 dependencies = [
  "bdk_chain",
  "bdk_file_store",
@@ -1053,9 +1053,9 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flate2"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11faaf5a5236997af9848be0bef4db95824b1d534ebc64d0f0c6cf3e67bd38dc"
+checksum = "7ced92e76e966ca2fd84c8f7aa01a4aea65b0eb6648d72f7c8f3e2764a67fece"
 dependencies = [
  "crc32fast",
  "libz-rs-sys",
@@ -1813,9 +1813,9 @@ dependencies = [
 
 [[package]]
 name = "libz-rs-sys"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "902bc563b5d65ad9bba616b490842ef0651066a1a1dc3ce1087113ffcb873c8d"
+checksum = "6489ca9bd760fe9642d7644e827b0c9add07df89857b0416ee15c1cc1a3b8c5a"
 dependencies = [
  "zlib-rs",
 ]
@@ -2575,7 +2575,7 @@ dependencies = [
 [[package]]
 name = "rust-cktap"
 version = "0.1.0"
-source = "git+https://github.com/bitcoinppl/rust-cktap#9dfa48d2b6cb34f9f06ad4231f52ef81ac79f5cc"
+source = "git+https://github.com/bitcoinppl/rust-cktap#09c2f57ce286f2c9fac4f85c9b07fa19f0e8fc79"
 dependencies = [
  "bitcoin",
  "ciborium",
@@ -3386,7 +3386,7 @@ dependencies = [
 [[package]]
 name = "uniffi"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "anyhow",
  "camino",
@@ -3424,7 +3424,7 @@ dependencies = [
 [[package]]
 name = "uniffi_bindgen"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "anyhow",
  "askama",
@@ -3457,7 +3457,7 @@ dependencies = [
 [[package]]
 name = "uniffi_build"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "anyhow",
  "camino",
@@ -3480,7 +3480,7 @@ dependencies = [
 [[package]]
 name = "uniffi_core"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "anyhow",
  "async-compat",
@@ -3502,7 +3502,7 @@ dependencies = [
 [[package]]
 name = "uniffi_internal_macros"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "quote",
  "syn",
@@ -3528,7 +3528,7 @@ dependencies = [
 [[package]]
 name = "uniffi_macros"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "camino",
  "fs-err",
@@ -3555,7 +3555,7 @@ dependencies = [
 [[package]]
 name = "uniffi_meta"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "anyhow",
  "siphasher",
@@ -3565,7 +3565,7 @@ dependencies = [
 [[package]]
 name = "uniffi_testing"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "anyhow",
  "camino",
@@ -3589,7 +3589,7 @@ dependencies = [
 [[package]]
 name = "uniffi_udl"
 version = "0.29.1"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "anyhow",
  "textwrap",
@@ -3783,7 +3783,7 @@ dependencies = [
 [[package]]
 name = "weedle2"
 version = "5.0.0"
-source = "git+https://github.com/mozilla/uniffi-rs#ce80f6db8f208eda3fa1db1920fa8a9de3c89d88"
+source = "git+https://github.com/mozilla/uniffi-rs#f23d818a09ca0d16aae7559e3ab6b19656348b28"
 dependencies = [
  "nom",
 ]
@@ -4241,6 +4241,6 @@ dependencies = [
 
 [[package]]
 name = "zlib-rs"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b20717f0917c908dc63de2e44e97f1e6b126ca58d0e391cee86d504eb8fbd05"
+checksum = "868b928d7949e09af2f6086dfc1e01936064cc7a819253bce650d4e2a2d63ba8"
