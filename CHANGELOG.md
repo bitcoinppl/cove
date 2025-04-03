@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Setup TAPSIGNER
+- Change TAPSIGNER PIN
+- Backup TAPSIGNER
+- Import TAPSIGNER public key
+- Sign PSBT using TAPSIGNER
+
 ## [0.2.2] - 2025-03-11
 
 ### Fixes
