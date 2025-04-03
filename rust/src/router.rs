@@ -98,11 +98,15 @@ pub enum SendRoute {
         id: WalletId,
         details: Arc<ConfirmDetails>,
     },
-    Confirm {
-        id: WalletId,
-        details: Arc<ConfirmDetails>,
-        signed_transaction: Option<Arc<BitcoinTransaction>>,
-    },
+    Confirm(SendRouteConfirmArgs),
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct SendRouteConfirmArgs {
+    pub id: WalletId,
+    pub details: Arc<ConfirmDetails>,
+    pub signed_transaction: Option<Arc<BitcoinTransaction>>,
+    pub signed_psbt: Option<Arc<Psbt>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -351,19 +355,22 @@ impl RouteFactory {
         Route::Send(send)
     }
 
-    #[uniffi::method(default(signed_transaction = None))]
+    #[uniffi::method(default(signed_transaction = None, signed_psbt = None))]
     pub fn send_confirm(
         &self,
         id: WalletId,
         details: Arc<ConfirmDetails>,
         signed_transaction: Option<Arc<BitcoinTransaction>>,
+        signed_psbt: Option<Arc<Psbt>>,
     ) -> Route {
-        let send = SendRoute::Confirm {
+        let args = SendRouteConfirmArgs {
             id,
             details,
             signed_transaction,
+            signed_psbt,
         };
 
+        let send = SendRoute::Confirm(args);
         Route::Send(send)
     }
 

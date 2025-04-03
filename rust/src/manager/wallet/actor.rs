@@ -416,7 +416,8 @@ impl WalletActor {
     }
 
     pub async fn do_finalize_psbt(&mut self, psbt: Psbt) -> Result<bitcoin::Transaction, Error> {
-        let mut psbt = psbt.into();
+        let mut psbt = psbt;
+
         let finalized = self
             .wallet
             .bdk

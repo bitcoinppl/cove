@@ -41,11 +41,12 @@ public struct SendFlowContainer: View {
             SendFlowSetAmountScreen(
                 id: id, manager: manager, address: address?.string() ?? "", amount: amount
             )
-        case let .confirm(id: id, details: details, signedTransaction: signedTransaction):
+        case let .confirm(confirm):
             SendFlowConfirmScreen(
-                id: id, manager: manager,
-                details: details,
-                signedTransaction: signedTransaction
+                id: confirm.id, manager: manager,
+                details: confirm.details,
+                signedTransaction: confirm.signedTransaction,
+                signedPsbt: confirm.signedPsbt
             )
         case let .hardwareExport(id: id, details: details):
             SendFlowHardwareScreen(id: id, manager: manager, details: details)

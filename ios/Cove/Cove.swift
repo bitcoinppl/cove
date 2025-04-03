@@ -8827,7 +8827,7 @@ public protocol RouteFactoryProtocol: AnyObject, Sendable {
     
     func send(send: SendRoute)  -> Route
     
-    func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?)  -> Route
+    func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?, signedPsbt: Psbt?)  -> Route
     
     func sendHardwareExport(id: WalletId, details: ConfirmDetails)  -> Route
     
@@ -9014,12 +9014,13 @@ open func send(send: SendRoute) -> Route  {
 })
 }
     
-open func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction? = nil) -> Route  {
+open func sendConfirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction? = nil, signedPsbt: Psbt? = nil) -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
     uniffi_cove_fn_method_routefactory_send_confirm(self.uniffiClonePointer(),
         FfiConverterTypeWalletId_lower(id),
         FfiConverterTypeConfirmDetails_lower(details),
-        FfiConverterOptionTypeBitcoinTransaction.lower(signedTransaction),$0
+        FfiConverterOptionTypeBitcoinTransaction.lower(signedTransaction),
+        FfiConverterOptionTypePsbt.lower(signedPsbt),$0
     )
 })
 }
@@ -9898,6 +9899,11 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     func fees()  -> FeeResponse?
     
+    /**
+     * Finalize a signed PSBT
+     */
+    func finalizePsbt(psbt: Psbt) async throws  -> BitcoinTransaction
+    
     func forceUpdateHeight() async throws  -> UInt32
     
     func forceWalletScan() async 
@@ -10361,6 +10367,26 @@ open func fees() -> FeeResponse?  {
     uniffi_cove_fn_method_rustwalletmanager_fees(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+    /**
+     * Finalize a signed PSBT
+     */
+open func finalizePsbt(psbt: Psbt)async throws  -> BitcoinTransaction  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_finalize_psbt(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePsbt_lower(psbt)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeBitcoinTransaction_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
 }
     
 open func forceUpdateHeight()async throws  -> UInt32  {
@@ -15578,6 +15604,66 @@ public func FfiConverterTypeScanningInfo_lift(_ buf: RustBuffer) throws -> Scann
 #endif
 public func FfiConverterTypeScanningInfo_lower(_ value: ScanningInfo) -> RustBuffer {
     return FfiConverterTypeScanningInfo.lower(value)
+}
+
+
+public struct SendRouteConfirmArgs {
+    public var id: WalletId
+    public var details: ConfirmDetails
+    public var signedTransaction: BitcoinTransaction?
+    public var signedPsbt: Psbt?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?, signedPsbt: Psbt?) {
+        self.id = id
+        self.details = details
+        self.signedTransaction = signedTransaction
+        self.signedPsbt = signedPsbt
+    }
+}
+
+#if compiler(>=6)
+extension SendRouteConfirmArgs: Sendable {}
+#endif
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendRouteConfirmArgs {
+        return
+            try SendRouteConfirmArgs(
+                id: FfiConverterTypeWalletId.read(from: &buf), 
+                details: FfiConverterTypeConfirmDetails.read(from: &buf), 
+                signedTransaction: FfiConverterOptionTypeBitcoinTransaction.read(from: &buf), 
+                signedPsbt: FfiConverterOptionTypePsbt.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendRouteConfirmArgs, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletId.write(value.id, into: &buf)
+        FfiConverterTypeConfirmDetails.write(value.details, into: &buf)
+        FfiConverterOptionTypeBitcoinTransaction.write(value.signedTransaction, into: &buf)
+        FfiConverterOptionTypePsbt.write(value.signedPsbt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendRouteConfirmArgs_lift(_ buf: RustBuffer) throws -> SendRouteConfirmArgs {
+    return try FfiConverterTypeSendRouteConfirmArgs.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendRouteConfirmArgs_lower(_ value: SendRouteConfirmArgs) -> RustBuffer {
+    return FfiConverterTypeSendRouteConfirmArgs.lower(value)
 }
 
 
@@ -22838,7 +22924,7 @@ public enum SendRoute {
     )
     case hardwareExport(id: WalletId, details: ConfirmDetails
     )
-    case confirm(id: WalletId, details: ConfirmDetails, signedTransaction: BitcoinTransaction?
+    case confirm(SendRouteConfirmArgs
     )
 }
 
@@ -22863,7 +22949,7 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
         case 2: return .hardwareExport(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf)
         )
         
-        case 3: return .confirm(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf), signedTransaction: try FfiConverterOptionTypeBitcoinTransaction.read(from: &buf)
+        case 3: return .confirm(try FfiConverterTypeSendRouteConfirmArgs.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22887,11 +22973,9 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
             FfiConverterTypeConfirmDetails.write(details, into: &buf)
             
         
-        case let .confirm(id,details,signedTransaction):
+        case let .confirm(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterTypeWalletId.write(id, into: &buf)
-            FfiConverterTypeConfirmDetails.write(details, into: &buf)
-            FfiConverterOptionTypeBitcoinTransaction.write(signedTransaction, into: &buf)
+            FfiConverterTypeSendRouteConfirmArgs.write(v1, into: &buf)
             
         }
     }
@@ -26036,6 +26120,8 @@ public enum WalletManagerError: Swift.Error {
     )
     case UnknownError(String
     )
+    case PsbtFinalizeError(String
+    )
 }
 
 
@@ -26111,6 +26197,9 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             try FfiConverterTypeConverterError.read(from: &buf)
             )
         case 22: return .UnknownError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 23: return .PsbtFinalizeError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -26230,6 +26319,11 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         
         case let .UnknownError(v1):
             writeInt(&buf, Int32(22))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .PsbtFinalizeError(v1):
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -29514,13 +29608,6 @@ public func allUnits() -> [Unit]  {
     )
 })
 }
-public func authManagerErrorToString(error: AuthManagerError) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_auth_manager_error_to_string(
-        FfiConverterTypeAuthManagerError_lower(error),$0
-    )
-})
-}
 public func colorSchemeSelectionCapitalizedString(colorScheme: ColorSchemeSelection) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_color_scheme_selection_capitalized_string(
@@ -30990,6 +31077,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_fees() != 1824) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_finalize_psbt() != 43668) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_force_update_height() != 23832) {

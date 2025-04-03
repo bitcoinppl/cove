@@ -15,7 +15,8 @@ struct SendFlowConfirmScreen: View {
     let id: WalletId
     @State var manager: WalletManager
     let details: ConfirmDetails
-    let signedTransaction: BitcoinTransaction?
+    @State var signedTransaction: BitcoinTransaction?
+    let signedPsbt: Psbt?
 
     let prices: PriceResponse? = nil
 
@@ -45,142 +46,160 @@ struct SendFlowConfirmScreen: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // MARK: HEADER
+        // signed psbt has not been finalized yet
+        if signedTransaction == nil, signedPsbt != nil {
+            FullPageLoadingView()
+        } else {
+            VStack(spacing: 0) {
+                // MARK: HEADER
 
-            SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
+                SendFlowHeaderView(manager: manager, amount: manager.balance.spendable())
 
-            // MARK: CONTENT
+                // MARK: CONTENT
 
-            ScrollView {
-                VStack(spacing: 24) {
-                    // set amount
-                    VStack(spacing: 8) {
-                        HStack {
-                            Text("You're sending")
-                                .font(.headline)
-                                .fontWeight(.bold)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // set amount
+                        VStack(spacing: 8) {
+                            HStack {
+                                Text("You're sending")
+                                    .font(.headline)
+                                    .fontWeight(.bold)
 
-                            Spacer()
-                        }
-                        .padding(.top, 6)
-
-                        HStack {
-                            Text("The amount they will receive")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary.opacity(0.80))
-                                .fontWeight(.medium)
-                            Spacer()
-                        }
-                    }
-                    .padding(.top, 10)
-
-                    // the amount in sats or btc
-                    VStack(spacing: 8) {
-                        HStack(alignment: .bottom) {
-                            Spacer()
-
-                            Text(manager.amountFmt(details.sendingAmount()))
-                                .frame(minWidth: screenWidth / 2)
-                                .font(.system(size: 48, weight: .bold))
-                                .minimumScaleFactor(0.01)
-                                .lineLimit(1)
-                                .multilineTextAlignment(.center)
-
-                            Button(action: { showingMenu.toggle() }) {
-                                HStack(spacing: 0) {
-                                    Text(metadata.selectedUnit == .sat ? "sats" : "btc")
-
-                                    Image(systemName: "chevron.down")
-                                        .font(.caption)
-                                        .fontWeight(.bold)
-                                        .padding(.top, 2)
-                                        .padding(.leading, 4)
-                                }
-                                .frame(alignment: .trailing)
+                                Spacer()
                             }
-                            .foregroundStyle(.primary)
-                            .padding(.vertical, 10)
-                            .padding(.leading, 16)
-                            .popover(isPresented: $showingMenu) {
-                                VStack(alignment: .center, spacing: 0) {
-                                    Button("sats") {
-                                        manager.dispatch(action: .updateUnit(.sat))
-                                        showingMenu = false
-                                    }
-                                    .padding(12)
-                                    .buttonStyle(.plain)
+                            .padding(.top, 6)
 
-                                    Divider()
-
-                                    Button("btc") {
-                                        manager.dispatch(action: .updateUnit(.btc))
-                                        showingMenu = false
-                                    }
-                                    .padding(12)
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 12)
-                                .frame(minWidth: 120, maxWidth: 200)
-                                .presentationCompactAdaptation(.popover)
-                                .foregroundStyle(.primary.opacity(0.8))
+                            HStack {
+                                Text("The amount they will receive")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary.opacity(0.80))
+                                    .fontWeight(.medium)
+                                Spacer()
                             }
                         }
-                        .frame(alignment: .center)
+                        .padding(.top, 10)
 
-                        Text(fiatAmount)
-                            .font(.title3)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.top, 8)
+                        // the amount in sats or btc
+                        VStack(spacing: 8) {
+                            HStack(alignment: .bottom) {
+                                Spacer()
 
-                    SendFlowAccountSection(manager: manager)
-                        .padding(.top)
+                                Text(manager.amountFmt(details.sendingAmount()))
+                                    .frame(minWidth: screenWidth / 2)
+                                    .font(.system(size: 48, weight: .bold))
+                                    .minimumScaleFactor(0.01)
+                                    .lineLimit(1)
+                                    .multilineTextAlignment(.center)
 
-                    Divider()
+                                Button(action: { showingMenu.toggle() }) {
+                                    HStack(spacing: 0) {
+                                        Text(metadata.selectedUnit == .sat ? "sats" : "btc")
 
-                    SendFlowDetailsView(manager: manager, details: details, prices: prices)
-                }
-            }
-            .scrollIndicators(.hidden)
-            .padding(.horizontal)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.coveBg)
+                                        Image(systemName: "chevron.down")
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                            .padding(.top, 2)
+                                            .padding(.leading, 4)
+                                    }
+                                    .frame(alignment: .trailing)
+                                }
+                                .foregroundStyle(.primary)
+                                .padding(.vertical, 10)
+                                .padding(.leading, 16)
+                                .popover(isPresented: $showingMenu) {
+                                    VStack(alignment: .center, spacing: 0) {
+                                        Button("sats") {
+                                            manager.dispatch(action: .updateUnit(.sat))
+                                            showingMenu = false
+                                        }
+                                        .padding(12)
+                                        .buttonStyle(.plain)
 
-            SwipeToSendView(sendState: $sendState) {
-                sendState = .sending
-                Task {
-                    do {
-                        if let txn = signedTransaction {
-                            _ = try await manager.rust.broadcastTransaction(signedTransaction: txn)
-                        } else {
-                            _ = try await manager.rust.signAndBroadcastTransaction(
-                                psbt: details.psbt())
+                                        Divider()
+
+                                        Button("btc") {
+                                            manager.dispatch(action: .updateUnit(.btc))
+                                            showingMenu = false
+                                        }
+                                        .padding(12)
+                                        .buttonStyle(.plain)
+                                    }
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
+                                    .frame(minWidth: 120, maxWidth: 200)
+                                    .presentationCompactAdaptation(.popover)
+                                    .foregroundStyle(.primary.opacity(0.8))
+                                }
+                            }
+                            .frame(alignment: .center)
+
+                            Text(fiatAmount)
+                                .font(.title3)
+                                .foregroundColor(.secondary)
                         }
-                        sendState = .sent
-                        isShowingAlert = true
-                        auth.unlock()
-                    } catch let error as WalletManagerError {
-                        sendState = .error(error.describe)
-                        isShowingErrorAlert = true
-                    } catch {
-                        sendState = .error(error.localizedDescription)
-                        isShowingErrorAlert = true
+                        .padding(.top, 8)
+
+                        SendFlowAccountSection(manager: manager)
+                            .padding(.top)
+
+                        Divider()
+
+                        SendFlowDetailsView(manager: manager, details: details, prices: prices)
                     }
                 }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal)
-            .padding(.bottom, 6)
-            .padding(.top, 20)
-            .background(Color.coveBg)
-            .onAppear {
-                lockingTask = Task {
-                    try? await Task.sleep(for: .milliseconds(50))
-                    if Task.isCancelled { return }
+                .scrollIndicators(.hidden)
+                .padding(.horizontal)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.coveBg)
 
-                    if metadata.walletType == .hot { auth.lock() }
+                SwipeToSendView(sendState: $sendState) {
+                    sendState = .sending
+                    Task {
+                        do {
+                            if let txn = signedTransaction {
+                                _ = try await manager.rust.broadcastTransaction(
+                                    signedTransaction: txn)
+                            } else {
+                                _ = try await manager.rust.signAndBroadcastTransaction(
+                                    psbt: details.psbt())
+                            }
+                            sendState = .sent
+                            isShowingAlert = true
+                            auth.unlock()
+                        } catch let error as WalletManagerError {
+                            sendState = .error(error.describe)
+                            isShowingErrorAlert = true
+                        } catch {
+                            sendState = .error(error.localizedDescription)
+                            isShowingErrorAlert = true
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal)
+                .padding(.bottom, 6)
+                .padding(.top, 20)
+                .background(Color.coveBg)
+                .onAppear {
+                    lockingTask = Task {
+                        try? await Task.sleep(for: .milliseconds(50))
+                        if Task.isCancelled { return }
+
+                        if metadata.walletType == .hot { auth.lock() }
+                    }
+                }
+                .task {
+                    if let psbt = signedPsbt, signedTransaction == nil {
+                        do {
+                            let txn = try await manager.rust.finalizePsbt(psbt: psbt)
+                            signedTransaction = txn
+                        } catch let error as WalletManagerError {
+                            app.alertState = .init(.general(title: "Unable to finalize transaction", message: error.describe))
+                        } catch {
+                            app.alertState = .init(.general(title: "Unknown error", message: error.localizedDescription))
+                        }
+                    }
                 }
             }
             .onDisappear {
@@ -214,7 +233,8 @@ struct SendFlowConfirmScreen: View {
                     if case let .error(error) = sendState {
                         Text(error)
                     } else {
-                        Text("Unknown error, unable to broadcast transaction, please try again!")
+                        Text(
+                            "Unknown error, unable to broadcast transaction, please try again!")
                     }
                 }
             )
@@ -245,7 +265,8 @@ struct SendFlowConfirmScreen: View {
                                     id: WalletId(),
                                     manager: manager,
                                     details: ConfirmDetails.previewNew(amount: 30333),
-                                    signedTransaction: nil
+                                    signedTransaction: nil,
+                                    signedPsbt: nil
                                 )
                                 .environment(AppManager.shared)
                                 .environment(AuthManager.shared)
@@ -270,7 +291,7 @@ struct SendFlowConfirmScreen: View {
             id: WalletId(),
             manager: WalletManager(preview: "preview_only"),
             details: ConfirmDetails.previewNew(amount: 30_333_312),
-            signedTransaction: nil
+            signedTransaction: nil, signedPsbt: nil
         )
         .environment(AppManager.shared)
         .environment(AuthManager.shared)

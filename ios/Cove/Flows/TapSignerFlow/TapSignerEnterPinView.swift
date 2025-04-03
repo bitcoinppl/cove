@@ -30,13 +30,13 @@ struct TapSignerEnterPin: View {
         case .change:
             manager.navigate(
                 to:
-                    .newPin(
-                        TapSignerNewPinArgs(
-                            tapSigner: tapSigner,
-                            startingPin: pin,
-                            chainCode: .none,
-                            action: .change
-                        )))
+                .newPin(
+                    TapSignerNewPinArgs(
+                        tapSigner: tapSigner,
+                        startingPin: pin,
+                        chainCode: .none,
+                        action: .change
+                    )))
         case .backup:
             backupAction(nfc, pin)
         case let .sign(psbt):
@@ -79,14 +79,16 @@ struct TapSignerEnterPin: View {
     func signAction(_ nfc: TapSignerNFC, _ psbt: Psbt, _ pin: String) {
         Task {
             switch await nfc.sign(psbt: psbt, pin: pin) {
-            case let .success(signedTxn):
+            case let .success(signedPsbt):
                 do {
                     let db = Database().unsignedTransactions()
-                    let record = try db.getTxThrow(txId: signedTxn.txId())
+                    let txId = psbt.txId()
+                    let record = try db.getTxThrow(txId: txId)
                     let route = RouteFactory()
                         .sendConfirm(
-                            id: record.walletId(), details: record.confirmDetails(),
-                            signedTransaction: signedTxn
+                            id: record.walletId(),
+                            details: record.confirmDetails(),
+                            signedPsbt: signedPsbt,
                         )
 
                     await MainActor.run {
@@ -151,7 +153,7 @@ struct TapSignerEnterPin: View {
                 .padding(.horizontal)
 
                 HStack {
-                    ForEach(0..<6, id: \.self) { index in
+                    ForEach(0 ..< 6, id: \.self) { index in
                         Circle()
                             .stroke(.primary, lineWidth: 1.3)
                             .fill(pin.count <= index ? Color.clear : .primary)

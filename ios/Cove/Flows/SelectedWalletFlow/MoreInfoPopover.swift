@@ -96,6 +96,7 @@ struct MoreInfoPopover: View {
                 Label("Wallet Settings", systemImage: "gear")
             }
         }
+        .tint(.primary)
     }
 }
 
