@@ -15,6 +15,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "act-zero-ext"
+version = "0.1.0"
+source = "git+https://github.com/praveenperera/act-zero-ext#e4c901c687e75d5ac81f6c443cdd2cda4247f680"
+dependencies = [
+ "act-zero",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -719,6 +730,7 @@ name = "cove"
 version = "0.3.0"
 dependencies = [
  "act-zero",
+ "act-zero-ext",
  "ahash",
  "arc-swap",
  "argon2",

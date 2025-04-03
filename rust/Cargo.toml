@@ -44,9 +44,12 @@ bitcoin = { version = "0.32", features = ["serde"] }
 # tapsigner / satscard
 rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }
 
-# async / actors
-tokio = { version = "1.38", features = ["rt"] }
+# actors
 act-zero = { version = "0.4.0", features = ["default-tokio"] }
+act-zero-ext = { version = "0.1.0", git = "https://github.com/praveenperera/act-zero-ext" }
+
+# async 
+tokio = { version = "1.38", features = ["rt"] }
 async-trait = "0.1.81"
 futures = "0.3.30"
 tryhard = "0.5"

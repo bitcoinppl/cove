@@ -13,6 +13,7 @@ use crate::{
     },
 };
 use act_zero::*;
+use act_zero_ext::into_actor_result;
 use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
 use bdk_core::spk_client::FullScanRequest;
 use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
@@ -161,17 +162,8 @@ impl WalletActor {
         Produces::ok(psbt)
     }
 
+    #[into_actor_result]
     pub async fn build_tx(
-        &mut self,
-        amount: Amount,
-        address: Address,
-        fee_rate: BdkFeeRate,
-    ) -> ActorResult<Result<Psbt, Error>> {
-        let psbt = self.do_build_tx(amount, address, fee_rate).await;
-        Produces::ok(psbt)
-    }
-
-    async fn do_build_tx(
         &mut self,
         amount: Amount,
         address: Address,
@@ -247,16 +239,8 @@ impl WalletActor {
         Produces::ok(SplitOutput { external, internal })
     }
 
+    #[into_actor_result]
     pub async fn get_confirm_details(
-        &mut self,
-        psbt: Psbt,
-        fee_rate: BdkFeeRate,
-    ) -> ActorResult<Result<ConfirmDetails, Error>> {
-        let details = self.do_get_confirm_details(psbt, fee_rate).await;
-        Produces::ok(details)
-    }
-
-    async fn do_get_confirm_details(
         &mut self,
         psbt: Psbt,
         fee_rate: BdkFeeRate,
@@ -369,15 +353,11 @@ impl WalletActor {
         Ok(())
     }
 
+    #[into_actor_result]
     pub async fn broadcast_transaction(
         &mut self,
         transaction: BdkTransaction,
-    ) -> ActorResult<Result<(), Error>> {
-        let result = self.do_broadcast_transaction(transaction).await;
-        Produces::ok(result)
-    }
-
-    async fn do_broadcast_transaction(&mut self, transaction: BdkTransaction) -> Result<(), Error> {
+    ) -> Result<(), Error> {
         self.check_node_connection().await.map_err(|error| {
             let error_string =
                 format!("failed to broadcast transaction, unable to connect to node: {error:?}");
@@ -402,15 +382,8 @@ impl WalletActor {
         Ok(())
     }
 
-    pub async fn finalize_psbt(
-        &mut self,
-        psbt: Psbt,
-    ) -> ActorResult<Result<bitcoin::Transaction, Error>> {
-        let tx = self.do_finalize_psbt(psbt).await;
-        Produces::ok(tx)
-    }
-
-    pub async fn do_finalize_psbt(&mut self, psbt: Psbt) -> Result<bitcoin::Transaction, Error> {
+    #[into_actor_result]
+    pub async fn finalize_psbt(&mut self, psbt: Psbt) -> Result<bitcoin::Transaction, Error> {
         let mut psbt = psbt;
 
         let finalized = self
@@ -593,14 +566,14 @@ impl WalletActor {
     // 1. do a full scan of the first 20 addresses, return results
     // 2. do a full scan of the next 150 addresses, return results
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
-        self.perform_initial_full_scan().await?;
+        self.maybe_perform_initial_full_scan().await?;
         Produces::ok(())
     }
 
     // when a wallet is first opened, we need to scan for its addresses, but we want the
     // initial scan to be fast, so we can have transactions show up in the UI quickly
     // so we do a full scan of only the first 20 addresses, initially
-    async fn perform_initial_full_scan(&mut self) -> ActorResult<()> {
+    async fn maybe_perform_initial_full_scan(&mut self) -> ActorResult<()> {
         if self.state != ActorState::Initial {
             debug!(
                 "already performing scanning or scanned skipping ({:?})",
@@ -617,7 +590,7 @@ impl WalletActor {
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Initial);
-        self.do_perform_initial_full_scan().await?;
+        self.perform_initial_full_scan().await?;
 
         Produces::ok(())
     }
@@ -625,7 +598,7 @@ impl WalletActor {
     // after the initial full scan is complete, do a much for comprehensive scan of the wallet
     // this is slower, but we want to be able to see all transactions in the UI, so scan the next
     // 150 addresses
-    async fn perform_expanded_full_scan(&mut self) -> ActorResult<()> {
+    async fn maybe_perform_expanded_full_scan(&mut self) -> ActorResult<()> {
         if self.state == ActorState::FullScanComplete(FullScanType::Expanded)
             || self.state == ActorState::IncrementalScanComplete
         {
@@ -645,13 +618,13 @@ impl WalletActor {
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Expanded);
-        send!(self.addr.do_perform_expanded_full_scan());
+        send!(self.addr.perform_expanded_full_scan());
 
         Produces::ok(())
     }
 
-    async fn do_perform_initial_full_scan(&mut self) -> ActorResult<()> {
-        debug!("do_perform_initial_full_scan");
+    async fn perform_initial_full_scan(&mut self) -> ActorResult<()> {
+        debug!("perform_initial_full_scan");
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Initial;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
@@ -671,14 +644,14 @@ impl WalletActor {
             let _ = call!(addr.handle_full_scan_complete(full_scan_result, FULL_SCAN_TYPE)).await;
 
             // perform next scan
-            send!(addr.perform_expanded_full_scan());
+            send!(addr.maybe_perform_expanded_full_scan());
         });
 
         Produces::ok(())
     }
 
-    async fn do_perform_expanded_full_scan(&mut self) -> ActorResult<()> {
-        debug!("do_perform_expanded_full_scan");
+    async fn perform_expanded_full_scan(&mut self) -> ActorResult<()> {
+        debug!("perform_expanded_full_scan");
         static FULL_SCAN_TYPE: FullScanType = FullScanType::Expanded;
 
         let (full_scan_request, graph, node_client) = self.get_for_full_scan().await?;
