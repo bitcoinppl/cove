@@ -32,6 +32,30 @@ class TapSignerNFC {
         }
     }
 
+    public func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
+        await performTapSignerCmd(cmd: .derive(pin: pin)) { $0?.deriveResponse }
+    }
+
+    public func changePin(currentPin: String, newPin: String) async -> Result<
+        Void, TapSignerReaderError
+    > {
+        await performTapSignerCmd(cmd: .change(currentPin: currentPin, newPin: newPin)) {
+            $0?.isChangeResponse
+        }.map { _ in () }
+    }
+
+    public func backup(pin: String) async -> Result<Data, TapSignerReaderError> {
+        await performTapSignerCmd(cmd: .backup(pin: pin)) { $0?.backupResponse }
+    }
+
+    public func sign(psbt: Psbt, pin: String) async -> Result<Psbt, TapSignerReaderError> {
+        await performTapSignerCmd(cmd: .sign(psbt: psbt, pin: pin)) { $0?.signResponse }
+    }
+
+    public func lastResponse() -> TapSignerResponse? {
+        nfc.tapSignerReader?.lastResponse() ?? lastResponse_
+    }
+
     private func performTapSignerCmd<T>(
         cmd: TapSignerCmd,
         _ successResult: @escaping (TapSignerResponse?) -> T?
@@ -76,30 +100,6 @@ class TapSignerNFC {
         }
     }
 
-    public func derive(pin: String) async -> Result<DeriveInfo, TapSignerReaderError> {
-        await performTapSignerCmd(cmd: .derive(pin: pin)) { $0?.deriveResponse }
-    }
-
-    public func changePin(currentPin: String, newPin: String) async -> Result<
-        Void, TapSignerReaderError
-    > {
-        await performTapSignerCmd(cmd: .change(currentPin: currentPin, newPin: newPin)) {
-            $0?.isChangeResponse
-        }.map { _ in () }
-    }
-
-    public func backup(pin: String) async -> Result<Data, TapSignerReaderError> {
-        await performTapSignerCmd(cmd: .backup(pin: pin)) { $0?.backupResponse }
-    }
-
-    public func sign(psbt: Psbt, pin: String) async -> Result<BitcoinTransaction, TapSignerReaderError> {
-        await performTapSignerCmd(cmd: .sign(psbt: psbt, pin: pin)) { $0?.signResponse }
-    }
-
-    public func lastResponse() -> TapSignerResponse? {
-        nfc.tapSignerReader?.lastResponse() ?? lastResponse_
-    }
-
     private func doSetupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil)
         async throws -> SetupCmdResponse
     {
@@ -133,8 +133,7 @@ class TapSignerNFC {
                 // Start the NFC operation
                 do {
                     let cmd = try SetupCmd.tryNew(
-                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode
-                    )
+                        factoryPin: factoryPin, newPin: newPin, chainCode: chainCode)
                     nfc.tapSignerCmd = TapSignerCmd.setup(cmd)
                     nfc.scan()
                 } catch let error as TapSignerReaderError {
@@ -340,8 +339,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
             case .tapSigner:
                 let tapSignerReader = try await TapSignerReader(
-                    transport: transport, cmd: tapSignerCmd
-                )
+                    transport: transport, cmd: tapSignerCmd)
 
                 self.tapSignerReader = tapSignerReader
 

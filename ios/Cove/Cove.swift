@@ -11332,7 +11332,7 @@ public protocol TapSignerReaderProtocol: AnyObject, Sendable {
      */
     func setup(cmd: SetupCmd) async throws  -> SetupCmdResponse
     
-    func sign(psbt: Psbt, pin: String) async throws  -> BitcoinTransaction
+    func sign(psbt: Psbt, pin: String) async throws  -> Psbt
     
 }
 open class TapSignerReader: TapSignerReaderProtocol, @unchecked Sendable {
@@ -11470,7 +11470,7 @@ open func setup(cmd: SetupCmd)async throws  -> SetupCmdResponse  {
         )
 }
     
-open func sign(psbt: Psbt, pin: String)async throws  -> BitcoinTransaction  {
+open func sign(psbt: Psbt, pin: String)async throws  -> Psbt  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -11482,7 +11482,7 @@ open func sign(psbt: Psbt, pin: String)async throws  -> BitcoinTransaction  {
             pollFunc: ffi_cove_rust_future_poll_pointer,
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeBitcoinTransaction_lift,
+            liftFunc: FfiConverterTypePsbt_lift,
             errorHandler: FfiConverterTypeTapSignerReaderError_lift
         )
 }
@@ -23885,7 +23885,7 @@ public enum TapSignerResponse {
     case `import`(DeriveInfo
     )
     case change
-    case sign(BitcoinTransaction
+    case sign(Psbt
     )
 }
 
@@ -23915,7 +23915,7 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
         
         case 4: return .change
         
-        case 5: return .sign(try FfiConverterTypeBitcoinTransaction.read(from: &buf)
+        case 5: return .sign(try FfiConverterTypePsbt.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -23947,7 +23947,7 @@ public struct FfiConverterTypeTapSignerResponse: FfiConverterRustBuffer {
         
         case let .sign(v1):
             writeInt(&buf, Int32(5))
-            FfiConverterTypeBitcoinTransaction.write(v1, into: &buf)
+            FfiConverterTypePsbt.write(v1, into: &buf)
             
         }
     }
@@ -28307,6 +28307,30 @@ fileprivate struct FfiConverterOptionTypeFingerprint: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePsbt: FfiConverterRustBuffer {
+    typealias SwiftType = Psbt?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePsbt.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePsbt.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeUnsignedTransactionRecord: FfiConverterRustBuffer {
     typealias SwiftType = UnsignedTransactionRecord?
 
@@ -29823,8 +29847,8 @@ public func tapSignerResponseSetupResponse(response: TapSignerResponse) -> Setup
     )
 })
 }
-public func tapSignerResponseSignResponse(response: TapSignerResponse) -> BitcoinTransaction?  {
-    return try!  FfiConverterOptionTypeBitcoinTransaction.lift(try! rustCall() {
+public func tapSignerResponseSignResponse(response: TapSignerResponse) -> Psbt?  {
+    return try!  FfiConverterOptionTypePsbt.lift(try! rustCall() {
     uniffi_cove_fn_func_tap_signer_response_sign_response(
         FfiConverterTypeTapSignerResponse_lower(response),$0
     )
@@ -30121,7 +30145,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_tap_signer_response_setup_response() != 1061) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_tap_signer_response_sign_response() != 6394) {
+    if (uniffi_cove_checksum_func_tap_signer_response_sign_response() != 54635) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_tap_signer_setup_complete_new() != 48955) {
@@ -31081,7 +31105,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_tapsignerreader_setup() != 7185) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_tapsignerreader_sign() != 32609) {
+    if (uniffi_cove_checksum_method_tapsignerreader_sign() != 10059) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_address() != 31151) {

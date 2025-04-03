@@ -15,7 +15,7 @@ use crate::{
 use act_zero::*;
 use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
 use bdk_core::spk_client::FullScanRequest;
-use bdk_wallet::{KeychainKind, TxOrdering};
+use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
 use bitcoin::Amount;
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use crossbeam::channel::Sender;
@@ -405,6 +405,37 @@ impl WalletActor {
             })?;
 
         Ok(())
+    }
+
+    pub async fn finalize_psbt(
+        &mut self,
+        psbt: Psbt,
+    ) -> ActorResult<Result<bitcoin::Transaction, Error>> {
+        let tx = self.do_finalize_psbt(psbt).await;
+        Produces::ok(tx)
+    }
+
+    pub async fn do_finalize_psbt(&mut self, psbt: Psbt) -> Result<bitcoin::Transaction, Error> {
+        let mut psbt = psbt.into();
+        let finalized = self
+            .wallet
+            .bdk
+            .lock()
+            .finalize_psbt(&mut psbt, SignOptions::default())
+            .map_err(|e| Error::PsbtFinalizeError(e.to_string()))?;
+
+        if !finalized {
+            return Err(Error::PsbtFinalizeError(
+                "Failed to finalize PSBT".to_string(),
+            ));
+        }
+
+        let tx = psbt.extract_tx().map_err(|e| {
+            let err = format!("Failed to extract tx from PSBT: {e:?}");
+            Error::PsbtFinalizeError(err)
+        })?;
+
+        Ok(tx)
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {

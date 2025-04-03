@@ -276,7 +276,7 @@ impl TapSignerReader {
             .reader
             .lock()
             .await
-            .sign_bip84_psbt(psbt.into(), pin)
+            .sign_psbt(psbt.into(), pin)
             .await
             .map_err(|e| Error::PsbtSignError(e.to_string()))?;
 

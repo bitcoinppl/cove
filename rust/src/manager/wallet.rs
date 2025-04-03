@@ -196,6 +196,9 @@ pub enum WalletManagerError {
 
     #[error("Unknown error: {0}")]
     UnknownError(String),
+
+    #[error("Error finalizing PSBT: {0}")]
+    PsbtFinalizeError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -1026,6 +1029,16 @@ impl RustWalletManager {
                 reconciler.reconcile(field);
             }
         });
+    }
+
+    /// Finalize a signed PSBT
+    #[uniffi::method]
+    pub async fn finalize_psbt(&self, psbt: Arc<Psbt>) -> Result<BitcoinTransaction, Error> {
+        let actor = self.actor.clone();
+        let psbt = Arc::unwrap_or_clone(psbt).into();
+        let transaction = call!(actor.finalize_psbt(psbt)).await.unwrap()?;
+
+        Ok(BitcoinTransaction::from(transaction))
     }
 
     #[uniffi::method]
