@@ -534,10 +534,8 @@ impl Wallet {
 
     #[allow(dead_code)]
     pub fn public_external_descriptor(&self) -> crate::keys::Descriptor {
-        let extended_descriptor: ExtendedDescriptor = self
-            .bdk
-            .public_descriptor(KeychainKind::External)
-            .clone();
+        let extended_descriptor: ExtendedDescriptor =
+            self.bdk.public_descriptor(KeychainKind::External).clone();
 
         crate::keys::Descriptor::from(extended_descriptor)
     }
@@ -547,10 +545,8 @@ impl Wallet {
         use bdk_wallet::miniscript::Descriptor;
         use bdk_wallet::miniscript::descriptor::ShInner;
 
-        let extended_descriptor: ExtendedDescriptor = self
-            .bdk
-            .public_descriptor(KeychainKind::External)
-            .clone();
+        let extended_descriptor: ExtendedDescriptor =
+            self.bdk.public_descriptor(KeychainKind::External).clone();
 
         let key = match extended_descriptor {
             Descriptor::Pkh(pk) => pk.into_inner(),
@@ -589,10 +585,7 @@ impl Wallet {
 
         // get up to 25 revealed but unused addresses
         if addresses.len() < MAX_ADDRESSES {
-            let address_info = self
-                .bdk
-                .reveal_next_address(KeychainKind::External)
-                .into();
+            let address_info = self.bdk.reveal_next_address(KeychainKind::External).into();
 
             self.persist()?;
 

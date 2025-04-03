@@ -211,7 +211,9 @@ impl WalletActor {
     pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
         let zero = Amount::ZERO.into();
 
-        let mut transactions = self.wallet.bdk
+        let mut transactions = self
+            .wallet
+            .bdk
             .transactions()
             .map(|tx| {
                 let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
@@ -432,10 +434,7 @@ impl WalletActor {
     }
 
     pub async fn address_at(&mut self, index: u32) -> ActorResult<AddressInfo> {
-        let address = self
-            .wallet
-            .bdk
-            .peek_address(KeychainKind::External, index);
+        let address = self.wallet.bdk.peek_address(KeychainKind::External, index);
         Produces::ok(address.into())
     }
 
@@ -575,9 +574,13 @@ impl WalletActor {
     }
 
     pub async fn transaction_details(&mut self, tx_id: TxId) -> ActorResult<TransactionDetails> {
-        let tx = self.wallet.bdk.get_tx(tx_id.0).ok_or(Error::TransactionDetailsError(
-            "transaction not found".to_string(),
-        ))?;
+        let tx = self
+            .wallet
+            .bdk
+            .get_tx(tx_id.0)
+            .ok_or(Error::TransactionDetailsError(
+                "transaction not found".to_string(),
+            ))?;
 
         let labels = self.db.labels.all_labels_for_txn(tx.tx_node.txid)?;
         let details = TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into())
@@ -702,7 +705,7 @@ impl WalletActor {
         &mut self,
     ) -> Result<(FullScanRequest<KeychainKind>, TxGraph, NodeClient)> {
         let node_client = self.node_client().await?.clone();
-        
+
         let full_scan_request = self.wallet.bdk.start_full_scan().build();
         let graph = self.wallet.bdk.tx_graph().clone();
 
@@ -716,7 +719,7 @@ impl WalletActor {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 
         let node_client = self.node_client().await?.clone();
-        
+
         let full_scan_request = self.wallet.bdk.start_full_scan().build();
         let graph = self.wallet.bdk.tx_graph().clone();
 
