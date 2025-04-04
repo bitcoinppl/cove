@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use act_zero::*;
 use bitcoin::{Transaction, Txid};
@@ -77,6 +77,8 @@ impl TransactionWatcher {
 
                     Ok(WatchResult::Continue) => {
                         debug!("continue watching");
+                        // sleep for 10 seconds before checking again
+                        tokio::time::sleep(Duration::from_secs(10)).await;
                     }
 
                     Err(error) => {
