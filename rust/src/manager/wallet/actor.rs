@@ -224,14 +224,12 @@ impl WalletActor {
                 (tx, sent_and_received)
             })
             .map(|(tx, sent_and_received)| Transaction::new(&self.wallet.id, sent_and_received, tx))
-            .map(|tx| {
+            .filter(|tx| tx.sent_and_received().amount() > zero)
+            .inspect(|tx| {
                 if let Transaction::Unconfirmed(unconfirmed) = &tx {
                     send!(self.addr.start_transaction_watcher(unconfirmed.txid.0));
                 };
-
-                tx
             })
-            .filter(|tx| tx.sent_and_received().amount() > zero)
             .collect::<Vec<Transaction>>();
 
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
