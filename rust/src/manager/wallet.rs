@@ -1,4 +1,4 @@
-mod actor;
+pub mod actor;
 
 use std::{
     sync::Arc,

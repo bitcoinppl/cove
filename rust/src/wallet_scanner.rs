@@ -20,10 +20,7 @@ use crate::{
     keychain::Keychain,
     manager::wallet::WalletManagerReconcileMessage,
     mnemonic::MnemonicExt,
-    node::{
-        Node,
-        client::{NodeClient, NodeClientOptions},
-    },
+    node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
     task::spawn_actor,
     wallet::{
         WalletAddressType, WalletError,
@@ -82,12 +79,6 @@ pub enum WalletScannerError {
 pub enum ScannerResponse {
     FoundAddresses(Vec<FoundAddress>),
     NoneFound,
-}
-
-#[derive(Debug, Clone)]
-pub struct NodeClientBuilder {
-    pub node: Node,
-    pub options: NodeClientOptions,
 }
 
 #[derive(Debug, Clone)]
@@ -580,13 +571,6 @@ impl Wallets {
         }
 
         Ok(wallets)
-    }
-}
-
-impl NodeClientBuilder {
-    pub async fn build(&self) -> Result<NodeClient, crate::node::client::Error> {
-        let node_client = NodeClient::new_with_options(&self.node, self.options).await?;
-        Ok(node_client)
     }
 }
 

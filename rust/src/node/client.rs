@@ -1,6 +1,8 @@
 pub mod electrum;
 pub mod esplora;
 
+use std::sync::Arc;
+
 use bdk_chain::{
     bitcoin::Address,
     spk_client::{SyncRequest, SyncResponse},
@@ -19,7 +21,7 @@ use tracing::debug;
 
 use crate::node::Node;
 
-use super::ApiType;
+use super::{ApiType, client_builder::NodeClientBuilder};
 
 const ELECTRUM_BATCH_SIZE: usize = 10;
 const ESPLORA_BATCH_SIZE: usize = 1;
@@ -70,9 +72,15 @@ pub enum Error {
 
     #[error("failed to broadcast transaction: {0}")]
     ElectrumBroadcast(electrum_client::Error),
+
+    #[error("failed to get transaction: {0}")]
+    EsploraGetTransaction(esplora_client::Error),
+
+    #[error("failed to get transaction: {0}")]
+    ElectrumGetTransaction(electrum_client::Error),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeClientOptions {
     pub batch_size: usize,
 }
@@ -95,6 +103,12 @@ impl NodeClient {
                 todo!()
             }
         }
+    }
+
+    pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
+        let node_client =
+            NodeClient::new_with_options(&builder.node, builder.options.clone()).await?;
+        Ok(node_client)
     }
 
     pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
@@ -178,6 +192,16 @@ impl NodeClient {
         };
 
         Ok(scan_result)
+    }
+
+    pub async fn get_transaction(
+        &self,
+        txid: Arc<Txid>,
+    ) -> Result<Option<bitcoin::Transaction>, Error> {
+        match self {
+            NodeClient::Esplora(client) => client.get_transaction(&txid).await,
+            NodeClient::Electrum(client) => client.get_transaction(txid).await,
+        }
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
