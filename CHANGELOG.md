@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-04-07
+
 ### TAPSIGNER Support
 
 - Setup TAPSIGNER
