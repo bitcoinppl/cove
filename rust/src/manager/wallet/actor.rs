@@ -508,8 +508,8 @@ impl WalletActor {
         if let Some((last_height_fetched, block_height)) = self.last_height_fetched() {
             let elapsed = elapsed_secs_since(last_height_fetched);
             if !force && elapsed < 120 {
-                // if less than a minute return the height, without updating
-                if elapsed < 60 {
+                // if less than 25 seconds return the height, without updating
+                if elapsed < 25 {
                     return Produces::ok(block_height);
                 }
 
@@ -593,6 +593,7 @@ impl WalletActor {
         let addr = spawn_actor(watcher);
 
         self.transaction_watchers.insert(tx_id, addr);
+
         Produces::ok(())
     }
 
@@ -601,8 +602,15 @@ impl WalletActor {
     pub async fn mark_transaction_found(&mut self, tx_id: Txid) -> ActorResult<()> {
         info!("marking transaction found: {tx_id}");
 
+        // remove the watcher
         self.transaction_watchers.remove(&tx_id);
-        send!(self.addr.perform_sync_scan());
+
+        // sleep for 5 seconds before performing sync scan
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            send!(addr.perform_sync_scan());
+        });
 
         Produces::ok(())
     }
