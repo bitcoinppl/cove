@@ -277,14 +277,9 @@ struct TransactionDetailsView: View {
             }
         }
         .task {
-            do {
-                if let blockNumber = transactionDetails.blockNumber() {
-                    let numberOfConfirmations = try? await manager.rust.numberOfConfirmations(
-                        blockHeight: blockNumber)
-                    guard numberOfConfirmations != nil else { return }
-                    self.numberOfConfirmations = Int(numberOfConfirmations!)
-                }
-            }
+            let numberOfConfirmations = await getAndSetNumberOfConfirmations()
+            if let numberOfConfirmations, numberOfConfirmations >= 3 { return }
+            await checkForConfirmation()
         }
         .background(
             GeometryReader { geometry in
@@ -298,6 +293,50 @@ struct TransactionDetailsView: View {
                     .opacity(max(0, 1 + (currentOffset / 275)))
             }
         )
+    }
+
+    func getAndSetNumberOfConfirmations() async -> Int? {
+        if let blockNumber = transactionDetails.blockNumber() {
+            let numberOfConfirmations = try? await manager.rust.numberOfConfirmations(
+                blockHeight: blockNumber)
+
+            guard let numberOfConfirmations else { return nil }
+
+            await MainActor.run { self.numberOfConfirmations = Int(numberOfConfirmations) }
+
+            return Int(numberOfConfirmations)
+        }
+
+        return nil
+    }
+
+    func checkForConfirmation() async {
+        let txId = transactionDetails.txId()
+        var needsMoreConfirmations = true
+        var errors = 0
+
+        while needsMoreConfirmations {
+            Log.debug("checking for number of confirmations for txId: \(txId), currently: \(numberOfConfirmations ?? 0)")
+
+            do {
+                if let details = try? await manager.rust.transactionDetails(txId: txId) {
+                    await MainActor.run { transactionDetails = details }
+                }
+
+                if let numberOfConfirmations, numberOfConfirmations >= 3 {
+                    needsMoreConfirmations = false
+                }
+
+                try await Task.sleep(for: .seconds(10))
+            } catch let error as CancellationError {
+                Log.debug("check for confirmation task cancelled: \(error)")
+                break
+            } catch {
+                Log.error("Error checking for confirmation: \(error)")
+                errors = errors + 1
+                if errors > 10 { break }
+            }
+        }
     }
 
     var backgroundImageOffset: CGFloat {

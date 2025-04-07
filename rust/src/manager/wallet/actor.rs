@@ -579,6 +579,7 @@ impl WalletActor {
     }
 
     pub async fn start_transaction_watcher(&mut self, tx_id: Txid) -> ActorResult<()> {
+        debug!("start_transaction_watcher for txn: {tx_id}");
         if self.transaction_watchers.contains_key(&tx_id) {
             warn!("transaction watcher already exists for txn: {tx_id}");
             return Produces::ok(());
@@ -595,7 +596,7 @@ impl WalletActor {
         Produces::ok(())
     }
 
-    /// Will remove the transaction watcher if it exists and
+    /// will remove the transaction watcher if it exists and
     /// perform a sync scan and send the transactions to the frontend
     pub async fn mark_transaction_found(&mut self, tx_id: Txid) -> ActorResult<()> {
         info!("marking transaction found: {tx_id}");

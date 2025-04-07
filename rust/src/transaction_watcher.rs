@@ -75,14 +75,16 @@ impl TransactionWatcher {
                         break;
                     }
 
+                    // sleep for 10 seconds before checking again
                     Ok(WatchResult::Continue) => {
                         debug!("continue watching");
-                        // sleep for 10 seconds before checking again
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
 
+                    // sleep for 30 seconds before checking again, if we get an error
                     Err(error) => {
                         error!("failed to check txn: {error:?}");
+                        tokio::time::sleep(Duration::from_secs(30)).await;
                     }
                 }
             }
