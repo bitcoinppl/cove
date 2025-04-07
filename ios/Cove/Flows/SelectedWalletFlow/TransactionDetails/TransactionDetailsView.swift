@@ -277,7 +277,6 @@ struct TransactionDetailsView: View {
             }
         }
         .task {
-            let numberOfConfirmations = await getAndSetNumberOfConfirmations()
             await updateNumberOfConfirmations()
         }
         .background(
@@ -301,7 +300,11 @@ struct TransactionDetailsView: View {
 
             guard let numberOfConfirmations else { return nil }
 
-            await MainActor.run { self.numberOfConfirmations = Int(numberOfConfirmations) }
+            await MainActor.run {
+                withAnimation {
+                    self.numberOfConfirmations = Int(numberOfConfirmations)
+                }
+            }
 
             return Int(numberOfConfirmations)
         }
@@ -319,7 +322,9 @@ struct TransactionDetailsView: View {
 
             do {
                 if let details = try? await manager.rust.transactionDetails(txId: txId) {
-                    await MainActor.run { transactionDetails = details }
+                    await MainActor.run {
+                        withAnimation { transactionDetails = details }
+                    }
                 }
 
                 let numberOfConfirmations = await getAndSetNumberOfConfirmations()

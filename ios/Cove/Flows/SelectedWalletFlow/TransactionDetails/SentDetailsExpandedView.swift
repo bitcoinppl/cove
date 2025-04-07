@@ -44,9 +44,10 @@ struct SentDetailsExpandedView: View {
                             Text(transactionDetails.blockNumberFmt() ?? "")
                             Text("|")
 
-                            if let confirmations = numberOfConfirmations {
+                            if let numberOfConfirmations {
                                 Group {
-                                    Text(String(confirmations))
+                                    Text(ThousandsFormatter(numberOfConfirmations).fmt())
+                                        .contentTransition(.numericText())
 
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 10))

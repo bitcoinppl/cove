@@ -43,6 +43,7 @@ struct ReceivedDetailsExpandedView: View {
                         Text(ThousandsFormatter(numberOfConfirmations).fmt())
                             .fontWeight(.semibold)
                             .multilineTextAlignment(.leading)
+                            .contentTransition(.numericText())
                     } else {
                         ProgressView()
                     }
