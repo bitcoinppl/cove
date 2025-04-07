@@ -278,8 +278,7 @@ struct TransactionDetailsView: View {
         }
         .task {
             let numberOfConfirmations = await getAndSetNumberOfConfirmations()
-            if let numberOfConfirmations, numberOfConfirmations >= 3 { return }
-            await checkForConfirmation()
+            await updateNumberOfConfirmations()
         }
         .background(
             GeometryReader { geometry in
@@ -310,9 +309,9 @@ struct TransactionDetailsView: View {
         return nil
     }
 
-    func checkForConfirmation() async {
+    func updateNumberOfConfirmations() async {
         let txId = transactionDetails.txId()
-        var needsMoreConfirmations = true
+        var needsFrequentCheck = true
         var errors = 0
 
         while true {
@@ -324,12 +323,12 @@ struct TransactionDetailsView: View {
                 }
 
                 let numberOfConfirmations = await getAndSetNumberOfConfirmations()
-                if let numberOfConfirmations, numberOfConfirmations >= 3 {
-                    Log.debug("transaction fully confirmed with \(numberOfConfirmations) confirmations")
-                    needsMoreConfirmations = false
+                if let numberOfConfirmations, numberOfConfirmations >= 3, needsFrequentCheck {
+                    Log.debug("transaction fully confirmed with \(needsFrequentCheck) confirmations")
+                    needsFrequentCheck = false
                 }
 
-                if needsMoreConfirmations {
+                if needsFrequentCheck {
                     try await Task.sleep(for: .seconds(10))
                 } else {
                     try await Task.sleep(for: .seconds(30))
