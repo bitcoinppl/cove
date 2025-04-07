@@ -106,8 +106,7 @@ impl NodeClient {
     }
 
     pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
-        let node_client =
-            NodeClient::new_with_options(&builder.node, builder.options.clone()).await?;
+        let node_client = NodeClient::new_with_options(&builder.node, builder.options).await?;
         Ok(node_client)
     }
 

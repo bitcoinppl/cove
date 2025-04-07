@@ -589,7 +589,7 @@ impl WalletActor {
         let options = NodeClientOptions { batch_size: 1 };
         let client_builder = NodeClientBuilder { node, options };
 
-        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id.clone(), client_builder);
+        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, client_builder);
         let addr = spawn_actor(watcher);
 
         self.transaction_watchers.insert(tx_id, addr);
