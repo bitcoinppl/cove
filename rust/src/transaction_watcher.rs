@@ -72,7 +72,9 @@ impl TransactionWatcher {
                     Ok(WatchResult::Found(txn)) => {
                         info!("found txn: {txn:?}");
                         let tx_id = Arc::unwrap_or_clone(tx_id);
+
                         send!(manager.mark_transaction_found(tx_id));
+
                         break;
                     }
 

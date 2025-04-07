@@ -315,7 +315,7 @@ struct TransactionDetailsView: View {
         var needsMoreConfirmations = true
         var errors = 0
 
-        while needsMoreConfirmations {
+        while true {
             Log.debug("checking for number of confirmations for txId: \(txId), currently: \(numberOfConfirmations ?? 0)")
 
             do {
@@ -329,7 +329,11 @@ struct TransactionDetailsView: View {
                     needsMoreConfirmations = false
                 }
 
-                try await Task.sleep(for: .seconds(10))
+                if needsMoreConfirmations {
+                    try await Task.sleep(for: .seconds(10))
+                } else {
+                    try await Task.sleep(for: .seconds(30))
+                }
             } catch let error as CancellationError {
                 Log.debug("check for confirmation task cancelled: \(error)")
                 break
