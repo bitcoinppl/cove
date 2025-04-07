@@ -4,10 +4,11 @@ use bdk_chain::{ConfirmationBlockTime, TxGraph, bitcoin::Address};
 use bdk_core::spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse};
 use bdk_electrum::{
     BdkElectrumClient,
-    electrum_client::{Client, ElectrumApi as _},
+    electrum_client::{self, Client, ElectrumApi as _},
 };
 use bdk_wallet::KeychainKind;
 use bitcoin::{Transaction, Txid};
+use serde_json::Value;
 use tap::TapFallible as _;
 use tracing::debug;
 
@@ -59,6 +60,26 @@ impl ElectrumClient {
         .map_err(Error::ElectrumConnect)?;
 
         Ok(header.height)
+    }
+
+    pub async fn get_transaction(
+        &self,
+        txid: Arc<Txid>,
+    ) -> Result<Option<bitcoin::Transaction>, Error> {
+        let client = self.client.clone();
+        let transaction = crate::unblock::run_blocking(move || {
+            client
+                .inner
+                .transaction_get(&txid)
+                .tap_err(|error| tracing::error!("electrum failed to get transaction: {error:?}"))
+        })
+        .await;
+
+        match transaction {
+            Ok(txn) => Ok(Some(txn)),
+            Err(electrum_client::Error::InvalidResponse(Value::Null)) => Ok(None),
+            Err(error) => Err(Error::ElectrumGetTransaction(error)),
+        }
     }
 
     pub async fn full_scan(

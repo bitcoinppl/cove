@@ -202,7 +202,7 @@ struct TransactionDetailsView: View {
         }
 
         if metadata.detailsExpanded {
-            SentDetailsExpandedView(manager: manager, transactionDetails: transactionDetails)
+            SentDetailsExpandedView(manager: manager, transactionDetails: transactionDetails, numberOfConfirmations: numberOfConfirmations)
         }
     }
 
@@ -277,14 +277,7 @@ struct TransactionDetailsView: View {
             }
         }
         .task {
-            do {
-                if let blockNumber = transactionDetails.blockNumber() {
-                    let numberOfConfirmations = try? await manager.rust.numberOfConfirmations(
-                        blockHeight: blockNumber)
-                    guard numberOfConfirmations != nil else { return }
-                    self.numberOfConfirmations = Int(numberOfConfirmations!)
-                }
-            }
+            await updateNumberOfConfirmations()
         }
         .background(
             GeometryReader { geometry in
@@ -298,6 +291,62 @@ struct TransactionDetailsView: View {
                     .opacity(max(0, 1 + (currentOffset / 275)))
             }
         )
+    }
+
+    func getAndSetNumberOfConfirmations() async -> Int? {
+        if let blockNumber = transactionDetails.blockNumber() {
+            let numberOfConfirmations = try? await manager.rust.numberOfConfirmations(
+                blockHeight: blockNumber)
+
+            guard let numberOfConfirmations else { return nil }
+
+            await MainActor.run {
+                withAnimation {
+                    self.numberOfConfirmations = Int(numberOfConfirmations)
+                }
+            }
+
+            return Int(numberOfConfirmations)
+        }
+
+        return nil
+    }
+
+    func updateNumberOfConfirmations() async {
+        let txId = transactionDetails.txId()
+        var needsFrequentCheck = true
+        var errors = 0
+
+        while true {
+            Log.debug("checking for number of confirmations for txId: \(txId), currently: \(numberOfConfirmations ?? 0)")
+
+            do {
+                if let details = try? await manager.rust.transactionDetails(txId: txId) {
+                    await MainActor.run {
+                        withAnimation { transactionDetails = details }
+                    }
+                }
+
+                let numberOfConfirmations = await getAndSetNumberOfConfirmations()
+                if let numberOfConfirmations, numberOfConfirmations >= 3, needsFrequentCheck {
+                    Log.debug("transaction fully confirmed with \(needsFrequentCheck) confirmations")
+                    needsFrequentCheck = false
+                }
+
+                if needsFrequentCheck {
+                    try await Task.sleep(for: .seconds(10))
+                } else {
+                    try await Task.sleep(for: .seconds(30))
+                }
+            } catch let error as CancellationError {
+                Log.debug("check for confirmation task cancelled: \(error)")
+                break
+            } catch {
+                Log.error("Error checking for confirmation: \(error)")
+                errors = errors + 1
+                if errors > 10 { break }
+            }
+        }
     }
 
     var backgroundImageOffset: CGFloat {

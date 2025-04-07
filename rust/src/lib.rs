@@ -39,6 +39,7 @@ mod seed_qr;
 pub mod tap_card;
 mod task;
 mod transaction;
+mod transaction_watcher;
 mod unblock;
 mod util;
 mod wallet;

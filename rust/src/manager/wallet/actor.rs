@@ -3,8 +3,12 @@ use crate::{
     database::{Database, wallet_data::WalletDataDb},
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
-    node::client::NodeClient,
+    node::{
+        client::{NodeClient, NodeClientOptions},
+        client_builder::NodeClientBuilder,
+    },
     transaction::{FeeRate, Transaction, TransactionDetails, TxId, fees::BdkFeeRate},
+    transaction_watcher::TransactionWatcher,
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType,
         balance::Balance,
@@ -12,18 +16,19 @@ use crate::{
         metadata::BlockSizeLast,
     },
 };
-use act_zero::*;
+use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
+use ahash::HashMap;
 use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
-use bdk_core::spk_client::FullScanRequest;
+use bdk_core::spk_client::{FullScanRequest, SyncResponse};
 use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
-use bitcoin::Amount;
+use bitcoin::{Amount, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use crossbeam::channel::Sender;
 use eyre::Result;
 use std::time::{Duration, UNIX_EPOCH};
 use tap::TapFallible as _;
-use tracing::{debug, error};
+use tracing::{debug, error, info, warn};
 
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
@@ -39,6 +44,8 @@ pub struct WalletActor {
     pub db: WalletDataDb,
     pub state: ActorState,
 
+    transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
+
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
     last_height_fetched: Option<(Duration, usize)>,
@@ -50,6 +57,9 @@ pub enum ActorState {
     PerformingIncrementalScan,
     PerformingFullScan(FullScanType),
 
+    PerformingSyncScan,
+    SyncScanComplete,
+
     FullScanComplete(FullScanType),
 
     /// incremental scan is performed after the expanded full scan
@@ -57,6 +67,7 @@ pub enum ActorState {
 
     FailedFullScan(FullScanType),
     FailedIncrementalScan,
+    FailedSyncScan,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -133,6 +144,7 @@ impl WalletActor {
             last_scan_finished: None,
             last_height_fetched: None,
             state: ActorState::Initial,
+            transaction_watchers: HashMap::default(),
             db,
         }
     }
@@ -213,10 +225,14 @@ impl WalletActor {
             })
             .map(|(tx, sent_and_received)| Transaction::new(&self.wallet.id, sent_and_received, tx))
             .filter(|tx| tx.sent_and_received().amount() > zero)
+            .inspect(|tx| {
+                if let Transaction::Unconfirmed(unconfirmed) = &tx {
+                    send!(self.addr.start_transaction_watcher(unconfirmed.txid.0));
+                };
+            })
             .collect::<Vec<Transaction>>();
 
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
-
         Produces::ok(transactions)
     }
 
@@ -492,8 +508,8 @@ impl WalletActor {
         if let Some((last_height_fetched, block_height)) = self.last_height_fetched() {
             let elapsed = elapsed_secs_since(last_height_fetched);
             if !force && elapsed < 120 {
-                // if less than a minute return the height, without updating
-                if elapsed < 60 {
+                // if less than 25 seconds return the height, without updating
+                if elapsed < 25 {
                     return Produces::ok(block_height);
                 }
 
@@ -560,6 +576,72 @@ impl WalletActor {
             .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
 
         Produces::ok(details)
+    }
+
+    pub async fn start_transaction_watcher(&mut self, tx_id: Txid) -> ActorResult<()> {
+        debug!("start_transaction_watcher for txn: {tx_id}");
+        if self.transaction_watchers.contains_key(&tx_id) {
+            warn!("transaction watcher already exists for txn: {tx_id}");
+            return Produces::ok(());
+        }
+
+        let node = Database::global().global_config.selected_node();
+        let options = NodeClientOptions { batch_size: 1 };
+        let client_builder = NodeClientBuilder { node, options };
+
+        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, client_builder);
+        let addr = spawn_actor(watcher);
+
+        self.transaction_watchers.insert(tx_id, addr);
+
+        Produces::ok(())
+    }
+
+    /// will remove the transaction watcher if it exists and
+    /// perform a sync scan and send the transactions to the frontend
+    pub async fn mark_transaction_found(&mut self, tx_id: Txid) -> ActorResult<()> {
+        info!("marking transaction found: {tx_id}");
+
+        // remove the watcher
+        self.transaction_watchers.remove(&tx_id);
+
+        // sleep for 5 seconds before performing sync scan
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            send!(addr.perform_sync_scan());
+        });
+
+        Produces::ok(())
+    }
+
+    pub async fn perform_sync_scan(&mut self) -> ActorResult<()> {
+        debug!("perform_sync_scan: {:?}", self.state);
+        if self.state == ActorState::PerformingSyncScan {
+            warn!("already performing sync scan, skipping");
+            return Produces::ok(());
+        }
+
+        debug!("starting sync scan");
+        self.state = ActorState::PerformingSyncScan;
+        let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+
+        let node_client = self.node_client().await?.clone();
+        let scan_request = self.wallet.bdk.start_sync_with_revealed_spks().build();
+        let graph = self.wallet.bdk.tx_graph().clone();
+
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            let scan_result = node_client.sync(&graph, scan_request).await;
+
+            let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
+            debug!("done sync scan in {}s", now - start);
+
+            // save updated txns and send to frontend
+            send!(addr.update_sync_state_and_send_transactions(scan_result));
+        });
+
+        Produces::ok(())
     }
 
     // perform full scan in 2 steps:
@@ -763,6 +845,29 @@ impl WalletActor {
         self.save_last_scan_finished();
 
         self.notify_scan_complete().await?;
+
+        Produces::ok(())
+    }
+
+    async fn update_sync_state_and_send_transactions(
+        &mut self,
+        scan_result: Result<SyncResponse, crate::node::client::Error>,
+    ) -> ActorResult<()> {
+        if scan_result.is_err() {
+            self.state = ActorState::FailedSyncScan;
+        }
+
+        let scan_result: SyncResponse = scan_result?;
+        self.wallet.bdk.apply_update(scan_result)?;
+        self.wallet.persist()?;
+
+        // get and send transactions
+        let transactions = self.transactions().await?.await?;
+        self.send(WalletManagerReconcileMessage::UpdatedTransactions(
+            transactions,
+        ));
+
+        self.state = ActorState::SyncScanComplete;
 
         Produces::ok(())
     }

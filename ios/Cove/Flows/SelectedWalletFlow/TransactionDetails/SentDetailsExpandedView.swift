@@ -10,6 +10,7 @@ import SwiftUI
 struct SentDetailsExpandedView: View {
     let manager: WalletManager
     let transactionDetails: TransactionDetails
+    let numberOfConfirmations: Int?
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -43,12 +44,10 @@ struct SentDetailsExpandedView: View {
                             Text(transactionDetails.blockNumberFmt() ?? "")
                             Text("|")
 
-                            AsyncView(operation: {
-                                let blockNumber = transactionDetails.blockNumber() ?? 0
-                                return try await manager.rust.numberOfConfirmationsFmt(blockHeight: blockNumber)
-                            }) { (confirmations: String) in
+                            if let numberOfConfirmations {
                                 Group {
-                                    Text(confirmations)
+                                    Text(ThousandsFormatter(numberOfConfirmations).fmt())
+                                        .contentTransition(.numericText())
 
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 10))
@@ -58,7 +57,6 @@ struct SentDetailsExpandedView: View {
                                 }
                             }
                         }
-
                         .padding(.horizontal, 2)
                     }
                     .font(.caption).foregroundStyle(.tertiary)

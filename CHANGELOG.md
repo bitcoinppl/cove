@@ -2,11 +2,17 @@
 
 ## [Unreleased]
 
+### TAPSIGNER Support
+
 - Setup TAPSIGNER
 - Change TAPSIGNER PIN
 - Backup TAPSIGNER
 - Import TAPSIGNER public key
 - Sign PSBT using TAPSIGNER
+
+### Features / Improvements
+
+- Pending transactions are automatically updated without user having to refresh
 
 ## [0.2.2] - 2025-03-11
 
