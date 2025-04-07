@@ -202,7 +202,7 @@ struct TransactionDetailsView: View {
         }
 
         if metadata.detailsExpanded {
-            SentDetailsExpandedView(manager: manager, transactionDetails: transactionDetails)
+            SentDetailsExpandedView(manager: manager, transactionDetails: transactionDetails, numberOfConfirmations: numberOfConfirmations)
         }
     }
 
@@ -323,7 +323,9 @@ struct TransactionDetailsView: View {
                     await MainActor.run { transactionDetails = details }
                 }
 
+                let numberOfConfirmations = await getAndSetNumberOfConfirmations()
                 if let numberOfConfirmations, numberOfConfirmations >= 3 {
+                    Log.debug("transaction fully confirmed with \(numberOfConfirmations) confirmations")
                     needsMoreConfirmations = false
                 }
 

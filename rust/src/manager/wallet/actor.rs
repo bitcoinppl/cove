@@ -608,13 +608,13 @@ impl WalletActor {
     }
 
     pub async fn perform_sync_scan(&mut self) -> ActorResult<()> {
-        debug!("starting sync scan");
-
+        debug!("perform_sync_scan: {:?}", self.state);
         if self.state == ActorState::PerformingSyncScan {
             warn!("already performing sync scan, skipping");
             return Produces::ok(());
         }
 
+        debug!("starting sync scan");
         self.state = ActorState::PerformingSyncScan;
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
 

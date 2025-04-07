@@ -65,6 +65,7 @@ impl TransactionWatcher {
         self.addr.send_fut(async move {
             let client = client;
             loop {
+                debug!("checking txn: {tx_id}");
                 let result = call!(addr.check_txn(client.clone())).await;
 
                 match result {
