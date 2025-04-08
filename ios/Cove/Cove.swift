@@ -454,22 +454,6 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterInt32: FfiConverterPrimitive {
-    typealias FfiType = Int32
-    typealias SwiftType = Int32
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int32 {
-        return try lift(readInt(&buf))
-    }
-
-    public static func write(_ value: Int32, into buf: inout [UInt8]) {
-        writeInt(&buf, lower(value))
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -479,6 +463,22 @@ fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
     }
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
+    typealias FfiType = Int64
+    typealias SwiftType = Int64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int64, into buf: inout [UInt8]) {
         writeInt(&buf, lower(value))
     }
 }
@@ -6448,11 +6448,11 @@ public func FfiConverterTypeHardwareExport_lower(_ value: HardwareExport) -> Uns
 
 public protocol HeaderIconPresenterProtocol: AnyObject, Sendable {
     
-    func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32)  -> FfiColor
+    func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int64)  -> FfiColor
     
-    func iconColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32)  -> FfiColor
+    func iconColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int64)  -> FfiColor
     
-    func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int32, ringNumber: Int32)  -> FfiColor
+    func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int64, ringNumber: Int64)  -> FfiColor
     
 }
 open class HeaderIconPresenter: HeaderIconPresenterProtocol, @unchecked Sendable {
@@ -6514,36 +6514,36 @@ public convenience init() {
     
 
     
-open func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32) -> FfiColor  {
+open func backgroundColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int64) -> FfiColor  {
     return try!  FfiConverterTypeFfiColor_lift(try! rustCall() {
     uniffi_cove_fn_method_headericonpresenter_background_color(self.uniffiClonePointer(),
         FfiConverterTypeTransactionState_lower(state),
         FfiConverterTypeTransactionDirection_lower(direction),
         FfiConverterTypeFfiColorScheme_lower(colorScheme),
-        FfiConverterInt32.lower(confirmationCount),$0
+        FfiConverterInt64.lower(confirmationCount),$0
     )
 })
 }
     
-open func iconColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int32) -> FfiColor  {
+open func iconColor(state: TransactionState, direction: TransactionDirection, colorScheme: FfiColorScheme, confirmationCount: Int64) -> FfiColor  {
     return try!  FfiConverterTypeFfiColor_lift(try! rustCall() {
     uniffi_cove_fn_method_headericonpresenter_icon_color(self.uniffiClonePointer(),
         FfiConverterTypeTransactionState_lower(state),
         FfiConverterTypeTransactionDirection_lower(direction),
         FfiConverterTypeFfiColorScheme_lower(colorScheme),
-        FfiConverterInt32.lower(confirmationCount),$0
+        FfiConverterInt64.lower(confirmationCount),$0
     )
 })
 }
     
-open func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int32, ringNumber: Int32) -> FfiColor  {
+open func ringColor(state: TransactionState, colorScheme: FfiColorScheme, direction: TransactionDirection, confirmations: Int64, ringNumber: Int64) -> FfiColor  {
     return try!  FfiConverterTypeFfiColor_lift(try! rustCall() {
     uniffi_cove_fn_method_headericonpresenter_ring_color(self.uniffiClonePointer(),
         FfiConverterTypeTransactionState_lower(state),
         FfiConverterTypeFfiColorScheme_lower(colorScheme),
         FfiConverterTypeTransactionDirection_lower(direction),
-        FfiConverterInt32.lower(confirmations),
-        FfiConverterInt32.lower(ringNumber),$0
+        FfiConverterInt64.lower(confirmations),
+        FfiConverterInt64.lower(ringNumber),$0
     )
 })
 }
@@ -30840,13 +30840,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_headericonpresenter_background_color() != 61819) {
+    if (uniffi_cove_checksum_method_headericonpresenter_background_color() != 38394) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_headericonpresenter_icon_color() != 52203) {
+    if (uniffi_cove_checksum_method_headericonpresenter_icon_color() != 34422) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_headericonpresenter_ring_color() != 23010) {
+    if (uniffi_cove_checksum_method_headericonpresenter_ring_color() != 38299) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_labelmanager_delete_labels_for_txn() != 27140) {

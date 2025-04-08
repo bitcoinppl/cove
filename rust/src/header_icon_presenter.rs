@@ -24,8 +24,8 @@ impl HeaderIconPresenter {
         state: TransactionState,
         color_scheme: FfiColorScheme,
         direction: TransactionDirection,
-        confirmations: i32,
-        ring_number: i32,
+        confirmations: i64,
+        ring_number: i64,
     ) -> FfiColor {
         type S = TransactionState;
         type C = FfiColor;
@@ -85,7 +85,7 @@ impl HeaderIconPresenter {
         state: TransactionState,
         direction: TransactionDirection,
         color_scheme: FfiColorScheme,
-        confirmation_count: i32,
+        confirmation_count: i64,
     ) -> FfiColor {
         type S = TransactionState;
         type C = FfiColor;
@@ -115,7 +115,7 @@ impl HeaderIconPresenter {
         state: TransactionState,
         direction: TransactionDirection,
         color_scheme: FfiColorScheme,
-        confirmation_count: i32,
+        confirmation_count: i64,
     ) -> FfiColor {
         type S = TransactionState;
         type C = FfiColor;

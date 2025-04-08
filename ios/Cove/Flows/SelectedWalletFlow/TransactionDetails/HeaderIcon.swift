@@ -26,9 +26,9 @@ struct HeaderIcon: View {
         }
     }
 
-    private var confirmationCount: Int32 {
+    private var confirmationCount: Int64 {
         if let numberOfConfirmations {
-            return Int32(numberOfConfirmations)
+            return Int64(numberOfConfirmations)
         }
 
         if isConfirmed {
@@ -94,7 +94,7 @@ struct HeaderIcon: View {
             colorScheme: colorScheme,
             direction: direction,
             confirmations: confirmationCount,
-            ringNumber: Int32(ringNumber)
+            ringNumber: Int64(ringNumber)
         )
         .toColor()
     }
