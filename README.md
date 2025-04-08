@@ -54,9 +54,9 @@ https://github.com/user-attachments/assets/9c933b90-a991-4c09-be29-2825d535bc1e
 
 ## Coming Soon...
 
-- Support for TapSigner and SatsCard
-- Lock and Unlock individual UTXOs
 - UTXO list and Coin Control (select individual UTXOs to spend)
+- Lock and Unlock individual UTXOs
+- Support for SATSCARD
 - Android version
 
 ## Acknowledgements
