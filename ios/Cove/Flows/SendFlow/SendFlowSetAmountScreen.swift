@@ -357,13 +357,13 @@ struct SendFlowSetAmountScreen: View {
             try? await Task.sleep(for: .milliseconds(700))
 
             await MainActor.run {
-                if address == "" {
-                    presenter.focusField = .address
+                if sendAmount == "0" || sendAmount == "" {
+                    presenter.focusField = .amount
                     return
                 }
 
-                if sendAmount == "0" || sendAmount == "" {
-                    presenter.focusField = .amount
+                if address == "" {
+                    presenter.focusField = .address
                     return
                 }
             }
@@ -391,9 +391,7 @@ struct SendFlowSetAmountScreen: View {
                 if !validateAmount(displayAlert: true) {
                     presenter.focusField = .amount
                 } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        setFormattedAmount(sendAmount)
-                    }
+                    setFormattedAmount(sendAmount)
                 }
 
                 if let prices = app.prices {
