@@ -38,6 +38,7 @@ struct EnterAmountView: View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
                 TextField("", text: textField)
+                    .contentTransition(.numericText())
                     .focused($focusField, equals: .amount)
                     .multilineTextAlignment(.center)
                     .font(.system(size: 48, weight: .bold))
@@ -71,11 +72,7 @@ struct EnterAmountView: View {
                     // focusField changed when entering btc/sats
                     if metadata.fiatOrBtc == .btc {
                         let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
-                        if newFocusField == .amount { self.sendAmount = sendAmount }
-
-                        if newFocusField != .amount, metadata.selectedUnit == .sat,
-                           let amountInt = Int(sendAmount)
-                        {
+                        if metadata.selectedUnit == .sat, let amountInt = Int(sendAmount) {
                             self.sendAmount = ThousandsFormatter(amountInt).fmt()
                         }
                     }
@@ -92,7 +89,7 @@ struct EnterAmountView: View {
                                 fiatText = fiatAmount
                             } catch {
                                 Log.error(
-                                    "'EnterAmountView' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
+                                    "'EnterAmountView::onChangeFocusField' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
                                 )
                             }
                         }
@@ -108,7 +105,7 @@ struct EnterAmountView: View {
                                 fiatText = fiatAmount
                             } catch {
                                 Log.error(
-                                    "'EnterAmountView' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
+                                    "'EnterAmountView::onChangeFocusField' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
                                 )
                             }
                         }
@@ -117,38 +114,46 @@ struct EnterAmountView: View {
                 .onChange(of: fiatText, initial: true) { oldValue, newValue in
                     guard metadata.fiatOrBtc == .fiat else { return }
                     guard let prices = app.prices else { return }
-
-                    // note: using contains instead of direct comparison because need to support multiple currencies
-                    // on first number if erasing, erase the entire thing,
-                    if oldValue.contains("0.00"), newValue.contains("0.0"), !newValue.contains("0.00"), sendAmount == "0" {
-                        return fiatText = newValue.replacingOccurrences(of: "0.0", with: "")
-                    }
-
-                    // on first enter, use just the entered number
-                    if oldValue.contains("0.00"), newValue.contains("0.00"), sendAmount == "0" {
-                        return fiatText = newValue.replacingOccurrences(of: "0.00", with: "")
-                    }
+                    let selectedCurrency = Database().globalConfig().selectedFiatCurrency()
 
                     do {
-                        let amount = manager.rust.convertFromFiatString(fiatAmount: newValue, prices: prices)
-                        presenter.amount = amount
-                        sendAmount = manager.walletMetadata.selectedUnit == .btc ? amount.btcString() : ThousandsFormatter(amount.asSats()).fmt()
+                        let result = try SendFlowFiatOnChangeHandler(prices: prices, selectedCurrency: selectedCurrency).onChange(oldValue: oldValue, newValue: newValue)
+                        if let amount = result.btcAmount {
+                            withAnimation {
+                                presenter.amount = amount
+                                sendAmount =
+                                    manager.walletMetadata.selectedUnit == .btc
+                                        ? amount.btcString() : ThousandsFormatter(amount.asSats()).fmt()
+                            }
+                        }
 
-                        let fiatValue = try Converter().getFiatValue(fiatAmount: newValue)
-                        sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatValue)
+                        if let fiatValue = result.fiatValue {
+                            withAnimation {
+                                sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatValue)
+                            }
+                        }
+
+                        if let fiatText = result.fiatText {
+                            withAnimation {
+                                self.fiatText = fiatText
+                            }
+                        }
+                    } catch let err as SendFlowFiatOnChangeError {
+                        Log.error("'EnterAmountView::onChange' error: \(err.describe)")
                     } catch {
-                        Log.error(
-                            "'EnterAmountView' failed to convert fiat amount to btc: \(error)")
+                        Log.error("'EnterAmountView::onChange' unknonw error: \(error.localizedDescription)")
                     }
                 }
                 .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
                     if old == .btc, new == .fiat {
-                        fiatText = Converter().removeFiatSuffix(fiatAmount: sendAmountFiat)
+                        fiatText = sendAmountFiat
+                    }
+
+                    if old == .fiat, new == .btc, fiatText == "" {
+                        sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
                     }
                 }
-                .onAppear {
-                    fiatText = Converter().removeFiatSuffix(fiatAmount: sendAmountFiat)
-                }
+                .onAppear { fiatText = sendAmountFiat }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button("sats") {
@@ -177,6 +182,7 @@ struct EnterAmountView: View {
 
             HStack(spacing: 4) {
                 Text(metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmount)
+                    .contentTransition(.numericText())
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 

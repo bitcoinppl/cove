@@ -244,8 +244,12 @@ struct SendFlowSetAmountScreen: View {
 
     private func setFormattedAmount(_ amount: String) {
         guard metadata.selectedUnit == .sat else { return }
-        guard let amountInt = Int(amount) else { return }
-        sendAmount = ThousandsFormatter(amountInt).fmt()
+        guard let amountDouble = Double(amount) else { return }
+        let amountInt = Int(round(amountDouble))
+
+        withAnimation {
+            sendAmount = ThousandsFormatter(amountInt).fmt()
+        }
     }
 
     var body: some View {
@@ -353,13 +357,13 @@ struct SendFlowSetAmountScreen: View {
             try? await Task.sleep(for: .milliseconds(700))
 
             await MainActor.run {
-                if address == "" {
-                    presenter.focusField = .address
+                if sendAmount == "0" || sendAmount == "" {
+                    presenter.focusField = .amount
                     return
                 }
 
-                if sendAmount == "0" || sendAmount == "" {
-                    presenter.focusField = .amount
+                if address == "" {
+                    presenter.focusField = .address
                     return
                 }
             }
@@ -385,11 +389,9 @@ struct SendFlowSetAmountScreen: View {
                 }
 
                 if !validateAmount(displayAlert: true) {
-                    presenter.focusField = .amount
+                    return presenter.focusField = .amount
                 } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        setFormattedAmount(sendAmount)
-                    }
+                    setFormattedAmount(sendAmount)
                 }
 
                 if let prices = app.prices {
@@ -495,15 +497,18 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func amountSats(_ amount: Double) -> Double {
+        let maxBtc = 21_000_000
+        let maxSats = Double(maxBtc * 100_000_000)
+
         if amount == 0 {
             return 0
         }
 
         if metadata.selectedUnit == .sat {
-            return amount
+            return min(amount, maxSats)
         }
 
-        return amount * 100_000_000
+        return min(amount * 100_000_000, maxSats)
     }
 
     // MARK: OnChange Functions
@@ -518,11 +523,20 @@ struct SendFlowSetAmountScreen: View {
 
         // allow clearing completely
         if newValue == "" {
-            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
-            return
+            return withAnimation { sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0) }
+        }
+
+        // remove leading zeros
+        if newValue.hasPrefix("00") {
+            return sendAmount = String("0")
+        }
+
+        if newValue.count == 2, newValue.first == "0", newValue != "0." {
+            return sendAmount = String(newValue.trimmingPrefix(while: { $0 == "0" }))
         }
 
         var newValue = newValue
+
         // no decimals when entering sats
         if metadata.selectedUnit == .sat {
             newValue = newValue.replacingOccurrences(of: ".", with: "")
@@ -533,13 +547,9 @@ struct SendFlowSetAmountScreen: View {
         let value =
             newValue
                 .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
-
-        if presenter.focusField == .amount {
-            sendAmount = value
-        }
 
         guard let amount = Double(value) else {
+            Log.warn("amount not double \(value)")
             sendAmount = oldValue
             return
         }
@@ -547,8 +557,8 @@ struct SendFlowSetAmountScreen: View {
         let oldValueCleaned =
             oldValue
                 .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
 
+        // same but formatted, don't do anything
         if oldValueCleaned == value { return }
 
         // if we had max selected before, but then start entering a different amount
@@ -578,13 +588,17 @@ struct SendFlowSetAmountScreen: View {
         presenter.amount = Amount.fromSat(sats: UInt64(amountSats))
 
         // fiat
-        let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
+        let fiatAmount = (Double(amountSats) / 100_000_000) * Double(prices.get())
         Task { await getFeeRateOptions() }
 
-        sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount)
+        withAnimation {
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount)
+        }
 
-        if oldValue.contains(","), metadata.selectedUnit == .sat {
-            setFormattedAmount(String(amountSats))
+        if metadata.selectedUnit == .sat {
+            withAnimation {
+                sendAmount = ThousandsFormatter(amountSats).fmt()
+            }
         }
     }
 
@@ -618,11 +632,9 @@ struct SendFlowSetAmountScreen: View {
         _privateFocusField = newField
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
-                if newField == .none, validate() {
-                    scrollPosition.scrollTo(edge: .bottom)
-                } else {
-                    scrollPosition.scrollTo(id: newField)
-                }
+                // if keyboard opening directly to amount, dont update scroll position
+                if newField == .amount, oldField == .none { return }
+                scrollPosition.scrollTo(id: newField)
             }
         }
     }
@@ -650,10 +662,9 @@ struct SendFlowSetAmountScreen: View {
         }
 
         if sendAmount == "0" || sendAmount == "" || !validateAmount() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            return DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 presenter.focusField = .amount
             }
-            return
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -836,9 +847,7 @@ struct SendFlowSetAmountScreen: View {
             .tint(.primary)
 
             Group {
-                if sendAmount != "" || sendAmount != "0"
-                    || !validateAmount(), validateAddress()
-                {
+                if validateAddress(), !validateAmount() {
                     Button(action: { presenter.focusField = .amount }) {
                         Text("Next")
                     }

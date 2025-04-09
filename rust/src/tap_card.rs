@@ -69,6 +69,7 @@ impl TapcardTransport {
         self.0.set_message(message);
     }
 
+    #[allow(dead_code)]
     pub fn append_message(&self, message: String) {
         self.0.append_message(message);
     }

@@ -14,7 +14,7 @@ use tracing::{debug, error, warn};
 
 use crate::{
     app::FfiApp,
-    converter::{CONVERTER, ConverterError},
+    converter::{Converter, ConverterError},
     database::{Database, error::DatabaseError},
     fiat::{
         FiatCurrency,
@@ -247,29 +247,14 @@ impl RustWalletManager {
     #[uniffi::method]
     pub fn convert_from_fiat_string(
         &self,
-        fiat_amount: String,
+        fiat_amount: &str,
         prices: Arc<PriceResponse>,
     ) -> Amount {
-        let fiat_value = if fiat_amount.is_empty() {
-            0.0
-        } else {
-            CONVERTER
-                .get_fiat_value(fiat_amount)
-                .tap_err(|error| error!("failed to convert fiat amount: {error}"))
-                .unwrap_or_default()
-        };
-
-        self.convert_from_fiat(fiat_value, prices)
-    }
-
-    #[uniffi::method]
-    pub fn convert_from_fiat(&self, fiat_amount: f64, prices: Arc<PriceResponse>) -> Amount {
-        let currency = self.selected_fiat_currency();
-        let price = prices.get_for_currency(currency) as f64;
-        let btc_amount = fiat_amount / price;
-        let sat_amount = (btc_amount * 100_000_000.0).floor() as u64;
-
-        Amount::from_sat(sat_amount)
+        Converter::global().convert_from_fiat_string(
+            fiat_amount,
+            self.selected_fiat_currency(),
+            prices,
+        )
     }
 
     #[uniffi::constructor]
