@@ -72,11 +72,7 @@ struct EnterAmountView: View {
                     // focusField changed when entering btc/sats
                     if metadata.fiatOrBtc == .btc {
                         let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
-                        if newFocusField == .amount { self.sendAmount = sendAmount }
-
-                        if newFocusField != .amount, metadata.selectedUnit == .sat,
-                           let amountInt = Int(sendAmount)
-                        {
+                        if metadata.selectedUnit == .sat, let amountInt = Int(sendAmount) {
                             self.sendAmount = ThousandsFormatter(amountInt).fmt()
                         }
                     }

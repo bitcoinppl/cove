@@ -389,7 +389,7 @@ struct SendFlowSetAmountScreen: View {
                 }
 
                 if !validateAmount(displayAlert: true) {
-                    presenter.focusField = .amount
+                    return presenter.focusField = .amount
                 } else {
                     setFormattedAmount(sendAmount)
                 }
@@ -632,11 +632,9 @@ struct SendFlowSetAmountScreen: View {
         _privateFocusField = newField
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
-                if newField == .none, validate() {
-                    scrollPosition.scrollTo(edge: .bottom)
-                } else {
-                    scrollPosition.scrollTo(id: newField)
-                }
+                // if keyboard opening directly to amount, dont update scroll position
+                if newField == .amount, oldField == .none { return }
+                scrollPosition.scrollTo(id: newField)
             }
         }
     }
@@ -664,10 +662,9 @@ struct SendFlowSetAmountScreen: View {
         }
 
         if sendAmount == "0" || sendAmount == "" || !validateAmount() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            return DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 presenter.focusField = .amount
             }
-            return
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -850,9 +847,7 @@ struct SendFlowSetAmountScreen: View {
             .tint(.primary)
 
             Group {
-                if sendAmount != "" || sendAmount != "0"
-                    || !validateAmount(), validateAddress()
-                {
+                if validateAddress(), !validateAmount() {
                     Button(action: { presenter.focusField = .amount }) {
                         Text("Next")
                     }
