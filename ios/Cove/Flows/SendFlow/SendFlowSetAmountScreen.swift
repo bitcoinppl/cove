@@ -244,7 +244,8 @@ struct SendFlowSetAmountScreen: View {
 
     private func setFormattedAmount(_ amount: String) {
         guard metadata.selectedUnit == .sat else { return }
-        guard let amountInt = Int(amount) else { return }
+        guard let amountDouble = Double(amount) else { return }
+        let amountInt = Int(round(amountDouble))
 
         withAnimation {
             sendAmount = ThousandsFormatter(amountInt).fmt()
@@ -498,15 +499,18 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func amountSats(_ amount: Double) -> Double {
+        let maxBtc = 21_000_000
+        let maxSats = Double(maxBtc * 100_000_000)
+
         if amount == 0 {
             return 0
         }
 
         if metadata.selectedUnit == .sat {
-            return amount
+            return min(amount, maxSats)
         }
 
-        return amount * 100_000_000
+        return min(amount * 100_000_000, maxSats)
     }
 
     // MARK: OnChange Functions
@@ -521,11 +525,16 @@ struct SendFlowSetAmountScreen: View {
 
         // allow clearing completely
         if newValue == "" {
-            withAnimation { sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0) }
-            return
+            return withAnimation { sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0) }
+        }
+
+        // remove leading zeros
+        if newValue.hasPrefix("00") {
+            return sendAmount = String("0")
         }
 
         var newValue = newValue
+
         // no decimals when entering sats
         if metadata.selectedUnit == .sat {
             newValue = newValue.replacingOccurrences(of: ".", with: "")
@@ -536,13 +545,9 @@ struct SendFlowSetAmountScreen: View {
         let value =
             newValue
                 .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
-
-        if presenter.focusField == .amount {
-            sendAmount = value
-        }
 
         guard let amount = Double(value) else {
+            Log.warn("amount not double \(value)")
             sendAmount = oldValue
             return
         }
@@ -550,8 +555,8 @@ struct SendFlowSetAmountScreen: View {
         let oldValueCleaned =
             oldValue
                 .replacingOccurrences(of: ",", with: "")
-                .removingLeadingZeros()
 
+        // same but formatted, don't do anything
         if oldValueCleaned == value { return }
 
         // if we had max selected before, but then start entering a different amount
@@ -581,13 +586,17 @@ struct SendFlowSetAmountScreen: View {
         presenter.amount = Amount.fromSat(sats: UInt64(amountSats))
 
         // fiat
-        let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
+        let fiatAmount = (Double(amountSats) / 100_000_000) * Double(prices.get())
         Task { await getFeeRateOptions() }
 
-        withAnimation { sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount) }
+        withAnimation {
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount)
+        }
 
-        if oldValue.contains(","), metadata.selectedUnit == .sat {
-            setFormattedAmount(String(amountSats))
+        if metadata.selectedUnit == .sat {
+            withAnimation {
+                sendAmount = ThousandsFormatter(amountSats).fmt()
+            }
         }
     }
 
