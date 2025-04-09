@@ -34,7 +34,22 @@ pub enum FiatCurrency {
 }
 
 impl FiatCurrency {
-    pub fn symbol(&self) -> &'static str {
+    pub const fn all_symbols() -> &'static [&'static str] {
+        &["$", "€", "£", "¥"]
+    }
+
+    pub const fn all_symbols_as_chars() -> &'static [char] {
+        &['$', '€', '£', '¥']
+    }
+
+    pub fn is_symbol(symbol: &str) -> bool {
+        match symbol {
+            "$" | "€" | "£" | "¥" => true,
+            _ => false,
+        }
+    }
+
+    pub const fn symbol(&self) -> &'static str {
         use FiatCurrency as F;
 
         match self {
@@ -46,7 +61,7 @@ impl FiatCurrency {
         }
     }
 
-    pub fn emoji(&self) -> &'static str {
+    pub const fn emoji(&self) -> &'static str {
         match self {
             FiatCurrency::Usd => "🇺🇸",
             FiatCurrency::Cad => "🇨🇦",
@@ -58,7 +73,7 @@ impl FiatCurrency {
         }
     }
 
-    pub fn suffix(&self) -> &'static str {
+    pub const fn suffix(&self) -> &'static str {
         match self {
             FiatCurrency::Usd => "",
             FiatCurrency::Cad => "CAD",
@@ -127,6 +142,11 @@ impl From<&FiatCurrency> for &'static str {
 #[uniffi::export]
 fn all_fiat_currencies() -> Vec<FiatCurrency> {
     FiatCurrency::iter().collect()
+}
+
+#[uniffi::export]
+fn is_fiat_currency_symbol(symbol: &str) -> bool {
+    FiatCurrency::is_symbol(symbol)
 }
 
 #[uniffi::export]

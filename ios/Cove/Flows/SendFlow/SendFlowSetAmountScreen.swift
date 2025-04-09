@@ -245,7 +245,10 @@ struct SendFlowSetAmountScreen: View {
     private func setFormattedAmount(_ amount: String) {
         guard metadata.selectedUnit == .sat else { return }
         guard let amountInt = Int(amount) else { return }
-        sendAmount = ThousandsFormatter(amountInt).fmt()
+
+        withAnimation {
+            sendAmount = ThousandsFormatter(amountInt).fmt()
+        }
     }
 
     var body: some View {
@@ -518,7 +521,7 @@ struct SendFlowSetAmountScreen: View {
 
         // allow clearing completely
         if newValue == "" {
-            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+            withAnimation { sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0) }
             return
         }
 
@@ -581,7 +584,7 @@ struct SendFlowSetAmountScreen: View {
         let fiatAmount = (amountSats / 100_000_000) * Double(prices.get())
         Task { await getFeeRateOptions() }
 
-        sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount)
+        withAnimation { sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatAmount) }
 
         if oldValue.contains(","), metadata.selectedUnit == .sat {
             setFormattedAmount(String(amountSats))

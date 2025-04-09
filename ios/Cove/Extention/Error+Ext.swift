@@ -48,3 +48,9 @@ extension WalletManagerError {
         describeWalletManagerError(error: self)
     }
 }
+
+extension SendFlowFiatOnChangeError {
+    var describe: String {
+        describeSendFlowFiatOnChangeError(error: self)
+    }
+}
