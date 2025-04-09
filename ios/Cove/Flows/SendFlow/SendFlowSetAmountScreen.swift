@@ -533,6 +533,10 @@ struct SendFlowSetAmountScreen: View {
             return sendAmount = String("0")
         }
 
+        if newValue.count == 2, newValue.first == "0", newValue != "0." {
+            return sendAmount = String(newValue.trimmingPrefix(while: { $0 == "0" }))
+        }
+
         var newValue = newValue
 
         // no decimals when entering sats
