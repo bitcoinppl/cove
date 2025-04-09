@@ -43,10 +43,7 @@ impl FiatCurrency {
     }
 
     pub fn is_symbol(symbol: &str) -> bool {
-        match symbol {
-            "$" | "€" | "£" | "¥" => true,
-            _ => false,
-        }
+        matches!(symbol, "$" | "€" | "£" | "¥")
     }
 
     pub const fn symbol(&self) -> &'static str {

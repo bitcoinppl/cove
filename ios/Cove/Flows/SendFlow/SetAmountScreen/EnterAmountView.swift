@@ -144,14 +144,6 @@ struct EnterAmountView: View {
                         Log.error("'EnterAmountView::onChange' unknonw error: \(error.localizedDescription)")
                     }
                 }
-                .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
-                    if old == .btc, new == .fiat {
-                        fiatText = Converter().removeFiatSuffix(fiatAmount: sendAmountFiat)
-                    }
-                }
-                .onAppear {
-                    fiatText = Converter().removeFiatSuffix(fiatAmount: sendAmountFiat)
-                }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button("sats") {
