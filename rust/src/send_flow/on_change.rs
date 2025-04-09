@@ -23,6 +23,12 @@ struct SendFlowFiatOnChangeResult {
     btc_amount: Option<Arc<Amount>>,
 }
 
+impl Default for SendFlowFiatOnChangeResult {
+    fn default() -> Self {
+        Self::no_change()
+    }
+}
+
 impl SendFlowFiatOnChangeResult {
     fn no_change() -> Self {
         Self {
@@ -74,6 +80,8 @@ impl SendFlowFiatOnChangeHandler {
 
         let symbol = self.selected_currency.symbol();
 
+        let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
+
         let new_value_raw = new_value
             .chars()
             .filter(|c| c.is_numeric() || *c == '.')
@@ -98,6 +106,14 @@ impl SendFlowFiatOnChangeHandler {
         if old_value == new_value {
             return Ok(SendFlowFiatOnChangeResult::no_change());
         }
+
+        // don't allow adding more than 1 decimal point
+        if number_of_decimal_points > 1 {
+            return Ok(SendFlowFiatOnChangeResult {
+                fiat_text: Some(old_value.to_string()),
+                ..Default::default()
+            });
+        };
 
         // if the only change was formatting (adding ,) then we don't need to do anything
         if old_value_raw == new_value_raw {
@@ -136,10 +152,8 @@ impl SendFlowFiatOnChangeHandler {
                 let decimals = last_index - decimal_index;
 
                 // get the decimal point and the decimals after it to a max of 2 decimals
-                match decimals {
-                    0 | 1 => new_value_raw[decimal_index..decimal_index + decimals + 1].to_string(),
-                    _ => new_value_raw[decimal_index..decimal_index + 2 + 1].to_string(),
-                }
+                let decimals = decimals.min(2);
+                new_value_raw[decimal_index..=decimal_index + decimals].to_string()
             }
 
             None => "".to_string(),
