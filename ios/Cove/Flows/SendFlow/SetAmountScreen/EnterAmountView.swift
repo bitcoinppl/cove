@@ -144,6 +144,16 @@ struct EnterAmountView: View {
                         Log.error("'EnterAmountView::onChange' unknonw error: \(error.localizedDescription)")
                     }
                 }
+                .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
+                    if old == .btc, new == .fiat {
+                        fiatText = sendAmountFiat
+                    }
+
+                    if old == .fiat, new == .btc, fiatText == "" {
+                        sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
+                    }
+                }
+                .onAppear { fiatText = sendAmountFiat }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button("sats") {
