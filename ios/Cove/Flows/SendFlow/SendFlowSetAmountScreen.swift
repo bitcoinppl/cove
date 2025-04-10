@@ -394,7 +394,8 @@ struct SendFlowSetAmountScreen: View {
                 }
 
                 if !validateAmount(displayAlert: true) {
-                    return presenter.focusField = .amount
+                    presenter.focusField = .amount
+                    return
                 } else {
                     setFormattedAmount(sendAmount)
                 }
@@ -516,6 +517,19 @@ struct SendFlowSetAmountScreen: View {
         return min(amount * 100_000_000, maxSats)
     }
 
+    private func clearSendAmount() {
+        if metadata.fiatOrBtc == .fiat {
+            sendAmountFiat = app.selectedFiatCurrency.symbol()
+            sendAmount = "0"
+            return
+        }
+
+        if metadata.fiatOrBtc == .btc {
+            sendAmount = ""
+            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+        }
+    }
+
     // MARK: OnChange Functions
 
     // note: maybe this should be moved into `EnterAmountView`
@@ -523,7 +537,6 @@ struct SendFlowSetAmountScreen: View {
         Log.debug("sendAmountChanged \(oldValue) -> \(newValue)")
         if feeRateOptions == nil { Task { await getFeeRateOptions() } }
 
-        // if entering fiat, skip formatting send amount (btc/sats)
         if metadata.fiatOrBtc == .fiat { return }
 
         // allow clearing completely
@@ -533,11 +546,13 @@ struct SendFlowSetAmountScreen: View {
 
         // remove leading zeros
         if newValue.hasPrefix("00") {
-            return sendAmount = String("0")
+            sendAmount = String("0")
+            return
         }
 
         if newValue.count == 2, newValue.first == "0", newValue != "0." {
-            return sendAmount = String(newValue.trimmingPrefix(while: { $0 == "0" }))
+            sendAmount = String(newValue.trimmingPrefix(while: { $0 == "0" }))
+            return
         }
 
         var newValue = newValue
@@ -815,7 +830,7 @@ struct SendFlowSetAmountScreen: View {
                 .buttonStyle(.bordered)
             }
 
-            Button(action: { sendAmount = "" }) {
+            Button(action: { clearSendAmount() }) {
                 Label("Clear", systemImage: "xmark.circle")
             }
             .buttonStyle(.bordered)
