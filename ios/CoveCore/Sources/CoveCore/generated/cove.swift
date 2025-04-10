@@ -7030,6 +7030,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func finalizePsbt(psbt: Psbt) async throws  -> BitcoinTransaction
     
+    func firstAddress() async throws  -> AddressInfo
+    
     func forceUpdateHeight() async throws  -> UInt32
     
     func forceWalletScan() async 
@@ -7519,6 +7521,23 @@ open func finalizePsbt(psbt: Psbt)async throws  -> BitcoinTransaction  {
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypeBitcoinTransaction_lift,
+            errorHandler: FfiConverterTypeWalletManagerError_lift
+        )
+}
+    
+open func firstAddress()async throws  -> AddressInfo  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustwalletmanager_first_address(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeAddressInfo_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -24544,6 +24563,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_finalize_psbt() != 10780) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_first_address() != 31221) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_force_update_height() != 23832) {

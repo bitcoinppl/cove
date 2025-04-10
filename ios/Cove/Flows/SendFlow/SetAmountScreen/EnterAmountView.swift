@@ -112,6 +112,7 @@ struct EnterAmountView: View {
                     }
                 }
                 .onChange(of: fiatText, initial: true) { oldValue, newValue in
+                    Log.debug("EnterAmountView::onChange::fiatText \(oldValue) --> \(newValue)")
                     guard metadata.fiatOrBtc == .fiat else { return }
                     guard let prices = app.prices else { return }
                     let selectedCurrency = Database().globalConfig().selectedFiatCurrency()
@@ -151,6 +152,15 @@ struct EnterAmountView: View {
 
                     if old == .fiat, new == .btc, fiatText == "" {
                         sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
+                    }
+                }
+                .onChange(of: sendAmountFiat, initial: false) { _, new in
+                    guard metadata.fiatOrBtc == .fiat else { return }
+                    let selectedCurrency = Database().globalConfig().selectedFiatCurrency()
+
+                    // allow clearing with the clear button
+                    if new == selectedCurrency.symbol() {
+                        fiatText = selectedCurrency.symbol()
                     }
                 }
                 .onAppear { fiatText = sendAmountFiat }

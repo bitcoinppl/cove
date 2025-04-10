@@ -352,6 +352,15 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub async fn first_address(&self) -> Result<AddressInfo, Error> {
+        let address_info = call!(self.actor.address_at(0))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get first address".to_string()))?;
+
+        Ok(address_info)
+    }
+
+    #[uniffi::method]
     pub fn save_unsigned_transaction(&self, details: Arc<ConfirmDetails>) -> Result<(), Error> {
         let wallet_id = self.id.clone();
         let tx_id = details.psbt.tx_id();

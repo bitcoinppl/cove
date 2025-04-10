@@ -162,9 +162,49 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
-        guard let address = try? Address.fromString(address: address, network: network) else { return }
-        guard let feeRateOptions else { return }
+    private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee?) {
+        Log.debug("setMaxSelected")
+        let address = try? Address.fromString(address: address)
+
+        // haven't added address or selected fee rate yet, use a smart default for fee
+        guard let address, let selectedFeeRate, let feeRateOptions else {
+            Task {
+                do {
+                    // no address, use own address to buildDrainTx
+                    let address = try await manager.firstAddress().address()
+
+                    // rought estimate amount we could send
+                    var estimateSend = Int(manager.balance.spendable().asSats()) - 5000
+                    estimateSend = max(10_000, estimateSend)
+
+                    let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFee(
+                        feeRateOptions: feeRateOptionsBase,
+                        amount: Amount.fromSat(sats: UInt64(estimateSend)),
+                        address: address
+                    )
+
+                    await MainActor.run {
+                        self.feeRateOptions = feeRateOptions
+                        updateSelectedFeeRate(feeRateOptions)
+                    }
+
+                    let psbt = try await manager.rust.buildDrainTransaction(address: address, fee: feeRateOptions.medium().feeRate())
+                    let max = psbt.outputTotalAmount()
+
+                    await MainActor.run {
+                        setAmount(max)
+                        presenter.maxSelected = max
+                    }
+
+                    // update the feeRateOptions with new amount
+                    await getFeeRateOptions(address: address, amount: max)
+                } catch {
+                    Log.error("Unable to set max amount: \(error)")
+                }
+            }
+
+            return
+        }
 
         Task {
             do {
@@ -174,13 +214,11 @@ struct SendFlowSetAmountScreen: View {
                 )
 
                 let max = psbt.outputTotalAmount()
-
                 let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFeeForDrain(
                     feeRateOptions: feeRateOptions, address: address
                 )
 
                 updateSelectedFeeRate(feeRateOptions)
-
                 await MainActor.run {
                     self.feeRateOptions = feeRateOptions
                     setAmount(max)
@@ -518,7 +556,10 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func clearSendAmount() {
+        Log.debug("clearSendAmount")
+
         if metadata.fiatOrBtc == .fiat {
+            Log.debug("fiat \(sendAmountFiat)")
             sendAmountFiat = app.selectedFiatCurrency.symbol()
             sendAmount = "0"
             return
@@ -527,6 +568,7 @@ struct SendFlowSetAmountScreen: View {
         if metadata.fiatOrBtc == .btc {
             sendAmount = ""
             sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
+            return
         }
     }
 
@@ -650,6 +692,11 @@ struct SendFlowSetAmountScreen: View {
         )
 
         _privateFocusField = newField
+
+        if newField == .none, feeRateOptions == nil {
+            let _ = validate(displayAlert: true)
+        }
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
                 // if keyboard opening directly to amount, dont update scroll position
@@ -704,8 +751,39 @@ struct SendFlowSetAmountScreen: View {
 
         presenter.address = address
 
-        let amountSats = max(sendAmountSats ?? 0, 10000)
+        let amountSats = max(sendAmountSats ?? 0, 10_000)
         let amount = Amount.fromSat(sats: UInt64(amountSats))
+
+        if presenter.maxSelected != nil {
+            Task {
+                do {
+                    var feeRateOptions = feeRateOptions
+
+                    if feeRateOptions == nil {
+                        feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFee(
+                            feeRateOptions: feeRateOptionsBase,
+                            amount: Amount.fromSat(sats: 10_000),
+                            address: address
+                        )
+                    }
+
+                    let psbt = try await manager.rust.buildDrainTransaction(
+                        address: address,
+                        fee: feeRateOptions!.medium().feeRate()
+                    )
+
+                    let outputAmount = psbt.outputTotalAmount()
+
+                    presenter.maxSelected = outputAmount
+                    setAmount(outputAmount)
+
+                } catch {
+                    Log.error("Unable to create drain txn: \(error.localizedDescription)")
+                }
+            }
+
+            return
+        }
 
         // address and amount is valid, dismiss the keyboard
         if validateAmount(), validateAddress(addressString) {
@@ -778,7 +856,7 @@ struct SendFlowSetAmountScreen: View {
 
         guard let address else { return }
         let amount =
-            amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10000))
+            amount ?? Amount.fromSat(sats: UInt64(sendAmountSats ?? 10_000))
 
         do {
             let feeRateOptions = try await manager.rust.feeRateOptionsWithTotalFee(
@@ -821,14 +899,12 @@ struct SendFlowSetAmountScreen: View {
 
             Spacer()
 
-            if let selectedFeeRate {
-                Button(action: { setMaxSelected(selectedFeeRate) }) {
-                    Text("Max")
-                        .font(.callout)
-                }
-                .tint(.primary)
-                .buttonStyle(.bordered)
+            Button(action: { setMaxSelected(selectedFeeRate) }) {
+                Text("Max")
+                    .font(.callout)
             }
+            .tint(.primary)
+            .buttonStyle(.bordered)
 
             Button(action: { clearSendAmount() }) {
                 Label("Clear", systemImage: "xmark.circle")
