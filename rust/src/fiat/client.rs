@@ -156,6 +156,7 @@ impl FiatClient {
         Ok(prices)
     }
 
+    /// Get the current price for a currency
     async fn price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
         let prices = self.prices().await?;
 
