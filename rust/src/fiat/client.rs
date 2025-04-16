@@ -329,20 +329,16 @@ mod tests {
         // Verify we got some price data
         assert!(!historical_prices.prices.is_empty());
 
-        // Verify the exchange rates exist
-        assert!(historical_prices.exchange_rates.usd_eur > 0.0);
-        assert!(historical_prices.exchange_rates.usd_gbp > 0.0);
-        assert!(historical_prices.exchange_rates.usd_cad > 0.0);
-        assert!(historical_prices.exchange_rates.usd_chf > 0.0);
-        assert!(historical_prices.exchange_rates.usd_aud > 0.0);
-        assert!(historical_prices.exchange_rates.usd_jpy > 0.0);
-
         // Verify the prices have a valid timestamp
         for price in &historical_prices.prices {
             assert!(price.time > 0);
-
-            // Some prices may be -1 if not available, so we only check that USD is valid
             assert!(price.usd > 0.0);
+            assert!(price.eur > 0.0);
+            assert!(price.gbp > 0.0);
+            assert!(price.cad > 0.0);
+            assert!(price.chf > 0.0);
+            assert!(price.aud > 0.0);
+            assert!(price.jpy > 0.0);
         }
     }
 
@@ -354,7 +350,7 @@ mod tests {
 
         // Test for USD
         let price_usd = fiat_client
-            .get_historical_price_at_time(timestamp, FiatCurrency::Usd)
+            .historical_price_for_currency(timestamp, FiatCurrency::Usd)
             .await
             .unwrap();
 
@@ -364,7 +360,7 @@ mod tests {
 
         // Test for EUR
         let price_eur = fiat_client
-            .get_historical_price_at_time(timestamp, FiatCurrency::Eur)
+            .historical_price_for_currency(timestamp, FiatCurrency::Eur)
             .await
             .unwrap();
 
