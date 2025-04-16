@@ -28,12 +28,15 @@ bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
 bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
-# store bdk wallet data
+# file store only for migration / compatibility with old beta, temporary
 bdk_file_store = { version = "0.18.0" }
+
+# store bdk wallet data
 bdk_chain = { version = "0.21.0" }
 
 # import / export hardware wallet public keys
-pubport = { version = "0.3.1", features = [] }
+# pubport = { version = "0.3.1", features = [] }
+pubport = { git = "https://github.com/bitcoinppl/pubport" }
 
 # bip329 labels
 bip329 = { version = "0.4.0" }
