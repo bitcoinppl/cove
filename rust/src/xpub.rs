@@ -64,6 +64,9 @@ pub enum DescriptorError {
 
     #[error("Can't import using the master xpub, please use a child xpub")]
     MasterXpub,
+
+    #[error("Unable to get descriptor from key expression")]
+    KeyExpressionError(String),
 }
 
 impl From<descriptor::Error> for DescriptorError {
@@ -87,6 +90,10 @@ impl From<descriptor::Error> for DescriptorError {
             DS::MasterXpub => Self::MasterXpub,
             DS::InvalidJsonDescriptor(..) => {
                 Self::InvalidDescriptor("invalid json descriptor".to_string())
+            }
+            DS::ScriptTypeParseError(error) => Self::KeyExpressionError(error.to_string()),
+            DS::MissingKeyExpressionFields => {
+                Self::KeyExpressionError("missing fields".to_string())
             }
         }
     }
