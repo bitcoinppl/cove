@@ -6,6 +6,8 @@ pub mod error;
 pub mod global_cache;
 pub mod global_config;
 pub mod global_flag;
+pub mod historical_price_record;
+pub mod historical_prices;
 pub mod key;
 pub mod macros;
 pub mod record;
@@ -19,6 +21,7 @@ use arc_swap::ArcSwap;
 use global_cache::GlobalCacheTable;
 use global_config::GlobalConfigTable;
 use global_flag::GlobalFlagTable;
+use historical_prices::HistoricalPricesTable;
 use uniffi::custom_newtype;
 use unsigned_transactions::UnsignedTransactionsTable;
 use wallet::WalletsTable;
@@ -41,6 +44,7 @@ pub struct Database {
     pub global_cache: GlobalCacheTable,
     pub wallets: WalletsTable,
     pub unsigned_transactions: UnsignedTransactionsTable,
+    pub historical_prices: HistoricalPricesTable,
 }
 
 #[uniffi::export]
@@ -60,6 +64,10 @@ impl Database {
 
     pub fn unsigned_transactions(&self) -> UnsignedTransactionsTable {
         self.unsigned_transactions.clone()
+    }
+    
+    pub fn historical_prices(&self) -> HistoricalPricesTable {
+        self.historical_prices.clone()
     }
 
     pub fn dangerous_reset_all_data(&self) {
@@ -97,6 +105,7 @@ impl Database {
         let global_config = GlobalConfigTable::new(main_db_arc.clone(), &write_txn);
         let global_cache = GlobalCacheTable::new(main_db_arc.clone(), &write_txn);
         let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
+        let historical_prices = HistoricalPricesTable::new(main_db_arc.clone(), &write_txn);
 
         write_txn
             .commit()
@@ -108,6 +117,7 @@ impl Database {
             global_config,
             global_cache,
             unsigned_transactions,
+            historical_prices,
         }
     }
 }
