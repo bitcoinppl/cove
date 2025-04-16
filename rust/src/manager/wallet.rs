@@ -470,7 +470,7 @@ impl RustWalletManager {
         let currency = self.selected_fiat_currency();
 
         FIAT_CLIENT
-            .value_in_currency(*amount, currency)
+            .current_value_in_currency(*amount, currency)
             .await
             .map_err(|error| {
                 Error::FiatError(format!("unable to get fiat value for amount: {error}"))
@@ -555,7 +555,7 @@ impl RustWalletManager {
         let currency = self.selected_fiat_currency();
 
         let fiat = FIAT_CLIENT
-            .value_in_currency(amount, currency)
+            .current_value_in_currency(amount, currency)
             .await
             .map_err(|error| {
                 Error::FiatError(format!("unable to get fiat value for amount: {error}"))

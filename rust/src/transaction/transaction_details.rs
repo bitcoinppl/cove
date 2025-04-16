@@ -210,7 +210,7 @@ impl TransactionDetails {
 
         task::spawn(async move {
             FIAT_CLIENT
-                .value_in_currency(amount, currency())
+                .current_value_in_currency(amount, currency())
                 .await
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
@@ -235,7 +235,7 @@ impl TransactionDetails {
         let fee = self.fee.ok_or(Error::Fee("No fee".to_string()))?;
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .value_in_currency(fee, currency())
+                .current_value_in_currency(fee, currency())
                 .await
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
@@ -274,7 +274,7 @@ impl TransactionDetails {
 
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .value_in_currency(amount, currency())
+                .current_value_in_currency(amount, currency())
                 .await
                 .map_err(|e| Error::FiatAmount(e.to_string()))
         })
