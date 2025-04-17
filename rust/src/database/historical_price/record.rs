@@ -1,4 +1,8 @@
+use std::cmp::Ordering;
+
 use crate::fiat::{FiatCurrency, historical::HistoricalPrice};
+
+use super::BlockNumber;
 
 /// A space-efficient version of HistoricalPrice where only USD is required
 /// and other currencies are optional to save space when they aren't available
@@ -63,3 +67,79 @@ impl HistoricalPriceRecord {
     }
 }
 
+impl redb::Key for BlockNumber {
+    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
+        data1.cmp(data2)
+    }
+}
+
+impl redb::Value for BlockNumber {
+    type SelfType<'a>
+        = &'a BlockNumber
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = &'a [u8]
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        todo!()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'a,
+        Self: 'b,
+    {
+        todo!()
+    }
+
+    fn type_name() -> redb::TypeName {
+        todo!()
+    }
+}
+
+impl redb::Value for HistoricalPriceRecord {
+    type SelfType<'a>
+        = &'a HistoricalPriceRecord
+    where
+        Self: 'a;
+
+    type AsBytes<'a>
+        = &'a [u8]
+    where
+        Self: 'a;
+
+    fn fixed_width() -> Option<usize> {
+        None
+    }
+
+    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
+    where
+        Self: 'a,
+    {
+        todo!()
+    }
+
+    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
+    where
+        Self: 'a,
+        Self: 'b,
+    {
+        // value.0.as_ref()
+        todo!()
+    }
+
+    fn type_name() -> redb::TypeName {
+        todo!()
+    }
+}
