@@ -41,7 +41,6 @@ mod task;
 mod transaction;
 mod transaction_watcher;
 mod unblock;
-mod util;
 mod wallet;
 mod wallet_scanner;
 mod word_validator;

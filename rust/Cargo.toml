@@ -17,6 +17,7 @@ default = ["uniffi/cli"]
 [dependencies]
 # cove crates
 macros = { path = "./crates/macros" }
+util = { path = "./crates/util" }
 
 # bdk / bitcoin
 bdk_core = "0.4"

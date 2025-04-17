@@ -1,0 +1,10 @@
+ [package]
+ name = "util"
+ version = "0.1.0"
+ edition = "2024"
+
+ [dependencies]
+ bitcoin = { version = "0.32", features = ["serde"] }
+ rand = "0.9"
+ hex = "0.4.3"
+ uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }

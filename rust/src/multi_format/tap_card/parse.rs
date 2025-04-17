@@ -233,7 +233,7 @@ fn message_and_signature_to_pubkeys(
 
 fn full_message_digest(url_encoded: &str) -> Message {
     let message = url_message_for_digest(url_encoded);
-    crate::util::message_digest(message.as_bytes())
+    util::message_digest(message.as_bytes())
 }
 
 fn url_message_for_digest(url_encoded: &str) -> &str {

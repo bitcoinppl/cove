@@ -579,7 +579,7 @@ impl TapSignerReaderError {
 
 mod ffi {
     use super::*;
-    use crate::util::generate_random_chain_code;
+    use util::generate_random_chain_code;
 
     fn derive_info() -> DeriveInfo {
         use std::str::FromStr as _;
