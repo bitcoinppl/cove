@@ -3614,6 +3614,8 @@ public protocol DatabaseProtocol: AnyObject, Sendable {
     
     func globalConfig()  -> GlobalConfigTable
     
+    func historicalPrices()  -> HistoricalPriceTable
+    
     func unsignedTransactions()  -> UnsignedTransactionsTable
     
     func wallets()  -> WalletsTable
@@ -3687,6 +3689,13 @@ open func dangerousResetAllData()  {try! rustCall() {
 open func globalConfig() -> GlobalConfigTable  {
     return try!  FfiConverterTypeGlobalConfigTable_lift(try! rustCall() {
     uniffi_cove_fn_method_database_global_config(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func historicalPrices() -> HistoricalPriceTable  {
+    return try!  FfiConverterTypeHistoricalPriceTable_lift(try! rustCall() {
+    uniffi_cove_fn_method_database_historical_prices(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -6623,6 +6632,232 @@ public func FfiConverterTypeHeaderIconPresenter_lift(_ pointer: UnsafeMutableRaw
 #endif
 public func FfiConverterTypeHeaderIconPresenter_lower(_ value: HeaderIconPresenter) -> UnsafeMutableRawPointer {
     return FfiConverterTypeHeaderIconPresenter.lower(value)
+}
+
+
+
+
+
+
+public protocol HistoricalPriceTableProtocol: AnyObject, Sendable {
+    
+}
+open class HistoricalPriceTable: HistoricalPriceTableProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_historicalpricetable(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_historicalpricetable(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHistoricalPriceTable: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = HistoricalPriceTable
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> HistoricalPriceTable {
+        return HistoricalPriceTable(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: HistoricalPriceTable) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HistoricalPriceTable {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: HistoricalPriceTable, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceTable_lift(_ pointer: UnsafeMutableRawPointer) throws -> HistoricalPriceTable {
+    return try FfiConverterTypeHistoricalPriceTable.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceTable_lower(_ value: HistoricalPriceTable) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeHistoricalPriceTable.lower(value)
+}
+
+
+
+
+
+
+public protocol HistoricalPricesResponseProtocol: AnyObject, Sendable {
+    
+}
+open class HistoricalPricesResponse: HistoricalPricesResponseProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_historicalpricesresponse(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_historicalpricesresponse(pointer, $0) }
+    }
+
+    
+
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHistoricalPricesResponse: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = HistoricalPricesResponse
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> HistoricalPricesResponse {
+        return HistoricalPricesResponse(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: HistoricalPricesResponse) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HistoricalPricesResponse {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: HistoricalPricesResponse, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPricesResponse_lift(_ pointer: UnsafeMutableRawPointer) throws -> HistoricalPricesResponse {
+    return try FfiConverterTypeHistoricalPricesResponse.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPricesResponse_lower(_ value: HistoricalPricesResponse) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeHistoricalPricesResponse.lower(value)
 }
 
 
@@ -14658,6 +14893,128 @@ public func FfiConverterTypeGroupedWord_lower(_ value: GroupedWord) -> RustBuffe
 }
 
 
+/**
+ * A space-efficient version of HistoricalPrice where only USD is required
+ * and other currencies are optional to save space when they aren't available
+ */
+public struct HistoricalPriceRecord {
+    public var time: UInt64
+    public var usd: Float
+    public var eur: Float?
+    public var gbp: Float?
+    public var cad: Float?
+    public var chf: Float?
+    public var aud: Float?
+    public var jpy: Float?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(time: UInt64, usd: Float, eur: Float?, gbp: Float?, cad: Float?, chf: Float?, aud: Float?, jpy: Float?) {
+        self.time = time
+        self.usd = usd
+        self.eur = eur
+        self.gbp = gbp
+        self.cad = cad
+        self.chf = chf
+        self.aud = aud
+        self.jpy = jpy
+    }
+}
+
+#if compiler(>=6)
+extension HistoricalPriceRecord: Sendable {}
+#endif
+
+
+extension HistoricalPriceRecord: Equatable, Hashable {
+    public static func ==(lhs: HistoricalPriceRecord, rhs: HistoricalPriceRecord) -> Bool {
+        if lhs.time != rhs.time {
+            return false
+        }
+        if lhs.usd != rhs.usd {
+            return false
+        }
+        if lhs.eur != rhs.eur {
+            return false
+        }
+        if lhs.gbp != rhs.gbp {
+            return false
+        }
+        if lhs.cad != rhs.cad {
+            return false
+        }
+        if lhs.chf != rhs.chf {
+            return false
+        }
+        if lhs.aud != rhs.aud {
+            return false
+        }
+        if lhs.jpy != rhs.jpy {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(time)
+        hasher.combine(usd)
+        hasher.combine(eur)
+        hasher.combine(gbp)
+        hasher.combine(cad)
+        hasher.combine(chf)
+        hasher.combine(aud)
+        hasher.combine(jpy)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHistoricalPriceRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HistoricalPriceRecord {
+        return
+            try HistoricalPriceRecord(
+                time: FfiConverterUInt64.read(from: &buf), 
+                usd: FfiConverterFloat.read(from: &buf), 
+                eur: FfiConverterOptionFloat.read(from: &buf), 
+                gbp: FfiConverterOptionFloat.read(from: &buf), 
+                cad: FfiConverterOptionFloat.read(from: &buf), 
+                chf: FfiConverterOptionFloat.read(from: &buf), 
+                aud: FfiConverterOptionFloat.read(from: &buf), 
+                jpy: FfiConverterOptionFloat.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HistoricalPriceRecord, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.time, into: &buf)
+        FfiConverterFloat.write(value.usd, into: &buf)
+        FfiConverterOptionFloat.write(value.eur, into: &buf)
+        FfiConverterOptionFloat.write(value.gbp, into: &buf)
+        FfiConverterOptionFloat.write(value.cad, into: &buf)
+        FfiConverterOptionFloat.write(value.chf, into: &buf)
+        FfiConverterOptionFloat.write(value.aud, into: &buf)
+        FfiConverterOptionFloat.write(value.jpy, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceRecord_lift(_ buf: RustBuffer) throws -> HistoricalPriceRecord {
+    return try FfiConverterTypeHistoricalPriceRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceRecord_lower(_ value: HistoricalPriceRecord) -> RustBuffer {
+    return FfiConverterTypeHistoricalPriceRecord.lower(value)
+}
+
+
 public struct ImportWalletManagerState {
 
     // Default memberwise initializers are never public by default, so we
@@ -18041,6 +18398,8 @@ public enum DatabaseError: Swift.Error {
     )
     case UnsignedTransactions(UnsignedTransactionsTableError
     )
+    case HistoricalPrice(HistoricalPriceTableError
+    )
     case Serialization(SerdeError
     )
 }
@@ -18080,7 +18439,10 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
         case 7: return .UnsignedTransactions(
             try FfiConverterTypeUnsignedTransactionsTableError.read(from: &buf)
             )
-        case 8: return .Serialization(
+        case 8: return .HistoricalPrice(
+            try FfiConverterTypeHistoricalPriceTableError.read(from: &buf)
+            )
+        case 9: return .Serialization(
             try FfiConverterTypeSerdeError.read(from: &buf)
             )
 
@@ -18130,8 +18492,13 @@ public struct FfiConverterTypeDatabaseError: FfiConverterRustBuffer {
             FfiConverterTypeUnsignedTransactionsTableError.write(v1, into: &buf)
             
         
-        case let .Serialization(v1):
+        case let .HistoricalPrice(v1):
             writeInt(&buf, Int32(8))
+            FfiConverterTypeHistoricalPriceTableError.write(v1, into: &buf)
+            
+        
+        case let .Serialization(v1):
+            writeInt(&buf, Int32(9))
             FfiConverterTypeSerdeError.write(v1, into: &buf)
             
         }
@@ -19812,6 +20179,173 @@ public func FfiConverterTypeHardwareWalletMetadata_lower(_ value: HardwareWallet
 }
 
 
+
+
+
+/**
+ * Error type for HistoricalPriceRecord
+ */
+public enum HistoricalPriceRecordError: Swift.Error {
+
+    
+    
+    case ConversionError(String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHistoricalPriceRecordError: FfiConverterRustBuffer {
+    typealias SwiftType = HistoricalPriceRecordError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HistoricalPriceRecordError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .ConversionError(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HistoricalPriceRecordError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .ConversionError(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceRecordError_lift(_ buf: RustBuffer) throws -> HistoricalPriceRecordError {
+    return try FfiConverterTypeHistoricalPriceRecordError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceRecordError_lower(_ value: HistoricalPriceRecordError) -> RustBuffer {
+    return FfiConverterTypeHistoricalPriceRecordError.lower(value)
+}
+
+
+extension HistoricalPriceRecordError: Equatable, Hashable {}
+
+
+
+
+extension HistoricalPriceRecordError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+
+public enum HistoricalPriceTableError: Swift.Error {
+
+    
+    
+    case Save(String
+    )
+    case Read(String
+    )
+    case NoRecordFound
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHistoricalPriceTableError: FfiConverterRustBuffer {
+    typealias SwiftType = HistoricalPriceTableError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HistoricalPriceTableError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .Save(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .Read(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .NoRecordFound
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HistoricalPriceTableError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .Save(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .Read(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .NoRecordFound:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceTableError_lift(_ buf: RustBuffer) throws -> HistoricalPriceTableError {
+    return try FfiConverterTypeHistoricalPriceTableError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHistoricalPriceTableError_lower(_ value: HistoricalPriceTableError) -> RustBuffer {
+    return FfiConverterTypeHistoricalPriceTableError.lower(value)
+}
+
+
+extension HistoricalPriceTableError: Equatable, Hashable {}
+
+
+
+
+extension HistoricalPriceTableError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
 
 
 // Note that we don't yet support `indirect` for enums.
@@ -28576,6 +29110,30 @@ fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionFloat: FfiConverterRustBuffer {
+    typealias SwiftType = Float?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterFloat.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterFloat.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
     typealias SwiftType = Double?
 
@@ -30170,12 +30728,6 @@ public func fiatCurrencyToString(fiatCurrency: FiatCurrency) -> String  {
     )
 })
 }
-public func generateRandomChainCode() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_generate_random_chain_code($0
-    )
-})
-}
 public func groupedPlainWordsOf(mnemonic: String, groups: UInt8)throws  -> [[String]]  {
     return try  FfiConverterSequenceSequenceString.lift(try rustCallWithError(FfiConverterTypeMnemonicParseError_lift) {
     uniffi_cove_fn_func_grouped_plain_words_of(
@@ -30195,27 +30747,6 @@ public func hashRoute(route: Route) -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_cove_fn_func_hash_route(
         FfiConverterTypeRoute_lower(route),$0
-    )
-})
-}
-public func hexDecode(hex: String) -> Data?  {
-    return try!  FfiConverterOptionData.lift(try! rustCall() {
-    uniffi_cove_fn_func_hex_decode(
-        FfiConverterString.lower(hex),$0
-    )
-})
-}
-public func hexEncode(bytes: Data) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_func_hex_encode(
-        FfiConverterData.lower(bytes),$0
-    )
-})
-}
-public func hexToUtf8String(hex: String) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_fn_func_hex_to_utf8_string(
-        FfiConverterString.lower(hex),$0
     )
 })
 }
@@ -30590,9 +31121,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_func_fiat_currency_to_string() != 50490) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_func_generate_random_chain_code() != 15318) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_func_grouped_plain_words_of() != 45802) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -30600,15 +31128,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_hash_route() != 32817) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_hex_decode() != 62551) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_hex_encode() != 38168) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_func_hex_to_utf8_string() != 60553) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_fiat_currency_symbol() != 27192) {
@@ -30918,6 +31437,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_database_global_config() != 4476) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_database_historical_prices() != 14167) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_database_unsigned_transactions() != 8913) {
