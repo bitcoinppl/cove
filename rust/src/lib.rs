@@ -13,6 +13,7 @@ mod color;
 mod color_scheme;
 mod consts;
 mod converter;
+// cove_nfc is now an external crate
 mod cove_nfc;
 mod device;
 mod encryption;
