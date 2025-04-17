@@ -22,7 +22,6 @@ pub struct HistoricalPrice {
     pub jpy: f32,
 }
 
-
 impl HistoricalPricesResponse {
     pub fn for_currency(&self, currency: FiatCurrency) -> Option<f32> {
         if self.prices.is_empty() {

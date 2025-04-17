@@ -18,6 +18,15 @@ pub struct HistoricalPriceRecord {
     pub jpy: Option<f32>,
 }
 
+/// Error type for HistoricalPriceRecord
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum HistoricalPriceRecordError {
+    #[error("failed to convert bytes to HistoricalPriceRecord")]
+    ConversionError(String),
+}
+
+pub type Error = HistoricalPriceRecordError;
+
 impl From<HistoricalPrice> for HistoricalPriceRecord {
     fn from(price: HistoricalPrice) -> Self {
         Self {
@@ -65,6 +74,16 @@ impl HistoricalPriceRecord {
             FiatCurrency::Jpy => self.jpy,
         }
     }
+
+    /// Convert from bytes
+    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        todo!("using bytes: {bytes:?}")
+    }
+
+    /// Convert to bytes
+    pub fn to_bytes(&self) -> Vec<u8> {
+        todo!()
+    }
 }
 
 impl redb::Key for BlockNumber {
@@ -103,15 +122,8 @@ impl redb::Value for BlockNumber {
 }
 
 impl redb::Value for HistoricalPriceRecord {
-    type SelfType<'a>
-        = &'a HistoricalPriceRecord
-    where
-        Self: 'a;
-
-    type AsBytes<'a>
-        = &'a [u8]
-    where
-        Self: 'a;
+    type SelfType<'a> = HistoricalPriceRecord;
+    type AsBytes<'a> = Vec<u8>;
 
     fn fixed_width() -> Option<usize> {
         None
@@ -121,7 +133,7 @@ impl redb::Value for HistoricalPriceRecord {
     where
         Self: 'a,
     {
-        todo!()
+        Self::try_from_bytes(data).unwrap()
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
@@ -129,11 +141,10 @@ impl redb::Value for HistoricalPriceRecord {
         Self: 'a,
         Self: 'b,
     {
-        // value.0.as_ref()
-        todo!()
+        value.to_bytes()
     }
 
     fn type_name() -> redb::TypeName {
-        todo!()
+        redb::TypeName::new(std::any::type_name::<HistoricalPriceRecord>())
     }
 }

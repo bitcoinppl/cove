@@ -66,7 +66,7 @@ impl HistoricalPriceTable {
         let value = table
             .get(key)
             .map_err(|error| HistoricalPriceTableError::Read(error.to_string()))?
-            .map(|value| *value.value());
+            .map(|value| value.value());
 
         Ok(value)
     }
