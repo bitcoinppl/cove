@@ -18,6 +18,8 @@ default = ["uniffi/cli"]
 # cove crates
 macros = { path = "./crates/macros" }
 util = { path = "./crates/util" }
+multi_format = { path = "./crates/multi_format" }
+tap_card = { path = "./crates/tap_card" }
 
 # bdk / bitcoin
 bdk_core = "0.4"
@@ -164,7 +166,7 @@ uniffi = { workspace = true, features = ["build"] }
 tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
 [workspace]
-members = ["crates/macros", "crates/util"]
+members = ["crates/macros", "crates/util", "crates/multi_format", "crates/tap_card"]
 
 [workspace.dependencies]
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }

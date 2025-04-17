@@ -761,6 +761,7 @@ dependencies = [
  "libz-sys",
  "macros",
  "memchr",
+ "multi_format",
  "nid",
  "num-bigint",
  "numfmt",
@@ -778,6 +779,7 @@ dependencies = [
  "sha2",
  "strum",
  "tap",
+ "tap_card",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
@@ -1953,6 +1955,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "multi_format"
+version = "0.1.0"
+dependencies = [
+ "bip329",
+ "bitcoin",
+ "derive_more",
+ "hex",
+ "pubport",
+ "serde",
+ "serde_json",
+ "tap_card",
+ "thiserror 2.0.12",
+ "tracing",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3035,6 +3053,21 @@ name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+
+[[package]]
+name = "tap_card"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "data-encoding",
+ "derive_more",
+ "hex",
+ "serde",
+ "serde_urlencoded",
+ "thiserror 2.0.12",
+ "tracing",
+ "uniffi 0.29.1",
+]
 
 [[package]]
 name = "tempfile"

@@ -13,7 +13,7 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::Keychain,
-    multi_format::tap_card::TapSigner,
+    tap_card::TapSigner,
     network::Network,
     node::Node,
     router::{Route, RouteFactory, Router},

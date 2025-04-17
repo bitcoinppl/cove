@@ -4,7 +4,7 @@ use crate::{
     app::FfiApp,
     database::Database,
     mnemonic::NumberOfBip39Words,
-    multi_format::tap_card::TapSigner,
+    tap_card::TapSigner,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
