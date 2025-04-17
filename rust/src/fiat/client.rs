@@ -82,22 +82,6 @@ impl FiatClient {
             wait_before_new_prices: ONE_MIN,
         }
     }
-    
-    /// Fetch and store historical price for a given block number
-    /// This combines the API call with database storage in one method
-    pub async fn fetch_and_store_price_for_block(&self, block_number: u32, timestamp: u64) -> Result<()> {
-        let historical_data = self.historical_prices(timestamp).await
-            .map_err(|e| eyre::eyre!("Failed to fetch historical price: {}", e))?;
-            
-        if historical_data.prices.is_empty() {
-            return Err(eyre::eyre!("No price data available for timestamp {}", timestamp));
-        }
-        
-        // Store the first price entry in the database (converted to the space-efficient record format)
-        let price_record = super::historical::HistoricalPriceRecord::from(historical_data.prices[0]);
-        store_historical_price_record_for_block(block_number, price_record)
-            .context("Failed to store historical price for block")
-    }
 
     #[allow(dead_code)]
     fn new_with_url(url: String) -> Self {
@@ -172,6 +156,7 @@ impl FiatClient {
         Ok(prices)
     }
 
+    /// Get the current price for a currency
     async fn price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
         let prices = self.prices().await?;
 
@@ -268,83 +253,13 @@ pub async fn update_prices_if_needed() -> Result<()> {
     Ok(())
 }
 
-/// Store historical price for a specific block number
-pub fn store_historical_price_for_block(block_number: u32, price: super::historical::HistoricalPrice) -> Result<()> {
-    let db = Database::global();
-    db.historical_prices.set_price_for_block(block_number, price)
-        .context("unable to save historical price")
-}
-
-/// Store a space-efficient historical price record for a specific block number
-pub fn store_historical_price_record_for_block(block_number: u32, price_record: super::historical::HistoricalPriceRecord) -> Result<()> {
-    let db = Database::global();
-    db.historical_prices.set_price_record_for_block(block_number, price_record)
-        .context("unable to save historical price record")
-}
-
-/// Get historical price for a specific block number
-pub fn get_historical_price_for_block(block_number: u32) -> Result<Option<super::historical::HistoricalPriceRecord>> {
-    let db = Database::global();
-    db.historical_prices.get_price_by_block(block_number)
-        .context("unable to get historical price")
-}
-
-/// Get all historical prices
-pub fn get_all_historical_prices() -> Result<Vec<(crate::database::historical_prices::BlockNumber, super::historical::HistoricalPriceRecord)>> {
-    let db = Database::global();
-    db.historical_prices.get_all_prices()
-        .context("unable to get all historical prices")
-}
-
 mod ffi {
     use tracing::error;
-    use super::super::historical::{HistoricalPrice, HistoricalPriceRecord};
-    use crate::database::historical_prices::BlockNumber;
 
     #[uniffi::export]
     async fn update_prices_if_needed() {
         if let Err(error) = crate::fiat::client::update_prices_if_needed().await {
             error!("unable to update prices: {error:?}");
-        }
-    }
-    
-    #[uniffi::export]
-    async fn fetch_and_store_price_for_block(block_number: u32, timestamp: u64) -> Result<(), String> {
-        match crate::fiat::client::FIAT_CLIENT.fetch_and_store_price_for_block(block_number, timestamp).await {
-            Ok(()) => Ok(()),
-            Err(error) => Err(format!("Error fetching and storing historical price: {error}")),
-        }
-    }
-    
-    #[uniffi::export]
-    fn store_historical_price_for_block(block_number: u32, price: HistoricalPrice) -> Result<(), String> {
-        match crate::fiat::client::store_historical_price_for_block(block_number, price) {
-            Ok(()) => Ok(()),
-            Err(error) => Err(format!("Error storing historical price: {error}")),
-        }
-    }
-    
-    #[uniffi::export]
-    fn store_historical_price_record_for_block(block_number: u32, price_record: HistoricalPriceRecord) -> Result<(), String> {
-        match crate::fiat::client::store_historical_price_record_for_block(block_number, price_record) {
-            Ok(()) => Ok(()),
-            Err(error) => Err(format!("Error storing historical price record: {error}")),
-        }
-    }
-    
-    #[uniffi::export]
-    fn get_historical_price_for_block(block_number: u32) -> Result<Option<HistoricalPriceRecord>, String> {
-        match crate::fiat::client::get_historical_price_for_block(block_number) {
-            Ok(price) => Ok(price),
-            Err(error) => Err(format!("Error getting historical price: {error}")),
-        }
-    }
-    
-    #[uniffi::export]
-    fn get_all_historical_prices() -> Result<Vec<(BlockNumber, HistoricalPriceRecord)>, String> {
-        match crate::fiat::client::get_all_historical_prices() {
-            Ok(prices) => Ok(prices),
-            Err(error) => Err(format!("Error getting all historical prices: {error}")),
         }
     }
 }

@@ -1,24 +1,16 @@
-use serde::{Deserialize, Serialize};
-
-use crate::fiat::{historical::HistoricalPrice, FiatCurrency};
+use crate::fiat::{FiatCurrency, historical::HistoricalPrice};
 
 /// A space-efficient version of HistoricalPrice where only USD is required
 /// and other currencies are optional to save space when they aren't available
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, uniffi::Record)]
+#[derive(Debug, Copy, Clone, PartialEq, uniffi::Record)]
 pub struct HistoricalPriceRecord {
     pub time: u64,
     pub usd: f32,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub eur: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub gbp: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cad: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub chf: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub aud: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub jpy: Option<f32>,
 }
 
@@ -27,17 +19,35 @@ impl From<HistoricalPrice> for HistoricalPriceRecord {
         Self {
             time: price.time,
             usd: price.usd,
-            eur: if price.eur >= 0.0 { Some(price.eur) } else { None },
-            gbp: if price.gbp >= 0.0 { Some(price.gbp) } else { None },
-            cad: if price.cad >= 0.0 { Some(price.cad) } else { None },
-            chf: if price.chf >= 0.0 { Some(price.chf) } else { None },
-            aud: if price.aud >= 0.0 { Some(price.aud) } else { None },
-            jpy: if price.jpy >= 0.0 { Some(price.jpy) } else { None },
+            eur: positive_or_none(price.eur),
+            gbp: positive_or_none(price.gbp),
+            cad: positive_or_none(price.cad),
+            chf: positive_or_none(price.chf),
+            aud: positive_or_none(price.aud),
+            jpy: positive_or_none(price.jpy),
         }
     }
 }
 
-#[uniffi::export]
+impl From<HistoricalPriceRecord> for HistoricalPrice {
+    fn from(record: HistoricalPriceRecord) -> Self {
+        Self {
+            time: record.time,
+            usd: record.usd,
+            eur: record.eur.unwrap_or(-1.0),
+            gbp: record.gbp.unwrap_or(-1.0),
+            cad: record.cad.unwrap_or(-1.0),
+            chf: record.chf.unwrap_or(-1.0),
+            aud: record.aud.unwrap_or(-1.0),
+            jpy: record.jpy.unwrap_or(-1.0),
+        }
+    }
+}
+
+fn positive_or_none(value: f32) -> Option<f32> {
+    if value >= 0.0 { Some(value) } else { None }
+}
+
 impl HistoricalPriceRecord {
     /// Get the price for a specific currency
     pub fn for_currency(&self, currency: FiatCurrency) -> Option<f32> {
@@ -52,3 +62,4 @@ impl HistoricalPriceRecord {
         }
     }
 }
+
