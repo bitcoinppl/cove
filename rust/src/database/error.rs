@@ -1,7 +1,7 @@
 use super::{
     global_cache::GlobalCacheTableError, global_config::GlobalConfigTableError,
-    global_flag::GlobalFlagTableError, unsigned_transactions::UnsignedTransactionsTableError,
-    wallet::WalletTableError,
+    global_flag::GlobalFlagTableError, historical_price::HistoricalPriceTableError,
+    unsigned_transactions::UnsignedTransactionsTableError, wallet::WalletTableError,
 };
 
 type Error = DatabaseError;
@@ -37,6 +37,9 @@ pub enum DatabaseError {
 
     #[error(transparent)]
     UnsignedTransactions(#[from] UnsignedTransactionsTableError),
+
+    #[error(transparent)]
+    HistoricalPrice(#[from] HistoricalPriceTableError),
 
     #[error("unable to serialize or deserialize: {0}")]
     Serialization(#[from] SerdeError),
