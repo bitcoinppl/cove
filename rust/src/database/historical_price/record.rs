@@ -74,25 +74,19 @@ impl redb::Key for BlockNumber {
 }
 
 impl redb::Value for BlockNumber {
-    type SelfType<'a>
-        = &'a BlockNumber
-    where
-        Self: 'a;
-
-    type AsBytes<'a>
-        = &'a [u8]
-    where
-        Self: 'a;
+    type SelfType<'a> = BlockNumber;
+    type AsBytes<'a> = [u8; 4];
 
     fn fixed_width() -> Option<usize> {
-        None
+        Some(4)
     }
 
     fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
     where
         Self: 'a,
     {
-        todo!()
+        let block_number = u32::from_le_bytes(data.try_into().unwrap());
+        Self(block_number)
     }
 
     fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
@@ -100,11 +94,11 @@ impl redb::Value for BlockNumber {
         Self: 'a,
         Self: 'b,
     {
-        todo!()
+        value.0.to_le_bytes()
     }
 
     fn type_name() -> redb::TypeName {
-        todo!()
+        redb::TypeName::new(std::any::type_name::<BlockNumber>())
     }
 }
 
