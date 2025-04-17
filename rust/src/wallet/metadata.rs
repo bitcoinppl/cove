@@ -12,7 +12,7 @@ use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
 use crate::{database::Database, network::Network};
-use tap_card;
+use tap_card::TapSigner;
 
 use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
 
@@ -177,7 +177,7 @@ pub enum WalletType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum HardwareWalletMetadata {
-    TapSigner(Arc<tap_card::TapSigner>),
+    TapSigner(Arc<TapSigner>),
 }
 
 #[derive(

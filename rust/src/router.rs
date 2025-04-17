@@ -4,7 +4,6 @@ use crate::{
     app::FfiApp,
     database::Database,
     mnemonic::NumberOfBip39Words,
-    tap_card::TapSigner,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
@@ -111,7 +110,7 @@ pub struct SendRouteConfirmArgs {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct TapSignerNewPinArgs {
-    pub tap_signer: Arc<TapSigner>,
+    pub tap_signer: Arc<tap_card::TapSigner>,
     pub starting_pin: String,
     pub chain_code: Option<String>,
     pub action: TapSignerPinAction,
@@ -119,7 +118,7 @@ pub struct TapSignerNewPinArgs {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct TapSignerConfirmPinArgs {
-    pub tap_signer: Arc<TapSigner>,
+    pub tap_signer: Arc<tap_card::TapSigner>,
     pub starting_pin: String,
     pub new_pin: String,
     pub chain_code: Option<String>,
@@ -129,24 +128,24 @@ pub struct TapSignerConfirmPinArgs {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum TapSignerRoute {
     // setup routes
-    InitSelect(Arc<TapSigner>),
-    InitAdvanced(Arc<TapSigner>),
+    InitSelect(Arc<tap_card::TapSigner>),
+    InitAdvanced(Arc<tap_card::TapSigner>),
     StartingPin {
-        tap_signer: Arc<TapSigner>,
+        tap_signer: Arc<tap_card::TapSigner>,
         chain_code: Option<String>,
     },
     NewPin(TapSignerNewPinArgs),
     ConfirmPin(TapSignerConfirmPinArgs),
-    SetupSuccess(Arc<TapSigner>, TapSignerSetupComplete),
-    SetupRetry(Arc<TapSigner>, SetupCmdResponse),
+    SetupSuccess(Arc<tap_card::TapSigner>, TapSignerSetupComplete),
+    SetupRetry(Arc<tap_card::TapSigner>, SetupCmdResponse),
 
     // import routes
-    ImportSuccess(Arc<TapSigner>, DeriveInfo),
-    ImportRetry(Arc<TapSigner>),
+    ImportSuccess(Arc<tap_card::TapSigner>, DeriveInfo),
+    ImportRetry(Arc<tap_card::TapSigner>),
 
     // shared routes
     EnterPin {
-        tap_signer: Arc<TapSigner>,
+        tap_signer: Arc<tap_card::TapSigner>,
         action: AfterPinAction,
     },
 }

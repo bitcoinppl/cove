@@ -761,7 +761,6 @@ dependencies = [
  "libz-sys",
  "macros",
  "memchr",
- "multi_format",
  "nid",
  "num-bigint",
  "numfmt",
@@ -1952,22 +1951,6 @@ dependencies = [
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "multi_format"
-version = "0.1.0"
-dependencies = [
- "bip329",
- "bitcoin",
- "derive_more",
- "hex",
- "pubport",
- "serde",
- "serde_json",
- "tap_card",
- "thiserror 2.0.12",
- "tracing",
 ]
 
 [[package]]
