@@ -26,6 +26,18 @@ pub struct HistoricalPriceTable {
     db: Arc<redb::Database>,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+pub enum HistoricalPriceTableError {
+    #[error("failed to save historical price {0}")]
+    Save(String),
+
+    #[error("failed to get historical price {0}")]
+    Read(String),
+
+    #[error("no record found")]
+    NoRecordFound,
+}
+
 impl HistoricalPriceTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // Create table if it doesn't exist
@@ -37,7 +49,7 @@ impl HistoricalPriceTable {
     }
 
     /// Get historical price for a specific block number
-    pub fn get_price_by_block(
+    pub fn get_price_for_block(
         &self,
         block_number: u32,
     ) -> Result<Option<HistoricalPriceRecord>, Error> {
@@ -53,8 +65,8 @@ impl HistoricalPriceTable {
         let key = BlockNumber(block_number);
         let value = table
             .get(key)
-            .map_err(|error| Error::Read(error.to_string()))?
-            .map(|value| value.value());
+            .map_err(|error| HistoricalPriceTableError::Read(error.to_string()))?
+            .map(|value| *value.value());
 
         Ok(value)
     }
@@ -80,8 +92,8 @@ impl HistoricalPriceTable {
 
             let key = BlockNumber(block_number);
             table
-                .insert(key, price_record)
-                .map_err(|error| Error::Save(error.to_string()))?;
+                .insert(key, &price_record)
+                .map_err(|error| HistoricalPriceTableError::Save(error.to_string()))?;
         }
 
         write_txn
@@ -91,60 +103,6 @@ impl HistoricalPriceTable {
         Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
-    }
-
-    /// Set historical price record directly
-    pub fn set_price_record_for_block(
-        &self,
-        block_number: u32,
-        price_record: HistoricalPriceRecord,
-    ) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
-
-            let key = BlockNumber(block_number);
-            table
-                .insert(key, price_record)
-                .map_err(|error| Error::Save(error.to_string()))?;
-        }
-
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        Updater::send_update(Update::DatabaseUpdated);
-
-        Ok(())
-    }
-
-    /// Get all historical prices
-    pub fn get_all_prices(&self) -> Result<Vec<(BlockNumber, HistoricalPriceRecord)>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        let table = read_txn
-            .open_table(TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
-
-        let mut prices = Vec::new();
-        for item in table
-            .iter()
-            .map_err(|error| Error::Read(error.to_string()))?
-        {
-            let (key, value) = item.map_err(|error| Error::Read(error.to_string()))?;
-            prices.push((key, value.value()));
-        }
-
-        Ok(prices)
     }
 
     /// Delete historical price for a specific block number
@@ -162,7 +120,7 @@ impl HistoricalPriceTable {
             let key = BlockNumber(block_number);
             table
                 .remove(key)
-                .map_err(|error| Error::Save(error.to_string()))?;
+                .map_err(|error| HistoricalPriceTableError::Save(error.to_string()))?;
         }
 
         write_txn
@@ -174,4 +132,3 @@ impl HistoricalPriceTable {
         Ok(())
     }
 }
-
