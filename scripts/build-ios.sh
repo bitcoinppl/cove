@@ -82,9 +82,58 @@ done
 echo "Checking for required binding files..."
 ls -la ./bindings
 
-# Combine all Swift files into a single file as required by UniFfi
+# Create a Swift module to properly combine all the Swift files
+echo "Setting up Swift module compilation..."
+
+# Create a temporary directory for the combined Swift module
+SWIFT_MODULE_DIR="./swift_module_tmp"
+mkdir -p "$SWIFT_MODULE_DIR"
+
+# Copy all Swift files to the temporary directory
+cp ./bindings/*.swift "$SWIFT_MODULE_DIR/"
+
+# Create a module map file for the Swift module
+cat > "$SWIFT_MODULE_DIR/module.modulemap" << EOF
+module CoveBindings {
+    header "coveFFI.h"
+    header "tap_cardFFI.h"
+    header "rust_cktapFFI.h"
+    header "utilFFI.h"
+    export *
+}
+EOF
+
+# Create a main Swift file that imports all the other Swift files
+cat > "$SWIFT_MODULE_DIR/CoveBindings.swift" << EOF
+// Combined Swift bindings for all Cove modules
+// This file imports all the individual binding files and re-exports them
+
+@_exported import Foundation
+
+// Import all the generated binding files
+@_exported import struct CoveBindings.RustBuffer
+@_exported import struct CoveBindings.ForeignBytes
+EOF
+
+# Create a header file that includes all the generated headers
+cat > "$SWIFT_MODULE_DIR/CoveBindings.h" << EOF
+#ifndef CoveBindings_h
+#define CoveBindings_h
+
+#include "coveFFI.h"
+#include "tap_cardFFI.h"
+#include "rust_cktapFFI.h"
+#include "utilFFI.h"
+
+#endif /* CoveBindings_h */
+EOF
+
+# Copy headers to the temporary directory
+cp ./bindings/*.h "$SWIFT_MODULE_DIR/"
+
+# Combine all Swift files into a single file manually for use in the iOS project
 echo "Combining Swift bindings into a single file..."
-echo "// Combined Swift bindings for all modules" > ../ios/Cove/Cove.swift
+echo "// Combined Swift bindings for all modules - generated $(date)" > ../ios/Cove/Cove.swift
 
 # Utility swift files
 if [ -f "./bindings/util.swift" ]; then
@@ -104,6 +153,14 @@ if [ -f "./bindings/tap_card.swift" ]; then
     cat ./bindings/tap_card.swift >> ../ios/Cove/Cove.swift
 fi
 
+# Main cove.swift file if it exists
+if [ -f "./bindings/cove.swift" ]; then
+    echo -e "\n// === cove module ===\n" >> ../ios/Cove/Cove.swift
+    cat ./bindings/cove.swift >> ../ios/Cove/Cove.swift
+fi
+
+echo "Finished creating combined Swift file at ../ios/Cove/Cove.swift"
+
 # Copy all header files and modulemaps to the bindings directory
 echo "Ensuring all header files are in place..."
 for HEADER in ./bindings/*.h; do
@@ -114,20 +171,22 @@ for MODULEMAP in ./bindings/*.modulemap; do
     echo "Found modulemap: $MODULEMAP"
 done
 
-# Create a combined module.modulemap if it doesn't exist
-if [ ! -f "./bindings/module.modulemap" ]; then
-    echo "Creating combined module.modulemap..."
-    echo "framework module Cove {" > ./bindings/module.modulemap
-    
-    # Add all umbrella headers
-    for HEADER in ./bindings/*FFI.h; do
-        BASE_NAME=$(basename "$HEADER" FFI.h)
-        echo "  umbrella header \"${BASE_NAME}FFI.h\"" >> ./bindings/module.modulemap
-    done
-    
-    echo "  export *" >> ./bindings/module.modulemap
-    echo "}" >> ./bindings/module.modulemap
-fi
+# Create a combined module.modulemap for the XCFramework
+echo "Creating combined module.modulemap..."
+echo "framework module Cove {" > ./bindings/module.modulemap
+
+# Add all umbrella headers
+for HEADER in ./bindings/*FFI.h; do
+    BASE_NAME=$(basename "$HEADER" FFI.h)
+    echo "  umbrella header \"${BASE_NAME}FFI.h\"" >> ./bindings/module.modulemap
+done
+
+echo "  export *" >> ./bindings/module.modulemap
+echo "}" >> ./bindings/module.modulemap
+
+# Copy our combined module files to the bindings directory for inclusion in the XCFramework
+cp "$SWIFT_MODULE_DIR/CoveBindings.h" ./bindings/
+cp "$SWIFT_MODULE_DIR/module.modulemap" ./bindings/CoveBindings.modulemap
  
 # Recreate XCFramework
 rm -rf "ios/Cove.xcframework" || true
@@ -143,6 +202,18 @@ xcodebuild -create-xcframework \
 #     codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"
 # fi
 
+# Clean up temporary directory
+if [ -d "$SWIFT_MODULE_DIR" ]; then
+    echo "Cleaning up temporary Swift module directory..."
+    rm -rf "$SWIFT_MODULE_DIR"
+fi
+
 echo "✅ Successfully built Cove.xcframework with combined Swift bindings for cove and tap_card"
 echo "📦 Framework located at: $(pwd)/ios/Cove.xcframework"
 echo "📄 Swift file created at: $(realpath ../ios/Cove/Cove.swift)"
+echo ""
+echo "The Swift file contains combined bindings from the following modules:"
+for MODULE in $(find ./bindings -name "*.swift" | sort); do
+    MODULE_NAME=$(basename "$MODULE" .swift)
+    echo "  - $MODULE_NAME"
+done
