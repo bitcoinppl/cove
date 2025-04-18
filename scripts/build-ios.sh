@@ -82,84 +82,49 @@ done
 echo "Checking for required binding files..."
 ls -la ./bindings
 
-# Create a Swift module to properly combine all the Swift files
-echo "Setting up Swift module compilation..."
+# Compiling Swift modules for Swift bindings
+MIN_IOS="12.0"
+SWIFT_MODULE_BASE="./swift_modules"
+echo "Compiling Swift modules for Swift bindings..."
+rm -rf "$SWIFT_MODULE_BASE"
+mkdir -p "$SWIFT_MODULE_BASE"
 
-# Create a temporary directory for the combined Swift module
-SWIFT_MODULE_DIR="./swift_module_tmp"
-mkdir -p "$SWIFT_MODULE_DIR"
+SWIFTMODULE_FLAGS=""
+for TARGET in ${TARGETS[@]}; do
+    case "$TARGET" in
+        aarch64-apple-ios)
+            SDK_NAME="iphoneos"
+            SWIFT_TRIPLE="arm64-apple-ios${MIN_IOS}"
+            ;;
+        aarch64-apple-ios-sim)
+            SDK_NAME="iphonesimulator"
+            SWIFT_TRIPLE="arm64-apple-ios${MIN_IOS}-simulator"
+            ;;
+        x86_64-apple-ios-sim)
+            SDK_NAME="iphonesimulator"
+            SWIFT_TRIPLE="x86_64-apple-ios${MIN_IOS}-simulator"
+            ;;
+        *)
+            echo "Error: Unsupported target $TARGET for Swift module compilation"
+            exit 1
+            ;;
+    esac
 
-# Copy all Swift files to the temporary directory
-cp ./bindings/*.swift "$SWIFT_MODULE_DIR/"
+    SDK_PATH=$(xcrun --sdk "$SDK_NAME" --show-sdk-path)
+    MODULE_OUT="$SWIFT_MODULE_BASE/$TARGET"
+    mkdir -p "$MODULE_OUT"
+    echo "swiftc -sdk $SDK_PATH -target $SWIFT_TRIPLE -emit-module -emit-module-path $MODULE_OUT/CoveBindings.swiftmodule -module-name CoveBindings -I ./bindings ./bindings/*.swift"
+    swiftc \
+        -sdk "$SDK_PATH" \
+        -target "$SWIFT_TRIPLE" \
+        -emit-module \
+        -emit-module-path "$MODULE_OUT/CoveBindings.swiftmodule" \
+        -module-name CoveBindings \
+        -I "./bindings" \
+        ./bindings/*.swift
 
-# Create a module map file for the Swift module
-cat > "$SWIFT_MODULE_DIR/module.modulemap" << EOF
-module CoveBindings {
-    header "coveFFI.h"
-    header "tap_cardFFI.h"
-    header "rust_cktapFFI.h"
-    header "utilFFI.h"
-    export *
-}
-EOF
-
-# Create a main Swift file that imports all the other Swift files
-cat > "$SWIFT_MODULE_DIR/CoveBindings.swift" << EOF
-// Combined Swift bindings for all Cove modules
-// This file imports all the individual binding files and re-exports them
-
-@_exported import Foundation
-
-// Import all the generated binding files
-@_exported import struct CoveBindings.RustBuffer
-@_exported import struct CoveBindings.ForeignBytes
-EOF
-
-# Create a header file that includes all the generated headers
-cat > "$SWIFT_MODULE_DIR/CoveBindings.h" << EOF
-#ifndef CoveBindings_h
-#define CoveBindings_h
-
-#include "coveFFI.h"
-#include "tap_cardFFI.h"
-#include "rust_cktapFFI.h"
-#include "utilFFI.h"
-
-#endif /* CoveBindings_h */
-EOF
-
-# Copy headers to the temporary directory
-cp ./bindings/*.h "$SWIFT_MODULE_DIR/"
-
-# Combine all Swift files into a single file manually for use in the iOS project
-echo "Combining Swift bindings into a single file..."
-echo "// Combined Swift bindings for all modules - generated $(date)" > ../ios/Cove/Cove.swift
-
-# Utility swift files
-if [ -f "./bindings/util.swift" ]; then
-    echo -e "\n// === util module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/util.swift >> ../ios/Cove/Cove.swift
-fi
-
-# rust_cktap swift files
-if [ -f "./bindings/rust_cktap.swift" ]; then
-    echo -e "\n// === rust_cktap module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/rust_cktap.swift >> ../ios/Cove/Cove.swift
-fi
-
-# tap_card swift files
-if [ -f "./bindings/tap_card.swift" ]; then
-    echo -e "\n// === tap_card module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/tap_card.swift >> ../ios/Cove/Cove.swift
-fi
-
-# Main cove.swift file if it exists
-if [ -f "./bindings/cove.swift" ]; then
-    echo -e "\n// === cove module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/cove.swift >> ../ios/Cove/Cove.swift
-fi
-
-echo "Finished creating combined Swift file at ../ios/Cove/Cove.swift"
+    SWIFTMODULE_FLAGS="$SWIFTMODULE_FLAGS -swiftmodule $MODULE_OUT/CoveBindings.swiftmodule"
+done
 
 # Copy all header files and modulemaps to the bindings directory
 echo "Ensuring all header files are in place..."
@@ -184,14 +149,13 @@ done
 echo "  export *" >> ./bindings/module.modulemap
 echo "}" >> ./bindings/module.modulemap
 
-# Copy our combined module files to the bindings directory for inclusion in the XCFramework
-cp "$SWIFT_MODULE_DIR/CoveBindings.h" ./bindings/
-cp "$SWIFT_MODULE_DIR/module.modulemap" ./bindings/CoveBindings.modulemap
+  # No longer copying temporary module files; Swift modules are compiled instead
  
 # Recreate XCFramework
 rm -rf "ios/Cove.xcframework" || true
 xcodebuild -create-xcframework \
         $LIBRARY_FLAGS \
+        $SWIFTMODULE_FLAGS \
         -output "ios/Cove.xcframework"
  
 # Cleanup
@@ -202,18 +166,10 @@ xcodebuild -create-xcframework \
 #     codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"
 # fi
 
-# Clean up temporary directory
-if [ -d "$SWIFT_MODULE_DIR" ]; then
-    echo "Cleaning up temporary Swift module directory..."
-    rm -rf "$SWIFT_MODULE_DIR"
-fi
+  # Clean up compiled Swift modules directory
+rm -rf "$SWIFT_MODULE_BASE"
 
-echo "✅ Successfully built Cove.xcframework with combined Swift bindings for cove and tap_card"
+echo "✅ Successfully built Cove.xcframework with compiled Swift modules"
 echo "📦 Framework located at: $(pwd)/ios/Cove.xcframework"
-echo "📄 Swift file created at: $(realpath ../ios/Cove/Cove.swift)"
 echo ""
-echo "The Swift file contains combined bindings from the following modules:"
-for MODULE in $(find ./bindings -name "*.swift" | sort); do
-    MODULE_NAME=$(basename "$MODULE" .swift)
-    echo "  - $MODULE_NAME"
-done
+echo "✅ Swift modules compiled and embedded in the XCFramework."
