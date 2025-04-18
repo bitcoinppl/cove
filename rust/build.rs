@@ -24,4 +24,5 @@ fn main() {
     // Rebuild when Git changes
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/refs");
+    println!("cargo:rerun-if-changed=crates/*");
 }

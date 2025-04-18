@@ -46,9 +46,9 @@ impl Serialize for TapSigner {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        
+
         let pubkey_hex = hex::encode(PublicKey::serialize(&self.pubkey));
-        
+
         let mut state = serializer.serialize_struct("TapSigner", 5)?;
         state.serialize_field("state", &self.state)?;
         state.serialize_field("card_ident", &self.card_ident)?;
@@ -127,19 +127,19 @@ impl<'de> Deserialize<'de> for TapSigner {
                 }
 
                 let state = state.ok_or_else(|| de::Error::missing_field("state"))?;
-                let card_ident = card_ident.ok_or_else(|| de::Error::missing_field("card_ident"))?;
+                let card_ident =
+                    card_ident.ok_or_else(|| de::Error::missing_field("card_ident"))?;
                 let nonce = nonce.ok_or_else(|| de::Error::missing_field("nonce"))?;
                 let signature = signature.ok_or_else(|| de::Error::missing_field("signature"))?;
-                let pubkey_hex: String = pubkey_hex.ok_or_else(|| de::Error::missing_field("pubkey_hex"))?;
-                
+                let pubkey_hex: String =
+                    pubkey_hex.ok_or_else(|| de::Error::missing_field("pubkey_hex"))?;
+
                 // Convert pubkey_hex to PublicKey
-                let pubkey_bytes = hex::decode(&pubkey_hex).map_err(|e| {
-                    de::Error::custom(format!("Invalid pubkey hex: {}", e))
-                })?;
-                
-                let pubkey = PublicKey::from_slice(&pubkey_bytes).map_err(|e| {
-                    de::Error::custom(format!("Invalid pubkey: {}", e))
-                })?;
+                let pubkey_bytes = hex::decode(&pubkey_hex)
+                    .map_err(|e| de::Error::custom(format!("Invalid pubkey hex: {}", e)))?;
+
+                let pubkey = PublicKey::from_slice(&pubkey_bytes)
+                    .map_err(|e| de::Error::custom(format!("Invalid pubkey: {}", e)))?;
 
                 Ok(TapSigner {
                     state,

@@ -258,7 +258,10 @@ impl FfiApp {
     /// Find tapsigner wallet by card ident
     /// Get the backup for the tap signer
     #[uniffi::method]
-    pub fn find_tap_signer_wallet(&self, tap_signer: &tap_card::TapSigner) -> Option<WalletMetadata> {
+    pub fn find_tap_signer_wallet(
+        &self,
+        tap_signer: &tap_card::TapSigner,
+    ) -> Option<WalletMetadata> {
         let ident = &tap_signer.card_ident;
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
