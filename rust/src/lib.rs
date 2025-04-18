@@ -46,4 +46,5 @@ mod wallet_scanner;
 mod word_validator;
 mod xpub;
 
+::tap_card::uniffi_reexport_scaffolding!();
 uniffi::setup_scaffolding!();
