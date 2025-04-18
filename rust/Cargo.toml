@@ -15,7 +15,7 @@ path = "src/bin/uniffi-bindgen.rs"
 default = ["uniffi/cli"]
 
 [workspace]
-members = ["crates/macros", "crates/util", "crates/tap_card"]
+members = ["crates/macros", "crates/util", "crates/tap_card", "cove-types"]
 
 [workspace.dependencies]
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
