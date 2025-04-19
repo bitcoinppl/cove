@@ -11,7 +11,7 @@
 		AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
 		ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */ = {isa = PBXBuildFile; productRef = ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */; };
-		ACDDC2F22DB33AA8002002D3 /* CoveCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ACDDC2F12DB33AA8002002D3 /* CoveCore.xcframework */; };
+		ACDDC2F52DB33B9E002002D3 /* CoveCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ACDDC2F32DB33B9E002002D3 /* CoveCore.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -29,7 +29,7 @@
 
 /* Begin PBXFileReference section */
 		AC9AB5782C34956C00BAE3BE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
-		ACDDC2F12DB33AA8002002D3 /* CoveCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = CoveCore.xcframework; sourceTree = "<group>"; };
+		ACDDC2F32DB33B9E002002D3 /* CoveCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = CoveCore.xcframework; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -44,7 +44,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */,
-				ACDDC2F22DB33AA8002002D3 /* CoveCore.xcframework in Frameworks */,
+				ACDDC2F52DB33B9E002002D3 /* CoveCore.xcframework in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
 				ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */,
 			);
@@ -53,14 +53,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		ACDDC2F42DB33B9E002002D3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				ACDDC2F32DB33B9E002002D3 /* CoveCore.xcframework */,
+			);
+			path = Frameworks;
+			sourceTree = "<group>";
+		};
 		D0245F432C0F7B4E0042B447 = {
 			isa = PBXGroup;
 			children = (
 				AC9AB5782C34956C00BAE3BE /* Logger.swift */,
-				ACDDC2F12DB33AA8002002D3 /* CoveCore.xcframework */,
 				AC8CF66C2CF8C86600F02F5C /* CodeScanner */,
 				AC8CF6022CF8C7D300F02F5C /* Cove */,
 				D0245F4D2C0F7B4E0042B447 /* Products */,
+				ACDDC2F42DB33B9E002002D3 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
