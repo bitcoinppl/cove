@@ -7,6 +7,7 @@ cd rust
 BUILD_TYPE=$1
 DEVICE=$2
 SIGN=$3
+INTEGRATE=$4
 
 if [ "$BUILD_TYPE" == "release" ] || [ "$BUILD_TYPE" == "--release" ]; then
     BUILD_FLAG="--release"
@@ -20,7 +21,7 @@ else
 fi
 
 # Make sure the directory exists
-mkdir -p ios/Cove.xcframework bindings ios/Cove
+mkdir -p ios/CoveCore.xcframework bindings ios/Cove
 
 # Build the dylib
 cargo build
@@ -54,10 +55,7 @@ echo "SIGN: $SIGN"
 
 if [ $BUILD_TYPE == "release" ] || [ $BUILD_TYPE == "release-smaller" ]; then
     TARGETS=(
-        # aarch64-apple-ios-sim \
-        aarch64-apple-ios \
-        # x86_64-apple-darwin
-        # aarch64-apple-darwin
+        aarch64-apple-ios
     )
 else
     # debug on device or simulator
@@ -72,7 +70,16 @@ LIBRARY_FLAGS=""
 echo "Build for targets: ${TARGETS[@]}"
 for TARGET in ${TARGETS[@]}; do
     echo "Building for target: ${TARGET} with build type: ${BUILD_TYPE}"
-    LIBRARY_FLAGS="$LIBRARY_FLAGS -library ./target/$TARGET/$BUILD_TYPE/libcove.a -headers ./bindings"
+    
+    # Create a target-specific headers directory to avoid conflicts
+    TARGET_HEADERS_DIR="./bindings/${TARGET}"
+    mkdir -p "$TARGET_HEADERS_DIR"
+    cp ./bindings/*.swift "$TARGET_HEADERS_DIR/"
+    cp ./bindings/*.h "$TARGET_HEADERS_DIR/"
+    cp ./bindings/*.modulemap "$TARGET_HEADERS_DIR/" 2>/dev/null || true
+    
+    # Add to library flags
+    LIBRARY_FLAGS="$LIBRARY_FLAGS -library ./target/$TARGET/$BUILD_TYPE/libcove.a -headers $TARGET_HEADERS_DIR"
 
     rustup target add $TARGET
     cargo build --target=$TARGET $BUILD_FLAG
@@ -92,124 +99,104 @@ mkdir -p "$SWIFT_MODULE_DIR"
 # Copy all Swift files to the temporary directory
 cp ./bindings/*.swift "$SWIFT_MODULE_DIR/"
 
-# Create a module map file for the Swift module
-cat > "$SWIFT_MODULE_DIR/module.modulemap" << EOF
-module CoveBindings {
-    header "coveFFI.h"
-    header "tap_cardFFI.h"
-    header "rust_cktapFFI.h"
-    header "utilFFI.h"
-    export *
-}
-EOF
-
-# Create a main Swift file that imports all the other Swift files
-cat > "$SWIFT_MODULE_DIR/CoveBindings.swift" << EOF
-// Combined Swift bindings for all Cove modules
-// This file imports all the individual binding files and re-exports them
-
-@_exported import Foundation
-
-// Import all the generated binding files
-@_exported import struct CoveBindings.RustBuffer
-@_exported import struct CoveBindings.ForeignBytes
-EOF
-
-# Create a header file that includes all the generated headers
-cat > "$SWIFT_MODULE_DIR/CoveBindings.h" << EOF
-#ifndef CoveBindings_h
-#define CoveBindings_h
+# Create a comprehensive umbrella header
+cat > "$SWIFT_MODULE_DIR/CoveCore.h" << EOF
+#ifndef CoveCore_h
+#define CoveCore_h
 
 #include "coveFFI.h"
 #include "tap_cardFFI.h"
 #include "rust_cktapFFI.h"
 #include "utilFFI.h"
 
-#endif /* CoveBindings_h */
+#endif /* CoveCore_h */
 EOF
 
-# Copy headers to the temporary directory
+# Create a more comprehensive module map
+cat > "$SWIFT_MODULE_DIR/module.modulemap" << EOF
+framework module CoveCore {
+    umbrella header "CoveCore.h"
+    
+    export *
+    module * { export * }
+}
+EOF
+
+# Copy headers to the Swift module directory
 cp ./bindings/*.h "$SWIFT_MODULE_DIR/"
 
 # Combine all Swift files into a single file manually for use in the iOS project
 echo "Combining Swift bindings into a single file..."
 echo "// Combined Swift bindings for all modules - generated $(date)" > ../ios/Cove/Cove.swift
+echo "import Foundation" >> ../ios/Cove/Cove.swift
 
-# Utility swift files
+# Utility swift files first (they might be dependencies)
 if [ -f "./bindings/util.swift" ]; then
     echo -e "\n// === util module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/util.swift >> ../ios/Cove/Cove.swift
+    grep -v "import Foundation" ./bindings/util.swift >> ../ios/Cove/Cove.swift
 fi
 
 # rust_cktap swift files
 if [ -f "./bindings/rust_cktap.swift" ]; then
     echo -e "\n// === rust_cktap module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/rust_cktap.swift >> ../ios/Cove/Cove.swift
+    grep -v "import Foundation" ./bindings/rust_cktap.swift >> ../ios/Cove/Cove.swift
 fi
 
 # tap_card swift files
 if [ -f "./bindings/tap_card.swift" ]; then
     echo -e "\n// === tap_card module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/tap_card.swift >> ../ios/Cove/Cove.swift
+    grep -v "import Foundation" ./bindings/tap_card.swift >> ../ios/Cove/Cove.swift
 fi
 
 # Main cove.swift file if it exists
 if [ -f "./bindings/cove.swift" ]; then
     echo -e "\n// === cove module ===\n" >> ../ios/Cove/Cove.swift
-    cat ./bindings/cove.swift >> ../ios/Cove/Cove.swift
+    grep -v "import Foundation" ./bindings/cove.swift >> ../ios/Cove/Cove.swift
 fi
 
 echo "Finished creating combined Swift file at ../ios/Cove/Cove.swift"
 
-# Copy all header files and modulemaps to the bindings directory
-echo "Ensuring all header files are in place..."
-for HEADER in ./bindings/*.h; do
-    echo "Found header: $HEADER"
+# Copy our umbrella header and module map to all target-specific directories
+for TARGET in ${TARGETS[@]}; do
+    TARGET_HEADERS_DIR="./bindings/${TARGET}"
+    cp "$SWIFT_MODULE_DIR/CoveCore.h" "$TARGET_HEADERS_DIR/"
+    cp "$SWIFT_MODULE_DIR/module.modulemap" "$TARGET_HEADERS_DIR/"
 done
 
-for MODULEMAP in ./bindings/*.modulemap; do
-    echo "Found modulemap: $MODULEMAP"
-done
-
-# Create a combined module.modulemap for the XCFramework
-echo "Creating combined module.modulemap..."
-echo "framework module Cove {" > ./bindings/module.modulemap
-
-# Add all umbrella headers
-for HEADER in ./bindings/*FFI.h; do
-    BASE_NAME=$(basename "$HEADER" FFI.h)
-    echo "  umbrella header \"${BASE_NAME}FFI.h\"" >> ./bindings/module.modulemap
-done
-
-echo "  export *" >> ./bindings/module.modulemap
-echo "}" >> ./bindings/module.modulemap
-
-# Copy our combined module files to the bindings directory for inclusion in the XCFramework
-cp "$SWIFT_MODULE_DIR/CoveBindings.h" ./bindings/
-cp "$SWIFT_MODULE_DIR/module.modulemap" ./bindings/CoveBindings.modulemap
- 
 # Recreate XCFramework
-rm -rf "ios/Cove.xcframework" || true
+echo "Creating XCFramework with flags: $LIBRARY_FLAGS"
+rm -rf "ios/CoveCore.xcframework" || true
 xcodebuild -create-xcframework \
         $LIBRARY_FLAGS \
-        -output "ios/Cove.xcframework"
- 
-# Cleanup
-# rm -rf bindings
+        -output "ios/CoveCore.xcframework"
 
-# if [ ! -z $SIGN ] && [ ! -z $SIGNING_IDENTITY ] || [ $SIGN == "--sign" ]; then
-#     echo "Signing for distribution: identity: $SIGNING_IDENTITY"
-#     codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"
-# fi
+# Sign the framework if requested
+if [ ! -z "$SIGN" ] && [ "$SIGN" == "--sign" ]; then
+    SIGNING_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk '{print $2}')
+    if [ ! -z "$SIGNING_IDENTITY" ]; then
+        echo "Signing for distribution with identity: $SIGNING_IDENTITY"
+        codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/CoveCore.xcframework"
+    else
+        echo "Warning: No signing identity found. Framework will not be signed."
+    fi
+fi
 
-# Clean up temporary directory
+# Clean up temporary directories
 if [ -d "$SWIFT_MODULE_DIR" ]; then
     echo "Cleaning up temporary Swift module directory..."
     rm -rf "$SWIFT_MODULE_DIR"
 fi
 
-echo "✅ Successfully built Cove.xcframework with combined Swift bindings for cove and tap_card"
-echo "📦 Framework located at: $(pwd)/ios/Cove.xcframework"
+for TARGET in ${TARGETS[@]}; do
+    TARGET_HEADERS_DIR="./bindings/${TARGET}"
+    if [ -d "$TARGET_HEADERS_DIR" ]; then
+        echo "Cleaning up target headers directory: $TARGET_HEADERS_DIR"
+        rm -rf "$TARGET_HEADERS_DIR"
+    fi
+done
+
+echo "✅ Successfully built CoveCore.xcframework with combined Swift bindings"
+echo "📦 Framework located at: $(pwd)/ios/CoveCore.xcframework"
 echo "📄 Swift file created at: $(realpath ../ios/Cove/Cove.swift)"
 echo ""
 echo "The Swift file contains combined bindings from the following modules:"
@@ -217,3 +204,11 @@ for MODULE in $(find ./bindings -name "*.swift" | sort); do
     MODULE_NAME=$(basename "$MODULE" .swift)
     echo "  - $MODULE_NAME"
 done
+
+# Integrate with Xcode if requested
+if [ "$INTEGRATE" == "--integrate" ] || [ "$INTEGRATE" == "true" ]; then
+    echo ""
+    echo "Integrating CoveCore.xcframework with Xcode project..."
+    cd ..
+    ./scripts/add-framework-to-xcode.sh
+fi

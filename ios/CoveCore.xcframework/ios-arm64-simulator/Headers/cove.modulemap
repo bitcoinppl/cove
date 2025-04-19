@@ -1,0 +1,7 @@
+module cove {
+    header "coveFFI.h"
+    header "rust_cktapFFI.h"
+    header "tap_cardFFI.h"
+    header "utilFFI.h"
+    export *
+}

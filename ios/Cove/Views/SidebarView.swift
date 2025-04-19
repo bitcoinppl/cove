@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 7/1/24.
 //
 
+import Cove
 import SwiftUI
 
 struct SidebarView: View {
