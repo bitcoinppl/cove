@@ -5,5 +5,6 @@ cdylib_name = "tap_card"
 [bindings.swift]
 cdylib_name = "tap_card"
 ffi_module_name = "tap_cardFFI"
-omit_argument_labels = true
+omit_argument_labels = false
 generate_module_map = true
+

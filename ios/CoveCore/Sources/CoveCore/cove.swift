@@ -3,7 +3,7 @@
 
 // swiftlint:disable all
 import Foundation
-import ffi
+import cove_core_ffi
 
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into

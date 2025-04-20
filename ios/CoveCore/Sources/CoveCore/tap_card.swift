@@ -3,7 +3,7 @@
 
 // swiftlint:disable all
 import Foundation
-import ffi
+import cove_core_ffi
 
 extension RustBuffer {
     // Allocate a new buffer, copying the contents of a `UInt8` array.

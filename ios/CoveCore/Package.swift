@@ -4,24 +4,24 @@ import PackageDescription
 let package = Package(
     name: "CoveCore",
     platforms: [
-        .iOS(.v17)
+        .iOS(.v16)
     ],
     products: [
         .library(name: "CoveCore", targets: ["CoveCore"])
     ],
     targets: [
         .target(
-            name: "ffi",
-            path: "Sources/ffi",
+            name: "cove_core_ffi",
+            path: "Sources/cove_core_ffi",
             publicHeadersPath: "include",
-            linkerSettings: [
-                .linkedLibrary("cove")
-            ]
+            swiftSettings: [.swiftLanguageMode(.v5)],
+            linkerSettings: [.linkedLibrary("cove")],
         ),
         .target(
             name: "CoveCore",
-            dependencies: ["ffi"],
-            path: "Sources/CoveCore"
-        )
+            dependencies: ["cove_core_ffi"],
+            path: "Sources/CoveCore",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

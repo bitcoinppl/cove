@@ -14,3 +14,4 @@ ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 /ios/CoveCore/CoveCore/Headers
 /ios/CoveCore/archives
 ios/CoveCore/Sources/ffi/libcove.a
+ios/CoveCore/Sources/cove_core_ffi/libcove.a

@@ -1,1 +1,1 @@
-import ffi
+import cove_core_ffi
