@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import ffi
 
 private enum SheetState: Equatable {
     case details

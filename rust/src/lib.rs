@@ -47,4 +47,6 @@ mod word_validator;
 mod xpub;
 
 ::tap_card::uniffi_reexport_scaffolding!();
+::util::uniffi_reexport_scaffolding!();
+::rust_cktap::uniffi_reexport_scaffolding!();
 uniffi::setup_scaffolding!();

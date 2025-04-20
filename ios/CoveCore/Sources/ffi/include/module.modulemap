@@ -1,0 +1,4 @@
+module ffi {
+    umbrella header "ffi.h"
+    export *
+}

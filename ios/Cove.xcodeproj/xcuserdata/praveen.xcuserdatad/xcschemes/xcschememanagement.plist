@@ -9,11 +9,6 @@
 			<key>orderHint</key>
 			<integer>0</integer>
 		</dict>
-		<key>CoveCore.xcscheme_^#shared#^_</key>
-		<dict>
-			<key>orderHint</key>
-			<integer>2</integer>
-		</dict>
 		<key>CoveDevice.xcscheme</key>
 		<dict>
 			<key>orderHint</key>
@@ -22,6 +17,11 @@
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
 	<dict>
+		<key>ACC176462DB400D60024D143</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
 		<key>D0245F4B2C0F7B4E0042B447</key>
 		<dict>
 			<key>primary</key>

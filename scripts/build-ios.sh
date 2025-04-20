@@ -43,8 +43,13 @@ cargo build --target=aarch64-apple-ios-sim
 
 cargo run --bin uniffi-bindgen -- "$DYLIB_PATH" "$OUTPUT_DIR" \
     --swift-sources --headers \
-    --modulemap --module-name coveFFI \
+    --modulemap --module-name CoveCore \
     --modulemap-filename module.modulemap
+
+cargo run --bin uniffi-bindgen -- "$DYLIB_PATH" "$OUTPUT_DIR" \
+    --xcframework \
+    --modulemap --module-name CoveCore \
+    --modulemap-filename xcframework.modulemap
 
 swiftc \
   -emit-module \
@@ -65,5 +70,6 @@ swiftc \
 xcodebuild -create-xcframework \
   -library ./bindings/framework/iossim-arm64/libCoveCore.a \
   -headers ./bindings/framework/iossim-arm64 \
+  -headers ./bindings \
   -output ./bindings/framework/CoveCore.xcframework
 
