@@ -5,6 +5,13 @@
 import Foundation
 import cove_core_ffi
 
+// Depending on the consumer's build setup, the low-level FFI code
+// might be in a separate module, or it might be compiled inline into
+// this module. This is a bit of light hackery to work with both.
+#if canImport(tap_cardFFI)
+    import tap_cardFFI
+#endif
+
 extension RustBuffer {
     // Allocate a new buffer, copying the contents of a `UInt8` array.
     fileprivate init(bytes: [UInt8]) {
@@ -481,7 +488,7 @@ public protocol TapSignerProtocol: AnyObject, Sendable {
 
     func identFileNamePrefix() -> String
 
-    func isEqual(_ rhs: TapSigner) -> Bool
+    func isEqual(rhs: TapSigner) -> Bool
 
 }
 open class TapSigner: TapSignerProtocol, @unchecked Sendable {
@@ -551,7 +558,7 @@ open class TapSigner: TapSignerProtocol, @unchecked Sendable {
             })
     }
 
-    open func isEqual(_ rhs: TapSigner) -> Bool {
+    open func isEqual(rhs: TapSigner) -> Bool {
         return try! FfiConverterBool.lift(
             try! rustCall {
                 uniffi_tap_card_fn_method_tapsigner_is_equal(
@@ -1119,7 +1126,7 @@ public func FfiConverterTypeTapSignerState_lower(_ value: TapSignerState) -> Rus
 
 extension TapSignerState: Equatable, Hashable {}
 
-public func tapSignerPreviewNew(_ preview: Bool) -> TapSigner {
+public func tapSignerPreviewNew(preview: Bool) -> TapSigner {
     return try! FfiConverterTypeTapSigner_lift(
         try! rustCall {
             uniffi_tap_card_fn_func_tap_signer_preview_new(
@@ -1173,3 +1180,4 @@ public func uniffiEnsureTapCardInitialized() {
 }
 
 // swiftlint:enable all
+

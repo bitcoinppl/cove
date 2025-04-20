@@ -193,7 +193,7 @@ extension TapSignerConfirmPinArgs {
     }
 }
 
-extension TapSigner: Equatable {
+extension TapSigner: @retroactive Equatable {
     public static func == (lhs: TapSigner, rhs: TapSigner) -> Bool {
         lhs.isEqual(rhs: rhs)
     }

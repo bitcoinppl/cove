@@ -11,7 +11,6 @@ import SwiftUI
 
 // MARK: SendFlowSetAmountScreen
 
-private typealias Unit = CoveCore.Unit
 private typealias FocusField = SendFlowPresenter.FocusField
 private typealias SheetState = SendFlowPresenter.SheetState
 private typealias AlertState = SendFlowPresenter.AlertState
