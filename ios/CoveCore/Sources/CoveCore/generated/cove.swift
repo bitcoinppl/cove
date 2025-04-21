@@ -28737,10 +28737,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_fees() != 44559) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet() != 5783) {
+    if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet() != 59228) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 4364) {
+    if (uniffi_cove_checksum_method_ffiapp_get_tap_signer_backup() != 49269) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_git_short_hash() != 10133) {
@@ -28779,7 +28779,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 13093) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 27055) {
+    if (uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 59132) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_select_wallet() != 63389) {
@@ -29568,7 +29568,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata() != 31333) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 46878) {
+    if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_tap_signer() != 5777) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_try_new_from_xpub() != 28304) {
@@ -29669,8 +29669,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureTapCardInitialized()
     return InitializationResult.ok
 }()
 

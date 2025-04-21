@@ -71,6 +71,8 @@ cargo run --bin uniffi-bindgen -- "$STATIC_LIB_PATH" "$OUTPUT_DIR" \
 ## 3. create XCFramework
 SPM_PACKAGE="../ios/CoveCore/"
 XCFRAMEWORK_OUTPUT="$SPM_PACKAGE/Sources/cove_core_ffi.xcframework"
+GENERATED_SWIFT_SOURCES=$SPM_PACKAGE/Sources/CoveCore/generated
+
 
 rm -rf "$XCFRAMEWORK_OUTPUT" || true
 xcodebuild -create-xcframework \
@@ -78,7 +80,9 @@ xcodebuild -create-xcframework \
         -output "$XCFRAMEWORK_OUTPUT"
 
 ## 4. copy swift sources to SPM
-cp -r bindings/*.swift $SPM_PACKAGE/Sources/CoveCore/
+rm -rf $GENERATED_SWIFT_SOURCES || true
+mkdir -p $GENERATED_SWIFT_SOURCES
+cp -r bindings/*.swift $GENERATED_SWIFT_SOURCES
 
 ## extra: remove uniffi generated Package.swift file
 rm -rf $SPM_PACKAGE/Sources/CoveCore/Package.swift
