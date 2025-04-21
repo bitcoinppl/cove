@@ -746,6 +746,7 @@ dependencies = [
  "bip329",
  "bip39",
  "bitcoin",
+ "bitflags 2.9.0",
  "bitvec",
  "cbor4ii",
  "chacha20poly1305",
