@@ -30,129 +30,13 @@ pub struct SatsCard {
     pub signature: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct TapSigner {
     pub state: TapSignerState,
     pub card_ident: String,
     pub nonce: String,
     pub signature: String,
     pub pubkey: Arc<PublicKey>,
-}
-
-// Manual implementation of Serialize for TapSigner
-impl Serialize for TapSigner {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-
-        let pubkey_hex = hex::encode(PublicKey::serialize(&self.pubkey));
-
-        let mut state = serializer.serialize_struct("TapSigner", 5)?;
-        state.serialize_field("state", &self.state)?;
-        state.serialize_field("card_ident", &self.card_ident)?;
-        state.serialize_field("nonce", &self.nonce)?;
-        state.serialize_field("signature", &self.signature)?;
-        state.serialize_field("pubkey_hex", &pubkey_hex)?;
-        state.end()
-    }
-}
-
-// Manual implementation of Deserialize for TapSigner
-impl<'de> Deserialize<'de> for TapSigner {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::{self, MapAccess, Visitor};
-        use std::fmt;
-
-        struct TapSignerVisitor;
-
-        impl<'de> Visitor<'de> for TapSignerVisitor {
-            type Value = TapSigner;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct TapSigner")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<TapSigner, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut state = None;
-                let mut card_ident = None;
-                let mut nonce = None;
-                let mut signature = None;
-                let mut pubkey_hex = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        "state" => {
-                            if state.is_some() {
-                                return Err(de::Error::duplicate_field("state"));
-                            }
-                            state = Some(map.next_value()?);
-                        }
-                        "card_ident" => {
-                            if card_ident.is_some() {
-                                return Err(de::Error::duplicate_field("card_ident"));
-                            }
-                            card_ident = Some(map.next_value()?);
-                        }
-                        "nonce" => {
-                            if nonce.is_some() {
-                                return Err(de::Error::duplicate_field("nonce"));
-                            }
-                            nonce = Some(map.next_value()?);
-                        }
-                        "signature" => {
-                            if signature.is_some() {
-                                return Err(de::Error::duplicate_field("signature"));
-                            }
-                            signature = Some(map.next_value()?);
-                        }
-                        "pubkey_hex" => {
-                            if pubkey_hex.is_some() {
-                                return Err(de::Error::duplicate_field("pubkey_hex"));
-                            }
-                            pubkey_hex = Some(map.next_value()?);
-                        }
-                        _ => {
-                            // Ignore unknown fields
-                            let _ = map.next_value::<serde::de::IgnoredAny>()?;
-                        }
-                    }
-                }
-
-                let state = state.ok_or_else(|| de::Error::missing_field("state"))?;
-                let card_ident =
-                    card_ident.ok_or_else(|| de::Error::missing_field("card_ident"))?;
-                let nonce = nonce.ok_or_else(|| de::Error::missing_field("nonce"))?;
-                let signature = signature.ok_or_else(|| de::Error::missing_field("signature"))?;
-                let pubkey_hex: String =
-                    pubkey_hex.ok_or_else(|| de::Error::missing_field("pubkey_hex"))?;
-
-                // Convert pubkey_hex to PublicKey
-                let pubkey_bytes = hex::decode(&pubkey_hex)
-                    .map_err(|e| de::Error::custom(format!("Invalid pubkey hex: {}", e)))?;
-
-                let pubkey = PublicKey::from_slice(&pubkey_bytes)
-                    .map_err(|e| de::Error::custom(format!("Invalid pubkey: {}", e)))?;
-
-                Ok(TapSigner {
-                    state,
-                    card_ident,
-                    nonce,
-                    signature,
-                    pubkey: Arc::new(pubkey),
-                })
-            }
-        }
-
-        deserializer.deserialize_map(TapSignerVisitor)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
