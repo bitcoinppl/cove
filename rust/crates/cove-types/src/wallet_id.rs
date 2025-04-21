@@ -1,4 +1,4 @@
-use macros::{impl_default_for, new_type};
+use cove_macros::{impl_default_for, new_type};
 use nid::Nanoid;
 use rand::random;
 

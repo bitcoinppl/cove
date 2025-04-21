@@ -20,7 +20,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use crossbeam::channel::{Receiver, Sender};
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};

@@ -11,7 +11,7 @@ use crate::{
 };
 
 use derive_more::From;
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {

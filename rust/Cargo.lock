@@ -692,9 +692,11 @@ dependencies = [
  "bitvec",
  "cbor4ii",
  "chacha20poly1305",
+ "cove-macros",
  "cove-nfc",
  "cove-tap-card",
  "cove-types",
+ "cove-util",
  "crossbeam",
  "data-encoding",
  "derive_more",
@@ -705,7 +707,6 @@ dependencies = [
  "itertools",
  "jiff",
  "libz-sys",
- "macros",
  "memchr",
  "nid",
  "num-bigint",
@@ -734,18 +735,22 @@ dependencies = [
  "tryhard",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
  "url",
- "util",
  "winnow",
  "zerocopy 0.8.24",
  "zeroize",
 ]
 
 [[package]]
+name = "cove-macros"
+version = "0.1.0"
+
+[[package]]
 name = "cove-nfc"
 version = "0.1.0"
 dependencies = [
+ "cove-macros",
+ "cove-util",
  "hex",
- "macros",
  "once_cell",
  "parking_lot",
  "serde_json",
@@ -753,7 +758,6 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
- "util",
  "winnow",
 ]
 
@@ -777,15 +781,25 @@ name = "cove-types"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
+ "cove-macros",
  "derive_more",
  "hex",
  "jiff",
- "macros",
  "nid",
  "rand 0.9.1",
  "redb",
  "serde",
  "thiserror 2.0.12",
+ "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
+]
+
+[[package]]
+name = "cove-util"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "hex",
+ "rand 0.9.1",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
 ]
 
@@ -1861,10 +1875,6 @@ name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
-
-[[package]]
-name = "macros"
-version = "0.1.0"
 
 [[package]]
 name = "matchers"
@@ -3635,16 +3645,6 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
-
-[[package]]
-name = "util"
-version = "0.1.0"
-dependencies = [
- "bitcoin",
- "hex",
- "rand 0.9.1",
- "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
-]
 
 [[package]]
 name = "valuable"

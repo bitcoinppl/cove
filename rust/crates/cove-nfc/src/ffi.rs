@@ -3,7 +3,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use crate::{NfcReaderError, ParseResult};
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 
 use super::{message_info::MessageInfo, record::NdefRecord};
 

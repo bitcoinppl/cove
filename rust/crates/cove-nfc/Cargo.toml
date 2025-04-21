@@ -5,8 +5,8 @@ edition = "2024"
 
 [dependencies]
 # from parent crate
-macros = { path = "../macros" }
-util = { path = "../util" }
+cove-macros = { path = "../cove-macros" }
+cove-util = { path = "../cove-util" }
 
 # error handling
 thiserror = { workspace = true }

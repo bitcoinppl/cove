@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 ## workspace dependencies
 # macros
-macros = { path = "../macros" }
+cove-macros = { path = "../cove-macros" }
 
 # bitcoin
 bitcoin = { workspace = true, features = ["serde"] }
