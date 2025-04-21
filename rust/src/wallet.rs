@@ -14,7 +14,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     keys::{Descriptor, Descriptors},
     mnemonic::MnemonicExt as _,
-    multi_format::{MultiFormatError, tap_card::TapSigner},
+    multi_format::MultiFormatError,
     network::Network,
     tap_card::tap_signer_reader::DeriveInfo,
     xpub::{self, XpubError},
@@ -342,7 +342,7 @@ impl Wallet {
     }
 
     pub fn try_new_persisted_from_tap_signer(
-        tap_signer: Arc<TapSigner>,
+        tap_signer: Arc<tap_card::TapSigner>,
         derive: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, WalletError> {

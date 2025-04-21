@@ -13,7 +13,7 @@ use bitcoin::{
 use serde::Deserialize;
 use tracing::debug;
 
-use super::{SatsCard, SatsCardState, TapCard, TapSigner, TapSignerState};
+use crate::{SatsCard, SatsCardState, TapCard, TapSigner, TapSignerState};
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -233,7 +233,7 @@ fn message_and_signature_to_pubkeys(
 
 fn full_message_digest(url_encoded: &str) -> Message {
     let message = url_message_for_digest(url_encoded);
-    util::message_digest(message.as_bytes())
+    message_digest(message.as_bytes())
 }
 
 fn url_message_for_digest(url_encoded: &str) -> &str {
@@ -280,6 +280,12 @@ pub fn card_pubkey_to_full_ident(card_pubkey: &[u8]) -> Result<String, Signature
     );
 
     Ok(full_ident)
+}
+
+// Helper for creating message digests
+fn message_digest(message: &[u8]) -> Message {
+    let hash = Hash::hash(message);
+    Message::from_digest_slice(hash.as_ref()).expect("hash is 32 bytes")
 }
 
 #[cfg(test)]

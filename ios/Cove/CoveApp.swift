@@ -5,8 +5,11 @@
 //  Created by Praveen Perera  on 6/17/24.
 //
 
+import CoveCore
 import MijickPopupView
 import SwiftUI
+
+@_exported import CoveCore
 
 struct NavigateKey: EnvironmentKey {
     static let defaultValue: (Route) -> Void = { _ in }

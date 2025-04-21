@@ -23,7 +23,6 @@ use crate::{
     format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     label_manager::LabelManager,
-    multi_format::tap_card::TapSigner,
     psbt::Psbt,
     router::Route,
     tap_card::tap_signer_reader::DeriveInfo,
@@ -285,7 +284,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor(default(backup = None))]
     pub fn try_new_from_tap_signer(
-        tap_signer: Arc<TapSigner>,
+        tap_signer: Arc<tap_card::TapSigner>,
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, Error> {

@@ -4,7 +4,7 @@
  edition = "2024"
 
  [dependencies]
- bitcoin = { version = "0.32", features = ["serde"] }
- rand = "0.9"
- hex = "0.4.3"
- uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
+bitcoin = { workspace = true, features = ["serde"] }
+rand = { workspace = true }
+hex = { workspace = true }
+uniffi = { workspace = true, features = ["tokio"] }

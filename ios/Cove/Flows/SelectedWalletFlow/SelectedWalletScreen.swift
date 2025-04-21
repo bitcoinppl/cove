@@ -67,7 +67,7 @@ struct SelectedWalletScreen: View {
     }
 
     @ViewBuilder
-    func transactionsCard(transactions: [Transaction], scanComplete: Bool) -> some View {
+    func transactionsCard(transactions: [CoveCore.Transaction], scanComplete: Bool) -> some View {
         TransactionsCardView(
             transactions: transactions,
             unsignedTransactions: manager.unsignedTransactions,

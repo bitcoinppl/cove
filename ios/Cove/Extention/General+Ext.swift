@@ -9,21 +9,15 @@
 import Foundation
 import SwiftUI
 
-extension WalletAddressType: Comparable {
+extension WalletAddressType: @retroactive Comparable {
     public static func < (lhs: WalletAddressType, rhs: WalletAddressType) -> Bool {
         walletAddressTypeLessThan(lhs: lhs, rhs: rhs)
     }
 }
 
-extension DiscoveryState: Equatable {
+extension DiscoveryState: @retroactive Equatable {
     public static func == (lhs: DiscoveryState, rhs: DiscoveryState) -> Bool {
         discoveryStateIsEqual(lhs: lhs, rhs: rhs)
-    }
-}
-
-extension Address: Equatable {
-    public static func == (lhs: Address, rhs: Address) -> Bool {
-        addressIsEqual(lhs: lhs, rhs: rhs)
     }
 }
 
@@ -199,7 +193,7 @@ extension TapSignerConfirmPinArgs {
     }
 }
 
-extension TapSigner: Equatable {
+extension TapSigner: @retroactive Equatable {
     public static func == (lhs: TapSigner, rhs: TapSigner) -> Bool {
         lhs.isEqual(rhs: rhs)
     }
