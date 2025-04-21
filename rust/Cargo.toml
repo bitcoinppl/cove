@@ -18,17 +18,29 @@ default = ["uniffi/cli"]
 members = ["crates/macros", "crates/util", "crates/tap_card"]
 
 [workspace.dependencies]
+# bindings
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
-bitcoin = { version = "0.32", features = ["serde"] }
+
+# sync
+parking_lot = { version = "0.12.3" }
+
+# primitives
+sha2 = "0.10.8"
+bitcoin = { version = "0.32" }
 rand = "0.9"
 hex = "0.4.3"
 
-pretty_assertions = "1.4.1"
+# logging
+tracing = "0.1"
+
+# error handling
+thiserror = "2.0"
 
 [dependencies]
 # cove crates
 macros = { path = "./crates/macros" }
 util = { path = "./crates/util" }
+cove_nfc = { path = "./crates/cove_nfc" }
 tap_card = { path = "./crates/tap_card" }
 
 # bdk / bitcoin

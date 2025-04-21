@@ -749,6 +749,7 @@ dependencies = [
  "bitvec",
  "cbor4ii",
  "chacha20poly1305",
+ "cove_nfc",
  "crossbeam",
  "data-encoding",
  "derive_more",
@@ -793,6 +794,23 @@ dependencies = [
  "winnow",
  "zerocopy 0.8.24",
  "zeroize",
+]
+
+[[package]]
+name = "cove_nfc"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "macros",
+ "once_cell",
+ "parking_lot",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.12",
+ "tracing",
+ "uniffi 0.29.1",
+ "util",
+ "winnow",
 ]
 
 [[package]]

@@ -1,3 +1,4 @@
+use cove_nfc::message::NfcMessage;
 use derive_more::{
     AsRef, Deref,
     derive::{From, Into},
@@ -6,7 +7,7 @@ use jiff::ToSpan as _;
 use numfmt::Formatter;
 use rand::Rng as _;
 
-use crate::{cove_nfc::message::NfcMessage, multi_format::StringOrData, push_tx::PushTx};
+use crate::{multi_format::StringOrData, push_tx::PushTx};
 
 use super::*;
 
@@ -44,11 +45,7 @@ impl BitcoinTransaction {
             NfcMessage::String(string) => Self::try_from_str(string),
             NfcMessage::Data(data) => Self::try_from_data(data),
             NfcMessage::Both(string, data) => {
-                if let Ok(txn) = Self::try_from_data(data) {
-                    return Ok(txn);
-                }
-
-                Self::try_from_str(string)
+                Self::try_from_data(data).or_else(|_| Self::try_from_str(string))
             }
         }
     }

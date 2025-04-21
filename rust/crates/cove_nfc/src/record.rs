@@ -1,4 +1,4 @@
-use crate::cove_nfc::{header::NdefHeader, payload::NdefPayload};
+use crate::{header::NdefHeader, payload::NdefPayload};
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NdefRecord {

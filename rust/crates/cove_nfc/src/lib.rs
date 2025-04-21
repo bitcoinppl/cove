@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 use tracing::warn;
 use winnow::error::Needed;
 
+uniffi::setup_scaffolding!();
+
 pub mod ffi;
 pub mod header;
 pub mod message;
@@ -237,7 +239,7 @@ mod tests {
     use super::*;
 
     fn export_bytes() -> Vec<u8> {
-        let file_contents = include_bytes!("../test/data/export_bytes.txt");
+        let file_contents = include_bytes!("../../../../test/data/export_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
         let bytes: Vec<u8> = file_string

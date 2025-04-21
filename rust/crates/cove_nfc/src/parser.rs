@@ -11,7 +11,7 @@ use winnow::{
     token::{any, literal, take},
 };
 
-use crate::cove_nfc::{
+use crate::{
     header::NdefHeader,
     message_info::MessageInfo,
     ndef_type::NdefType,
@@ -199,7 +199,7 @@ mod tests {
 
     use super::*;
 
-    use crate::cove_nfc::{header::NdefHeader, ndef_type::NdefType, payload::NdefPayload};
+    use crate::{header::NdefHeader, ndef_type::NdefType, payload::NdefPayload};
 
     fn owned_stream(bytes: Vec<u8>) -> Stream<'static> {
         let bytes = Box::leak(bytes.into_boxed_slice());
@@ -212,7 +212,7 @@ mod tests {
     }
 
     static EXPORT: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../../test/data/export_bytes.txt");
+        let file_contents = include_bytes!("../../../../test/data/export_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
         let bytes: Vec<u8> = file_string
@@ -225,7 +225,7 @@ mod tests {
     });
 
     static DESCRIPTOR: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../../test/data/descriptor_bytes.txt");
+        let file_contents = include_bytes!("../../../../test/data/descriptor_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
         let bytes: Vec<u8> = file_string
@@ -238,7 +238,7 @@ mod tests {
     });
 
     static SEED_WORDS_BYTES: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../../test/data/seed_words_bytes.txt");
+        let file_contents = include_bytes!("../../../../test/data/seed_words_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
         let bytes: Vec<u8> = file_string
@@ -367,7 +367,7 @@ mod tests {
             panic!("payload is not text")
         };
 
-        let descriptor_string = std::fs::read_to_string("test/data/descriptor.txt")
+        let descriptor_string = std::fs::read_to_string("../../../../test/data/descriptor.txt")
             .unwrap()
             .trim()
             .to_string();
@@ -388,7 +388,7 @@ mod tests {
         let NdefPayload::Data(payload) = payload else { panic!("payload is not data") };
 
         let payload_string = String::from_utf8(payload).unwrap();
-        let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
+        let export_string = std::fs::read_to_string("../../../../test/data/export.json").unwrap();
 
         let payload_json = serde_json::from_str::<serde_json::Value>(&payload_string).unwrap();
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
@@ -419,7 +419,7 @@ mod tests {
             panic!("payload is not data")
         };
 
-        let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
+        let export_string = std::fs::read_to_string("../../../../test/data/export.json").unwrap();
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
 
         assert_eq!(
@@ -438,7 +438,7 @@ mod tests {
         let record = &message[0];
         assert_eq!(record.type_, b"T");
 
-        let known_descriptor_string = std::fs::read_to_string("test/data/descriptor.txt")
+        let known_descriptor_string = std::fs::read_to_string("../../../../test/data/descriptor.txt")
             .unwrap()
             .trim()
             .to_string();

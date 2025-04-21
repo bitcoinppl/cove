@@ -1,3 +1,5 @@
+export TMPDIR := "/tmp"
+
 # xcode aliases
 alias xc := xcode-clean
 alias xr := xcode-reset

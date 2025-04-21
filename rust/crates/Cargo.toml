@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["./macros", "./util"]
+members = ["./macros", "./util", "./cove_nfc"]
 
 [workspace.dependencies]
 # bindings
-uniffi = { version = "=0.28.3", features = ["tokio"] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
 
 # error handling
 thiserror = "2.0"
@@ -21,4 +21,11 @@ tracing = "0.1"
 tracing-log = "0.2"
 
 # sync
-parking_lot = "0.12"
+parking_lot = { workspace = true, features = ["deadlock_detection"] }
+
+# parsing
+winnow = { version = "0.7", features = ["simd"] }
+
+# hashing
+sha2 = "0.10.8"
+hex = "0.4.3"

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cove_nfc::message::NfcMessage;
 use tracing::{debug, warn};
 
 use crate::{
@@ -67,6 +68,18 @@ impl MultiFormat {
         }
 
         Err(MultiFormatError::UnrecognizedFormat)
+    }
+
+    pub fn try_from_nfc_message(nfc_message: NfcMessage) -> Result<Self> {
+        debug!("MultiFormat::try_from_nfc_message");
+
+        match nfc_message {
+            NfcMessage::Data(data) => Self::try_from_data(&data),
+            NfcMessage::String(string) => Self::try_from_string(&string),
+            NfcMessage::Both(string, data) => {
+                Self::try_from_data(&data).or_else(|_| Self::try_from_string(&string))
+            }
+        }
     }
 
     pub fn try_from_string(string: &str) -> Result<Self> {
@@ -155,6 +168,14 @@ impl TryFrom<StringOrData> for MultiFormat {
             StringOrData::Data(data) => Self::try_from_data(&data),
         }
     }
+}
+
+#[uniffi::export]
+fn multi_format_try_from_nfc_message(
+    nfc_message: Arc<NfcMessage>,
+) -> Result<MultiFormat, MultiFormatError> {
+    let nfc_message = Arc::unwrap_or_clone(nfc_message);
+    MultiFormat::try_from_nfc_message(nfc_message)
 }
 
 #[uniffi::export]
