@@ -1,4 +1,0 @@
-module cove_core_ffi {
-    umbrella header "cove_core_ffi.h"
-    export *
-}

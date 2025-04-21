@@ -7,11 +7,6 @@ buildServer.json
 .compile
 log.txt
 .nvim
-ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 /rust/bindings
-/ios/CoveCore/CoveCore/Frameworks
-/ios/CoveCore/CoveCore/Headers
-/ios/CoveCore/archives
-ios/CoveCore/Sources/ffi/libcove.a
-ios/CoveCore/Sources/cove_core_ffi/libcove.a
+/ios/CoveCore/Sources/cove_core_ffi.xcframework

@@ -7,7 +7,6 @@ cd rust
 BUILD_TYPE=$1
 DEVICE=$2
 SIGN=$3
-INTEGRATE=$4
 
 # Determine build flags
 if [[ "$BUILD_TYPE" == "release" || "$BUILD_TYPE" == "--release" ]]; then
@@ -20,56 +19,56 @@ else
     BUILD_FLAG="--profile $BUILD_TYPE"
 fi
 
-# output and temp dirs
-SWIFT_SRC_DIR="../ios/CoveCore/Sources/CoveCore"
-SWIFT_FRAMEWORK_BUILD_DIR="../build"
-XCFRAMEWORK_OUTPUT="../ios/CoveCore.xcframework"
+if [ $BUILD_TYPE == "release" ] || [ $BUILD_TYPE == "release-smaller" ]; then
+    TARGETS=(
+        # aarch64-apple-ios-sim \
+        aarch64-apple-ios \
+        # x86_64-apple-darwin
+        # aarch64-apple-darwin
+    )
+else
+    # debug on device or simulator
+    if [ "$DEVICE" == "true" ] || [ "$DEVICE" == "--device" ]; then
+        TARGETS=(aarch64-apple-ios aarch64-apple-ios-sim)
+    else
+        TARGETS=(aarch64-apple-ios-sim)
+    fi
+fi 
 
-mkdir -p "$OUTPUT_DIR" "$SWIFT_SRC_DIR" "$SWIFT_FRAMEWORK_BUILD_DIR"
 
-# 1. Build Rust library for all targets
-TARGETS=(aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim)
-for TARGET in "${TARGETS[@]}"; do
-    rustup target add $TARGET
-    cargo build --target=$TARGET $BUILD_FLAG
-done
-
-
+## 1. headers, modulemap, and swift sources
 OUTPUT_DIR="./bindings"
-DYLIB_PATH="./target/aarch64-apple-ios-sim/debug/libcove.a"
+DYLIB_PATH="./target/debug/libcove.dylib"
+mkdir -p "$OUTPUT_DIR" 
 
 rustup target add aarch64-apple-ios-sim
 cargo build --target=aarch64-apple-ios-sim 
 
 cargo run --bin uniffi-bindgen -- "$DYLIB_PATH" "$OUTPUT_DIR" \
     --swift-sources --headers \
-    --modulemap --module-name CoveCore \
+    --modulemap --module-name cove_core_ffi \
     --modulemap-filename module.modulemap
 
-cargo run --bin uniffi-bindgen -- "$DYLIB_PATH" "$OUTPUT_DIR" \
-    --xcframework \
-    --modulemap --module-name CoveCore \
-    --modulemap-filename xcframework.modulemap
 
-swiftc \
-  -emit-module \
-  -module-name CoveCore \
-  -emit-library -static -o ./bindings/framework/iossim-arm64/libCoveCore.a \
-  -emit-module-path ./bindings/framework/iossim-arm64/CoveCore.swiftmodule \
-  -emit-objc-header-path ./bindings/framework/iossim-arm64/CoveCore-Swift.h \
-  -parse-as-library \
-  -I ./bindings \
-  -Xcc -fmodule-map-file=./bindings/module.modulemap \
-  -L ./target/aarch64-apple-ios-sim/debug \
-  -lcove \
-  -target arm64-apple-ios18.0-simulator \
-  -sdk $(xcrun --sdk iphonesimulator --show-sdk-path) \
-  ./bindings/cove.swift ./bindings/rust_cktap.swift ./bindings/tap_card.swift ./bindings/util.swift
+## 2. static library for iOS and iOS simulator
+LIBRARY_FLAGS=""
+echo "Build for targets: ${TARGETS[@]}"
+for TARGET in ${TARGETS[@]}; do
+    echo "Building for target: ${TARGET} with build type: ${BUILD_TYPE}"
+    LIBRARY_FLAGS="$LIBRARY_FLAGS -library ./target/$TARGET/$BUILD_TYPE/libcove.a -headers ./bindings"
 
+    rustup target add $TARGET
+    cargo build --target=$TARGET $BUILD_FLAG
+done
 
+# 3. create XCFramework
+SPM_PACKAGE="../ios/CoveCore/"
+XCFRAMEWORK_OUTPUT="$SPM_PACKAGE/Sources/cove_core_ffi.xcframework"
+
+rm -rf "$XCFRAMEWORK_OUTPUT" || true
 xcodebuild -create-xcframework \
-  -library ./bindings/framework/iossim-arm64/libCoveCore.a \
-  -headers ./bindings/framework/iossim-arm64 \
-  -headers ./bindings \
-  -output ./bindings/framework/CoveCore.xcframework
+        $LIBRARY_FLAGS \
+        -output "$XCFRAMEWORK_OUTPUT"
 
+# 4. copy swift sources
+cp -r bindings/*.swift $SPM_PACKAGE/Sources/CoveCore/

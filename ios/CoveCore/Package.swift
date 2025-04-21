@@ -10,12 +10,9 @@ let package = Package(
         .library(name: "CoveCore", targets: ["CoveCore"])
     ],
     targets: [
-        .target(
+        .binaryTarget(
             name: "cove_core_ffi",
-            path: "Sources/cove_core_ffi",
-            publicHeadersPath: "include",
-            swiftSettings: [.swiftLanguageMode(.v5)],
-            linkerSettings: [.linkedLibrary("cove")],
+            path: "Sources/cove_core_ffi.xcframework"
         ),
         .target(
             name: "CoveCore",
