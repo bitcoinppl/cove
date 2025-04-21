@@ -1,3 +1,78 @@
+
+
+#### MAIN PLAN
+
+Here’s a first‐cut of how I’d start carving up the monolithic cove crate into a small handful of focused crates, in an order that breaks all of the existing cycles:
+
+        1. Extract “primitive” types into a new crate
+           ── Crate name: `cove‑types`
+           ── Move out:
+              • `src/transaction.rs`’s `TxId` (and its `impl redb::Key/Value`)
+              • `src/wallet/metadata.rs`’s `WalletId` (the `new_type!` and friends)
+              • Any other “leaf” types that currently live in `src/*` but are depended‐upon by both database and wallet (e.g. `AddressIndex`, `BlockSizeLast`, maybe `ConfirmDetails` if you can isolate it).
+           ── Dependencies: none (just `std`, maybe `serde`)
+        2. Extract the database layer
+           ── Crate name: `cove‑database`
+           ── Move out everything under `src/database/*` plus `src/redb.rs`
+           ── Change `use crate::transaction::TxId` → `cove_types::TxId`
+                 `use crate::wallet::WalletId` → `cove_types::WalletId`
+                 `use crate::wallet::confirm::ConfirmDetails` → either pull that type into `cove‑types` or re‑expose an analogous record in `cove‑database`
+           ── Depends on: `cove‑types`, `redb`, `serde`, `thiserror`, etc.
+        3. Extract the transaction model
+           ── Crate name: `cove‑transaction`
+           ── Move out `src/transaction/*` (amounts, unsigned vs. signed, FFI glue, fees, etc.)
+           ── Change `use crate::transaction::TxId` → internal, and if any table‐defs live in `cove‑database` that need `TxId`, they pick it up from `cove‑types`
+           ── Depends on: `cove‑types`, `redb` (just for `impl Key/Value`), `serde`, BDK types
+        4. Extract the wallet core
+           ── Crate name: `cove‑wallet`
+           ── Move out `src/wallet.rs` + `src/wallet/*` submodules (address, balance, confirm, metadata, etc.)
+           ── Change all DB calls → go through the `cove‑database` crate’s API
+           ── Change `TxId`, `WalletId` imports → from `cove‑types`
+           ── Depends on: `cove‑types`, `cove‑database`, `cove‑transaction`, BDK, keychain, etc.
+        5. Extract the “manager” actor layer
+           ── Crate name: `cove‑manager`
+           ── Move out `src/manager.rs`, `src/manager/wallet/*.rs`, plus any `pending_wallet.rs` logic that drives the actor
+           ── Depends on: `cove‑wallet`, `cove‑transaction`, `cove‑database`, Tokio, `act‑zero`, etc.
+        6. Extract the node/backend clients
+           ── Crate name: `cove‑node`
+           ── Move out `src/node.rs`, `src/node_connect.rs`, `src/node/client/*`
+           ── Depends on: BDK‐Electrum, BDK‐Esplora, `cove‑types`
+        8. Fold some of the little “utility” modules into `crates/util` (or a new `cove‑util`):
+           ── Move out `src/format.rs`, `src/file_handler.rs`, perhaps parts of `src/encryption.rs` and the existing `crates/util` bits can all live together
+           ── Expose formatting helpers, file I/O helpers, hex/sha256, etc.
+           ── Depends on: `cove‑types` (for type‐generic hashing), `numfmt`, `hex`, `chacha20poly1305`, etc.
+        9. Extract the send‐flow / UI flow logic
+           ── Crate name: `cove‑send`
+           ── Move out `src/send_flow.rs`, `src/multi_format.rs`, `src/multi_qr.rs`, `src/seed_qr.rs`, `src/push_tx.rs`, anything that drives the “send” UX flow
+           ── Depends on: `cove‑wallet`, `cove‑transaction`, `cove‑util`
+        10. Finally the top‑level “cove” crate in `src` becomes a thin wrapper that just re‑exports and wires together the workspace crates for your FFI boundary (Swift, CLI, etc.)
+
+    By lifting out a single “primitives” crate up‐front you eliminate the cycle between database ↔ wallet ↔ transaction types.  Once that’s in place each of the other layers can cleanly depend down the graph:
+
+              cove‑types
+                  ↓     ↘
+           cove‑database   cove‑transaction
+                  ↓      ↘        ↓
+               cove‑wallet     cove‑send
+                  ↓
+           cove‑manager
+                  ↓
+           cove‑nfc, cove‑node, etc.
+                  ↓
+             cove (top‑level FFI crate)
+
+    No circulars, each crate has a clear, single‐direction dependency path.
+
+    Next steps would be:
+
+        * create each new `crates/<name>/Cargo.toml>`, copy the module files in, adjust their `mod` paths, fix `use crate::…` → `use cove_<shim>::…`, and add the necessary `cove‑types` or other cove‑ crates as dependencies.
+
+        * once each one builds in isolation, remove its code from the top‐level `src/` and replace with `pub use cove_foo::*;`
+        * iterate until the root `cove` crate is just a small shim.
+
+
+#### OTHER PLANS
+
     Here's a strategic plan and analysis for extracting crates from this repo, following Rust best practices and avoiding circular dependencies.
 
     ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -125,70 +200,30 @@
   7. Extract the mnemonic crate with refactored dependencies.
   8. Finally, extract the wallet crate.
 
-Here’s a first‐cut of how I’d start carving up the monolithic cove crate into a small handful of focused crates, in an order that breaks all of the existing cycles:
+#### CURRENT APPROACH FOR EXTRACTING CRATES
 
-        1. Extract “primitive” types into a new crate
-           ── Crate name: `cove‑types`
-           ── Move out:
-              • `src/transaction.rs`’s `TxId` (and its `impl redb::Key/Value`)
-              • `src/wallet/metadata.rs`’s `WalletId` (the `new_type!` and friends)
-              • Any other “leaf” types that currently live in `src/*` but are depended‐upon by both database and wallet (e.g. `AddressIndex`, `BlockSizeLast`, maybe `ConfirmDetails` if you can isolate it).
-           ── Dependencies: none (just `std`, maybe `serde`)
-        2. Extract the database layer
-           ── Crate name: `cove‑database`
-           ── Move out everything under `src/database/*` plus `src/redb.rs`
-           ── Change `use crate::transaction::TxId` → `cove_types::TxId`
-                 `use crate::wallet::WalletId` → `cove_types::WalletId`
-                 `use crate::wallet::confirm::ConfirmDetails` → either pull that type into `cove‑types` or re‑expose an analogous record in `cove‑database`
-           ── Depends on: `cove‑types`, `redb`, `serde`, `thiserror`, etc.
-        3. Extract the transaction model
-           ── Crate name: `cove‑transaction`
-           ── Move out `src/transaction/*` (amounts, unsigned vs. signed, FFI glue, fees, etc.)
-           ── Change `use crate::transaction::TxId` → internal, and if any table‐defs live in `cove‑database` that need `TxId`, they pick it up from `cove‑types`
-           ── Depends on: `cove‑types`, `redb` (just for `impl Key/Value`), `serde`, BDK types
-        4. Extract the wallet core
-           ── Crate name: `cove‑wallet`
-           ── Move out `src/wallet.rs` + `src/wallet/*` submodules (address, balance, confirm, metadata, etc.)
-           ── Change all DB calls → go through the `cove‑database` crate’s API
-           ── Change `TxId`, `WalletId` imports → from `cove‑types`
-           ── Depends on: `cove‑types`, `cove‑database`, `cove‑transaction`, BDK, keychain, etc.
-        5. Extract the “manager” actor layer
-           ── Crate name: `cove‑manager`
-           ── Move out `src/manager.rs`, `src/manager/wallet/*.rs`, plus any `pending_wallet.rs` logic that drives the actor
-           ── Depends on: `cove‑wallet`, `cove‑transaction`, `cove‑database`, Tokio, `act‑zero`, etc.
-        6. Extract the node/backend clients
-           ── Crate name: `cove‑node`
-           ── Move out `src/node.rs`, `src/node_connect.rs`, `src/node/client/*`
-           ── Depends on: BDK‐Electrum, BDK‐Esplora, `cove‑types`
-        8. Fold some of the little “utility” modules into `crates/util` (or a new `cove‑util`):
-           ── Move out `src/format.rs`, `src/file_handler.rs`, perhaps parts of `src/encryption.rs` and the existing `crates/util` bits can all live together
-           ── Expose formatting helpers, file I/O helpers, hex/sha256, etc.
-           ── Depends on: `cove‑types` (for type‐generic hashing), `numfmt`, `hex`, `chacha20poly1305`, etc.
-        9. Extract the send‐flow / UI flow logic
-           ── Crate name: `cove‑send`
-           ── Move out `src/send_flow.rs`, `src/multi_format.rs`, `src/multi_qr.rs`, `src/seed_qr.rs`, `src/push_tx.rs`, anything that drives the “send” UX flow
-           ── Depends on: `cove‑wallet`, `cove‑transaction`, `cove‑util`
-        10. Finally the top‑level “cove” crate in `src` becomes a thin wrapper that just re‑exports and wires together the workspace crates for your FFI boundary (Swift, CLI, etc.)
+We've taken a more thorough approach to extracting the `cove-types` crate. Key elements of our approach include:
 
-    By lifting out a single “primitives” crate up‐front you eliminate the cycle between database ↔ wallet ↔ transaction types.  Once that’s in place each of the other layers can cleanly depend down the graph:
+1. **Keeping UniFfi Annotations**: 
+   - We've kept all UniFfi annotations (`uniffi::Object`, `uniffi::Record`, etc.) in the extracted types
+   - Added a proper `uniffi::setup_scafolding!` directive to the crate's lib.rs
+   - Added the necessary build.rs to generate the scaffolding
+   - DO NOT USE `uniffi_macros` crate, use `uniffi` crate directly
+   - DO NOT create a UDL file, we use only proc macros
 
-              cove‑types
-                  ↓     ↘
-           cove‑database   cove‑transaction
-                  ↓      ↘        ↓
-               cove‑wallet     cove‑send
-                  ↓
-           cove‑manager
-                  ↓
-           cove‑nfc, cove‑node, etc.
-                  ↓
-             cove (top‑level FFI crate)
+2. **Moving Implementation Details**:
+   - Moved complete implementations of types like `TxId`, `WalletId`, `OutPoint`
+   - Implemented `redb::Key` trait directly in the cove-types crate
+   - Added proper Display traits and other necessary implementations
 
-    No circulars, each crate has a clear, single‐direction dependency path.
+3. **Export Strategy**:
+   - The main crate now re-exports the types from cove-types: `pub use cove_types::{TxId, WalletId, etc.}`
+   - This allows existing code to keep the same import paths via re-exports
+   - Gradually, we can update imports to use cove-types directly where appropriate
 
-    Next steps would be:
+4. **Dependencies**:
+   - Used `workspace = true` to ensure consistent dependency versions
+   - Added explicit dependencies for everything the types need (thiserror, serde, etc.)
+   - Included uniffi and uniffi_macros as dependencies in the extracted crate
 
-        * create each new `crates/<name>/Cargo.toml>`, copy the module files in, adjust their `mod` paths, fix `use crate::…` → `use cove_<shim>::…`, and add the necessary `cove‑types` or other cove‑ crates as dependencies.
-
-        * once each one builds in isolation, remove its code from the top‐level `src/` and replace with `pub use cove_foo::*;`
-        * iterate until the root `cove` crate is just a small shim.
+This approach should lead to a clean separation while maintaining the FFI bindings and existing API surface.

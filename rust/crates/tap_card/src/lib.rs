@@ -5,8 +5,6 @@ use std::sync::Arc;
 use bitcoin::secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 
-uniffi::setup_scaffolding!();
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
 pub enum TapSignerState {
     Sealed,
@@ -243,3 +241,5 @@ pub fn tap_signer_preview_new(preview: bool) -> TapSigner {
             pubkey: Arc::new(PublicKey::from_slice(&[0u8; 33]).unwrap()),
         }
 }
+
+uniffi::setup_scaffolding!();

@@ -1733,6 +1733,8 @@ extension NdefPayload: Equatable, Hashable {}
 
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -1844,6 +1846,8 @@ extension NdefType: Equatable, Hashable {}
 
 
 
+
+
 public enum NfcMessageError: Swift.Error {
 
     
@@ -1911,6 +1915,8 @@ extension NfcMessageError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
 
 
 
@@ -1999,6 +2005,8 @@ extension NfcReaderError: Foundation.LocalizedError {
 }
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -2080,6 +2088,8 @@ extension ParseResult: Equatable, Hashable {}
 
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -2154,6 +2164,8 @@ public func FfiConverterTypeParserState_lower(_ value: ParserState) -> RustBuffe
 
 
 extension ParserState: Equatable, Hashable {}
+
+
 
 
 
@@ -2271,6 +2283,8 @@ extension ResumeError: Foundation.LocalizedError {
 }
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -2335,6 +2349,8 @@ public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) 
 
 
 extension TextPayloadFormat: Equatable, Hashable {}
+
+
 
 
 

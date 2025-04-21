@@ -1,0 +1,53 @@
+[package]
+name = "cove-types"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+## workspace dependencies
+# macros
+macros = { path = "../macros" }
+
+# bitcoin
+bitcoin = { workspace = true, features = ["serde"] }
+
+# error handling
+thiserror = { workspace = true }
+
+# serialization
+serde = { workspace = true }
+
+# database
+redb = { workspace = true }
+
+# timestamp
+jiff = { workspace = true, features = [] }
+
+# derive utilities
+derive_more = { workspace = true, features = [
+    "display",
+    "add",
+    "mul",
+    "from",
+    "into",
+    "as_ref",
+    "from_str",
+    "deref",
+    "deref_mut",
+] }
+
+# uniffi
+uniffi = { workspace = true, features = ["tokio"] }
+
+# ids
+nid = { workspace = true }
+
+# randomness
+rand = { workspace = true, features = ["std_rng"] }
+
+# encoding
+hex = { workspace = true }
+
+[build-dependencies]
+uniffi = { workspace = true, features = ["build"] }
+

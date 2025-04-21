@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fmt::Display, sync::Arc, time::Duration};
+use std::{fmt::Display, sync::Arc, time::Duration};
 
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 use tracing::debug;
@@ -7,10 +7,11 @@ use crate::{
     app::reconcile::{AppStateReconcileMessage, Update, Updater},
     network::Network,
     redb::Json,
-    wallet::metadata::{HardwareWalletMetadata, WalletId, WalletMetadata, WalletMode},
+    wallet::metadata::{HardwareWalletMetadata, WalletMetadata, WalletMode},
 };
 
 use super::{Database, Error};
+use cove_types::WalletId;
 
 const TABLE: TableDefinition<&'static str, Json<Vec<WalletMetadata>>> =
     TableDefinition::new("wallets.json");
@@ -305,8 +306,4 @@ impl WalletsTable {
     }
 }
 
-impl redb::Key for WalletId {
-    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
-        data1.cmp(data2)
-    }
-}
+// redb::Key for WalletId is now implemented in the cove-types crate

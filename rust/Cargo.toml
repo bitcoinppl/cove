@@ -15,8 +15,9 @@ path = "src/bin/uniffi-bindgen.rs"
 default = ["uniffi/cli"]
 
 [workspace]
-members = ["crates/macros", "crates/util", "crates/tap_card"]
+members = ["crates/*"]
 
+## WORKSPACE DEPENDENCIES
 [workspace.dependencies]
 # bindings
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
@@ -30,18 +31,35 @@ bitcoin = { version = "0.32" }
 rand = "0.9"
 hex = "0.4.3"
 
+# time
+jiff = { version = "0.2", features = [] }
+
 # logging
 tracing = "0.1"
 
 # error handling
 thiserror = "2.0"
 
+# database
+redb = "2.4"
+
+# ids
+nid = "3.0"
+
+# derive stuff
+derive_more = { version = "2.0" }
+
+# serde
+serde = { version = "1.0", features = ["derive"] }
+
+## DEPENDENCIES
 [dependencies]
 # cove crates
 macros = { path = "./crates/macros" }
 util = { path = "./crates/util" }
 cove_nfc = { path = "./crates/cove_nfc" }
 tap_card = { path = "./crates/tap_card" }
+cove-types = { path = "./crates/cove-types" }
 
 # bdk / bitcoin
 bdk_core = "0.4"
@@ -105,7 +123,7 @@ tracing-log = "0.2"
 dirs = "6.0"
 
 # database
-redb = "2.1"
+redb = { workspace = true }
 
 # ids
 nid = "3.0"
@@ -182,7 +200,6 @@ paste = "1.0"
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
-# uniffi = { version = "0.29.0", features = ["build"] }
 
 [dev-dependencies]
 tempfile = "3.19"

@@ -809,6 +809,8 @@ extension Field: Equatable, Hashable {}
 
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -884,6 +886,8 @@ extension SatsCardState: Equatable, Hashable {}
 
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -951,6 +955,8 @@ public func FfiConverterTypeTapCard_lift(_ buf: RustBuffer) throws -> TapCard {
 public func FfiConverterTypeTapCard_lower(_ value: TapCard) -> RustBuffer {
     return FfiConverterTypeTapCard.lower(value)
 }
+
+
 
 
 
@@ -1091,6 +1097,8 @@ extension TapCardParseError: Foundation.LocalizedError {
 }
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -1162,6 +1170,8 @@ public func FfiConverterTypeTapSignerState_lower(_ value: TapSignerState) -> Rus
 
 
 extension TapSignerState: Equatable, Hashable {}
+
+
 
 
 
