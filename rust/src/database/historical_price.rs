@@ -6,12 +6,8 @@ use record::HistoricalPriceRecord;
 use redb::TableDefinition;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    app::reconcile::{Update, Updater},
-    fiat::historical::HistoricalPrice,
-};
-
 use super::Error;
+use crate::fiat::historical::HistoricalPrice;
 
 // Define a custom type that implements redb::TypeName for BlockNumber
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -99,35 +95,6 @@ impl HistoricalPriceTable {
         write_txn
             .commit()
             .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        Updater::send_update(Update::DatabaseUpdated);
-
-        Ok(())
-    }
-
-    /// Delete historical price for a specific block number
-    pub fn delete_price_for_block(&self, block_number: u32) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
-
-            let key = BlockNumber(block_number);
-            table
-                .remove(key)
-                .map_err(|error| HistoricalPriceTableError::Save(error.to_string()))?;
-        }
-
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
-
-        Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }

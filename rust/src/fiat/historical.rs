@@ -29,14 +29,20 @@ impl HistoricalPricesResponse {
         }
 
         let prices = self.prices[0];
+        prices.for_currency(currency)
+    }
+}
+
+impl HistoricalPrice {
+    pub fn for_currency(&self, currency: FiatCurrency) -> Option<f32> {
         let price = match currency {
-            FiatCurrency::Usd => prices.usd,
-            FiatCurrency::Eur => prices.eur,
-            FiatCurrency::Gbp => prices.gbp,
-            FiatCurrency::Cad => prices.cad,
-            FiatCurrency::Chf => prices.chf,
-            FiatCurrency::Aud => prices.aud,
-            FiatCurrency::Jpy => prices.jpy,
+            FiatCurrency::Usd => self.usd,
+            FiatCurrency::Eur => self.eur,
+            FiatCurrency::Gbp => self.gbp,
+            FiatCurrency::Cad => self.cad,
+            FiatCurrency::Chf => self.chf,
+            FiatCurrency::Aud => self.aud,
+            FiatCurrency::Jpy => self.jpy,
         };
 
         // in the mempool.space API, the price is negative if not available

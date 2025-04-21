@@ -20,6 +20,7 @@ mod fiat;
 mod file_handler;
 mod format;
 mod hardware_export;
+mod historical_price;
 mod keychain;
 mod keys;
 mod label_manager;
