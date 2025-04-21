@@ -7,8 +7,8 @@ import Foundation
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
-#if canImport(utilFFI)
-import utilFFI
+#if canImport(rust_cktapFFI)
+import rust_cktapFFI
 #endif
 
 fileprivate extension RustBuffer {
@@ -25,13 +25,13 @@ fileprivate extension RustBuffer {
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_util_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+        try! rustCall { ffi_rust_cktap_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
     func deallocate() {
-        try! rustCall { ffi_util_rustbuffer_free(self, $0) }
+        try! rustCall { ffi_rust_cktap_rustbuffer_free(self, $0) }
     }
 }
 
@@ -281,7 +281,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureUtilInitialized()
+    uniffiEnsureRustCktapInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -455,78 +455,9 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
         writeBytes(&buf, value)
     }
 }
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
-    typealias SwiftType = String?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterString.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterString.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
-    typealias SwiftType = Data?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterData.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterData.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-public func generateRandomChainCode() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_util_fn_func_generate_random_chain_code($0
-    )
-})
-}
-public func hexDecode(hex: String) -> Data?  {
-    return try!  FfiConverterOptionData.lift(try! rustCall() {
-    uniffi_util_fn_func_hex_decode(
-        FfiConverterString.lower(hex),$0
-    )
-})
-}
-public func hexEncode(bytes: Data) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_util_fn_func_hex_encode(
-        FfiConverterData.lower(bytes),$0
-    )
-})
-}
-public func hexToUtf8String(hex: String) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_util_fn_func_hex_to_utf8_string(
-        FfiConverterString.lower(hex),$0
+public func randNonce() -> Data  {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_rust_cktap_fn_func_rand_nonce($0
     )
 })
 }
@@ -542,20 +473,11 @@ private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 29
     // Get the scaffolding contract version by calling the into the dylib
-    let scaffolding_contract_version = ffi_util_uniffi_contract_version()
+    let scaffolding_contract_version = ffi_rust_cktap_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_util_checksum_func_generate_random_chain_code() != 29599) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_util_checksum_func_hex_decode() != 19589) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_util_checksum_func_hex_encode() != 20696) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_util_checksum_func_hex_to_utf8_string() != 36419) {
+    if (uniffi_rust_cktap_checksum_func_rand_nonce() != 11446) {
         return InitializationResult.apiChecksumMismatch
     }
 
@@ -564,7 +486,7 @@ private let initializationResult: InitializationResult = {
 
 // Make the ensure init function public so that other modules which have external type references to
 // our types can call it.
-public func uniffiEnsureUtilInitialized() {
+public func uniffiEnsureRustCktapInitialized() {
     switch initializationResult {
     case .ok:
         break

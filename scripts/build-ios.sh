@@ -44,6 +44,7 @@ mkdir -p "$OUTPUT_DIR"
 rustup target add aarch64-apple-ios-sim
 cargo build --target=aarch64-apple-ios-sim 
 
+rm -rf $OUTPUT_DIR || true
 cargo run --bin uniffi-bindgen -- "$DYLIB_PATH" "$OUTPUT_DIR" \
     --swift-sources --headers \
     --modulemap --module-name cove_core_ffi \
@@ -72,3 +73,4 @@ xcodebuild -create-xcframework \
 
 # 4. copy swift sources
 cp -r bindings/*.swift $SPM_PACKAGE/Sources/CoveCore/
+rm -rf $SPM_PACKAGE/Sources/CoveCore/Package.swift
