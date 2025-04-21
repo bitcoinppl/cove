@@ -75,4 +75,3 @@ impl ConfirmDetails {
         self.psbt_hex.clone()
     }
 }
-

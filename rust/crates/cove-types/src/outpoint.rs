@@ -23,4 +23,3 @@ impl From<&bitcoin::OutPoint> for OutPoint {
         }
     }
 }
-

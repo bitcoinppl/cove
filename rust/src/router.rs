@@ -10,8 +10,8 @@ use crate::{
     wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
 };
 
-use derive_more::From;
 use cove_macros::impl_default_for;
+use derive_more::From;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {

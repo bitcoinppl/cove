@@ -438,10 +438,11 @@ mod tests {
         let record = &message[0];
         assert_eq!(record.type_, b"T");
 
-        let known_descriptor_string = std::fs::read_to_string("../../../../test/data/descriptor.txt")
-            .unwrap()
-            .trim()
-            .to_string();
+        let known_descriptor_string =
+            std::fs::read_to_string("../../../../test/data/descriptor.txt")
+                .unwrap()
+                .trim()
+                .to_string();
 
         let NdefPayload::Text(payload_string) = &record.payload else {
             panic!("payload is not text")

@@ -139,4 +139,3 @@ mod tests {
         assert_eq!(txid_borrow, &txid);
     }
 }
-

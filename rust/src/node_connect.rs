@@ -2,8 +2,8 @@ use tracing::error;
 use url::Url;
 
 use crate::{database::Database, network::Network, node::Node};
-use eyre::{Context, eyre};
 use cove_macros::impl_default_for;
+use eyre::{Context, eyre};
 
 pub const BITCOIN_ESPLORA: [(&str, &str); 2] = [
     ("blockstream.info", "https://blockstream.info/api/"),

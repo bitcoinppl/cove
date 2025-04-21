@@ -19,8 +19,8 @@ use crate::{
     transaction::fees::client::{FEE_CLIENT, FeeResponse},
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
-use crossbeam::channel::{Receiver, Sender};
 use cove_macros::impl_default_for;
+use crossbeam::channel::{Receiver, Sender};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
@@ -288,7 +288,11 @@ impl FfiApp {
 
     /// Save the backup for the tap signer in the keychain
     #[uniffi::method]
-    pub fn save_tap_signer_backup(&self, tap_signer: &cove_tap_card::TapSigner, backup: &[u8]) -> bool {
+    pub fn save_tap_signer_backup(
+        &self,
+        tap_signer: &cove_tap_card::TapSigner,
+        backup: &[u8],
+    ) -> bool {
         let run = || {
             let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
                 debug!(
