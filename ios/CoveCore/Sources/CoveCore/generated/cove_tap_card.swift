@@ -25,13 +25,13 @@ fileprivate extension RustBuffer {
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_tap_card_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+        try! rustCall { ffi_cove_tap_card_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
     func deallocate() {
-        try! rustCall { ffi_tap_card_rustbuffer_free(self, $0) }
+        try! rustCall { ffi_cove_tap_card_rustbuffer_free(self, $0) }
     }
 }
 
@@ -281,7 +281,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureTapCardInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -527,7 +527,7 @@ open class TapSigner: TapSignerProtocol, @unchecked Sendable {
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_tap_card_fn_clone_tapsigner(self.pointer, $0) }
+        return try! rustCall { uniffi_cove_tap_card_fn_clone_tapsigner(self.pointer, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -536,7 +536,7 @@ open class TapSigner: TapSignerProtocol, @unchecked Sendable {
             return
         }
 
-        try! rustCall { uniffi_tap_card_fn_free_tapsigner(pointer, $0) }
+        try! rustCall { uniffi_cove_tap_card_fn_free_tapsigner(pointer, $0) }
     }
 
     
@@ -544,21 +544,21 @@ open class TapSigner: TapSignerProtocol, @unchecked Sendable {
     
 open func fullCardIdent() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_tap_card_fn_method_tapsigner_full_card_ident(self.uniffiClonePointer(),$0
+    uniffi_cove_tap_card_fn_method_tapsigner_full_card_ident(self.uniffiClonePointer(),$0
     )
 })
 }
     
 open func identFileNamePrefix() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_tap_card_fn_method_tapsigner_ident_file_name_prefix(self.uniffiClonePointer(),$0
+    uniffi_cove_tap_card_fn_method_tapsigner_ident_file_name_prefix(self.uniffiClonePointer(),$0
     )
 })
 }
     
 open func isEqual(rhs: TapSigner) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_tap_card_fn_method_tapsigner_is_equal(self.uniffiClonePointer(),
+    uniffi_cove_tap_card_fn_method_tapsigner_is_equal(self.uniffiClonePointer(),
         FfiConverterTypeTapSigner_lower(rhs),$0
     )
 })
@@ -809,6 +809,8 @@ extension Field: Equatable, Hashable {}
 
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -884,6 +886,8 @@ extension SatsCardState: Equatable, Hashable {}
 
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -951,6 +955,8 @@ public func FfiConverterTypeTapCard_lift(_ buf: RustBuffer) throws -> TapCard {
 public func FfiConverterTypeTapCard_lower(_ value: TapCard) -> RustBuffer {
     return FfiConverterTypeTapCard.lower(value)
 }
+
+
 
 
 
@@ -1091,6 +1097,8 @@ extension TapCardParseError: Foundation.LocalizedError {
 }
 
 
+
+
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
@@ -1165,9 +1173,11 @@ extension TapSignerState: Equatable, Hashable {}
 
 
 
+
+
 public func tapSignerPreviewNew(preview: Bool) -> TapSigner  {
     return try!  FfiConverterTypeTapSigner_lift(try! rustCall() {
-    uniffi_tap_card_fn_func_tap_signer_preview_new(
+    uniffi_cove_tap_card_fn_func_tap_signer_preview_new(
         FfiConverterBool.lower(preview),$0
     )
 })
@@ -1184,20 +1194,20 @@ private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 29
     // Get the scaffolding contract version by calling the into the dylib
-    let scaffolding_contract_version = ffi_tap_card_uniffi_contract_version()
+    let scaffolding_contract_version = ffi_cove_tap_card_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_tap_card_checksum_func_tap_signer_preview_new() != 53995) {
+    if (uniffi_cove_tap_card_checksum_func_tap_signer_preview_new() != 8348) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_tap_card_checksum_method_tapsigner_full_card_ident() != 40120) {
+    if (uniffi_cove_tap_card_checksum_method_tapsigner_full_card_ident() != 40678) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_tap_card_checksum_method_tapsigner_ident_file_name_prefix() != 12039) {
+    if (uniffi_cove_tap_card_checksum_method_tapsigner_ident_file_name_prefix() != 17503) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_tap_card_checksum_method_tapsigner_is_equal() != 8771) {
+    if (uniffi_cove_tap_card_checksum_method_tapsigner_is_equal() != 37467) {
         return InitializationResult.apiChecksumMismatch
     }
 
@@ -1206,7 +1216,7 @@ private let initializationResult: InitializationResult = {
 
 // Make the ensure init function public so that other modules which have external type references to
 // our types can call it.
-public func uniffiEnsureTapCardInitialized() {
+public func uniffiEnsureCoveTapCardInitialized() {
     switch initializationResult {
     case .ok:
         break

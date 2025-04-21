@@ -14,6 +14,7 @@ use crate::{
 use super::Error;
 
 // Define a custom type that implements redb::TypeName for BlockNumber
+// TODO: Move this to cove-types later
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct BlockNumber(pub u32);
 

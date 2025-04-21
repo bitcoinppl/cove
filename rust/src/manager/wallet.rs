@@ -284,7 +284,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor(default(backup = None))]
     pub fn try_new_from_tap_signer(
-        tap_signer: Arc<tap_card::TapSigner>,
+        tap_signer: Arc<cove_tap_card::TapSigner>,
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, Error> {

@@ -13,19 +13,17 @@ use bdk_chain::{
     tx_graph::CanonicalTx,
 };
 use bdk_wallet::bitcoin::{
-    OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
-    TxOut as BdkTxOut, Txid as BdkTxid,
+    ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn, TxOut as BdkTxOut,
 };
 use bip329::Labels;
-use bitcoin::hashes::{Hash as _, sha256d::Hash};
-use rand::Rng as _;
-use std::{borrow::Borrow, cmp::Ordering, sync::Arc};
+use std::{cmp::Ordering, sync::Arc};
 
 use crate::{
     database::{Database, wallet_data::WalletDataDb},
     fiat::FiatAmount,
-    wallet::metadata::WalletId,
 };
+// Import types from cove-types
+pub use cove_types::{OutPoint, TxId, WalletId};
 
 pub type Amount = amount::Amount;
 pub type SentAndReceived = sent_and_received::SentAndReceived;
@@ -78,24 +76,6 @@ pub struct UnconfirmedTransaction {
     pub labels: Labels,
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    derive_more::AsRef,
-    derive_more::Deref,
-    uniffi::Object,
-    serde::Serialize,
-    serde::Deserialize,
-)]
-#[repr(transparent)]
-pub struct TxId(pub BdkTxid);
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct TxOut {
     pub value: Amount,
@@ -108,21 +88,6 @@ pub struct TxIn {
     pub script_sig: ScriptBuf,
     pub sequence: Sequence,
     pub witness: Witness,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct OutPoint {
-    pub txid: TxId,
-    pub vout: u32,
-}
-
-impl TxId {
-    pub fn preview_new() -> Self {
-        let random_bytes = rand::rng().random::<[u8; 32]>();
-        let hash = *bitcoin::hashes::sha256d::Hash::from_bytes_ref(&random_bytes);
-
-        Self(BdkTxid::from_raw_hash(hash))
-    }
 }
 
 impl Transaction {
@@ -213,21 +178,6 @@ impl From<BdkTxOut> for TxOut {
     }
 }
 
-impl From<BdkOutPoint> for OutPoint {
-    fn from(out_point: BdkOutPoint) -> Self {
-        Self {
-            txid: out_point.txid.into(),
-            vout: out_point.vout,
-        }
-    }
-}
-
-impl From<BdkTxid> for TxId {
-    fn from(txid: BdkTxid) -> Self {
-        Self(txid)
-    }
-}
-
 impl From<BdkTxIn> for TxIn {
     fn from(tx_in: BdkTxIn) -> Self {
         Self {
@@ -299,87 +249,5 @@ impl Ord for Transaction {
 impl PartialOrd for Transaction {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-impl Borrow<[u8]> for TxId {
-    fn borrow(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
-
-// Implement Borrow in both directions
-impl Borrow<BdkTxid> for TxId {
-    fn borrow(&self) -> &BdkTxid {
-        &self.0
-    }
-}
-
-impl Borrow<TxId> for &BdkTxid {
-    fn borrow(&self) -> &TxId {
-        // SAFETY: Valid because:
-        // 1. TxId is #[repr(transparent)] around BdkTxid
-        // 2. We're casting from &BdkTxid to &TxId
-        unsafe { &*((*self) as *const BdkTxid as *const TxId) }
-    }
-}
-
-// MARK: redb serd/de impls
-impl redb::Key for TxId {
-    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
-        data1.cmp(data2)
-    }
-}
-
-impl redb::Value for TxId {
-    type SelfType<'a>
-        = TxId
-    where
-        Self: 'a;
-
-    type AsBytes<'a>
-        = &'a [u8]
-    where
-        Self: 'a;
-
-    fn fixed_width() -> Option<usize> {
-        None
-    }
-
-    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
-    where
-        Self: 'a,
-    {
-        let hash = Hash::from_slice(data).unwrap();
-        let txid = bitcoin::Txid::from_raw_hash(hash);
-
-        Self(txid)
-    }
-
-    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
-    where
-        Self: 'a,
-        Self: 'b,
-    {
-        value.0.as_ref()
-    }
-
-    fn type_name() -> redb::TypeName {
-        redb::TypeName::new(std::any::type_name::<TxId>())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_txid_borrow() {
-        let txid = TxId::preview_new();
-        let txid_borrow: &bitcoin::Txid = txid.borrow();
-        assert_eq!(txid_borrow, &txid.0);
-
-        let txid_borrow: &TxId = txid.borrow();
-        assert_eq!(txid_borrow, &txid);
     }
 }

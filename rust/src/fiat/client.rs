@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
 use crate::{database::Database, fiat::FiatCurrency, transaction::Amount};
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 
 use super::historical::HistoricalPricesResponse;
 

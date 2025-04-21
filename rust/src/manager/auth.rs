@@ -1,7 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use crossbeam::channel::{Receiver, Sender};
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};

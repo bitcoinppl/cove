@@ -135,19 +135,6 @@ impl BitcoinTransaction {
 }
 
 #[uniffi::export]
-impl TxId {
-    #[uniffi::method]
-    pub fn as_hash_string(&self) -> String {
-        self.0.to_raw_hash().to_string()
-    }
-
-    #[uniffi::method]
-    pub fn is_equal(&self, other: Arc<TxId>) -> bool {
-        self.0 == other.0
-    }
-}
-
-#[uniffi::export]
 impl ConfirmedTransaction {
     #[uniffi::method]
     pub fn id(&self) -> TxId {

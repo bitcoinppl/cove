@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ImportWalletManagerReconcileMessage {

@@ -5,8 +5,6 @@ use std::sync::Arc;
 use bitcoin::secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 
-uniffi::setup_scaffolding!();
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
 pub enum TapSignerState {
     Sealed,
@@ -14,14 +12,14 @@ pub enum TapSignerState {
     Error,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
 pub enum SatsCardState {
     Sealed,
     Unsealed,
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Record)]
 pub struct SatsCard {
     pub state: SatsCardState,
     pub slot_number: u32,
@@ -30,7 +28,7 @@ pub struct SatsCard {
     pub signature: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, uniffi::Object)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Object)]
 pub struct TapSigner {
     pub state: TapSignerState,
     pub card_ident: String,
@@ -39,7 +37,7 @@ pub struct TapSigner {
     pub pubkey: Arc<PublicKey>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum)]
 pub enum TapCard {
     SatsCard(SatsCard),
     TapSigner(Arc<TapSigner>),
@@ -127,3 +125,5 @@ pub fn tap_signer_preview_new(preview: bool) -> TapSigner {
             pubkey: Arc::new(PublicKey::from_slice(&[0u8; 33]).unwrap()),
         }
 }
+
+uniffi::setup_scaffolding!();

@@ -20,7 +20,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use crossbeam::channel::{Receiver, Sender};
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
@@ -260,7 +260,7 @@ impl FfiApp {
     #[uniffi::method]
     pub fn find_tap_signer_wallet(
         &self,
-        tap_signer: &tap_card::TapSigner,
+        tap_signer: &cove_tap_card::TapSigner,
     ) -> Option<WalletMetadata> {
         let ident = &tap_signer.card_ident;
         let network = Database::global().global_config.selected_network();
@@ -274,7 +274,7 @@ impl FfiApp {
 
     /// Get the backup for the tap signer
     #[uniffi::method]
-    pub fn get_tap_signer_backup(&self, tap_signer: &tap_card::TapSigner) -> Option<Vec<u8>> {
+    pub fn get_tap_signer_backup(&self, tap_signer: &cove_tap_card::TapSigner) -> Option<Vec<u8>> {
         let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
             debug!(
                 "Unable to find wallet with card ident {}",
@@ -288,7 +288,7 @@ impl FfiApp {
 
     /// Save the backup for the tap signer in the keychain
     #[uniffi::method]
-    pub fn save_tap_signer_backup(&self, tap_signer: &tap_card::TapSigner, backup: &[u8]) -> bool {
+    pub fn save_tap_signer_backup(&self, tap_signer: &cove_tap_card::TapSigner, backup: &[u8]) -> bool {
         let run = || {
             let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
                 debug!(

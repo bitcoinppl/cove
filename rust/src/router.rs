@@ -11,7 +11,7 @@ use crate::{
 };
 
 use derive_more::From;
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
@@ -110,7 +110,7 @@ pub struct SendRouteConfirmArgs {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct TapSignerNewPinArgs {
-    pub tap_signer: Arc<tap_card::TapSigner>,
+    pub tap_signer: Arc<cove_tap_card::TapSigner>,
     pub starting_pin: String,
     pub chain_code: Option<String>,
     pub action: TapSignerPinAction,
@@ -118,7 +118,7 @@ pub struct TapSignerNewPinArgs {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct TapSignerConfirmPinArgs {
-    pub tap_signer: Arc<tap_card::TapSigner>,
+    pub tap_signer: Arc<cove_tap_card::TapSigner>,
     pub starting_pin: String,
     pub new_pin: String,
     pub chain_code: Option<String>,
@@ -128,24 +128,24 @@ pub struct TapSignerConfirmPinArgs {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum TapSignerRoute {
     // setup routes
-    InitSelect(Arc<tap_card::TapSigner>),
-    InitAdvanced(Arc<tap_card::TapSigner>),
+    InitSelect(Arc<cove_tap_card::TapSigner>),
+    InitAdvanced(Arc<cove_tap_card::TapSigner>),
     StartingPin {
-        tap_signer: Arc<tap_card::TapSigner>,
+        tap_signer: Arc<cove_tap_card::TapSigner>,
         chain_code: Option<String>,
     },
     NewPin(TapSignerNewPinArgs),
     ConfirmPin(TapSignerConfirmPinArgs),
-    SetupSuccess(Arc<tap_card::TapSigner>, TapSignerSetupComplete),
-    SetupRetry(Arc<tap_card::TapSigner>, SetupCmdResponse),
+    SetupSuccess(Arc<cove_tap_card::TapSigner>, TapSignerSetupComplete),
+    SetupRetry(Arc<cove_tap_card::TapSigner>, SetupCmdResponse),
 
     // import routes
-    ImportSuccess(Arc<tap_card::TapSigner>, DeriveInfo),
-    ImportRetry(Arc<tap_card::TapSigner>),
+    ImportSuccess(Arc<cove_tap_card::TapSigner>, DeriveInfo),
+    ImportRetry(Arc<cove_tap_card::TapSigner>),
 
     // shared routes
     EnterPin {
-        tap_signer: Arc<tap_card::TapSigner>,
+        tap_signer: Arc<cove_tap_card::TapSigner>,
         action: AfterPinAction,
     },
 }

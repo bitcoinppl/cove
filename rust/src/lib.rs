@@ -45,9 +45,10 @@ mod wallet_scanner;
 mod word_validator;
 mod xpub;
 
-::tap_card::uniffi_reexport_scaffolding!();
-::util::uniffi_reexport_scaffolding!();
+::cove_tap_card::uniffi_reexport_scaffolding!();
+::cove_util::uniffi_reexport_scaffolding!();
 ::rust_cktap::uniffi_reexport_scaffolding!();
 ::cove_nfc::uniffi_reexport_scaffolding!();
+::cove_types::uniffi_reexport_scaffolding!();
 
 uniffi::setup_scaffolding!();

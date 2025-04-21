@@ -1,5 +1,5 @@
 use crate::mnemonic::NumberOfBip39Words;
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 
 #[uniffi::export(with_foreign)]
 pub trait AutoComplete: Send + Sync + std::fmt::Debug + 'static {

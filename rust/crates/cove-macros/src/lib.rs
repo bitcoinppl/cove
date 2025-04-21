@@ -50,6 +50,12 @@ macro_rules! new_type {
             }
         }
 
+        impl ::redb::Key for $name {
+            fn compare(data1: &[u8], data2: &[u8]) -> ::std::cmp::Ordering {
+                data1.cmp(data2)
+            }
+        }
+
         impl ::redb::Value for $name {
             type SelfType<'a> = $name;
 

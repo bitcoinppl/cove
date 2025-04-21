@@ -7,8 +7,8 @@ import Foundation
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
-#if canImport(utilFFI)
-import utilFFI
+#if canImport(cove_utilFFI)
+import cove_utilFFI
 #endif
 
 fileprivate extension RustBuffer {
@@ -25,13 +25,13 @@ fileprivate extension RustBuffer {
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_util_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+        try! rustCall { ffi_cove_util_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
     func deallocate() {
-        try! rustCall { ffi_util_rustbuffer_free(self, $0) }
+        try! rustCall { ffi_cove_util_rustbuffer_free(self, $0) }
     }
 }
 
@@ -281,7 +281,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureUtilInitialized()
+    uniffiEnsureCoveUtilInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -505,27 +505,27 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 }
 public func generateRandomChainCode() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_util_fn_func_generate_random_chain_code($0
+    uniffi_cove_util_fn_func_generate_random_chain_code($0
     )
 })
 }
 public func hexDecode(hex: String) -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
-    uniffi_util_fn_func_hex_decode(
+    uniffi_cove_util_fn_func_hex_decode(
         FfiConverterString.lower(hex),$0
     )
 })
 }
 public func hexEncode(bytes: Data) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_util_fn_func_hex_encode(
+    uniffi_cove_util_fn_func_hex_encode(
         FfiConverterData.lower(bytes),$0
     )
 })
 }
 public func hexToUtf8String(hex: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_util_fn_func_hex_to_utf8_string(
+    uniffi_cove_util_fn_func_hex_to_utf8_string(
         FfiConverterString.lower(hex),$0
     )
 })
@@ -542,20 +542,20 @@ private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 29
     // Get the scaffolding contract version by calling the into the dylib
-    let scaffolding_contract_version = ffi_util_uniffi_contract_version()
+    let scaffolding_contract_version = ffi_cove_util_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_util_checksum_func_generate_random_chain_code() != 29599) {
+    if (uniffi_cove_util_checksum_func_generate_random_chain_code() != 48326) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_util_checksum_func_hex_decode() != 19589) {
+    if (uniffi_cove_util_checksum_func_hex_decode() != 30938) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_util_checksum_func_hex_encode() != 20696) {
+    if (uniffi_cove_util_checksum_func_hex_encode() != 50472) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_util_checksum_func_hex_to_utf8_string() != 36419) {
+    if (uniffi_cove_util_checksum_func_hex_to_utf8_string() != 7316) {
         return InitializationResult.apiChecksumMismatch
     }
 
@@ -564,7 +564,7 @@ private let initializationResult: InitializationResult = {
 
 // Make the ensure init function public so that other modules which have external type references to
 // our types can call it.
-public func uniffiEnsureUtilInitialized() {
+public func uniffiEnsureCoveUtilInitialized() {
     switch initializationResult {
     case .ok:
         break
