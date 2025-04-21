@@ -31,7 +31,7 @@ clean:
 
 fmt:
     cd rust && cargo fmt --all
-    swiftformat . --swiftversion 6 --exclude ios/Cove/Cove.swift
+    swiftformat . --swiftversion 6 
 
 clippy *flags="":
     cd rust && cargo clippy {{flags}}
@@ -49,7 +49,7 @@ ci:
     just test
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
-    swiftformat --lint . --swiftversion 6 --exclude ios/Cove/Cove.swift
+    swiftformat --lint . --swiftversion 6 
 
 xcode-reset:
     killAll Xcode || true
