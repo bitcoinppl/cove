@@ -4,6 +4,10 @@ set -o pipefail
 
 cd rust
 
+################################################################################
+############################### ARG PARSING ####################################
+################################################################################
+
 BUILD_TYPE=$1
 DEVICE=$2
 SIGN=$3
@@ -36,22 +40,11 @@ else
 fi 
 
 
-## 1. headers, modulemap, and swift sources
-OUTPUT_DIR="./bindings"
-DYLIB_PATH="./target/debug/libcove.dylib"
-mkdir -p "$OUTPUT_DIR" 
+################################################################################
+############################### BUILDING ####################################
+################################################################################
 
-rustup target add aarch64-apple-ios-sim
-cargo build --target=aarch64-apple-ios-sim 
-
-rm -rf $OUTPUT_DIR || true
-cargo run --bin uniffi-bindgen -- "$DYLIB_PATH" "$OUTPUT_DIR" \
-    --swift-sources --headers \
-    --modulemap --module-name cove_core_ffi \
-    --modulemap-filename module.modulemap
-
-
-## 2. static library for iOS and iOS simulator
+## 1. build static binary for iOS and iOS simulator
 LIBRARY_FLAGS=""
 echo "Build for targets: ${TARGETS[@]}"
 for TARGET in ${TARGETS[@]}; do
@@ -62,7 +55,20 @@ for TARGET in ${TARGETS[@]}; do
     cargo build --target=$TARGET $BUILD_FLAG
 done
 
-# 3. create XCFramework
+## 2. headers, modulemap, and swift sources
+OUTPUT_DIR="./bindings"
+STATIC_LIB_PATH="./target/${TARGETS[0]}/$BUILD_TYPE/libcove.a"
+mkdir -p "$OUTPUT_DIR" 
+
+echo "Running uniffi-bindgen for ${TARGETS[0]}, outputting to $OUTPUT_DIR"
+rm -rf $OUTPUT_DIR || true
+cargo run --bin uniffi-bindgen -- "$STATIC_LIB_PATH" "$OUTPUT_DIR" \
+    --swift-sources --headers \
+    --modulemap --module-name cove_core_ffi \
+    --modulemap-filename module.modulemap
+
+
+## 3. create XCFramework
 SPM_PACKAGE="../ios/CoveCore/"
 XCFRAMEWORK_OUTPUT="$SPM_PACKAGE/Sources/cove_core_ffi.xcframework"
 
@@ -71,6 +77,8 @@ xcodebuild -create-xcframework \
         $LIBRARY_FLAGS \
         -output "$XCFRAMEWORK_OUTPUT"
 
-# 4. copy swift sources
+## 4. copy swift sources to SPM
 cp -r bindings/*.swift $SPM_PACKAGE/Sources/CoveCore/
+
+## extra: remove uniffi generated Package.swift file
 rm -rf $SPM_PACKAGE/Sources/CoveCore/Package.swift
