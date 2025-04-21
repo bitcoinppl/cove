@@ -28199,6 +28199,13 @@ public func isValidChainCode(chainCode: String) -> Bool  {
     )
 })
 }
+public func multiFormatTryFromNfcMessage(nfcMessage: NfcMessage)throws  -> MultiFormat  {
+    return try  FfiConverterTypeMultiFormat_lift(try rustCallWithError(FfiConverterTypeMultiFormatError_lift) {
+    uniffi_cove_fn_func_multi_format_try_from_nfc_message(
+        FfiConverterTypeNfcMessage_lower(nfcMessage),$0
+    )
+})
+}
 public func networkToString(network: Network) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_network_to_string(
@@ -28544,6 +28551,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_is_valid_chain_code() != 48052) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_multi_format_try_from_nfc_message() != 9847) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_network_to_string() != 60660) {
@@ -29885,8 +29895,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitPendingWalletManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureTapCardInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

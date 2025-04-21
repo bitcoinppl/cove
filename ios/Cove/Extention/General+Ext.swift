@@ -127,6 +127,10 @@ extension NfcMessage? {
 }
 
 extension NfcMessage: Equatable {
+    public func tryIntoMultiFormat() throws -> MultiFormat {
+        try multiFormatTryFromNfcMessage(nfcMessage: self)
+    }
+
     public static func == (lhs: NfcMessage, rhs: NfcMessage) -> Bool {
         nfcMessageIsEqual(lhs: lhs, rhs: rhs)
     }
