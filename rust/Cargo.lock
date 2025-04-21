@@ -692,8 +692,9 @@ dependencies = [
  "bitvec",
  "cbor4ii",
  "chacha20poly1305",
+ "cove-nfc",
+ "cove-tap-card",
  "cove-types",
- "cove_nfc",
  "crossbeam",
  "data-encoding",
  "derive_more",
@@ -724,7 +725,6 @@ dependencies = [
  "sha2",
  "strum",
  "tap",
- "tap_card",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
@@ -738,6 +738,38 @@ dependencies = [
  "winnow",
  "zerocopy 0.8.24",
  "zeroize",
+]
+
+[[package]]
+name = "cove-nfc"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "macros",
+ "once_cell",
+ "parking_lot",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.12",
+ "tracing",
+ "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
+ "util",
+ "winnow",
+]
+
+[[package]]
+name = "cove-tap-card"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "data-encoding",
+ "derive_more",
+ "hex",
+ "serde",
+ "serde_urlencoded",
+ "thiserror 2.0.12",
+ "tracing",
+ "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
 ]
 
 [[package]]
@@ -755,23 +787,6 @@ dependencies = [
  "serde",
  "thiserror 2.0.12",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
-]
-
-[[package]]
-name = "cove_nfc"
-version = "0.1.0"
-dependencies = [
- "hex",
- "macros",
- "once_cell",
- "parking_lot",
- "serde_json",
- "sha2",
- "thiserror 2.0.12",
- "tracing",
- "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
- "util",
- "winnow",
 ]
 
 [[package]]
@@ -3026,21 +3041,6 @@ name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
-
-[[package]]
-name = "tap_card"
-version = "0.1.0"
-dependencies = [
- "bitcoin",
- "data-encoding",
- "derive_more",
- "hex",
- "serde",
- "serde_urlencoded",
- "thiserror 2.0.12",
- "tracing",
- "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
-]
 
 [[package]]
 name = "tempfile"

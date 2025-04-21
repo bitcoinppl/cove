@@ -25,9 +25,9 @@ pub enum MultiFormat {
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
     /// TAPSIGNER has not been initialized yet
-    TapSigner(Arc<tap_card::TapSigner>),
+    TapSigner(Arc<cove_tap_card::TapSigner>),
     /// TAPSIGNER has not been initialized yet
-    TapSignerInit(Arc<tap_card::TapSigner>),
+    TapSignerInit(Arc<cove_tap_card::TapSigner>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -47,7 +47,7 @@ pub enum MultiFormatError {
     UrFormatNotSupported,
 
     #[error("Invalid TapSigner {0}")]
-    InvalidTapSigner(tap_card::ffi::TapCardParseError),
+    InvalidTapSigner(cove_tap_card::ffi::TapCardParseError),
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
@@ -130,15 +130,15 @@ impl MultiFormat {
         }
 
         if string.contains("tapsigner.com/start") {
-            let tap_card = tap_card::TapCard::parse(string)
+            let tap_card = cove_tap_card::TapCard::parse(string)
                 .map_err(|e| MultiFormatError::InvalidTapSigner(e.into()))?;
 
             match tap_card {
-                tap_card::TapCard::TapSigner(card) => {
+                cove_tap_card::TapCard::TapSigner(card) => {
                     return Ok(MultiFormat::TapSigner(card));
                 }
 
-                tap_card::TapCard::SatsCard(_card) => {
+                cove_tap_card::TapCard::SatsCard(_card) => {
                     unreachable!("tap card should not be a sats card");
                 }
             }
@@ -204,9 +204,9 @@ fn describe_multi_format_error(error: MultiFormatError) -> String {
 
 pub struct Bip329Labels(pub bip329::Labels);
 
-impl From<tap_card::TapSigner> for MultiFormat {
-    fn from(tap_signer: tap_card::TapSigner) -> Self {
-        if tap_signer.state == tap_card::TapSignerState::Unused {
+impl From<cove_tap_card::TapSigner> for MultiFormat {
+    fn from(tap_signer: cove_tap_card::TapSigner) -> Self {
+        if tap_signer.state == cove_tap_card::TapSignerState::Unused {
             Self::TapSignerInit(Arc::new(tap_signer))
         } else {
             Self::TapSigner(Arc::new(tap_signer))

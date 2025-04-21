@@ -57,8 +57,8 @@ serde = { version = "1.0", features = ["derive"] }
 # cove crates
 macros = { path = "./crates/macros" }
 util = { path = "./crates/util" }
-cove_nfc = { path = "./crates/cove-nfc" }
-tap_card = { path = "./crates/tap-card" }
+cove-nfc = { path = "./crates/cove-nfc" }
+cove-tap-card = { path = "./crates/cove-tap-card" }
 cove-types = { path = "./crates/cove-types" }
 
 # bdk / bitcoin

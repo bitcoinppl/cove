@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
 use crate::transaction::Unit;
 use crate::{database::Database, network::Network};
-use tap_card::TapSigner;
+use cove_tap_card::TapSigner;
 
 pub use cove_types::{BlockSizeLast, WalletId};
 

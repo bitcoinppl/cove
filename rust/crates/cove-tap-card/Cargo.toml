@@ -1,5 +1,5 @@
 [package]
-name = "tap_card"
+name = "cove-tap-card"
 version = "0.1.0"
 edition = "2024"
 
@@ -20,3 +20,4 @@ derive_more = { version = "2.0", features = ["display"] }
 
 # Uniffi for FFI
 uniffi = { workspace = true, features = ["tokio"] }
+
