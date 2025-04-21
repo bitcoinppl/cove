@@ -21,7 +21,7 @@ tracing = { workspace = true }
 parking_lot = { workspace = true }
 
 # parsing
-winnow = { workspace = true }
+winnow = "0.7"
 
 # hashing
 sha2 = { workspace = true }
@@ -30,3 +30,4 @@ hex = { workspace = true }
 [dev-dependencies]
 serde_json = "1.0"
 once_cell = "1.19.0"
+

@@ -21,7 +21,7 @@ tracing = "0.1"
 tracing-log = "0.2"
 
 # sync
-parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
+parking_lot = { workspace = true, features = ["deadlock_detection"] }
 
 # parsing
 winnow = { version = "0.7", features = ["simd"] }

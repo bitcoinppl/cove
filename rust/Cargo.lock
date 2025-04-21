@@ -802,7 +802,9 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "macros",
+ "once_cell",
  "parking_lot",
+ "serde_json",
  "sha2",
  "thiserror 2.0.12",
  "tracing",
