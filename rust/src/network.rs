@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
     Hash,
     Eq,
     PartialEq,
+    Ord,
+    PartialOrd,
     uniffi::Enum,
     derive_more::Display,
     strum::EnumIter,
@@ -32,6 +34,29 @@ fn network_to_string(network: Network) -> String {
 #[uniffi::export]
 fn all_networks() -> Vec<Network> {
     Network::iter().collect()
+}
+
+impl From<Network> for u8 {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => 0,
+            Network::Testnet => 1,
+            Network::Signet => 2,
+        }
+    }
+}
+
+impl TryFrom<u8> for Network {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Network::Bitcoin),
+            1 => Ok(Network::Testnet),
+            2 => Ok(Network::Signet),
+            _ => Err(format!("Unknown network: {}", value)),
+        }
+    }
 }
 
 impl TryFrom<&str> for Network {

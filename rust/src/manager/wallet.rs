@@ -25,6 +25,7 @@ use crate::{
     label_manager::LabelManager,
     multi_format::tap_card::TapSigner,
     psbt::Psbt,
+    reporting::HistoricalFiatPriceReport,
     router::Route,
     tap_card::tap_signer_reader::DeriveInfo,
     task::{self, spawn_actor},
@@ -199,6 +200,12 @@ pub enum WalletManagerError {
 
     #[error("Error finalizing PSBT: {0}")]
     PsbtFinalizeError(String),
+
+    #[error("Unable to get historical prices for transactions: {0}")]
+    GetHistoricalPricesError(String),
+
+    #[error("Unable to create report CSV: {0}")]
+    CsvCreationError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -327,6 +334,23 @@ impl RustWalletManager {
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
         Ok(fees.into())
+    }
+
+    #[uniffi::method]
+    pub async fn create_transactions_with_fiat_export(&self) -> Result<String, Error> {
+        let fiat_currency = Database::global()
+            .global_config
+            .fiat_currency()
+            .unwrap_or_default();
+
+        let txns_with_prices = call!(self.actor.txns_with_prices()).await.unwrap().unwrap();
+
+        let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
+        let csv = report
+            .create_csv()
+            .map_err(|e| Error::CsvCreationError(e.to_string()))?;
+
+        Ok(csv.into_string())
     }
 
     #[uniffi::method]

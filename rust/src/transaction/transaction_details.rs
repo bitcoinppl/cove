@@ -298,9 +298,8 @@ impl TransactionDetails {
 
         // get timezone
         let timezone_string = Device::global().timezone();
-        // let timezone = Tz::from_str(&timezone_string).ok()?;
 
-        // Create a Timestamp from Unix seconds
+        // create a Timestamp from Unix seconds
         let ts = Timestamp::from_second(confirm_time).ok()?;
 
         // Convert to local time zone

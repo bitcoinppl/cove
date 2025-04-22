@@ -1,8 +1,4 @@
-use std::cmp::Ordering;
-
 use crate::fiat::{FiatCurrency, historical::HistoricalPrice};
-
-use super::BlockNumber;
 
 /// A space-efficient version of HistoricalPrice where only USD is required
 /// and other currencies are optional to save space when they aren't available
@@ -136,7 +132,7 @@ impl HistoricalPriceRecord {
     }
 
     /// Convert to bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         let flag = CurrencyFlag::from(*self).bits();
         let mut bytes = Vec::with_capacity(8 + 4 + (6 * 4));
 
@@ -222,41 +218,6 @@ impl From<HistoricalPriceRecord> for CurrencyFlag {
     }
 }
 
-impl redb::Key for BlockNumber {
-    fn compare(data1: &[u8], data2: &[u8]) -> Ordering {
-        data1.cmp(data2)
-    }
-}
-
-impl redb::Value for BlockNumber {
-    type SelfType<'a> = BlockNumber;
-    type AsBytes<'a> = [u8; 4];
-
-    fn fixed_width() -> Option<usize> {
-        Some(4)
-    }
-
-    fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
-    where
-        Self: 'a,
-    {
-        let block_number = u32::from_le_bytes(data.try_into().unwrap());
-        Self(block_number)
-    }
-
-    fn as_bytes<'a, 'b: 'a>(value: &'a Self::SelfType<'b>) -> Self::AsBytes<'a>
-    where
-        Self: 'a,
-        Self: 'b,
-    {
-        value.0.to_le_bytes()
-    }
-
-    fn type_name() -> redb::TypeName {
-        redb::TypeName::new(std::any::type_name::<BlockNumber>())
-    }
-}
-
 impl redb::Value for HistoricalPriceRecord {
     type SelfType<'a> = HistoricalPriceRecord;
     type AsBytes<'a> = Vec<u8>;
@@ -277,7 +238,7 @@ impl redb::Value for HistoricalPriceRecord {
         Self: 'a,
         Self: 'b,
     {
-        value.to_bytes()
+        value.as_bytes()
     }
 
     fn type_name() -> redb::TypeName {
@@ -395,7 +356,7 @@ mod tests {
             jpy: Some(1.6),
         };
 
-        let bytes = record.to_bytes();
+        let bytes = record.as_bytes();
         let parsed = HistoricalPriceRecord::try_from_bytes(&bytes).expect("roundtrip failed");
         assert_eq!(record, parsed);
 
@@ -410,7 +371,7 @@ mod tests {
             jpy: None,
         };
 
-        let bytes = record.to_bytes();
+        let bytes = record.as_bytes();
         let parsed = HistoricalPriceRecord::try_from_bytes(&bytes).expect("roundtrip failed");
         assert_eq!(record, parsed);
 
@@ -425,7 +386,7 @@ mod tests {
             jpy: None,
         };
 
-        let bytes = record.to_bytes();
+        let bytes = record.as_bytes();
         let parsed = HistoricalPriceRecord::try_from_bytes(&bytes).expect("roundtrip failed");
         assert_eq!(record, parsed);
     }
@@ -436,7 +397,7 @@ mod tests {
 
         for _ in 0..100 {
             let rec = random_record(&mut rng);
-            let bytes = rec.to_bytes();
+            let bytes = rec.as_bytes();
             let parsed = HistoricalPriceRecord::try_from_bytes(&bytes).expect("roundtrip failed");
 
             assert_eq!(rec.time, parsed.time, "time mismatch");
