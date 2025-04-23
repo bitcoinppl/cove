@@ -19,7 +19,7 @@ use crate::{
     device::Device,
     wallet::{Address, address},
 };
-use cove_common::format::NumberFormatter as _;
+use cove_util::format::NumberFormatter as _;
 
 use super::{Amount, FeeRate, SentAndReceived, TxId};
 

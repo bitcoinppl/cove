@@ -759,14 +759,10 @@ dependencies = [
 name = "cove-common"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "bitcoin",
- "chacha20poly1305",
- "cove-macros",
  "dirs",
  "eyre",
  "memchr",
- "numfmt",
  "once_cell",
  "redb",
  "serde",
@@ -828,6 +824,7 @@ dependencies = [
  "rand 0.9.1",
  "redb",
  "serde",
+ "serde_json",
  "strum",
  "thiserror 2.0.12",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
@@ -837,9 +834,15 @@ dependencies = [
 name = "cove-util"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bitcoin",
+ "chacha20poly1305",
+ "cove-macros",
  "hex",
+ "memchr",
+ "numfmt",
  "rand 0.9.1",
+ "thiserror 2.0.12",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
 ]
 

@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::Error;
-use cove_common::redb::Json;
+use cove_types::redb::Json;
 
 pub const TABLE: TableDefinition<&'static str, Json<GlobalCacheData>> =
     TableDefinition::new("global_cache");

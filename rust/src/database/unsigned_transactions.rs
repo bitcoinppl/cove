@@ -7,7 +7,7 @@ use crate::{
     transaction::TxId,
     wallet::{confirm::ConfirmDetails, metadata::WalletId},
 };
-use cove_common::redb::Json;
+use cove_types::redb::Json;
 
 pub const MAIN_TABLE: TableDefinition<TxId, Json<UnsignedTransactionRecord>> =
     TableDefinition::new("unsigned_transactions");

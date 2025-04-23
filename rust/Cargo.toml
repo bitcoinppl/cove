@@ -53,6 +53,9 @@ bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-featu
 # fast hashmap
 ahash = "0.8.11"
 
+# fmt currency
+numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
+
 # num 
 num-bigint = "0.4"
 
@@ -192,6 +195,9 @@ uniffi = { workspace = true, features = ["tokio"] }
 num-bigint = { workspace = true }
 bitvec = "1.0"
 
+# fmt
+numfmt = { workspace = true }
+
 # url parsing
 url = "2.5"
 
@@ -200,9 +206,6 @@ chacha20poly1305 = { workspace = true }
 
 # fast hashmap
 ahash = { workspace = true }
-
-# fmt currency
-numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
 
 # http client
 reqwest = { workspace = true, features = ["json"] }

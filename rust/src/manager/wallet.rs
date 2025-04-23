@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
-use cove_common::format::NumberFormatter as _;
+use cove_util::format::NumberFormatter as _;
 
 use crate::{
     app::FfiApp,

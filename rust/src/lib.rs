@@ -49,6 +49,6 @@ mod xpub;
 uniffi::setup_scaffolding!();
 
 // re-export types from crates that are are used
-use cove_common::color;
 use cove_common::logging;
+use cove_types::color;
 use cove_types::network;

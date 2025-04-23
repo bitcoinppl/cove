@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
 
 use crate::wallet::{WalletAddressType, metadata::WalletId};
-use cove_common::{consts::WALLET_DATA_DIR, redb::Json};
+use cove_common::consts::WALLET_DATA_DIR;
+use cove_types::redb::Json;
 
 use ahash::AHashMap as HashMap;
 

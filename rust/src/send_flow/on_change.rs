@@ -6,7 +6,7 @@ use crate::{
     transaction::Amount,
 };
 
-use cove_common::format::NumberFormatter as _;
+use cove_util::format::NumberFormatter as _;
 
 /// Handles the logic for what happens when the fiat amount onChange is called
 

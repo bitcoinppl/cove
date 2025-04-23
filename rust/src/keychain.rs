@@ -9,7 +9,7 @@ use once_cell::sync::OnceCell;
 use tracing::warn;
 
 use crate::wallet::metadata::WalletId;
-use cove_common::encryption::Cryptor;
+use cove_util::encryption::Cryptor;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum KeychainError {

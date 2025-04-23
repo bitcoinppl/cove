@@ -7,7 +7,9 @@ mod outpoint;
 mod txid;
 mod wallet_id;
 
+pub mod color;
 pub mod network;
+pub mod redb;
 
 // export the types
 pub use address_index::AddressIndex;
