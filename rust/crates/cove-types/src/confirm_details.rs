@@ -40,7 +40,7 @@ pub enum ConfirmDetailsError {
 
 impl ConfirmDetails {
     pub fn id(&self) -> TxId {
-        self.txid.clone()
+        self.txid
     }
 
     pub fn id_hash(&self) -> String {

@@ -106,36 +106,6 @@ impl FiatClient {
         Ok(historical_prices)
     }
 
-    /// Get historical price for Bitcoin in the requested currency at a given timestamp
-    pub async fn historical_price_for_currency(
-        &self,
-        timestamp: u64,
-        currency: FiatCurrency,
-    ) -> Result<Option<f32>, reqwest::Error> {
-        let historical_data = self.historical_prices(timestamp).await?;
-        Ok(historical_data.for_currency(currency))
-    }
-
-    /// Convert the BTC amount to the requested currency using a historical price
-    pub async fn historical_value_in_currency(
-        &self,
-        amount: Amount,
-        currency: FiatCurrency,
-        timestamp: u64,
-    ) -> Result<Option<f64>, reqwest::Error> {
-        let btc = amount.as_btc();
-        let price = self
-            .historical_price_for_currency(timestamp, currency)
-            .await?;
-
-        if price.is_none() {
-            return Ok(None);
-        }
-
-        let value_in_currency = btc * price.expect("price is some") as f64;
-        Ok(Some(value_in_currency))
-    }
-
     /// Get the current price for a currency
     pub async fn prices(&self) -> Result<PriceResponse, reqwest::Error> {
         if let Some(prices) = PRICES.load().as_ref() {
@@ -350,23 +320,14 @@ mod tests {
         let timestamp = Timestamp::now().as_second() as u64 - (12 * 60 * 60);
 
         // Test for USD
-        let price_usd = fiat_client
-            .historical_price_for_currency(timestamp, FiatCurrency::Usd)
-            .await
-            .unwrap();
+        let historical_prices = fiat_client.historical_prices(timestamp).await.unwrap();
+        let historical_prices = historical_prices.prices.first().unwrap();
 
-        assert!(price_usd.is_some());
-        let price_usd = price_usd.unwrap();
+        let price_usd = historical_prices.usd;
         assert!(price_usd > 0.0);
 
         // Test for EUR
-        let price_eur = fiat_client
-            .historical_price_for_currency(timestamp, FiatCurrency::Eur)
-            .await
-            .unwrap();
-
-        assert!(price_eur.is_some());
-        let price_eur = price_eur.unwrap();
+        let price_eur = historical_prices.eur;
         assert!(price_eur > 0.0);
     }
 }
