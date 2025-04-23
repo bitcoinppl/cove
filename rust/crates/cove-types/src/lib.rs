@@ -3,7 +3,6 @@ uniffi::setup_scaffolding!();
 mod address_index;
 mod block_size;
 mod chain_position;
-mod outpoint;
 mod wallet_id;
 
 pub mod address;
@@ -27,6 +26,9 @@ pub use confirm::{
 
 pub use chain_position::ChainPosition;
 pub use network::Network;
-pub use outpoint::OutPoint;
-pub use transaction::txid::TxId;
 pub use wallet_id::WalletId;
+
+pub use transaction::out_point::OutPoint;
+pub use transaction::tx_id::TxId;
+pub use transaction::tx_in::TxIn;
+pub use transaction::tx_out::TxOut;
