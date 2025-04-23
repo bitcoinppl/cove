@@ -3,9 +3,10 @@ use std::sync::Arc;
 use crate::{
     converter::{Converter, ConverterError},
     fiat::{FiatCurrency, client::PriceResponse},
-    format::NumberFormatter as _,
     transaction::Amount,
 };
+
+use cove_util::format::NumberFormatter as _;
 
 /// Handles the logic for what happens when the fiat amount onChange is called
 

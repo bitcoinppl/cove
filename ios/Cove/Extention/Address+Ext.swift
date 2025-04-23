@@ -5,7 +5,15 @@
 //  Created by Praveen Perera on 11/7/24.
 //
 
-extension Address: Hashable {
+import CoveCore
+
+extension Address: @retroactive Equatable {
+    public static func == (lhs: Address, rhs: Address) -> Bool {
+        addressIsEqual(lhs: lhs, rhs: rhs)
+    }
+}
+
+extension Address: @retroactive Hashable {
     static func checkValid(_ address: String, network: Network? = nil) -> Result<Void, AddressError> {
         if address.isEmpty { return .failure(AddressError.EmptyAddress) }
 

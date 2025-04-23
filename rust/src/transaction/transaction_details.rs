@@ -11,7 +11,6 @@ use numfmt::{Formatter, Precision};
 use crate::{
     database::Database,
     fiat::{FiatCurrency, client::FIAT_CLIENT},
-    format::NumberFormatter as _,
     task,
     transaction::{TransactionDirection, Unit},
 };
@@ -20,6 +19,7 @@ use crate::{
     device::Device,
     wallet::{Address, address},
 };
+use cove_util::format::NumberFormatter as _;
 
 use super::{Amount, FeeRate, SentAndReceived, TxId};
 

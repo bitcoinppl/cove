@@ -9,13 +9,13 @@ use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
     bdk_store::BdkStore,
-    consts::GAP_LIMIT,
+    // moved to cove-common
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     keys::{Descriptor, Descriptors},
     mnemonic::MnemonicExt as _,
-    multi_format::{MultiFormatError, tap_card::TapSigner},
-    network::Network,
+    multi_format::MultiFormatError,
+    // moved to cove-types
     tap_card::tap_signer_reader::DeriveInfo,
     xpub::{self, XpubError},
 };
@@ -23,6 +23,8 @@ use balance::Balance;
 use bdk_chain::rusqlite::Connection;
 use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey};
 use bip39::Mnemonic;
+use cove_common::consts::GAP_LIMIT;
+use cove_types::Network;
 use eyre::Context as _;
 use fingerprint::Fingerprint;
 use metadata::{DiscoveryState, HardwareWalletMetadata, WalletId, WalletMetadata, WalletType};
@@ -342,7 +344,7 @@ impl Wallet {
     }
 
     pub fn try_new_persisted_from_tap_signer(
-        tap_signer: Arc<TapSigner>,
+        tap_signer: Arc<cove_tap_card::TapSigner>,
         derive: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, WalletError> {

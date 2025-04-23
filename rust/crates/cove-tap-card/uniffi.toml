@@ -1,0 +1,10 @@
+[bindings.kotlin]
+package_name = "org.bitcoinppl.tap_card"
+cdylib_name = "tap_card"
+
+[bindings.swift]
+cdylib_name = "tap_card"
+ffi_module_name = "tap_cardFFI"
+omit_argument_labels = false
+generate_module_map = true
+

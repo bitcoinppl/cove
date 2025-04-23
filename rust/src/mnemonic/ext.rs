@@ -10,7 +10,7 @@ impl MnemonicExt for bip39::Mnemonic {
     fn into_descriptors(
         self,
         passphrase: Option<String>,
-        network: impl Into<crate::network::Network>,
+        network: impl Into<cove_types::Network>,
         address_type: WalletAddressType,
     ) -> Descriptors {
         use crate::keys::{Descriptor, DescriptorSecretKey};
@@ -56,7 +56,7 @@ impl MnemonicExt for Mnemonic {
     fn into_descriptors(
         self,
         passphrase: Option<String>,
-        network: impl Into<crate::network::Network>,
+        network: impl Into<cove_types::Network>,
         address_type: WalletAddressType,
     ) -> Descriptors {
         self.0.into_descriptors(passphrase, network, address_type)

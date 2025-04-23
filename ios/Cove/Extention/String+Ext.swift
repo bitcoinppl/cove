@@ -7,6 +7,8 @@
 
 import Foundation
 
+typealias Unit = CoveCore.Unit
+
 extension String {
     init(_ unit: Unit) {
         self = unitToString(unit: unit)

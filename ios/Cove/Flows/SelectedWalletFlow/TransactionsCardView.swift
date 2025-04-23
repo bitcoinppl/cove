@@ -11,7 +11,7 @@ import SwiftUI
 struct TransactionsCardView: View {
     @Environment(WalletManager.self) var manager
 
-    let transactions: [Transaction]
+    let transactions: [CoveCore.Transaction]
     let unsignedTransactions: [UnsignedTransaction]
     let scanComplete: Bool
     let metadata: WalletMetadata
@@ -97,7 +97,7 @@ private func amountColor(_ direction: TransactionDirection) -> Color {
 
 struct TransactionRow: View {
     @Environment(WalletManager.self) var manager
-    var txn: Transaction
+    var txn: CoveCore.Transaction
     var metadata: WalletMetadata
 
     var body: some View {

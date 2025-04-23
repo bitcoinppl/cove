@@ -1,8 +1,6 @@
-pub mod tap_card;
-
 use std::sync::Arc;
 
-use tap_card::TapSigner;
+use cove_nfc::message::NfcMessage;
 use tracing::{debug, warn};
 
 use crate::{
@@ -27,9 +25,9 @@ pub enum MultiFormat {
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
     /// TAPSIGNER has not been initialized yet
-    TapSigner(Arc<TapSigner>),
+    TapSigner(Arc<cove_tap_card::TapSigner>),
     /// TAPSIGNER has not been initialized yet
-    TapSignerInit(Arc<TapSigner>),
+    TapSignerInit(Arc<cove_tap_card::TapSigner>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -49,7 +47,7 @@ pub enum MultiFormatError {
     UrFormatNotSupported,
 
     #[error("Invalid TapSigner {0}")]
-    InvalidTapSigner(tap_card::ffi::TapCardParseError),
+    InvalidTapSigner(cove_tap_card::ffi::TapCardParseError),
 }
 
 type Result<T, E = MultiFormatError> = std::result::Result<T, E>;
@@ -70,6 +68,18 @@ impl MultiFormat {
         }
 
         Err(MultiFormatError::UnrecognizedFormat)
+    }
+
+    pub fn try_from_nfc_message(nfc_message: NfcMessage) -> Result<Self> {
+        debug!("MultiFormat::try_from_nfc_message");
+
+        match nfc_message {
+            NfcMessage::Data(data) => Self::try_from_data(&data),
+            NfcMessage::String(string) => Self::try_from_string(&string),
+            NfcMessage::Both(string, data) => {
+                Self::try_from_data(&data).or_else(|_| Self::try_from_string(&string))
+            }
+        }
     }
 
     pub fn try_from_string(string: &str) -> Result<Self> {
@@ -120,15 +130,15 @@ impl MultiFormat {
         }
 
         if string.contains("tapsigner.com/start") {
-            let tap_card = tap_card::TapCard::parse(string)
+            let tap_card = cove_tap_card::TapCard::parse(string)
                 .map_err(|e| MultiFormatError::InvalidTapSigner(e.into()))?;
 
             match tap_card {
-                tap_card::TapCard::TapSigner(card) => {
+                cove_tap_card::TapCard::TapSigner(card) => {
                     return Ok(MultiFormat::TapSigner(card));
                 }
 
-                tap_card::TapCard::SatsCard(_card) => {
+                cove_tap_card::TapCard::SatsCard(_card) => {
                     unreachable!("tap card should not be a sats card");
                 }
             }
@@ -161,6 +171,14 @@ impl TryFrom<StringOrData> for MultiFormat {
 }
 
 #[uniffi::export]
+fn multi_format_try_from_nfc_message(
+    nfc_message: Arc<NfcMessage>,
+) -> Result<MultiFormat, MultiFormatError> {
+    let nfc_message = Arc::unwrap_or_clone(nfc_message);
+    MultiFormat::try_from_nfc_message(nfc_message)
+}
+
+#[uniffi::export]
 fn string_or_data_try_into_multi_format(
     string_or_data: StringOrData,
 ) -> Result<MultiFormat, MultiFormatError> {
@@ -186,12 +204,12 @@ fn describe_multi_format_error(error: MultiFormatError) -> String {
 
 pub struct Bip329Labels(pub bip329::Labels);
 
-impl From<TapSigner> for MultiFormat {
-    fn from(tap_signer: TapSigner) -> Self {
-        if tap_signer.state == tap_card::TapSignerState::Unused {
-            Self::TapSignerInit(tap_signer.into())
+impl From<cove_tap_card::TapSigner> for MultiFormat {
+    fn from(tap_signer: cove_tap_card::TapSigner) -> Self {
+        if tap_signer.state == cove_tap_card::TapSignerState::Unused {
+            Self::TapSignerInit(Arc::new(tap_signer))
         } else {
-            Self::TapSigner(tap_signer.into())
+            Self::TapSigner(Arc::new(tap_signer))
         }
     }
 }

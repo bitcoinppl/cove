@@ -4,41 +4,15 @@ use std::{
     time::Duration,
 };
 
-use crate::transaction::Unit;
 use derive_more::Display;
-use macros::{impl_default_for, new_type};
-use nid::Nanoid;
-use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
-use crate::{database::Database, network::Network};
-
 use super::{AddressInfo, WalletAddressType, fingerprint::Fingerprint};
+use crate::transaction::Unit;
+use crate::{database::Database, network::Network};
+use cove_tap_card::TapSigner;
 
-new_type!(WalletId, String);
-impl_default_for!(WalletId);
-impl WalletId {
-    pub fn new() -> Self {
-        let nanoid: Nanoid = Nanoid::new();
-        Self(nanoid.to_string())
-    }
-
-    pub fn preview_new() -> Self {
-        Self("testtesttest".to_string())
-    }
-
-    pub fn preview_new_random() -> Self {
-        // random string id
-        let rng = rand::rng();
-        let random_string: String = rng
-            .sample_iter(&rand::distr::Alphanumeric)
-            .take(8)
-            .map(char::from)
-            .collect();
-
-        Self(random_string)
-    }
-}
+pub use cove_types::{BlockSizeLast, WalletId};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct WalletMetadata {
@@ -88,14 +62,14 @@ pub struct WalletMetadata {
 #[serde(default)]
 pub struct InternalOnlyMetadata {
     #[serde(default)]
-    pub address_index: Option<AddressIndex>,
+    pub address_index: Option<cove_types::AddressIndex>,
 
     #[serde(default)]
     /// this is the last time the wallet was scanned, this includes the initial scna, expanded scan, and incremental scan
     pub last_scan_finished: Option<Duration>,
 
     #[serde(default)]
-    pub last_height_fetched: Option<BlockSizeLast>,
+    pub last_height_fetched: Option<cove_types::BlockSizeLast>,
 
     #[serde(default)]
     /// this is the time that a full expanded scan was completed, this should only happen once
@@ -111,20 +85,6 @@ pub enum StoreType {
     #[default]
     Sqlite,
     FileStore,
-}
-
-#[derive(
-    Debug, Clone, Copy, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record,
-)]
-pub struct BlockSizeLast {
-    pub block_height: u64,
-    pub last_seen: Duration,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Record)]
-pub struct AddressIndex {
-    pub last_seen_index: u8,
-    pub address_list_hash: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -176,7 +136,7 @@ pub enum WalletType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum HardwareWalletMetadata {
-    TapSigner(Arc<crate::multi_format::tap_card::TapSigner>),
+    TapSigner(Arc<TapSigner>),
 }
 
 #[derive(
@@ -281,7 +241,7 @@ impl WalletMetadata {
 impl InternalOnlyMetadata {
     pub fn last_seen_address_index(&self, addreses: &[AddressInfo]) -> Option<usize> {
         let address_index = self.address_index.as_ref()?;
-        let address_list_hash = crate::util::calculate_hash(addreses);
+        let address_list_hash = cove_util::calculate_hash(addreses);
 
         // different address list, return none
         if address_index.address_list_hash != address_list_hash {
@@ -292,9 +252,9 @@ impl InternalOnlyMetadata {
     }
 
     pub fn set_last_seen_address_index(&mut self, addreses: &[AddressInfo], index: usize) {
-        let address_list_hash = crate::util::calculate_hash(addreses);
+        let address_list_hash = cove_util::calculate_hash(addreses);
 
-        self.address_index = Some(AddressIndex {
+        self.address_index = Some(cove_types::AddressIndex {
             last_seen_index: index as u8,
             address_list_hash,
         });
@@ -352,6 +312,7 @@ impl WalletColor {
     pub fn random() -> Self {
         let options = default_wallet_colors();
 
+        use rand::Rng;
         let random_index = rand::rng().random_range(0..options.len());
         options[random_index]
     }

@@ -14,11 +14,33 @@ path = "src/bin/uniffi-bindgen.rs"
 [features]
 default = ["uniffi/cli"]
 
-[dependencies]
-# cove crates
-macros = { path = "./crates/macros" }
+[workspace]
+members = ["crates/*"]
+
+## WORKSPACE DEPENDENCIES
+[workspace.dependencies]
+# bindings
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
+
+# sync
+parking_lot = { version = "0.12.3" }
+
+# encoding / decoding 
+hex = "0.4.3"
+base64 = "0.22.0"
+data-encoding = "2.8.0"
+
+# parsing
+winnow = { version = "0.7", features = ["simd"] }
+memchr = "2.7"
+
+# encryption / hashing
+chacha20poly1305 = "0.10.1"
+sha2 = "0.10.8"
+rand = "0.9"
 
 # bdk / bitcoin
+bitcoin = { version = "0.32" }
 bdk_core = "0.4"
 bdk_wallet = { version = "1.1", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
@@ -28,18 +50,74 @@ bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
 bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
+# fast hashmap
+ahash = "0.8.11"
+
+once_cell = "1.21.0"
+
+# fmt currency
+numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
+
+# num 
+num-bigint = "0.4"
+
+# http client
+reqwest = { version = "0.12", features = ["json"] }
+
 # store bdk wallet data
-bdk_file_store = { version = "0.18.0" }
 bdk_chain = { version = "0.21.0" }
+
+# time
+jiff = { version = "0.2", features = [] }
+
+# logging
+tracing = "0.1"
+
+# error handling
+thiserror = "2.0"
+
+# database
+redb = "2.4"
+
+# ids
+nid = "3.0"
+
+# derive stuff
+derive_more = { version = "2.0" }
+strum = { version = "0.27", features = ["derive"] }
+
+# serde
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+## DEPENDENCIES
+[dependencies]
+# cove crates
+cove-macros = { path = "./crates/cove-macros" }
+cove-util = { path = "./crates/cove-util" }
+cove-nfc = { path = "./crates/cove-nfc" }
+cove-tap-card = { path = "./crates/cove-tap-card" }
+cove-types = { path = "./crates/cove-types" }
+cove-common = { path = "./crates/cove-common" }
+cove-bip39 = { path = "./crates/cove-bip39" }
+cove-device = { path = "./crates/cove-device" }
+
+# bitcoin
+bitcoin = { workspace = true }
+bdk_wallet = { workspace = true }
+bip39 = { workspace = true }
+bdk_chain = { workspace = true }
+bdk_core = { workspace = true }
+bdk_file_store = { version = "0.18.0" }
+
+bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
+bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-features = false }
 
 # import / export hardware wallet public keys
 pubport = { version = "0.3.1", features = [] }
 
 # bip329 labels
 bip329 = { version = "0.4.0" }
-
-# bitcoin
-bitcoin = { version = "0.32", features = ["serde"] }
 
 # tapsigner / satscard
 rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }
@@ -80,7 +158,7 @@ tracing-log = "0.2"
 dirs = "6.0"
 
 # database
-redb = "2.1"
+redb = { workspace = true }
 
 # ids
 nid = "3.0"
@@ -97,56 +175,57 @@ derive_more = { version = "2.0", features = [
     "deref",
     "deref_mut",
 ] }
-strum = { version = "0.27", features = ["derive"] }
+
+strum = { workspace = true, features = ["derive"] }
 
 # helpers / utils / exts
 tap = "1.0.1"
 itertools = "0.14"
 
 # time 
-jiff = { version = "0.2", features = [] }
+jiff = { workspace = true, features = [] }
 
 # ser/de
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 cbor4ii = { version = "1.0", features = ["serde1"] }
 serde_urlencoded = "0.7"
 
 zerocopy = { version = "0.8", features = ["derive"] }
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
+uniffi = { workspace = true, features = ["tokio"] }
 
 # bit manipulation# bindings
-num-bigint = "0.4"
+num-bigint = { workspace = true }
 bitvec = "1.0"
+
+# fmt
+numfmt = { workspace = true }
 
 # url parsing
 url = "2.5"
 
 # encryption
-chacha20poly1305 = "0.10.1"
+chacha20poly1305 = { workspace = true }
 
 # fast hashmap
-ahash = "0.8.11"
-
-# fmt currency
-numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
+ahash = { workspace = true }
 
 # http client
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { workspace = true, features = ["json"] }
+
+# parsing
+winnow = { workspace = true }
+memchr = { workspace = true }
+
+# encoding / decoding 
+hex = { workspace = true }
+base64 = { workspace = true }
+data-encoding = { workspace = true }
 
 # qr
 # static link libz-sys
 libz-sys = { version = "1.1", features = ["static"] }
 bbqr = { version = "0.3", default-features = false }
-
-# hex / base64
-hex = "0.4.3"
-base64 = "0.22.0"
-data-encoding = "2.8.0"
-
-# parsing
-winnow = { version = "0.7", features = ["simd"] }
-memchr = "2.7"
 
 # sync
 arc-swap = "1.7"
@@ -162,15 +241,15 @@ csv = "1.3"
 
 
 [build-dependencies]
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["build"] }
-# uniffi = { version = "0.29.0", features = ["build"] }
+uniffi = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
-tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["bindgen-tests"] }
-# uniffi = { version = "0.29.0", features = ["bindgen-tests"] }
-tempfile = "3.16"
+tempfile = "3.19"
 pretty_assertions = "1.4.1"
+
+tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
+uniffi = { workspace = true, features = ["bindgen-tests"] }
+
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

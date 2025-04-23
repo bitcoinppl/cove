@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 10/29/24.
 //
 
+import CoveCore
 import Foundation
 import SwiftUI
 

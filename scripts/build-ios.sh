@@ -4,33 +4,24 @@ set -o pipefail
 
 cd rust
 
+################################################################################
+############################### ARG PARSING ####################################
+################################################################################
+
 BUILD_TYPE=$1
 DEVICE=$2
 SIGN=$3
 
-if [ "$BUILD_TYPE" == "release" ] || [ "$BUILD_TYPE" == "--release" ]; then
+# Determine build flags
+if [[ "$BUILD_TYPE" == "release" || "$BUILD_TYPE" == "--release" ]]; then
     BUILD_FLAG="--release"
     BUILD_TYPE="release"
-    export RUST_LOG="cove=info"
-elif [ "$BUILD_TYPE" == "debug" ] || [ "$BUILD_TYPE" == "--debug" ] ; then
+elif [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "--debug" ]]; then
     BUILD_FLAG=""
     BUILD_TYPE="debug"
 else
     BUILD_FLAG="--profile $BUILD_TYPE"
 fi
-
-# Make sure the directory exists
-mkdir -p ios/Cove.xcframework bindings ios/Cove
-
-# Build the dylib
-cargo build
-
-# Generate bindings
-cargo run --bin uniffi-bindgen generate --library ./target/debug/libcove.dylib --language swift --out-dir ./bindings
-
-echo "BUILD_TYPE: $BUILD_TYPE"
-echo "DEVICE: $DEVICE"
-echo "SIGN: $SIGN"
 
 if [ $BUILD_TYPE == "release" ] || [ $BUILD_TYPE == "release-smaller" ]; then
     TARGETS=(
@@ -47,7 +38,13 @@ else
         TARGETS=(aarch64-apple-ios-sim)
     fi
 fi 
- 
+
+
+################################################################################
+############################### BUILDING ####################################
+################################################################################
+
+## 1. build static binary for iOS and iOS simulator
 LIBRARY_FLAGS=""
 echo "Build for targets: ${TARGETS[@]}"
 for TARGET in ${TARGETS[@]}; do
@@ -58,23 +55,34 @@ for TARGET in ${TARGETS[@]}; do
     cargo build --target=$TARGET $BUILD_FLAG
 done
 
-# Rename *.modulemap to module.modulemap
-mv ./bindings/coveFFI.modulemap ./bindings/module.modulemap
- 
-# Move the Swift file to the project
-rm ../ios/Cove/Cove.swift || true
-mv ./bindings/cove.swift ../ios/Cove/Cove.swift
- 
-# Recreate XCFramework
-rm -rf "ios/Cove.xcframework" || true
+## 2. headers, modulemap, and swift sources
+OUTPUT_DIR="./bindings"
+STATIC_LIB_PATH="./target/${TARGETS[0]}/$BUILD_TYPE/libcove.a"
+mkdir -p "$OUTPUT_DIR" 
+
+echo "Running uniffi-bindgen for ${TARGETS[0]}, outputting to $OUTPUT_DIR"
+rm -rf $OUTPUT_DIR || true
+cargo run --bin uniffi-bindgen -- "$STATIC_LIB_PATH" "$OUTPUT_DIR" \
+    --swift-sources --headers \
+    --modulemap --module-name cove_core_ffi \
+    --modulemap-filename module.modulemap
+
+
+## 3. create XCFramework
+SPM_PACKAGE="../ios/CoveCore/"
+XCFRAMEWORK_OUTPUT="$SPM_PACKAGE/Sources/cove_core_ffi.xcframework"
+GENERATED_SWIFT_SOURCES=$SPM_PACKAGE/Sources/CoveCore/generated
+
+
+rm -rf "$XCFRAMEWORK_OUTPUT" || true
 xcodebuild -create-xcframework \
         $LIBRARY_FLAGS \
-        -output "ios/Cove.xcframework"
- 
-# Cleanup
-rm -rf bindings
+        -output "$XCFRAMEWORK_OUTPUT"
 
-# if [ ! -z $SIGN ] && [ ! -z $SIGNING_IDENTITY ] || [ $SIGN == "--sign" ]; then
-#     echo "Signing for distribution: identity: $SIGNING_IDENTITY"
-#     codesign --timestamp -v --sign "$SIGNING_IDENTITY" "ios/Cove.xcframework"
-# fi
+## 4. copy swift sources to SPM
+rm -rf $GENERATED_SWIFT_SOURCES || true
+mkdir -p $GENERATED_SWIFT_SOURCES
+cp -r bindings/*.swift $GENERATED_SWIFT_SOURCES
+
+## extra: remove uniffi generated Package.swift file
+rm -rf $SPM_PACKAGE/Sources/CoveCore/Package.swift

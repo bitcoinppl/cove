@@ -1,0 +1,8 @@
+[bindings.swift]
+generate_module_maps = true
+cdylib_name = "cove_types_ffi"
+
+[bindings.kotlin]
+package_name = "org.bitcoinppl.cove_types"
+cdylib_name = "cove_types_ffi"
+

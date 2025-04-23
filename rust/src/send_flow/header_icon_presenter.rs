@@ -1,5 +1,5 @@
 /// Contains the logic for the header icon presentation
-use macros::impl_default_for;
+use cove_macros::impl_default_for;
 
 #[derive(Clone, uniffi::Object)]
 pub struct HeaderIconPresenter {}

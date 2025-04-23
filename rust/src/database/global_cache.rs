@@ -5,10 +5,10 @@ use redb::TableDefinition;
 use crate::{
     app::reconcile::{Update, Updater},
     fiat::client::PriceResponse,
-    redb::Json,
 };
 
 use super::Error;
+use cove_types::redb::Json;
 
 pub const TABLE: TableDefinition<&'static str, Json<GlobalCacheData>> =
     TableDefinition::new("global_cache");

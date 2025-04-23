@@ -1,12 +1,10 @@
 pub mod client;
 pub mod client_builder;
 
-use crate::{
-    network::Network,
-    node_connect::{BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA},
-};
+use crate::node_connect::{BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA};
 
 use client::NodeClient;
+use cove_types::network::Network;
 
 #[derive(
     Debug,

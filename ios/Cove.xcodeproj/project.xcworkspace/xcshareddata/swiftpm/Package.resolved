@@ -1,0 +1,33 @@
+{
+  "originHash" : "c15951252ef09062e6521b46665d3e71e66b8c13b5ca8d57a1d868c52f23eecb",
+  "pins" : [
+    {
+      "identity" : "activityindicatorview",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/exyte/ActivityIndicatorView",
+      "state" : {
+        "revision" : "36140867802ae4a1d2b11490bcbbefe058001d14",
+        "version" : "1.2.1"
+      }
+    },
+    {
+      "identity" : "keychain-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/evgenyneu/keychain-swift",
+      "state" : {
+        "revision" : "5e1b02b6a9dac2a759a1d5dbc175c86bd192a608",
+        "version" : "24.0.0"
+      }
+    },
+    {
+      "identity" : "popupview",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Mijick/PopupView",
+      "state" : {
+        "revision" : "60ebc93bbcf06d78b0123389e641c3a451c80f65",
+        "version" : "2.7.1"
+      }
+    }
+  ],
+  "version" : 3
+}

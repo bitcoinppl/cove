@@ -28,7 +28,7 @@ use wallet::WalletsTable;
 use once_cell::sync::OnceCell;
 use tracing::{error, info};
 
-use crate::consts::ROOT_DATA_DIR;
+use cove_common::consts::ROOT_DATA_DIR;
 
 pub static DATABASE: OnceCell<ArcSwap<Database>> = OnceCell::new();
 

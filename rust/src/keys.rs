@@ -17,8 +17,8 @@ use bdk_wallet::{
 use bitcoin::bip32::Xpub;
 use bitcoin::secp256k1;
 
-use crate::network::Network;
 use crate::tap_card::tap_signer_reader::DeriveInfo;
+use cove_types::Network;
 
 pub type Seed = [u8; 64];
 

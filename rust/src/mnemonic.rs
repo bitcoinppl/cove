@@ -6,14 +6,14 @@ pub mod parse;
 pub mod word_access;
 
 use crate::{
-    keychain::{Keychain, KeychainError},
     keys::Descriptors,
     seed_qr::SeedQr,
     wallet::{WalletAddressType, metadata::WalletId},
 };
-use derive_more::{AsRef, Deref, From, Into};
 
 use bdk_chain::bitcoin::{Network, bip32::Xpub};
+use cove_device::keychain::{Keychain, KeychainError};
+use derive_more::{AsRef, Deref, From, Into};
 
 pub type NumberOfBip39Words = number_of_bip39_words::NumberOfBip39Words;
 pub type GroupedWord = grouped_word::GroupedWord;
@@ -61,7 +61,7 @@ pub trait MnemonicExt {
     fn into_descriptors(
         self,
         passphrase: Option<String>,
-        network: impl Into<crate::network::Network>,
+        network: impl Into<cove_types::Network>,
         wallet_address_type: WalletAddressType,
     ) -> Descriptors;
 

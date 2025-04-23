@@ -12,6 +12,8 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
+use cove_util::format::NumberFormatter as _;
+
 use crate::{
     app::FfiApp,
     converter::{Converter, ConverterError},
@@ -20,10 +22,8 @@ use crate::{
         FiatCurrency,
         client::{FIAT_CLIENT, PriceResponse},
     },
-    format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     label_manager::LabelManager,
-    multi_format::tap_card::TapSigner,
     psbt::Psbt,
     reporting::HistoricalFiatPriceReport,
     router::Route,
@@ -292,7 +292,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor(default(backup = None))]
     pub fn try_new_from_tap_signer(
-        tap_signer: Arc<TapSigner>,
+        tap_signer: Arc<cove_tap_card::TapSigner>,
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, Error> {

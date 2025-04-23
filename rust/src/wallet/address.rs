@@ -10,9 +10,9 @@ use bdk_chain::tx_graph::CanonicalTx;
 use bdk_wallet::{AddressInfo as BdkAddressInfo, bitcoin::Transaction as BdkTransaction};
 use serde::Deserialize;
 
-use crate::network::Network;
 use crate::transaction::Amount;
 use crate::transaction::TransactionDirection;
+use cove_types::Network;
 
 #[derive(
     Debug,

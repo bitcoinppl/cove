@@ -67,7 +67,7 @@ https://github.com/user-attachments/assets/9c933b90-a991-4c09-be29-2825d535bc1e
 - All the alpha and beta testers that have provided valuable feedback.
 - [Craig Raw](https://x.com/craigraw) for helping me make integrations with sparrow work smoothly.
 - [Coinkite](http://coinkite.com) for providing me with hardware to test on and helping me with integrations.
-- [NVK](http://twitter.com/nvk) for the Cove name and feebdack
+- [NVK](http://twitter.com/nvk) for the Cove name and feedback.
 
 ## License
 
