@@ -269,11 +269,11 @@ impl Wallet {
                 ))?;
 
                 metadata.discovery_state = DiscoveryState::StartedJson(Arc::new(json.into()));
-
                 descriptors
             }
             Format::Wasabi(descriptors) => descriptors,
             Format::Electrum(descriptors) => descriptors,
+            Format::KeyExpression(descriptors) => descriptors,
         };
 
         let fingerprint = pubport_descriptors.fingerprint();
