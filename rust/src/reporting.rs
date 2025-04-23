@@ -39,7 +39,8 @@ type Row = TxnWithHistoricalPrice;
 #[derive(Debug, Serialize)]
 pub struct TxnWithHistoricalPrice {
     pub tx_id: TxId,
-    pub date_time: String,
+    pub date_time_utc: String,
+    pub date_time_local: String,
     pub block_height: u32,
     pub label: Option<String>,
     pub btc_amount: f64,
@@ -64,12 +65,15 @@ impl HistoricalFiatPriceReport {
             self.currency.suffix()
         );
 
+        let confirmed_at_local_header = format!("Confirmed At ({})", self.timezone.to_string());
+
         let mut csv = WriterBuilder::new().has_headers(false).from_writer(vec![]);
 
         // write header
         csv.write_record([
             "Transaction ID",
-            "Confirmed At",
+            "Confirmed At (UTC)",
+            confirmed_at_local_header.as_str(),
             "Block Height",
             "Label",
             "Amont (BTC)",
@@ -136,8 +140,8 @@ impl HistoricalFiatPriceReport {
 
         let row = Row {
             tx_id: txn.id(),
-            date_time: jiff::fmt::rfc2822::to_string(&datetime_local)
-                .expect("all datetimes are valid"),
+            date_time_utc: txn.confirmed_at.to_string(),
+            date_time_local: datetime_local.to_string(),
             block_height: txn.block_height(),
             label: txn.label_opt(),
             btc_amount,
