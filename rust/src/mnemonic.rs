@@ -61,7 +61,7 @@ pub trait MnemonicExt {
     fn into_descriptors(
         self,
         passphrase: Option<String>,
-        network: impl Into<crate::network::Network>,
+        network: impl Into<cove_types::Network>,
         wallet_address_type: WalletAddressType,
     ) -> Descriptors;
 

@@ -12,11 +12,8 @@ use redb::{ReadOnlyTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
 
-use crate::{
-    consts::WALLET_DATA_DIR,
-    redb::Json,
-    wallet::{WalletAddressType, metadata::WalletId},
-};
+use crate::wallet::{WalletAddressType, metadata::WalletId};
+use cove_common::{consts::WALLET_DATA_DIR, redb::Json};
 
 use ahash::AHashMap as HashMap;
 

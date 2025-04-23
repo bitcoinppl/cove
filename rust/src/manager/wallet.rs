@@ -12,6 +12,8 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
+use cove_common::format::NumberFormatter as _;
+
 use crate::{
     app::FfiApp,
     converter::{Converter, ConverterError},
@@ -20,7 +22,6 @@ use crate::{
         FiatCurrency,
         client::{FIAT_CLIENT, PriceResponse},
     },
-    format::NumberFormatter,
     keychain::{Keychain, KeychainError},
     label_manager::LabelManager,
     psbt::Psbt,

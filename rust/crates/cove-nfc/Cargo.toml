@@ -21,7 +21,7 @@ tracing = { workspace = true }
 parking_lot = { workspace = true }
 
 # parsing
-winnow = "0.7"
+winnow = { workspace = true }
 
 # hashing
 sha2 = { workspace = true }

@@ -392,7 +392,7 @@ impl GlobalConfigTable {
 
 #[cfg(test)]
 mod tests {
-    use crate::network::Network;
+    use cove_types::Network;
 
     #[test]
     fn test_selected_node_key() {

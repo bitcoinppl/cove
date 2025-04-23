@@ -8,10 +8,10 @@ use tracing::{info, warn};
 
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
-    consts::ROOT_DATA_DIR,
     database::Database,
     wallet::metadata::{StoreType, WalletId},
 };
+use cove_common::consts::ROOT_DATA_DIR;
 
 pub struct BdkStore {
     id: WalletId,

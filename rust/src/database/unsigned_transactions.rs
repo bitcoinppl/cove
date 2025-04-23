@@ -2,13 +2,12 @@ use redb::TableDefinition;
 use std::sync::Arc;
 use tracing::debug;
 
+use super::Error;
 use crate::{
-    redb::Json,
     transaction::TxId,
     wallet::{confirm::ConfirmDetails, metadata::WalletId},
 };
-
-use super::Error;
+use cove_common::redb::Json;
 
 pub const MAIN_TABLE: TableDefinition<TxId, Json<UnsignedTransactionRecord>> =
     TableDefinition::new("unsigned_transactions");

@@ -693,6 +693,8 @@ dependencies = [
  "bitvec",
  "cbor4ii",
  "chacha20poly1305",
+ "cove-bip39",
+ "cove-common",
  "cove-macros",
  "cove-nfc",
  "cove-tap-card",
@@ -743,6 +745,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "cove-bip39"
+version = "0.1.0"
+dependencies = [
+ "bip39",
+ "num-bigint",
+ "rand 0.9.1",
+ "sha2",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "cove-common"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "bitcoin",
+ "chacha20poly1305",
+ "cove-macros",
+ "dirs",
+ "eyre",
+ "memchr",
+ "numfmt",
+ "once_cell",
+ "redb",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tracing",
+ "tracing-subscriber",
+ "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
+]
+
+[[package]]
 name = "cove-macros"
 version = "0.1.0"
 
@@ -782,6 +817,8 @@ dependencies = [
 name = "cove-types"
 version = "0.1.0"
 dependencies = [
+ "bdk_chain",
+ "bdk_wallet",
  "bitcoin",
  "cove-macros",
  "derive_more",
@@ -791,6 +828,7 @@ dependencies = [
  "rand 0.9.1",
  "redb",
  "serde",
+ "strum",
  "thiserror 2.0.12",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
 ]
@@ -1007,9 +1045,9 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "electrum-client"
-version = "0.23.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8ed4d35bb98a55540bb5b735731486febddf9cc9b6e96f5b3fd2536eed81a4e"
+checksum = "5ed9a037f88aa61d3627a20af1c68fa0405ed5a16d9a0d9dc0e66adcda44afbe"
 dependencies = [
  "bitcoin",
  "byteorder",

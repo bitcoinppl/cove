@@ -104,7 +104,7 @@ impl Bip39WordSpecificAutocomplete {
                     .join(" ");
 
                 let possible =
-                    crate::bip39::generate_possible_final_words(&all_words).unwrap_or_default();
+                    cove_bip39::generate_possible_final_words(&all_words).unwrap_or_default();
 
                 if word.is_empty() {
                     return possible.into_iter().take(4).collect();
@@ -133,7 +133,7 @@ impl Bip39WordSpecificAutocomplete {
                     .join(" ");
 
                 let possible =
-                    crate::bip39::generate_possible_final_words(&all_words).unwrap_or_default();
+                    cove_bip39::generate_possible_final_words(&all_words).unwrap_or_default();
 
                 possible.contains(&word)
             }

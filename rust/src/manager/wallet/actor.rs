@@ -1,5 +1,4 @@
 use crate::{
-    consts::GAP_LIMIT,
     database::{Database, wallet_data::WalletDataDb},
     historical_price_service::HistoricalPriceService,
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
@@ -27,6 +26,7 @@ use bdk_core::spk_client::{FullScanRequest, SyncResponse};
 use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
 use bitcoin::{Amount, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
+use cove_common::consts::GAP_LIMIT;
 use crossbeam::channel::Sender;
 use eyre::Result;
 use std::{
