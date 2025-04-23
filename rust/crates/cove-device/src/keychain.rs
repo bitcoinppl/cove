@@ -8,7 +8,7 @@ use bip39::Mnemonic;
 use once_cell::sync::OnceCell;
 use tracing::warn;
 
-use crate::wallet::metadata::WalletId;
+use cove_types::WalletId;
 use cove_util::encryption::Cryptor;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]

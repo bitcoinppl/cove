@@ -53,6 +53,8 @@ bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-featu
 # fast hashmap
 ahash = "0.8.11"
 
+once_cell = "1.21.0"
+
 # fmt currency
 numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
 
@@ -98,6 +100,7 @@ cove-tap-card = { path = "./crates/cove-tap-card" }
 cove-types = { path = "./crates/cove-types" }
 cove-common = { path = "./crates/cove-common" }
 cove-bip39 = { path = "./crates/cove-bip39" }
+cove-device = { path = "./crates/cove-device" }
 
 # bitcoin
 bitcoin = { workspace = true }

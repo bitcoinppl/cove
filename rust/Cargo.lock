@@ -695,6 +695,7 @@ dependencies = [
  "chacha20poly1305",
  "cove-bip39",
  "cove-common",
+ "cove-device",
  "cove-macros",
  "cove-nfc",
  "cove-tap-card",
@@ -770,6 +771,22 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "tracing-subscriber",
+ "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
+]
+
+[[package]]
+name = "cove-device"
+version = "0.1.0"
+dependencies = [
+ "bdk_wallet",
+ "bip39",
+ "bitcoin",
+ "cove-types",
+ "cove-util",
+ "hex",
+ "once_cell",
+ "thiserror 2.0.12",
+ "tracing",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
 ]
 

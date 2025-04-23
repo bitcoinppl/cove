@@ -7,14 +7,11 @@ mod auth;
 mod autocomplete;
 mod bdk_store;
 mod build;
-mod color_scheme;
 mod converter;
-mod device;
 mod fiat;
 mod file_handler;
 mod hardware_export;
 mod historical_price_service;
-mod keychain;
 mod keys;
 mod label_manager;
 mod manager;
@@ -50,5 +47,8 @@ uniffi::setup_scaffolding!();
 
 // re-export types from crates that are are used
 use cove_common::logging;
+use cove_device::device;
+use cove_device::keychain;
 use cove_types::color;
+use cove_types::color_scheme;
 use cove_types::network;

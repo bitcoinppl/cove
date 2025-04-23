@@ -1,0 +1,28 @@
+[package]
+name = "cove-device"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# cove crates
+cove-types = { path = "../cove-types" }
+cove-util = { path = "../cove-util" }
+
+once_cell = { workspace = true }
+
+# bitcoin
+bitcoin = { workspace = true }
+bdk_wallet = { workspace = true }
+bip39 = { workspace = true }
+
+# error handling
+thiserror = { workspace = true }
+
+# logging
+tracing = { workspace = true }
+
+# uniffi
+uniffi = { workspace = true }
+
+# hex
+hex = { workspace = true }

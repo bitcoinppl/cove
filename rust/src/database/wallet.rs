@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{Database, Error};
-use cove_types::redb::Json;
 use cove_types::WalletId;
+use cove_types::redb::Json;
 
 const TABLE: TableDefinition<&'static str, Json<Vec<WalletMetadata>>> =
     TableDefinition::new("wallets.json");

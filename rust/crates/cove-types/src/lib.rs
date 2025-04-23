@@ -8,6 +8,7 @@ mod txid;
 mod wallet_id;
 
 pub mod color;
+pub mod color_scheme;
 pub mod network;
 pub mod redb;
 
