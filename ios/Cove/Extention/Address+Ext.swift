@@ -22,7 +22,8 @@ extension Address: @retroactive Hashable {
                 .mapError { $0 as! AddressError }
         }
 
-        return Result { try addressIsValid(address: address) }
+        let network = Database().globalConfig().selectedNetwork()
+        return Result { try addressIsValid(address: address, network: network) }
             .mapError { $0 as! AddressError }
     }
 
