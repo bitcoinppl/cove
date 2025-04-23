@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 
+extension Network: @retroactive CaseIterable {}
+extension Network: @retroactive CustomStringConvertible {}
 extension Network: SettingsEnum {
     public var description: String {
         toString()
@@ -15,6 +17,8 @@ extension Network: SettingsEnum {
     }
 }
 
+extension FiatCurrency: @retroactive CaseIterable {}
+extension FiatCurrency: @retroactive CustomStringConvertible {}
 extension FiatCurrency: SettingsEnum {
     public var description: String {
         "\(emoji()) \(toString())"
@@ -41,6 +45,8 @@ extension FiatCurrency: SettingsEnum {
     }
 }
 
+extension ColorSchemeSelection: @retroactive CaseIterable {}
+extension ColorSchemeSelection: @retroactive CustomStringConvertible {}
 extension ColorSchemeSelection: SettingsEnum {
     public var description: String {
         colorSchemeSelectionCapitalizedString(colorScheme: self)

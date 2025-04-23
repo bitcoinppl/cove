@@ -1039,11 +1039,6 @@ public func FfiConverterTypeAddressWithNetwork_lower(_ value: AddressWithNetwork
     return FfiConverterTypeAddressWithNetwork.lower(value)
 }
 
-
-
-
-
-
 public protocol AmountProtocol: AnyObject, Sendable {
     
     func asBtc()  -> Double
