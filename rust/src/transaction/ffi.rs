@@ -164,12 +164,18 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn label(&self) -> String {
-        // check if we have a label for this transaction
-        if let Some(label) = self.labels.transaction_label() {
-            return label.to_string();
+        self.label_opt()
+            .unwrap_or_else(|| self.sent_and_received.label())
+    }
+
+    #[uniffi::method]
+    pub fn label_opt(&self) -> Option<String> {
+        let label = self.labels.transaction_label()?;
+        if label.is_empty() {
+            return None;
         }
 
-        self.sent_and_received.label()
+        Some(label.to_string())
     }
 
     #[uniffi::method]

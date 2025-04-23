@@ -1,5 +1,6 @@
 pub mod amount;
 pub mod client;
+pub mod historical;
 
 use std::{fmt::Display, str::FromStr};
 

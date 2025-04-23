@@ -10,3 +10,4 @@ log.txt
 ios/Cove.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 /rust/bindings
+/ios/CoveCore/Sources/cove_core_ffi.xcframework

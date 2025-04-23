@@ -19,6 +19,7 @@ use bdk_wallet::bitcoin::{
 use bip329::Labels;
 use bitcoin::hashes::{Hash as _, sha256d::Hash};
 use rand::Rng as _;
+use serde::Serialize;
 use std::{borrow::Borrow, cmp::Ordering, sync::Arc};
 
 use crate::{
@@ -35,7 +36,8 @@ pub type TransactionDetails = transaction_details::TransactionDetails;
 pub type FeeRate = fees::FeeRate;
 pub type BdkAmount = bitcoin::Amount;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Eq, Hash, uniffi::Enum)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum TransactionDirection {
     Incoming,
     Outgoing,

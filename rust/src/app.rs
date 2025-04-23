@@ -169,7 +169,7 @@ impl App {
                 debug!("updating fiat prices");
 
                 crate::task::spawn(async move {
-                    match FIAT_CLIENT.get_prices().await {
+                    match FIAT_CLIENT.prices().await {
                         Ok(prices) => {
                             Updater::send_update(AppMessage::FiatPricesChanged(prices.into()))
                         }
@@ -435,7 +435,7 @@ impl FfiApp {
     #[uniffi::method]
     pub async fn prices(&self) -> Result<PriceResponse, Error> {
         let prices = FIAT_CLIENT
-            .get_prices()
+            .prices()
             .await
             .map_err(|e| Error::PricesError(e.to_string()))?;
 
@@ -497,7 +497,7 @@ impl FfiApp {
         crate::task::spawn(async move {
             // init prices and update the client state
             if crate::fiat::client::init_prices().await.is_ok() {
-                let prices = FIAT_CLIENT.get_prices().await;
+                let prices = FIAT_CLIENT.prices().await;
                 if let Ok(prices) = prices {
                     Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
@@ -522,7 +522,7 @@ impl FfiApp {
                     }
                 }
 
-                let prices = FIAT_CLIENT.get_prices().await;
+                let prices = FIAT_CLIENT.prices().await;
                 if let Ok(prices) = prices {
                     Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }

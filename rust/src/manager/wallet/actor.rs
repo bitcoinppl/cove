@@ -1,13 +1,16 @@
 use crate::{
     consts::GAP_LIMIT,
     database::{Database, wallet_data::WalletDataDb},
+    historical_price_service::HistoricalPriceService,
     manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::{
         client::{NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
-    transaction::{FeeRate, Transaction, TransactionDetails, TxId, fees::BdkFeeRate},
+    transaction::{
+        ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TxId, fees::BdkFeeRate,
+    },
     transaction_watcher::TransactionWatcher,
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType,
@@ -26,7 +29,10 @@ use bitcoin::{Amount, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use crossbeam::channel::Sender;
 use eyre::Result;
-use std::time::{Duration, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{Duration, UNIX_EPOCH},
+};
 use tap::TapFallible as _;
 use tracing::{debug, error, info, warn};
 
@@ -212,7 +218,8 @@ impl WalletActor {
         self.wallet.bdk.cancel_tx(&txn)
     }
 
-    pub async fn transactions(&mut self) -> ActorResult<Vec<Transaction>> {
+    #[act_zero_ext::into_actor_result]
+    pub async fn transactions(&mut self) -> Vec<Transaction> {
         let zero = Amount::ZERO.into();
 
         let mut transactions = self
@@ -233,7 +240,7 @@ impl WalletActor {
             .collect::<Vec<Transaction>>();
 
         transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
-        Produces::ok(transactions)
+        transactions
     }
 
     pub async fn split_transaction_outputs(
@@ -560,6 +567,34 @@ impl WalletActor {
 
         self.save_last_height_fetched(block_height);
         Produces::ok(block_height)
+    }
+
+    #[into_actor_result]
+    pub async fn txns_with_prices(&mut self) -> Result<Vec<(ConfirmedTransaction, Option<f32>)>> {
+        let network = self.wallet.network;
+        let fiat_currency = Database::global()
+            .global_config
+            .fiat_currency()
+            .unwrap_or_default();
+
+        let confirmed_transactions = self
+            .do_transactions()
+            .await
+            .into_iter()
+            .filter_map(|tx| match tx {
+                Transaction::Confirmed(confirmed) => Some(confirmed),
+                Transaction::Unconfirmed(_) => None,
+            })
+            .map(Arc::unwrap_or_clone)
+            .collect::<Vec<_>>();
+
+        let historical_prices_service = HistoricalPriceService::new();
+        let txns_with_prices = historical_prices_service
+            .get_prices_for_transactions(network, fiat_currency, confirmed_transactions)
+            .await
+            .map_err(|error| Error::GetHistoricalPricesError(error.to_string()))?;
+
+        Ok(txns_with_prices)
     }
 
     pub async fn transaction_details(&mut self, tx_id: TxId) -> ActorResult<TransactionDetails> {
