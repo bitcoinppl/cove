@@ -320,23 +320,14 @@ mod tests {
         let timestamp = Timestamp::now().as_second() as u64 - (12 * 60 * 60);
 
         // Test for USD
-        let price_usd = fiat_client
-            .historical_price_for_currency(timestamp, FiatCurrency::Usd)
-            .await
-            .unwrap();
+        let historical_prices = fiat_client.historical_prices(timestamp).await.unwrap();
+        let historical_prices = historical_prices.prices.first().unwrap();
 
-        assert!(price_usd.is_some());
-        let price_usd = price_usd.unwrap();
+        let price_usd = historical_prices.usd;
         assert!(price_usd > 0.0);
 
         // Test for EUR
-        let price_eur = fiat_client
-            .historical_price_for_currency(timestamp, FiatCurrency::Eur)
-            .await
-            .unwrap();
-
-        assert!(price_eur.is_some());
-        let price_eur = price_eur.unwrap();
+        let price_eur = historical_prices.eur;
         assert!(price_eur > 0.0);
     }
 }
