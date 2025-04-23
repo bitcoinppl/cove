@@ -65,7 +65,7 @@ impl HistoricalFiatPriceReport {
             self.currency.suffix()
         );
 
-        let confirmed_at_local_header = format!("Confirmed At ({})", self.timezone.to_string());
+        let confirmed_at_local_header = format!("Confirmed At ({})", self.timezone);
 
         let mut csv = WriterBuilder::new().has_headers(false).from_writer(vec![]);
 
@@ -113,6 +113,8 @@ impl HistoricalFiatPriceReport {
             }
         };
 
+        let datetime_local_string = datetime_local.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string();
+
         let sent_and_received = txn.sent_and_received;
         let txn_direction = sent_and_received.direction();
 
@@ -141,7 +143,7 @@ impl HistoricalFiatPriceReport {
         let row = Row {
             tx_id: txn.id(),
             date_time_utc: txn.confirmed_at.to_string(),
-            date_time_local: datetime_local.to_string(),
+            date_time_local: datetime_local_string,
             block_height: txn.block_height(),
             label: txn.label_opt(),
             btc_amount,
