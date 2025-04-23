@@ -358,6 +358,13 @@ mod tests {
     }
 
     #[test]
+    fn test_address_string_spaced_out() {
+        let address = "bc1pkdj04w4lxsv570j5nsd249lqe4w4j608r2nq9997ruh0wv96cnksy5jeny";
+        let expected = "bc1pk dj04w 4lxsv 570j5 nsd24 9lqe4 w4j60 8r2nq 9997r uh0wv 96cnk sy5je ny";
+        assert_eq!(address_string_spaced_out(address.to_string()), expected);
+    }
+
+    #[test]
     fn test_address_with_network() {
         let assert = |address_with_network: AddressWithNetwork, amount: Option<Amount>| {
             assert_eq!(

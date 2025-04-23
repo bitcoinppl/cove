@@ -1,5 +1,7 @@
-use super::{Amount, TransactionDirection, Unit};
+use super::TransactionDirection;
+use crate::{amount::Amount, unit::Unit};
 use bitcoin::Amount as BdkAmount;
+use rand::Rng as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct SentAndReceived {
@@ -77,4 +79,42 @@ impl SentAndReceived {
         }
         .to_string()
     }
+}
+
+impl SentAndReceived {
+    pub fn preview_new() -> Self {
+        let rand = rand::rng().random_range(0..3);
+
+        let direction = if rand == 0 {
+            TransactionDirection::Outgoing
+        } else {
+            TransactionDirection::Incoming
+        };
+
+        Self {
+            direction,
+            sent: Amount::from_sat(random_amount()),
+            received: Amount::from_sat(random_amount()),
+        }
+    }
+
+    pub fn preview_outgoing() -> Self {
+        Self {
+            direction: TransactionDirection::Outgoing,
+            sent: Amount::from_sat(random_amount()),
+            received: Amount::from_sat(0),
+        }
+    }
+
+    pub fn preview_incoming() -> Self {
+        Self {
+            direction: TransactionDirection::Incoming,
+            sent: Amount::from_sat(0),
+            received: Amount::from_sat(random_amount()),
+        }
+    }
+}
+
+fn random_amount() -> u64 {
+    rand::rng().random_range(100_000..=200_000_000)
 }

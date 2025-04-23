@@ -1,20 +1,11 @@
-mod sent_and_received;
-
 pub mod ffi;
 pub mod transaction_details;
 pub mod unsigned_transaction;
 
 use std::{cmp::Ordering, sync::Arc};
 
-use bdk_chain::{
-    ChainPosition as BdkChainPosition, ConfirmationBlockTime,
-    bitcoin::{Sequence, Witness},
-    tx_graph::CanonicalTx,
-};
-use bdk_wallet::bitcoin::{
-    OutPoint as BdkOutPoint, ScriptBuf, Transaction as BdkTransaction, TxIn as BdkTxIn,
-    TxOut as BdkTxOut,
-};
+use bdk_chain::{ChainPosition as BdkChainPosition, ConfirmationBlockTime, tx_graph::CanonicalTx};
+use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bip329::Labels;
 
 use crate::{
@@ -26,23 +17,16 @@ use crate::{
 pub type Amount = cove_types::amount::Amount;
 pub type Unit = cove_types::unit::Unit;
 pub type FeeRate = cove_types::fees::FeeRate;
-
-pub type SentAndReceived = sent_and_received::SentAndReceived;
-pub type TransactionDetails = transaction_details::TransactionDetails;
-
+pub type SentAndReceived = cove_types::transaction::sent_and_received::SentAndReceived;
 pub type TransactionDirection = cove_types::transaction::TransactionDirection;
 pub type TxId = cove_types::TxId;
+
+pub type TransactionDetails = transaction_details::TransactionDetails;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum TransactionState {
     Pending,
     Confirmed,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub enum ChainPosition {
-    Unconfirmed(u64),
-    Confirmed(ConfirmationBlockTime),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -68,26 +52,6 @@ pub struct UnconfirmedTransaction {
     pub last_seen: u64,
     pub fiat: Option<FiatAmount>,
     pub labels: Labels,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct TxOut {
-    pub value: Amount,
-    pub script_pubkey: ScriptBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct TxIn {
-    pub previous_output: OutPoint,
-    pub script_sig: ScriptBuf,
-    pub sequence: Sequence,
-    pub witness: Witness,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
-pub struct OutPoint {
-    pub txid: TxId,
-    pub vout: u32,
 }
 
 impl Transaction {
@@ -159,49 +123,6 @@ impl Transaction {
     }
 }
 
-impl From<BdkTxOut> for TxOut {
-    fn from(tx_out: BdkTxOut) -> Self {
-        Self {
-            value: Amount::from(tx_out.value),
-            script_pubkey: tx_out.script_pubkey,
-        }
-    }
-}
-
-impl From<BdkOutPoint> for OutPoint {
-    fn from(out_point: BdkOutPoint) -> Self {
-        Self {
-            txid: out_point.txid.into(),
-            vout: out_point.vout,
-        }
-    }
-}
-
-impl From<BdkTxIn> for TxIn {
-    fn from(tx_in: BdkTxIn) -> Self {
-        Self {
-            previous_output: tx_in.previous_output.into(),
-            script_sig: tx_in.script_sig,
-            sequence: tx_in.sequence,
-            witness: tx_in.witness,
-        }
-    }
-}
-
-impl From<BdkChainPosition<&ConfirmationBlockTime>> for ChainPosition {
-    fn from(chain_position: BdkChainPosition<&ConfirmationBlockTime>) -> Self {
-        match chain_position {
-            BdkChainPosition::Unconfirmed { last_seen } => {
-                Self::Unconfirmed(last_seen.unwrap_or_default())
-            }
-            BdkChainPosition::Confirmed {
-                anchor: confirmation_blocktime,
-                ..
-            } => Self::Confirmed(*confirmation_blocktime),
-        }
-    }
-}
-
 impl Ord for ConfirmedTransaction {
     fn cmp(&self, other: &Self) -> Ordering {
         self.block_height.cmp(&other.block_height)
@@ -254,6 +175,7 @@ impl PartialOrd for Transaction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::borrow::Borrow as _;
 
     #[test]
     fn test_txid_borrow() {

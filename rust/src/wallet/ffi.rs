@@ -59,15 +59,3 @@ fn preview_new_wrapped_found_address() -> FoundAddress {
         first_address: "31h1vZy7PMtGu5ddtxyirrfr8CRPkd8QJF".to_string(),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_address_string_spaced_out() {
-        let address = "bc1pkdj04w4lxsv570j5nsd249lqe4w4j608r2nq9997ruh0wv96cnksy5jeny";
-        let expected = "bc1pk dj04w 4lxsv 570j5 nsd24 9lqe4 w4j60 8r2nq 9997r uh0wv 96cnk sy5je ny";
-        assert_eq!(address_string_spaced_out(address.to_string()), expected);
-    }
-}

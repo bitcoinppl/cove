@@ -1,3 +1,9 @@
+pub mod outpoint;
+pub mod sent_and_received;
+pub mod tx_in;
+pub mod tx_out;
+pub mod txid;
+
 use bitcoin::Amount;
 use serde::Serialize;
 

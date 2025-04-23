@@ -278,48 +278,6 @@ fn transaction_preview_confirmed_new() -> Transaction {
     Transaction::Confirmed(Arc::new(txn))
 }
 
-impl SentAndReceived {
-    pub fn preview_new() -> Self {
-        let rand = rand::rng().random_range(0..3);
-
-        let direction = if rand == 0 {
-            TransactionDirection::Outgoing
-        } else {
-            TransactionDirection::Incoming
-        };
-
-        Self {
-            direction,
-            sent: Amount::from_sat(random_amount()),
-            received: Amount::from_sat(random_amount()),
-        }
-    }
-
-    pub fn preview_outgoing() -> Self {
-        Self {
-            direction: TransactionDirection::Outgoing,
-            sent: Amount::from_sat(random_amount()),
-            received: Amount::from_sat(0),
-        }
-    }
-
-    pub fn preview_incoming() -> Self {
-        Self {
-            direction: TransactionDirection::Incoming,
-            sent: Amount::from_sat(0),
-            received: Amount::from_sat(random_amount()),
-        }
-    }
-}
-
-fn random_block_height() -> u32 {
-    rand::rng().random_range(0..850_000)
-}
-
-fn random_amount() -> u64 {
-    rand::rng().random_range(100_000..=200_000_000)
-}
-
 #[uniffi::export]
 fn transaction_preview_unconfirmed_new() -> Transaction {
     let rand_hours = rand::rng().random_range(0..4);
@@ -340,4 +298,8 @@ fn transaction_preview_unconfirmed_new() -> Transaction {
         fiat: None,
         labels: Default::default(),
     }))
+}
+
+fn random_block_height() -> u32 {
+    rand::rng().random_range(0..850_000)
 }
