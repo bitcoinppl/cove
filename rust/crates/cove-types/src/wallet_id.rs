@@ -2,7 +2,7 @@ use cove_macros::{impl_default_for, new_type};
 use nid::Nanoid;
 use rand::random;
 
-new_type!(WalletId, String);
+new_type!(WalletId, String, "cove::wallet::metadata::WalletId");
 impl_default_for!(WalletId);
 
 impl WalletId {
@@ -16,7 +16,6 @@ impl WalletId {
     }
 
     pub fn preview_new_random() -> Self {
-        // Generate a simple random string
         let random_id = format!("random{}", random::<u32>());
         Self(random_id)
     }

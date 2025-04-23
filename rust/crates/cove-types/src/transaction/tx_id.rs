@@ -121,7 +121,8 @@ impl redb::Value for TxId {
     }
 
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new(std::any::type_name::<TxId>())
+        // type name is from old code structure
+        redb::TypeName::new("cove::transaction::TxId")
     }
 }
 

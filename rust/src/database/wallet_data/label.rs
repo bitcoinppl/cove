@@ -7,8 +7,7 @@ use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableD
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::database::{cbor::Cbor, key::OutPointKey};
-
-use cove_types::TxId;
+use crate::transaction::TxId;
 
 type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;

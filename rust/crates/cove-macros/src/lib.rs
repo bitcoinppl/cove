@@ -12,6 +12,10 @@ macro_rules! impl_default_for {
 #[macro_export]
 macro_rules! new_type {
     ($name:ident, String) => {
+        new_type!($name, String, std::any::type_name::<$name>());
+    };
+
+    ($name:ident, String, $redb_type_name:expr) => {
         uniffi::custom_newtype!($name, String);
 
         #[derive(
@@ -77,7 +81,7 @@ macro_rules! new_type {
             }
 
             fn type_name() -> ::redb::TypeName {
-                ::redb::TypeName::new(std::any::type_name::<$name>())
+                ::redb::TypeName::new($redb_type_name)
             }
         }
     };

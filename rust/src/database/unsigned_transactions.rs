@@ -4,7 +4,7 @@ use tracing::debug;
 
 use super::Error;
 
-use cove_types::TxId;
+use crate::transaction::TxId;
 use cove_types::WalletId;
 use cove_types::confirm::ConfirmDetails;
 use cove_types::redb::Json;
