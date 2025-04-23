@@ -1,6 +1,4 @@
-pub mod address;
 pub mod balance;
-pub mod confirm;
 pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
@@ -31,6 +29,8 @@ use metadata::{DiscoveryState, HardwareWalletMetadata, WalletId, WalletMetadata,
 use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{debug, error, warn};
+
+pub use cove_types::address;
 
 pub type Address = address::Address;
 pub type AddressWithNetwork = address::AddressWithNetwork;

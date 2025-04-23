@@ -3,11 +3,13 @@ use std::sync::Arc;
 use crate::{
     database::{InsertOrUpdate, Record, record::Timestamps, wallet_data::WalletDataDb},
     multi_format::Bip329Labels,
-    transaction::{TransactionDetails, TransactionDirection, TxId},
+    transaction::{TransactionDetails, TransactionDirection},
     wallet::{Address, metadata::WalletId},
 };
+
 use ahash::AHashMap as HashMap;
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
+use cove_types::TxId;
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {

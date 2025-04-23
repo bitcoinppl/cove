@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tracing::debug;
 
 use super::Error;
-use crate::{
-    transaction::TxId,
-    wallet::{confirm::ConfirmDetails, metadata::WalletId},
-};
+
+use cove_types::TxId;
+use cove_types::WalletId;
+use cove_types::confirm::ConfirmDetails;
 use cove_types::redb::Json;
 
 pub const MAIN_TABLE: TableDefinition<TxId, Json<UnsignedTransactionRecord>> =

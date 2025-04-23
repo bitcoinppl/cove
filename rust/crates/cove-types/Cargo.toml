@@ -15,13 +15,22 @@ bdk_chain = { workspace = true }
 
 # error handling
 thiserror = { workspace = true }
+eyre = { workspace = true }
+
+# logging
+tracing = { workspace = true }
 
 # serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+# bbqr
+bbqr = { workspace = true }
+
 # database
 redb = { workspace = true }
+
+numfmt = { workspace = true }
 
 # strum
 strum = { workspace = true, features = ["derive"] }

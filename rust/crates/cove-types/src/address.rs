@@ -1,18 +1,17 @@
 use std::hash::Hash;
-use std::hash::Hasher;
-use std::sync::Arc;
+use std::str::FromStr as _;
+use std::{hash::Hasher, sync::Arc};
 
-use bdk_chain::ConfirmationBlockTime;
-use bdk_chain::bitcoin::Address as BdkAddress;
-use bdk_chain::bitcoin::address::NetworkUnchecked;
-use bdk_chain::bitcoin::params::Params;
-use bdk_chain::tx_graph::CanonicalTx;
-use bdk_wallet::{AddressInfo as BdkAddressInfo, bitcoin::Transaction as BdkTransaction};
+use bdk_chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx};
+use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bitcoin::{
+    Transaction,
+    address::{NetworkChecked, NetworkUnchecked},
+    params::Params,
+};
 use serde::Deserialize;
 
-use crate::transaction::Amount;
-use crate::transaction::TransactionDirection;
-use cove_types::Network;
+use crate::{Network, amount::Amount, transaction::TransactionDirection};
 
 #[derive(
     Debug,
@@ -97,7 +96,7 @@ impl Address {
     }
 
     pub fn try_new(
-        tx: &CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
+        tx: &CanonicalTx<Arc<Transaction>, ConfirmationBlockTime>,
         wallet: &bdk_wallet::Wallet,
     ) -> Result<Self, Error> {
         let txid = tx.tx_node.txid;
@@ -193,12 +192,6 @@ fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
     (address, Some(amount))
 }
 
-use std::str::FromStr as _;
-
-use bdk_chain::bitcoin::address::NetworkChecked;
-
-use crate::database::Database;
-
 #[uniffi::export]
 fn address_is_equal(lhs: Arc<Address>, rhs: Arc<Address>) -> bool {
     lhs == rhs
@@ -227,8 +220,7 @@ impl AddressWithNetwork {
 #[uniffi::export]
 impl Address {
     #[uniffi::constructor]
-    pub fn from_string(address: String) -> Result<Self> {
-        let network = Database::global().global_config.selected_network();
+    pub fn from_string(address: String, network: Network) -> Result<Self> {
         let bdk_address = BdkAddress::from_str(&address)
             .map_err(|_| Error::InvalidAddress)?
             .require_network(network.into())
@@ -247,7 +239,22 @@ impl Address {
         Self::new(address)
     }
 
+    #[uniffi::method]
+    pub fn spaced_out(&self) -> String {
+        address_string_spaced_out(self.to_string())
+    }
+
     fn string(&self) -> String {
+        self.to_string()
+    }
+
+    #[uniffi::method]
+    fn unformatted(&self) -> String {
+        self.to_string()
+    }
+
+    #[uniffi::method(name = "toString")]
+    fn ffi_to_string(&self) -> String {
         self.to_string()
     }
 }
@@ -268,8 +275,23 @@ impl AddressInfo {
 }
 
 #[uniffi::export]
-fn address_is_valid(address: String) -> Result<(), Error> {
-    let network = Database::global().global_config.selected_network();
+fn address_string_spaced_out(address: String) -> String {
+    let groups = address.len() / 5;
+    let mut final_address = String::with_capacity(address.len() + groups);
+
+    for (i, char) in address.chars().enumerate() {
+        if i > 0 && i % 5 == 0 {
+            final_address.push(' ');
+        }
+
+        final_address.push(char)
+    }
+
+    final_address
+}
+
+#[uniffi::export]
+fn address_is_valid(address: String, network: Network) -> Result<(), Error> {
     address_is_valid_for_network(address, network)
 }
 

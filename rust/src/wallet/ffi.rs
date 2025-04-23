@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::hardware_export::HardwareExport;
 
 use super::{
-    Address, Wallet, WalletAddressType, WalletError,
+    Wallet, WalletAddressType, WalletError,
     metadata::{DiscoveryState, FoundAddress},
 };
 
@@ -30,40 +30,6 @@ fn wallet_address_type_to_string(wallet_address_type: WalletAddressType) -> Stri
     };
 
     str.to_string()
-}
-
-#[uniffi::export]
-impl Address {
-    #[uniffi::method]
-    pub fn spaced_out(&self) -> String {
-        address_string_spaced_out(self.to_string())
-    }
-
-    #[uniffi::method]
-    pub fn unformatted(&self) -> String {
-        self.to_string()
-    }
-
-    #[uniffi::method(name = "toString")]
-    pub fn ffi_to_string(&self) -> String {
-        self.to_string()
-    }
-}
-
-#[uniffi::export]
-fn address_string_spaced_out(address: String) -> String {
-    let groups = address.len() / 5;
-    let mut final_address = String::with_capacity(address.len() + groups);
-
-    for (i, char) in address.chars().enumerate() {
-        if i > 0 && i % 5 == 0 {
-            final_address.push(' ');
-        }
-
-        final_address.push(char)
-    }
-
-    final_address
 }
 
 #[uniffi::export]

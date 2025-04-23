@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use bitcoin::{Network, TxOut, params::Params};
+use bitcoin::params::Params;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::{
-    psbt::Psbt,
-    transaction::{Amount, FeeRate, TxId},
-};
+use crate::fees::FeeRate;
+use crate::{Network, TxId, address::Address, amount::Amount, psbt::Psbt};
+use bitcoin::{FeeRate as BdkFeeRate, TxOut};
 
-use super::Address;
+type Error = ConfirmDetailsError;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(
     Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, serde::Serialize, serde::Deserialize,
@@ -22,40 +24,29 @@ pub struct ConfirmDetails {
     pub more_details: InputOutputDetails,
 }
 
-#[derive(
-    Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, Serialize, Deserialize)]
 pub struct AddressAndAmount {
     pub address: Arc<Address>,
     pub amount: Arc<Amount>,
 }
 
-#[derive(
-    Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object, Serialize, Deserialize)]
 pub struct InputOutputDetails {
     pub inputs: Vec<AddressAndAmount>,
     pub outputs: Vec<AddressAndAmount>,
 }
 
-#[derive(
-    Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, Serialize, Deserialize)]
 pub struct SplitOutput {
     pub external: Vec<AddressAndAmount>,
     pub internal: Vec<AddressAndAmount>,
 }
 
-use crate::transaction::fees::BdkFeeRate;
-
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Debug, Error, uniffi::Error)]
 pub enum ConfirmDetailsError {
     #[error("unable to represent PSBT as QR code: {0}")]
     QrCodeCreation(String),
 }
-
-type Error = ConfirmDetailsError;
-type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[uniffi::export]
 impl ConfirmDetails {
@@ -108,7 +99,7 @@ impl ConfirmDetails {
     }
 
     pub fn psbt_bytes(&self) -> Vec<u8> {
-        self.psbt.serialize()
+        self.psbt.0.serialize()
     }
 
     pub fn psbt_to_bbqr(&self) -> Result<Vec<String>> {
@@ -119,7 +110,7 @@ impl ConfirmDetails {
             split::{Split, SplitOptions},
         };
 
-        let data = self.psbt.serialize();
+        let data = self.psbt.0.serialize();
 
         let split = Split::try_from_data(
             data.as_slice(),
@@ -135,6 +126,16 @@ impl ConfirmDetails {
         .map_err(|e| ConfirmDetailsError::QrCodeCreation(e.to_string()))?;
 
         Ok(split.parts)
+    }
+}
+
+impl AddressAndAmount {
+    pub fn try_new(tx_out: &TxOut, network: Network) -> eyre::Result<Self> {
+        let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
+        Ok(Self {
+            address: Arc::new(address.into()),
+            amount: Arc::new(tx_out.value.into()),
+        })
     }
 }
 
@@ -157,16 +158,6 @@ impl InputOutputDetails {
             .collect();
 
         Self { inputs, outputs }
-    }
-}
-
-impl AddressAndAmount {
-    pub fn try_new(tx_out: &TxOut, network: Network) -> eyre::Result<Self> {
-        let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
-        Ok(Self {
-            address: Arc::new(address.into()),
-            amount: Arc::new(tx_out.value.into()),
-        })
     }
 }
 

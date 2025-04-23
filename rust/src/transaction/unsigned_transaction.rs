@@ -1,7 +1,6 @@
-use crate::{
-    database::unsigned_transactions::UnsignedTransactionRecord,
-    wallet::{confirm::ConfirmDetails, metadata::WalletId},
-};
+use cove_types::{ConfirmDetails, WalletId};
+
+use crate::database::unsigned_transactions::UnsignedTransactionRecord;
 
 use super::{Amount, TxId};
 

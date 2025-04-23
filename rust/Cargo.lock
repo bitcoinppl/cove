@@ -711,7 +711,6 @@ dependencies = [
  "hex",
  "itertools",
  "jiff",
- "libz-sys",
  "memchr",
  "nid",
  "num-bigint",
@@ -771,7 +770,6 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "tracing-subscriber",
- "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
 ]
 
 [[package]]
@@ -830,20 +828,24 @@ dependencies = [
 name = "cove-types"
 version = "0.1.0"
 dependencies = [
+ "bbqr",
  "bdk_chain",
  "bdk_wallet",
  "bitcoin",
  "cove-macros",
  "derive_more",
+ "eyre",
  "hex",
  "jiff",
  "nid",
+ "numfmt",
  "rand 0.9.1",
  "redb",
  "serde",
  "serde_json",
  "strum",
  "thiserror 2.0.12",
+ "tracing",
  "uniffi 0.29.1 (git+https://github.com/mozilla/uniffi-rs)",
 ]
 
@@ -1915,18 +1917,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6489ca9bd760fe9642d7644e827b0c9add07df89857b0416ee15c1cc1a3b8c5a"
 dependencies = [
  "zlib-rs",
-]
-
-[[package]]
-name = "libz-sys"
-version = "1.1.22"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b70e7a7df205e92a1a4cd9aaae7898dac0aa555503cc0a649494d0d60e7651d"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
 ]
 
 [[package]]

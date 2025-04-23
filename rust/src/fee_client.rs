@@ -7,7 +7,7 @@ use arc_swap::ArcSwap;
 use eyre::Result;
 use tracing::warn;
 
-use super::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed};
+use cove_types::fees::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed};
 
 const FEE_URL: &str = "https://mempool.space/api/v1/fees/recommended";
 

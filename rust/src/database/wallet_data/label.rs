@@ -6,10 +6,9 @@ use bitcoin::{Address, address::NetworkUnchecked};
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{
-    database::{cbor::Cbor, key::OutPointKey},
-    transaction::TxId,
-};
+use crate::database::{cbor::Cbor, key::OutPointKey};
+
+use cove_types::TxId;
 
 type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;

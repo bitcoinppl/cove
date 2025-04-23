@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 
 # error handling
-eyre = "0.6"
+eyre = { workspace = true }
 thiserror = { workspace = true }
 
 # bitcoin
@@ -25,4 +25,3 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
 redb = { workspace = true }
-uniffi = { workspace = true }

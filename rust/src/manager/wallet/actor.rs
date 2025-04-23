@@ -7,15 +7,10 @@ use crate::{
         client::{NodeClient, NodeClientOptions},
         client_builder::NodeClientBuilder,
     },
-    transaction::{
-        ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TxId, fees::BdkFeeRate,
-    },
+    transaction::{ConfirmedTransaction, FeeRate, Transaction, TransactionDetails, TxId},
     transaction_watcher::TransactionWatcher,
     wallet::{
-        Address, AddressInfo, Wallet, WalletAddressType,
-        balance::Balance,
-        confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
-        metadata::BlockSizeLast,
+        Address, AddressInfo, Wallet, WalletAddressType, balance::Balance, metadata::BlockSizeLast,
     },
 };
 use act_zero::{runtimes::tokio::spawn_actor, *};
@@ -24,9 +19,10 @@ use ahash::HashMap;
 use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
 use bdk_core::spk_client::{FullScanRequest, SyncResponse};
 use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
-use bitcoin::{Amount, Txid};
+use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_common::consts::GAP_LIMIT;
+use cove_types::confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput};
 use crossbeam::channel::Sender;
 use eyre::Result;
 use std::{
@@ -314,7 +310,7 @@ impl WalletActor {
             .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
 
         let psbt = psbt.into();
-        let more_details = InputOutputDetails::new(&psbt, network);
+        let more_details = InputOutputDetails::new(&psbt, network.into());
         let details = ConfirmDetails {
             spending_amount: spending_amount.into(),
             sending_amount: sending_amount.into(),
