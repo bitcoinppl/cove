@@ -132,4 +132,29 @@ impl HistoricalPriceTable {
 
         Ok(prices)
     }
+
+    /// DANGEROUS: Deletes all prices from the table.
+    #[allow(dead_code)]
+    fn clear(&self) -> Result<(), Error> {
+        let write_txn = self
+            .db
+            .begin_write()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+
+        {
+            let mut table = write_txn
+                .open_table(TABLE)
+                .map_err(|error| Error::TableAccess(error.to_string()))?;
+
+            // delete all the records
+            table
+                .retain(|_, _| false)
+                .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        }
+
+        write_txn
+            .commit()
+            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        Ok(())
+    }
 }

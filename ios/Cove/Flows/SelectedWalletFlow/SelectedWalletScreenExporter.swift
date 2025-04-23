@@ -7,6 +7,28 @@ private enum AlertState: Equatable {
     case unableToExportLabels(String)
 }
 
+private struct ExportableDocument: FileDocument {
+    static var readableContentTypes = [UTType.jsonl, UTType.json, UTType.plainText]
+    var text: String
+
+    init(text: String) {
+        self.text = text
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        if let data = configuration.file.regularFileContents {
+            text = String(decoding: data, as: UTF8.self)
+        } else {
+            text = ""
+        }
+    }
+
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
+        let data = Data(text.utf8)
+        return FileWrapper(regularFileWithContents: data)
+    }
+}
+
 struct SelctedWalletScreenExporterView: View {
     public enum Exporting: Equatable {
         case labels
@@ -26,14 +48,11 @@ struct SelctedWalletScreenExporterView: View {
                     get: { exporting != nil },
                     set: { if !$0 { exporting = nil } }
                 ),
-                document: makeTextDocument(),
+                document: makeFileDocument(),
                 contentType: makeContentType(),
                 defaultFilename: makeDefaultFilename(),
                 onCompletion: handle
             )
-            .onChange(of: exporting) { exporting in
-                print("EXPORTING CHAGNED: \(exporting)")
-            }
     }
 
     private func exportLabelContent() -> String {
@@ -51,28 +70,17 @@ struct SelctedWalletScreenExporterView: View {
         }
     }
 
-    private func makeTextDocument() -> TextDocument {
+    private func makeFileDocument() -> ExportableDocument? {
         switch exporting {
         case let .backup(exportingBackup):
             let data = exportingBackup.backup
-            return TextDocument(text: hexEncode(bytes: data))
+            return ExportableDocument(text: hexEncode(bytes: data))
         case let .transactions(csv):
-            return TextDocument(text: csv)
+            return ExportableDocument(text: csv)
         case .labels:
-            //            fatalError("will never be called when exporting labels")
-            return TextDocument(text: "")
+            return ExportableDocument(text: exportLabelContent())
         case .none:
-//            fatalError("fileExporter invoked with no export type")
-            return TextDocument(text: "")
-        }
-    }
-
-    private func makeJsonLDocument() -> JSONLDocument {
-        switch exporting {
-        case .labels:
-            JSONLDocument(text: exportLabelContent())
-        default:
-            fatalError("will only be called with exporting is labels")
+            return .none
         }
     }
 
@@ -80,7 +88,7 @@ struct SelctedWalletScreenExporterView: View {
     private func makeContentType() -> UTType {
         switch exporting {
         case .labels:
-            .json
+            .jsonl
         case .backup:
             .plainText
         case .transactions:
@@ -99,7 +107,7 @@ struct SelctedWalletScreenExporterView: View {
             let prefix = exportingBackup.tapSigner.identFileNamePrefix()
             return "\(prefix)_backup.txt"
         case .transactions:
-            return "\(metadata.name)_transactions.csv"
+            return "\(metadata.name.lowercased())_transactions.csv"
         case .none:
             return "impossible"
         }

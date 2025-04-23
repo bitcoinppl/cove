@@ -1,3 +1,4 @@
+use csv::WriterBuilder;
 use serde::Serialize;
 
 use crate::{
@@ -43,7 +44,7 @@ pub struct TxnWithHistoricalPrice {
     pub label: Option<String>,
     pub btc_amount: f64,
     pub sats_amount: i64,
-    pub fiat_price: Option<f32>,
+    pub fiat_price: Option<String>,
     pub txn_direction: &'static str,
 }
 
@@ -63,7 +64,7 @@ impl HistoricalFiatPriceReport {
             self.currency.suffix()
         );
 
-        let mut csv = csv::Writer::from_writer(vec![]);
+        let mut csv = WriterBuilder::new().has_headers(false).from_writer(vec![]);
 
         // write header
         csv.write_record([
@@ -80,6 +81,7 @@ impl HistoricalFiatPriceReport {
         let rows = self.txns.iter().map(|txn| self.create_row(txn));
 
         // write each row
+        // skip the header row because we wrote a custom one
         for row in rows {
             let row = row?;
             csv.serialize(row)?;
@@ -124,6 +126,14 @@ impl HistoricalFiatPriceReport {
             TransactionDirection::Outgoing => "Sent",
         };
 
+        let fiat_price = fiat_price
+            .map(|fiat_price| fiat_price as f64 * btc_amount)
+            .map(|fiat_price| fiat_price * direction_multiplier)
+            .map(|fiat_price| {
+                let rounded = (fiat_price * 100.0).round() / 100.0;
+                format!("{:.2}", rounded)
+            });
+
         let row = Row {
             tx_id: txn.id(),
             date_time: jiff::fmt::rfc2822::to_string(&datetime_local)
@@ -132,7 +142,7 @@ impl HistoricalFiatPriceReport {
             label: txn.label_opt(),
             btc_amount,
             sats_amount,
-            fiat_price: fiat_price.map(|fiat_price| fiat_price * direction_multiplier),
+            fiat_price,
             txn_direction,
         };
 
