@@ -13676,6 +13676,8 @@ public enum DescriptorError: Swift.Error {
     case NoXpubInDescriptor
     case SinglePubkeyNotSupported
     case MasterXpub
+    case KeyExpressionError(String
+    )
 }
 
 
@@ -13716,6 +13718,9 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
         case 12: return .NoXpubInDescriptor
         case 13: return .SinglePubkeyNotSupported
         case 14: return .MasterXpub
+        case 15: return .KeyExpressionError(
+            try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -13788,6 +13793,11 @@ public struct FfiConverterTypeDescriptorError: FfiConverterRustBuffer {
         case .MasterXpub:
             writeInt(&buf, Int32(14))
         
+        
+        case let .KeyExpressionError(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterString.write(v1, into: &buf)
+            
         }
     }
 }
@@ -24937,9 +24947,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitPendingWalletManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
+    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
