@@ -1,9 +1,9 @@
-use crate::transaction::{Amount, BdkAmount, TxId};
 use bdk_wallet::psbt::PsbtUtils as _;
-use bitcoin::TxOut;
+use bitcoin::{Amount as BdkAmount, TxOut};
 use derive_more::{AsRef, Deref, From, Into};
 use std::fmt::Debug;
 
+use crate::{TxId, amount::Amount};
 pub type BdkPsbt = bdk_wallet::bitcoin::Psbt;
 
 #[derive(

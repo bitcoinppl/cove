@@ -13,7 +13,7 @@ use crate::{fiat::historical::HistoricalPrice, network::Network};
 
 // Table definition with NetworkBlockHeight as key and HistoricalPriceRecord as value
 pub const TABLE: TableDefinition<NetworkBlockHeight, HistoricalPriceRecord> =
-    TableDefinition::new("historical_prices.bin");
+    TableDefinition::new("historical_prices");
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct HistoricalPriceTable {

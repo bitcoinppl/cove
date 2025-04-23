@@ -8,6 +8,7 @@ use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
     database::{Database, error::DatabaseError},
+    fee_client::{FEE_CLIENT, FeeResponse},
     fiat::{
         FiatCurrency,
         client::{FIAT_CLIENT, PriceResponse},
@@ -16,7 +17,6 @@ use crate::{
     network::Network,
     node::Node,
     router::{Route, RouteFactory, Router},
-    transaction::fees::client::{FEE_CLIENT, FeeResponse},
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
@@ -537,7 +537,7 @@ impl FfiApp {
 
         // get / update fees
         crate::task::spawn(async move {
-            crate::transaction::fees::client::init_fees().await;
+            crate::fee_client::init_fees().await;
 
             let fees = FEE_CLIENT.get_fees().await;
             if let Ok(fees) = fees {

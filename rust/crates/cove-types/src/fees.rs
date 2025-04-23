@@ -1,8 +1,6 @@
-pub mod client;
-
 use std::sync::Arc;
 
-use crate::{color::FfiColor, transaction::Amount};
+use crate::{amount::Amount, color::FfiColor};
 use derive_more::{AsRef, Deref, Display, From, Into};
 use tracing::debug;
 

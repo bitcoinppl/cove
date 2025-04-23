@@ -18,6 +18,7 @@ use crate::{
     app::FfiApp,
     converter::{Converter, ConverterError},
     database::{Database, error::DatabaseError},
+    fee_client::{FEE_CLIENT, FEES, FeeResponse},
     fiat::{
         FiatCurrency,
         client::{FIAT_CLIENT, PriceResponse},
@@ -31,23 +32,20 @@ use crate::{
     task::{self, spawn_actor},
     transaction::{
         Amount, FeeRate, SentAndReceived, Transaction, TransactionDetails, TxId, Unit,
-        fees::{
-            FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
-            client::{FEE_CLIENT, FEES, FeeResponse},
-        },
-        ffi::BitcoinTransaction,
-        unsigned_transaction::UnsignedTransaction,
+        ffi::BitcoinTransaction, unsigned_transaction::UnsignedTransaction,
     },
     wallet::{
         Address, AddressInfo, Wallet, WalletAddressType, WalletError,
         balance::Balance,
-        confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata},
     },
     wallet_scanner::{ScannerResponse, WalletScanner},
     word_validator::WordValidator,
 };
+
+use cove_types::confirm::{AddressAndAmount, ConfirmDetails, SplitOutput};
+use cove_types::fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee};
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
@@ -795,14 +793,10 @@ impl RustWalletManager {
             Some(cached_fees)
                 if cached_fees.last_fetched > Instant::now() - Duration::from_secs(30) =>
             {
-                crate::task::spawn(async move {
-                    crate::transaction::fees::client::get_and_update_fees().await
-                });
+                crate::task::spawn(async move { crate::fee_client::get_and_update_fees().await });
             }
             None => {
-                crate::task::spawn(async move {
-                    crate::transaction::fees::client::get_and_update_fees().await
-                });
+                crate::task::spawn(async move { crate::fee_client::get_and_update_fees().await });
             }
             _ => {}
         }

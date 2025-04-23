@@ -7,10 +7,11 @@ use crate::{
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
     transaction::{Amount, TransactionDetails, ffi::BitcoinTransaction},
-    wallet::{Address, confirm::ConfirmDetails, metadata::WalletId},
+    wallet::Address,
 };
 
 use cove_macros::impl_default_for;
+use cove_types::{ConfirmDetails, WalletId};
 use derive_more::From;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

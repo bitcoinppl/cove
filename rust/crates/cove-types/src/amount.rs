@@ -2,7 +2,8 @@ use bdk_wallet::bitcoin::Amount as BdkAmount;
 use numfmt::{Formatter, Precision};
 use serde::{Deserialize, Serialize};
 
-use super::Unit;
+use crate::unit::Unit;
+
 #[derive(
     Debug,
     Clone,

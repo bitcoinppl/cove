@@ -34,6 +34,9 @@ data-encoding = "2.8.0"
 winnow = { version = "0.7", features = ["simd"] }
 memchr = "2.7"
 
+# qr
+bbqr = { version = "0.3", default-features = false }
+
 # encryption / hashing
 chacha20poly1305 = "0.10.1"
 sha2 = "0.10.8"
@@ -75,6 +78,7 @@ tracing = "0.1"
 
 # error handling
 thiserror = "2.0"
+eyre = "0.6"
 
 # database
 redb = "2.4"
@@ -146,8 +150,9 @@ parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
 once_cell = "1.19.0"
 
 # error handling
-eyre = "0.6"
-thiserror = "2.0"
+eyre = { workspace = true }
+thiserror = { workspace = true }
+
 
 # logging
 tracing = "0.1"
@@ -222,10 +227,7 @@ hex = { workspace = true }
 base64 = { workspace = true }
 data-encoding = { workspace = true }
 
-# qr
-# static link libz-sys
-libz-sys = { version = "1.1", features = ["static"] }
-bbqr = { version = "0.3", default-features = false }
+bbqr = { workspace = true }
 
 # sync
 arc-swap = "1.7"

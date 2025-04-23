@@ -49,6 +49,10 @@ struct SendFlowSetAmountScreen: View {
         manager.walletMetadata
     }
 
+    private var network: Network {
+        metadata.network
+    }
+
     private var sendAmountSats: Int? {
         let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
         guard let amount = Double(sendAmount) else { return .none }
@@ -159,7 +163,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee) {
-        guard let address = try? Address.fromString(address: address) else { return }
+        guard let address = try? Address.fromString(address: address, network: network) else { return }
         guard let feeRateOptions else { return }
 
         Task {
@@ -196,7 +200,7 @@ struct SendFlowSetAmountScreen: View {
             return setAlertState(.invalidNumber)
         }
 
-        guard let address = try? Address.fromString(address: address) else {
+        guard let address = try? Address.fromString(address: address, network: network) else {
             return setAlertState(.invalidAddress(address))
         }
 
@@ -404,7 +408,7 @@ struct SendFlowSetAmountScreen: View {
 
             // address
             if address != "" {
-                if let address = try? Address.fromString(address: address) {
+                if let address = try? Address.fromString(address: address, network: network) {
                     presenter.address = address
                 }
 
@@ -679,7 +683,8 @@ struct SendFlowSetAmountScreen: View {
 
         let addressString = address.trimmingCharacters(
             in: .whitespacesAndNewlines)
-        guard let address = try? Address.fromString(address: addressString) else { return }
+
+        guard let address = try? Address.fromString(address: addressString, network: network) else { return }
         guard validateAddress(addressString) else { return }
 
         presenter.address = address
@@ -705,7 +710,7 @@ struct SendFlowSetAmountScreen: View {
     ) {
         guard let newFee else { return }
         guard case .custom = newFee.feeSpeed() else { return }
-        guard let address = try? Address.fromString(address: address) else { return }
+        guard let address = try? Address.fromString(address: address, network: network) else { return }
         guard let sendAmountSats else { return }
         let amount = Amount.fromSat(sats: UInt64(sendAmountSats))
 
@@ -745,7 +750,9 @@ struct SendFlowSetAmountScreen: View {
                 guard validateAddress(addressString) else { return .none }
                 guard
                     let address = try? Address.fromString(
-                        address: addressString)
+                        address: addressString,
+                        network: network
+                    )
                 else {
                     return .none
                 }

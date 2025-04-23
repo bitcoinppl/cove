@@ -8,6 +8,7 @@ mod autocomplete;
 mod bdk_store;
 mod build;
 mod converter;
+mod fee_client;
 mod fiat;
 mod file_handler;
 mod hardware_export;
@@ -21,7 +22,6 @@ mod multi_qr;
 mod node;
 mod node_connect;
 mod pending_wallet;
-mod psbt;
 mod push_tx;
 mod reporting;
 mod seed_qr;
@@ -38,10 +38,9 @@ mod xpub;
 
 ::cove_tap_card::uniffi_reexport_scaffolding!();
 ::cove_util::uniffi_reexport_scaffolding!();
-::rust_cktap::uniffi_reexport_scaffolding!();
 ::cove_nfc::uniffi_reexport_scaffolding!();
 ::cove_types::uniffi_reexport_scaffolding!();
-::cove_common::uniffi_reexport_scaffolding!();
+::cove_device::uniffi_reexport_scaffolding!();
 
 uniffi::setup_scaffolding!();
 
@@ -52,3 +51,4 @@ use cove_device::keychain;
 use cove_types::color;
 use cove_types::color_scheme;
 use cove_types::network;
+use cove_types::psbt;
