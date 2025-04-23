@@ -36,16 +36,29 @@ struct MoreInfoPopover: View {
     }
 
     func exportTransactions() {
-        app.alertState = .init(
-            .general(
-                title: "Exporting, please wait...",
-                message: "Creating a transaction export file. If this is the first time it might take a while"
-            )
-        )
+        // if task isnt cancelled in 0.5 seconds show alert about waiting
+        let alertTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(0.5))
+                app.alertState = .init(
+                    .general(
+                        title: "Exporting, please wait...",
+                        message: "Creating a transaction export file. If this is the first time it might take a while"
+                    )
+                )
+            }
+        }
 
         Task {
             do {
                 let csv = try await manager.rust.createTransactionsWithFiatExport()
+                alertTask.cancel()
+
+                if app.alertState != .none {
+                    await MainActor.run { app.alertState = .none }
+                    try? await Task.sleep(for: .seconds(0.5))
+                }
+
                 await MainActor.run { exporting = .transactions(csv) }
             } catch {
                 app.alertState = .init(

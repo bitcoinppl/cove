@@ -8,7 +8,7 @@ private enum AlertState: Equatable {
 }
 
 struct SelctedWalletScreenExporterView: View {
-    public enum Exporting {
+    public enum Exporting: Equatable {
         case labels
         case backup(ExportingBackup)
         case transactions(String)
@@ -20,33 +20,20 @@ struct SelctedWalletScreenExporterView: View {
     @Binding var exporting: Exporting?
 
     var body: some View {
-        switch exporting {
-        case .none: EmptyView()
-        case .labels:
-            EmptyView()
-                .fileExporter(
-                    isPresented: Binding(
-                        get: { exporting != nil },
-                        set: { if !$0 { exporting = nil } }
-                    ),
-                    document: makeJsonLDocument(),
-                    contentType: makeContentType(),
-                    defaultFilename: makeDefaultFilename(),
-                    onCompletion: handle
-                )
-        default:
-            EmptyView()
-                .fileExporter(
-                    isPresented: Binding(
-                        get: { exporting != nil },
-                        set: { if !$0 { exporting = nil } }
-                    ),
-                    document: makeTextDocument(),
-                    contentType: makeContentType(),
-                    defaultFilename: makeDefaultFilename(),
-                    onCompletion: handle
-                )
-        }
+        VStack {}
+            .fileExporter(
+                isPresented: Binding(
+                    get: { exporting != nil },
+                    set: { if !$0 { exporting = nil } }
+                ),
+                document: makeTextDocument(),
+                contentType: makeContentType(),
+                defaultFilename: makeDefaultFilename(),
+                onCompletion: handle
+            )
+            .onChange(of: exporting) { exporting in
+                print("EXPORTING CHAGNED: \(exporting)")
+            }
     }
 
     private func exportLabelContent() -> String {
@@ -72,9 +59,11 @@ struct SelctedWalletScreenExporterView: View {
         case let .transactions(csv):
             return TextDocument(text: csv)
         case .labels:
-            fatalError("will never be called when exporting labels")
+            //            fatalError("will never be called when exporting labels")
+            return TextDocument(text: "")
         case .none:
-            fatalError("fileExporter invoked with no export type")
+//            fatalError("fileExporter invoked with no export type")
+            return TextDocument(text: "")
         }
     }
 
