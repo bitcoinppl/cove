@@ -2331,7 +2331,8 @@ dependencies = [
 [[package]]
 name = "pubport"
 version = "0.4.0"
-source = "git+https://github.com/bitcoinppl/pubport#cfa3a72cd14f2e5c2e0d6c31d84fdcd10f29fb1a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f3d3922955cf3c57f1db242c1c71ba723cd91b854790723d9b04c638b6de37c"
 dependencies = [
  "bitcoin",
  "derive_more",
