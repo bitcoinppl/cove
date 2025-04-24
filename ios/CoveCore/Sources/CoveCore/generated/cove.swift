@@ -6969,6 +6969,152 @@ public func FfiConverterTypeRustPendingWalletManager_lower(_ value: RustPendingW
 
 
 
+public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
+    
+    func amount()  -> Amount
+    
+    /**
+     * action from the frontend to change the state of the view model
+     */
+    func dispatch(action: SendFlowManagerAction) 
+    
+    func listenForUpdates(reconciler: SendFlowManagerReconciler) 
+    
+}
+open class RustSendFlowManager: RustSendFlowManagerProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_rustsendflowmanager(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustsendflowmanager(pointer, $0) }
+    }
+
+    
+
+    
+open func amount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_amount(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * action from the frontend to change the state of the view model
+     */
+open func dispatch(action: SendFlowManagerAction)  {try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_dispatch(self.uniffiClonePointer(),
+        FfiConverterTypeSendFlowManagerAction_lower(action),$0
+    )
+}
+}
+    
+open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(self.uniffiClonePointer(),
+        FfiConverterCallbackInterfaceSendFlowManagerReconciler_lower(reconciler),$0
+    )
+}
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustSendFlowManager: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = RustSendFlowManager
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> RustSendFlowManager {
+        return RustSendFlowManager(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: RustSendFlowManager) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustSendFlowManager {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: RustSendFlowManager, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustSendFlowManager_lift(_ pointer: UnsafeMutableRawPointer) throws -> RustSendFlowManager {
+    return try FfiConverterTypeRustSendFlowManager.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustSendFlowManager_lower(_ value: RustSendFlowManager) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeRustSendFlowManager.lower(value)
+}
+
+
+
+
+
+
 public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     
     /**
@@ -7052,6 +7198,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func markWalletAsVerified() throws 
     
     func masterFingerprint()  -> String?
+    
+    func newSendFlowManager()  -> RustSendFlowManager
     
     /**
      * Get the next address for the wallet
@@ -7645,6 +7793,13 @@ open func markWalletAsVerified()throws   {try rustCallWithError(FfiConverterType
 open func masterFingerprint() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func newSendFlowManager() -> RustSendFlowManager  {
+    return try!  FfiConverterTypeRustSendFlowManager_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustwalletmanager_new_send_flow_manager(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -11590,6 +11745,98 @@ public func FfiConverterTypeSendFlowFiatOnChangeResult_lift(_ buf: RustBuffer) t
 #endif
 public func FfiConverterTypeSendFlowFiatOnChangeResult_lower(_ value: SendFlowFiatOnChangeResult) -> RustBuffer {
     return FfiConverterTypeSendFlowFiatOnChangeResult.lower(value)
+}
+
+
+public struct SendFlowManagerState {
+    public var mode: FiatOrBtc
+    public var unit: Unit
+    public var fiatCurrency: FiatCurrency
+    public var feeRateOptionsBase: FeeRateOptions?
+    public var enteringBtcAmount: String
+    public var enteringFiatAmount: String
+    public var amountSats: UInt64
+    public var amountFiat: Double
+    public var maxSelected: Amount?
+    public var setAmountFocusField: SetAmountFocusField?
+    public var selectedFeeRate: FeeRateOptionWithTotalFee?
+    public var feeRateOptions: FeeRateOptionWithTotalFee?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(mode: FiatOrBtc, unit: Unit, fiatCurrency: FiatCurrency, feeRateOptionsBase: FeeRateOptions?, enteringBtcAmount: String, enteringFiatAmount: String, amountSats: UInt64, amountFiat: Double, maxSelected: Amount?, setAmountFocusField: SetAmountFocusField?, selectedFeeRate: FeeRateOptionWithTotalFee?, feeRateOptions: FeeRateOptionWithTotalFee?) {
+        self.mode = mode
+        self.unit = unit
+        self.fiatCurrency = fiatCurrency
+        self.feeRateOptionsBase = feeRateOptionsBase
+        self.enteringBtcAmount = enteringBtcAmount
+        self.enteringFiatAmount = enteringFiatAmount
+        self.amountSats = amountSats
+        self.amountFiat = amountFiat
+        self.maxSelected = maxSelected
+        self.setAmountFocusField = setAmountFocusField
+        self.selectedFeeRate = selectedFeeRate
+        self.feeRateOptions = feeRateOptions
+    }
+}
+
+#if compiler(>=6)
+extension SendFlowManagerState: Sendable {}
+#endif
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowManagerState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowManagerState {
+        return
+            try SendFlowManagerState(
+                mode: FfiConverterTypeFiatOrBtc.read(from: &buf), 
+                unit: FfiConverterTypeUnit.read(from: &buf), 
+                fiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf), 
+                feeRateOptionsBase: FfiConverterOptionTypeFeeRateOptions.read(from: &buf), 
+                enteringBtcAmount: FfiConverterString.read(from: &buf), 
+                enteringFiatAmount: FfiConverterString.read(from: &buf), 
+                amountSats: FfiConverterUInt64.read(from: &buf), 
+                amountFiat: FfiConverterDouble.read(from: &buf), 
+                maxSelected: FfiConverterOptionTypeAmount.read(from: &buf), 
+                setAmountFocusField: FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), 
+                selectedFeeRate: FfiConverterOptionTypeFeeRateOptionWithTotalFee.read(from: &buf), 
+                feeRateOptions: FfiConverterOptionTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendFlowManagerState, into buf: inout [UInt8]) {
+        FfiConverterTypeFiatOrBtc.write(value.mode, into: &buf)
+        FfiConverterTypeUnit.write(value.unit, into: &buf)
+        FfiConverterTypeFiatCurrency.write(value.fiatCurrency, into: &buf)
+        FfiConverterOptionTypeFeeRateOptions.write(value.feeRateOptionsBase, into: &buf)
+        FfiConverterString.write(value.enteringBtcAmount, into: &buf)
+        FfiConverterString.write(value.enteringFiatAmount, into: &buf)
+        FfiConverterUInt64.write(value.amountSats, into: &buf)
+        FfiConverterDouble.write(value.amountFiat, into: &buf)
+        FfiConverterOptionTypeAmount.write(value.maxSelected, into: &buf)
+        FfiConverterOptionTypeSetAmountFocusField.write(value.setAmountFocusField, into: &buf)
+        FfiConverterOptionTypeFeeRateOptionWithTotalFee.write(value.selectedFeeRate, into: &buf)
+        FfiConverterOptionTypeFeeRateOptionWithTotalFee.write(value.feeRateOptions, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowManagerState_lift(_ buf: RustBuffer) throws -> SendFlowManagerState {
+    return try FfiConverterTypeSendFlowManagerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowManagerState_lower(_ value: SendFlowManagerState) -> RustBuffer {
+    return FfiConverterTypeSendFlowManagerState.lower(value)
 }
 
 
@@ -17662,6 +17909,175 @@ extension SendFlowFiatOnChangeError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum SendFlowManagerAction {
+    
+    case changeEnteringBtcAmount(String
+    )
+    case changeEnteringFiatAmount(String
+    )
+    case changeSetAmountFocusField(SetAmountFocusField?
+    )
+    case selectFeeRate(FeeRateOptionWithTotalFee
+    )
+}
+
+
+#if compiler(>=6)
+extension SendFlowManagerAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
+    typealias SwiftType = SendFlowManagerAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowManagerAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .changeEnteringBtcAmount(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .changeEnteringFiatAmount(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .changeSetAmountFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
+        )
+        
+        case 4: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendFlowManagerAction, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .changeEnteringBtcAmount(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .changeEnteringFiatAmount(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .changeSetAmountFocusField(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterOptionTypeSetAmountFocusField.write(v1, into: &buf)
+            
+        
+        case let .selectFeeRate(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowManagerAction_lift(_ buf: RustBuffer) throws -> SendFlowManagerAction {
+    return try FfiConverterTypeSendFlowManagerAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowManagerAction_lower(_ value: SendFlowManagerAction) -> RustBuffer {
+    return FfiConverterTypeSendFlowManagerAction.lower(value)
+}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SendFlowManagerReconcileMessage {
+    
+    case updateAmountSats(UInt64
+    )
+    case updateAmountFiat(Double
+    )
+}
+
+
+#if compiler(>=6)
+extension SendFlowManagerReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = SendFlowManagerReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowManagerReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .updateAmountSats(try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .updateAmountFiat(try FfiConverterDouble.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendFlowManagerReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .updateAmountSats(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(v1, into: &buf)
+            
+        
+        case let .updateAmountFiat(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterDouble.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowManagerReconcileMessage_lift(_ buf: RustBuffer) throws -> SendFlowManagerReconcileMessage {
+    return try FfiConverterTypeSendFlowManagerReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowManagerReconcileMessage_lower(_ value: SendFlowManagerReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeSendFlowManagerReconcileMessage.lower(value)
+}
+
+
+extension SendFlowManagerReconcileMessage: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum SendRoute {
     
     case setAmount(id: WalletId, address: Address?, amount: Amount?
@@ -17827,6 +18243,76 @@ extension SerdeError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SetAmountFocusField {
+    
+    case amount
+    case address
+}
+
+
+#if compiler(>=6)
+extension SetAmountFocusField: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSetAmountFocusField: FfiConverterRustBuffer {
+    typealias SwiftType = SetAmountFocusField
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SetAmountFocusField {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .amount
+        
+        case 2: return .address
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SetAmountFocusField, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .amount:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .address:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetAmountFocusField_lift(_ buf: RustBuffer) throws -> SetAmountFocusField {
+    return try FfiConverterTypeSetAmountFocusField.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSetAmountFocusField_lower(_ value: SetAmountFocusField) -> RustBuffer {
+    return FfiConverterTypeSetAmountFocusField.lower(value)
+}
+
+
+extension SetAmountFocusField: Equatable, Hashable {}
+
+
 
 
 
@@ -21899,6 +22385,125 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 
 
 
+public protocol SendFlowManagerReconciler: AnyObject, Sendable {
+    
+    /**
+     * Tells the frontend to reconcile the manager changes
+     */
+    func reconcile(message: SendFlowManagerReconcileMessage) 
+    
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceSendFlowManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceSendFlowManagerReconciler] = [UniffiVTableCallbackInterfaceSendFlowManagerReconciler(
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceSendFlowManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeSendFlowManagerReconcileMessage_lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterCallbackInterfaceSendFlowManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface SendFlowManagerReconciler: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitSendFlowManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(UniffiCallbackInterfaceSendFlowManagerReconciler.vtable)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceSendFlowManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<SendFlowManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceSendFlowManagerReconciler : FfiConverter {
+    typealias SwiftType = SendFlowManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceSendFlowManagerReconciler_lift(_ handle: UInt64) throws -> SendFlowManagerReconciler {
+    return try FfiConverterCallbackInterfaceSendFlowManagerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceSendFlowManagerReconciler_lower(_ v: SendFlowManagerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceSendFlowManagerReconciler.lower(v)
+}
+
+
+
+
 public protocol TapcardTransportProtocol: AnyObject, Sendable {
     
     func setMessage(message: String) 
@@ -22493,6 +23098,30 @@ fileprivate struct FfiConverterOptionTypeAmount: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFeeRateOptionWithTotalFee: FfiConverterRustBuffer {
+    typealias SwiftType = FeeRateOptionWithTotalFee?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFeeRateOptionWithTotalFee.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFeeRateOptions: FfiConverterRustBuffer {
     typealias SwiftType = FeeRateOptions?
 
@@ -22749,6 +23378,30 @@ fileprivate struct FfiConverterOptionTypeRoute: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeRoute.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSetAmountFocusField: FfiConverterRustBuffer {
+    typealias SwiftType = SetAmountFocusField?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSetAmountFocusField.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSetAmountFocusField.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -24490,6 +25143,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 15246) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_amount() != 53892) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_dispatch() != 29847) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 57971) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24593,6 +25255,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint() != 64933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 50164) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 53396) {
@@ -24949,6 +25614,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 39280) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile() != 13568) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 41763) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24967,12 +25635,13 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitImportWalletManagerReconciler()
     uniffiCallbackInitPendingWalletManagerReconciler()
+    uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 

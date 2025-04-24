@@ -47,6 +47,8 @@ use crate::{
 use cove_types::confirm::{AddressAndAmount, ConfirmDetails, SplitOutput};
 use cove_types::fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee};
 
+use super::send_flow_manager::RustSendFlowManager;
+
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
     StartedInitialFullScan,
@@ -247,6 +249,12 @@ impl RustWalletManager {
     #[uniffi::method]
     pub fn label_manager(&self) -> Arc<LabelManager> {
         self.label_manager.clone()
+    }
+
+    #[uniffi::method]
+    pub fn new_send_flow_manager(&self) -> Arc<RustSendFlowManager> {
+        let addr = self.actor.downgrade();
+        RustSendFlowManager::new(addr, self.reconcile_receiver.clone()).into()
     }
 
     #[uniffi::method]

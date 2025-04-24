@@ -164,7 +164,7 @@ struct SendFlowSetAmountScreen: View {
 
     private func setMaxSelected(_ selectedFeeRate: FeeRateOptionWithTotalFee?) {
         Log.debug("setMaxSelected")
-        let address = try? Address.fromString(address: address)
+        let address = try? Address.fromString(address: address, network: network)
 
         // haven't added address or selected fee rate yet, use a smart default for fee
         guard let address, let selectedFeeRate, let feeRateOptions else {
