@@ -20,13 +20,6 @@ private enum SheetState: Equatable {
     case qrLabelsImport
 }
 
-private enum AlertState: Equatable {
-    case setupSuccess
-    case exportSuccess
-    case unableToImportLabels(String)
-    case unableToExportLabels(String)
-}
-
 struct SelectedWalletScreen: View {
     @Environment(\.safeAreaInsets) private var safeAreaInsets
     @Environment(\.colorScheme) private var colorScheme
@@ -38,21 +31,18 @@ struct SelectedWalletScreen: View {
     // public
     var manager: WalletManager
 
-    // private
-
     // alerts & sheets
     @State private var sheetState: TaggedItem<SheetState>? = nil
-    @State private var alertState: TaggedItem<AlertState>? = nil
 
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
 
     // import / export
-    @State private var isExportingLabels = false
-    @State private var isImportingLabels = false
+    @State var exportingBackup: ExportingBackup? = nil
+    @State var exporting: SelctedWalletScreenExporterView.Exporting? = nil
+
     @State private var scannedLabels: TaggedString? = nil
-    @State private var exportingBackup: ExportingBackup? = nil
-    @State private var isExportingBackup = false
+    @State private var isImportingLabels = false
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -201,8 +191,7 @@ struct SelectedWalletScreen: View {
                 Menu {
                     MoreInfoPopover(
                         manager: manager,
-                        exportingBackup: $exportingBackup,
-                        isExportingLabels: $isExportingLabels,
+                        exporting: $exporting,
                         isImportingLabels: $isImportingLabels
                     )
                 } label: {
@@ -232,52 +221,15 @@ struct SelectedWalletScreen: View {
 
             Transactions
                 .environment(manager)
+
+            SelctedWalletScreenExporterView(labelManager: labelManager, metadata: metadata, exporting: $exporting)
         }
         .background(Color.coveBg)
         .toolbar { MainToolBar }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(Color.midnightBlue, for: .navigationBar)
         .toolbarBackground(shouldShowNavBar ? .visible : .hidden, for: .navigationBar)
-        .onChange(of: exportingBackup) { _, new in
-            if new != nil { isExportingBackup = true } else { isExportingBackup = false }
-        }
-        .onChange(of: isExportingBackup) { _, new in
-            if !new { exportingBackup = nil }
-        }
         .sheet(item: $sheetState, content: SheetContent)
-        .fileExporter(
-            isPresented: $isExportingLabels,
-            document: JSONLDocument(text: exportLabelContent()),
-            defaultFilename:
-            labelManager.exportDefaultFileName(name: metadata.name)
-        ) { result in
-            switch result {
-            case .success:
-                alertState = .init(.exportSuccess)
-            case let .failure(error):
-                alertState = .init(.unableToExportLabels(error.localizedDescription))
-            }
-        }
-        .fileExporter(
-            isPresented: $isExportingBackup,
-            document: TextDocument(text: hexEncode(bytes: exportingBackup?.backup ?? Data())),
-            contentType: .plainText,
-            defaultFilename: "\(exportingBackup?.tapSigner.identFileNamePrefix() ?? "TAPSIGNER")_backup.txt"
-        ) { result in
-            switch result {
-            case .success:
-                app.sheetState = .none
-                app.alertState = .init(
-                    .general(
-                        title: "Backup Saved!",
-                        message: "Your backup has been save successfully!"
-                    )
-                )
-            case let .failure(error):
-                app.alertState = .init(
-                    .general(title: "Saving Backup Failed!", message: error.localizedDescription))
-            }
-        }
         .fileImporter(
             isPresented: $isImportingLabels,
             allowedContentTypes: [.plainText, .json]
@@ -286,21 +238,23 @@ struct SelectedWalletScreen: View {
                 let file = try result.get()
                 let fileContents = try FileReader(for: file).read()
                 try labelManager.import(jsonl: fileContents)
-                alertState = .init(.setupSuccess)
+
+                app.alertState = .init(
+                    .general(
+                        title: "Success!",
+                        message: "Labels have been imported successfully."
+                    ))
 
                 // when labels are imported, we need to get the transactions again with the updated labels
                 Task { await manager.rust.getTransactions() }
             } catch {
-                alertState = .init(.unableToImportLabels(error.localizedDescription))
+                app.alertState = .init(
+                    .general(
+                        title: "Oops something went wrong!",
+                        message: "Unable to import labels \(error.localizedDescription)"
+                    ))
             }
         }
-        .alert(
-            alertTitle,
-            isPresented: showingAlert,
-            presenting: alertState,
-            actions: { MyAlert($0).actions },
-            message: { MyAlert($0).message }
-        )
         .onChange(of: scannedLabels, initial: false, onChangeOfScannedLabels)
     }
 
@@ -308,18 +262,18 @@ struct SelectedWalletScreen: View {
         guard let labels else { return }
         do {
             try labelManager.import(jsonl: labels.item)
-            alertState = .init(.setupSuccess)
-        } catch {
-            alertState = .init(.unableToImportLabels("Invalid QR code \(error.localizedDescription)"))
-        }
-    }
+            app.alertState = .init(
+                .general(
+                    title: "Success!",
+                    message: "Labels have been imported successfully."
+                ))
 
-    func exportLabelContent() -> String {
-        do {
-            return try labelManager.export()
         } catch {
-            alertState = .init(.unableToExportLabels(error.localizedDescription))
-            return ""
+            app.alertState = .init(
+                .general(
+                    title: "Oops something went wrong!",
+                    message: "Invalid QR code \(error.localizedDescription)"
+                ))
         }
     }
 
@@ -366,49 +320,6 @@ struct SelectedWalletScreen: View {
             content: DisplayErrorAlert
         )
         .environment(manager)
-    }
-
-    // MARK: Alerts
-
-    private var showingAlert: Binding<Bool> {
-        Binding(
-            get: { alertState != nil },
-            set: { if !$0 { alertState = .none } }
-        )
-    }
-
-    private var alertTitle: String {
-        guard let alert = alertState else { return "Error!" }
-        return MyAlert(alert).title
-    }
-
-    private func MyAlert(_ alert: TaggedItem<AlertState>) -> AnyAlertBuilder {
-        switch alert.item {
-        case let .unableToImportLabels(error), let .unableToExportLabels(error):
-            AlertBuilder(
-                title: "Oops something went wrong!",
-                message: error,
-                actions: okButton
-            ).eraseToAny()
-        case .setupSuccess:
-            AlertBuilder(
-                title: "Success!",
-                message: "Labels have been imported successfully.",
-                actions: okButton
-            ).eraseToAny()
-        case .exportSuccess:
-            AlertBuilder(
-                title: "Success!",
-                message: "Labels have been saved successfully.",
-                actions: okButton
-            )
-            .eraseToAny()
-        }
-    }
-
-    @ViewBuilder
-    private func okButton() -> some View {
-        Button("OK", action: { alertState = .none })
     }
 }
 

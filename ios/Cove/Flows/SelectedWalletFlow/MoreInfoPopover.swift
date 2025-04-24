@@ -12,10 +12,7 @@ struct MoreInfoPopover: View {
 
     // args
     let manager: WalletManager
-    @Binding var exportingBackup: ExportingBackup?
-
-    // confirmation dialogs
-    @Binding var isExportingLabels: Bool
+    @Binding var exporting: SelctedWalletScreenExporterView.Exporting?
     @Binding var isImportingLabels: Bool
 
     private var hasLabels: Bool {
@@ -35,7 +32,43 @@ struct MoreInfoPopover: View {
     }
 
     func exportLabels() {
-        isExportingLabels = true
+        exporting = .labels
+    }
+
+    func exportTransactions() {
+        // if task isnt cancelled in 0.5 seconds show alert about waiting
+        let alertTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(0.5))
+                app.alertState = .init(
+                    .general(
+                        title: "Exporting, please wait...",
+                        message: "Creating a transaction export file. If this is the first time it might take a while"
+                    )
+                )
+            }
+        }
+
+        Task {
+            do {
+                let csv = try await manager.rust.createTransactionsWithFiatExport()
+                alertTask.cancel()
+
+                if app.alertState != .none {
+                    await MainActor.run { app.alertState = .none }
+                    try? await Task.sleep(for: .seconds(0.5))
+                }
+
+                await MainActor.run { exporting = .transactions(csv) }
+            } catch {
+                app.alertState = .init(
+                    .general(
+                        title: "Ooops something went wrong!",
+                        message: "Unable to export transactions \(error.localizedDescription)"
+                    )
+                )
+            }
+        }
     }
 
     var defaultFileName: String {
@@ -57,7 +90,7 @@ struct MoreInfoPopover: View {
             if let backup = app.getTapSignerBackup(t) {
                 return {
                     Log.debug("Downloading backup...")
-                    exportingBackup = ExportingBackup(tapSigner: t, backup: backup)
+                    exporting = .backup(ExportingBackup(tapSigner: t, backup: backup))
                 }
             }
 
@@ -86,6 +119,10 @@ struct MoreInfoPopover: View {
                 }
             }
 
+            Button(action: exportTransactions) {
+                Label("Export Transactions", systemImage: "arrow.up.arrow.down")
+            }
+
             if case let .tapSigner(t) = metadata.hardwareMetadata {
                 ChangePinButton(t)
                 DownloadBackupButton(t)
@@ -104,8 +141,7 @@ struct MoreInfoPopover: View {
     AsyncPreview {
         MoreInfoPopover(
             manager: WalletManager(preview: "preview_only"),
-            exportingBackup: Binding.constant(nil),
-            isExportingLabels: Binding.constant(false),
+            exporting: Binding.constant(nil),
             isImportingLabels: Binding.constant(false)
         )
         .environment(AppManager.shared)

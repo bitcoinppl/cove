@@ -1,3 +1,4 @@
+use csv::WriterBuilder;
 use serde::Serialize;
 
 use crate::{
@@ -38,12 +39,13 @@ type Row = TxnWithHistoricalPrice;
 #[derive(Debug, Serialize)]
 pub struct TxnWithHistoricalPrice {
     pub tx_id: TxId,
-    pub date_time: String,
+    pub date_time_utc: String,
+    pub date_time_local: String,
     pub block_height: u32,
     pub label: Option<String>,
     pub btc_amount: f64,
     pub sats_amount: i64,
-    pub fiat_price: Option<f32>,
+    pub fiat_price: Option<String>,
     pub txn_direction: &'static str,
 }
 
@@ -63,15 +65,18 @@ impl HistoricalFiatPriceReport {
             self.currency.suffix()
         );
 
-        let mut csv = csv::Writer::from_writer(vec![]);
+        let confirmed_at_local_header = format!("Confirmed At ({})", self.timezone);
+
+        let mut csv = WriterBuilder::new().has_headers(false).from_writer(vec![]);
 
         // write header
         csv.write_record([
             "Transaction ID",
-            "Confirmed At",
+            "Confirmed At (UTC)",
+            confirmed_at_local_header.as_str(),
             "Block Height",
             "Label",
-            "Amont (BTC)",
+            "Amount (BTC)",
             "Amount (Sats)",
             &fiat_header,
             "Transaction Direction",
@@ -80,6 +85,7 @@ impl HistoricalFiatPriceReport {
         let rows = self.txns.iter().map(|txn| self.create_row(txn));
 
         // write each row
+        // skip the header row because we wrote a custom one
         for row in rows {
             let row = row?;
             csv.serialize(row)?;
@@ -107,6 +113,8 @@ impl HistoricalFiatPriceReport {
             }
         };
 
+        let datetime_local_string = datetime_local.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string();
+
         let sent_and_received = txn.sent_and_received;
         let txn_direction = sent_and_received.direction();
 
@@ -124,15 +132,23 @@ impl HistoricalFiatPriceReport {
             TransactionDirection::Outgoing => "Sent",
         };
 
+        let fiat_price = fiat_price
+            .map(|fiat_price| fiat_price as f64 * btc_amount)
+            .map(|fiat_price| fiat_price * direction_multiplier)
+            .map(|fiat_price| {
+                let rounded = (fiat_price * 100.0).round() / 100.0;
+                format!("{:.2}", rounded)
+            });
+
         let row = Row {
             tx_id: txn.id(),
-            date_time: jiff::fmt::rfc2822::to_string(&datetime_local)
-                .expect("all datetimes are valid"),
+            date_time_utc: txn.confirmed_at.to_string(),
+            date_time_local: datetime_local_string,
             block_height: txn.block_height(),
             label: txn.label_opt(),
             btc_amount,
             sats_amount,
-            fiat_price: fiat_price.map(|fiat_price| fiat_price * direction_multiplier),
+            fiat_price,
             txn_direction,
         };
 
