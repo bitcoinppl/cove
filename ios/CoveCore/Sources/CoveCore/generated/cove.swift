@@ -24565,7 +24565,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_finalize_psbt() != 10780) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_first_address() != 31221) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_first_address() != 55623) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_force_update_height() != 23832) {
@@ -24969,9 +24969,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitPendingWalletManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
