@@ -76,7 +76,7 @@ impl HistoricalFiatPriceReport {
             confirmed_at_local_header.as_str(),
             "Block Height",
             "Label",
-            "Amont (BTC)",
+            "Amount (BTC)",
             "Amount (Sats)",
             &fiat_header,
             "Transaction Direction",
