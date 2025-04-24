@@ -11760,11 +11760,11 @@ public struct SendFlowManagerState {
     public var maxSelected: Amount?
     public var setAmountFocusField: SetAmountFocusField?
     public var selectedFeeRate: FeeRateOptionWithTotalFee?
-    public var feeRateOptions: FeeRateOptionWithTotalFee?
+    public var feeRateOptions: FeeRateOptionsWithTotalFee?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(mode: FiatOrBtc, unit: Unit, fiatCurrency: FiatCurrency, feeRateOptionsBase: FeeRateOptions?, enteringBtcAmount: String, enteringFiatAmount: String, amountSats: UInt64, amountFiat: Double, maxSelected: Amount?, setAmountFocusField: SetAmountFocusField?, selectedFeeRate: FeeRateOptionWithTotalFee?, feeRateOptions: FeeRateOptionWithTotalFee?) {
+    public init(mode: FiatOrBtc, unit: Unit, fiatCurrency: FiatCurrency, feeRateOptionsBase: FeeRateOptions?, enteringBtcAmount: String, enteringFiatAmount: String, amountSats: UInt64, amountFiat: Double, maxSelected: Amount?, setAmountFocusField: SetAmountFocusField?, selectedFeeRate: FeeRateOptionWithTotalFee?, feeRateOptions: FeeRateOptionsWithTotalFee?) {
         self.mode = mode
         self.unit = unit
         self.fiatCurrency = fiatCurrency
@@ -11804,7 +11804,7 @@ public struct FfiConverterTypeSendFlowManagerState: FfiConverterRustBuffer {
                 maxSelected: FfiConverterOptionTypeAmount.read(from: &buf), 
                 setAmountFocusField: FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), 
                 selectedFeeRate: FfiConverterOptionTypeFeeRateOptionWithTotalFee.read(from: &buf), 
-                feeRateOptions: FfiConverterOptionTypeFeeRateOptionWithTotalFee.read(from: &buf)
+                feeRateOptions: FfiConverterOptionTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
     }
 
@@ -11820,7 +11820,7 @@ public struct FfiConverterTypeSendFlowManagerState: FfiConverterRustBuffer {
         FfiConverterOptionTypeAmount.write(value.maxSelected, into: &buf)
         FfiConverterOptionTypeSetAmountFocusField.write(value.setAmountFocusField, into: &buf)
         FfiConverterOptionTypeFeeRateOptionWithTotalFee.write(value.selectedFeeRate, into: &buf)
-        FfiConverterOptionTypeFeeRateOptionWithTotalFee.write(value.feeRateOptions, into: &buf)
+        FfiConverterOptionTypeFeeRateOptionsWithTotalFee.write(value.feeRateOptions, into: &buf)
     }
 }
 
@@ -22388,7 +22388,7 @@ public func FfiConverterCallbackInterfacePendingWalletManagerReconciler_lower(_ 
 public protocol SendFlowManagerReconciler: AnyObject, Sendable {
     
     /**
-     * Tells the frontend to reconcile the manager changes
+     * tells the frontend to reconcile the manager changes
      */
     func reconcile(message: SendFlowManagerReconcileMessage) 
     
@@ -23138,6 +23138,30 @@ fileprivate struct FfiConverterOptionTypeFeeRateOptions: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFeeRateOptions.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeFeeRateOptionsWithTotalFee: FfiConverterRustBuffer {
+    typealias SwiftType = FeeRateOptionsWithTotalFee?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFeeRateOptionsWithTotalFee.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -25614,7 +25638,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile() != 39280) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile() != 13568) {
+    if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile() != 9770) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 41763) {
@@ -25638,10 +25662,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

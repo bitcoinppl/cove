@@ -10,15 +10,8 @@ struct EnterAmountView: View {
     @Environment(AppManager.self) private var app
     @Environment(SendFlowPresenter.self) private var presenter
     @Environment(WalletManager.self) private var manager
+    @Environment(SendFlowManager.self) private var sendFlowManager
 
-    // args
-    @Binding var sendAmount: String
-    @Binding var sendAmountFiat: String
-
-    // private
-
-    // private state for entering sendAmountFiat, don't show sendAmountFiat update
-    @State private var fiatText: String = ""
     @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
 
@@ -30,8 +23,10 @@ struct EnterAmountView: View {
     }
 
     var textField: Binding<String> {
-        if metadata.fiatOrBtc == .btc { return $sendAmount }
-        return $fiatText
+//        if metadata.fiatOrBtc == .btc { return $sendAmount }
+//        return $fiatText
+        // TODO:
+        Binding.constant("0")
     }
 
     var body: some View {
@@ -65,105 +60,105 @@ struct EnterAmountView: View {
                     }
                 }
                 .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
-                .onChange(of: focusField, initial: true) { oldFocusField, newFocusField in
+                .onChange(of: focusField, initial: true) { _, newFocusField in
                     guard let newFocusField else { return }
                     presenter.focusField = newFocusField
 
-                    // focusField changed when entering btc/sats
-                    if metadata.fiatOrBtc == .btc {
-                        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
-                        if metadata.selectedUnit == .sat, let amountInt = Int(sendAmount) {
-                            self.sendAmount = ThousandsFormatter(amountInt).fmt()
-                        }
-                    }
-
-                    // focusField changed when entering fiat
-                    if metadata.fiatOrBtc == .fiat {
-                        if newFocusField == .amount {
-                            do {
-                                if fiatText == "" { return }
-                                let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
-                                let fiatAmount = manager.rust.displayFiatAmount(
-                                    amount: fiatValue, withSuffix: false
-                                )
-                                fiatText = fiatAmount
-                            } catch {
-                                Log.error(
-                                    "'EnterAmountView::onChangeFocusField' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
-                                )
-                            }
-                        }
-
-                        if oldFocusField == .amount, newFocusField != .amount {
-                            do {
-                                let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
-                                let fiatAmount = manager.rust.displayFiatAmount(
-                                    amount: fiatValue, withSuffix: false
-                                )
-
-                                sendAmountFiat = fiatAmount
-                                fiatText = fiatAmount
-                            } catch {
-                                Log.error(
-                                    "'EnterAmountView::onChangeFocusField' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
-                                )
-                            }
-                        }
-                    }
+                    // TODO:
+//                    // focusField changed when entering btc/sats
+//                    if metadata.fiatOrBtc == .btc {
+//                        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
+//                        if metadata.selectedUnit == .sat, let amountInt = Int(sendAmount) {
+//                            self.sendAmount = ThousandsFormatter(amountInt).fmt()
+//                        }
+//                    }
+//
+//                    // focusField changed when entering fiat
+//                    if metadata.fiatOrBtc == .fiat {
+//                        if newFocusField == .amount {
+//                            do {
+//                                if fiatText == "" { return }
+//                                let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
+//                                let fiatAmount = manager.rust.displayFiatAmount(
+//                                    amount: fiatValue, withSuffix: false
+//                                )
+//                                fiatText = fiatAmount
+//                            } catch {
+//                                Log.error(
+//                                    "'EnterAmountView::onChangeFocusField' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
+//                                )
+//                            }
+//                        }
+//
+//                        if oldFocusField == .amount, newFocusField != .amount {
+//                            do {
+//                                let fiatValue = try Converter().getFiatValue(fiatAmount: fiatText)
+//                                let fiatAmount = manager.rust.displayFiatAmount(
+//                                    amount: fiatValue, withSuffix: false
+//                                )
+//
+//                                sendAmountFiat = fiatAmount
+//                                fiatText = fiatAmount
+//                            } catch {
+//                                Log.error(
+//                                    "'EnterAmountView::onChangeFocusField' failed to convert fiat amount (\(fiatText)) to btc: \(error)"
+//                                )
+//                            }
+//                        }
+//                    }
                 }
-                .onChange(of: fiatText, initial: true) { oldValue, newValue in
-                    Log.debug("EnterAmountView::onChange::fiatText \(oldValue) --> \(newValue)")
-                    guard metadata.fiatOrBtc == .fiat else { return }
-                    guard let prices = app.prices else { return }
-                    let selectedCurrency = Database().globalConfig().selectedFiatCurrency()
-
-                    do {
-                        let result = try SendFlowFiatOnChangeHandler(prices: prices, selectedCurrency: selectedCurrency).onChange(oldValue: oldValue, newValue: newValue)
-                        if let amount = result.btcAmount {
-                            withAnimation {
-                                presenter.amount = amount
-                                sendAmount =
-                                    manager.walletMetadata.selectedUnit == .btc
-                                        ? amount.btcString() : ThousandsFormatter(amount.asSats()).fmt()
-                            }
-                        }
-
-                        if let fiatValue = result.fiatValue {
-                            withAnimation {
-                                sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatValue)
-                            }
-                        }
-
-                        if let fiatText = result.fiatText {
-                            withAnimation {
-                                self.fiatText = fiatText
-                            }
-                        }
-                    } catch let err as SendFlowFiatOnChangeError {
-                        Log.error("'EnterAmountView::onChange' error: \(err.describe)")
-                    } catch {
-                        Log.error("'EnterAmountView::onChange' unknonw error: \(error.localizedDescription)")
-                    }
-                }
-                .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
-                    if old == .btc, new == .fiat {
-                        fiatText = sendAmountFiat
-                    }
-
-                    if old == .fiat, new == .btc, fiatText == "" {
-                        sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
-                    }
-                }
-                .onChange(of: sendAmountFiat, initial: false) { _, new in
-                    guard metadata.fiatOrBtc == .fiat else { return }
-                    let selectedCurrency = Database().globalConfig().selectedFiatCurrency()
-
-                    // allow clearing with the clear button
-                    if new == selectedCurrency.symbol() {
-                        fiatText = selectedCurrency.symbol()
-                    }
-                }
-                .onAppear { fiatText = sendAmountFiat }
+//                .onChange(of: fiatText, initial: true) { oldValue, newValue in
+//                    Log.debug("EnterAmountView::onChange::fiatText \(oldValue) --> \(newValue)")
+//                    guard metadata.fiatOrBtc == .fiat else { return }
+//                    guard let prices = app.prices else { return }
+//                    let selectedCurrency = Database().globalConfig().selectedFiatCurrency()
+//
+//                    do {
+//                        let result = try SendFlowFiatOnChangeHandler(prices: prices, selectedCurrency: selectedCurrency).onChange(oldValue: oldValue, newValue: newValue)
+//                        if let amount = result.btcAmount {
+//                            withAnimation {
+//                                presenter.amount = amount
+//                                sendAmount =
+//                                    manager.walletMetadata.selectedUnit == .btc
+//                                        ? amount.btcString() : ThousandsFormatter(amount.asSats()).fmt()
+//                            }
+//                        }
+//
+//                        if let fiatValue = result.fiatValue {
+//                            withAnimation {
+//                                sendAmountFiat = manager.rust.displayFiatAmount(amount: fiatValue)
+//                            }
+//                        }
+//
+//                        if let fiatText = result.fiatText {
+//                            withAnimation {
+//                                self.fiatText = fiatText
+//                            }
+//                        }
+//                    } catch let err as SendFlowFiatOnChangeError {
+//                        Log.error("'EnterAmountView::onChange' error: \(err.describe)")
+//                    } catch {
+//                        Log.error("'EnterAmountView::onChange' unknonw error: \(error.localizedDescription)")
+//                    }
+//                }
+//                .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
+//                    if old == .btc, new == .fiat {
+//                        fiatText = sendAmountFiat
+//                    }
+//
+//                    if old == .fiat, new == .btc, fiatText == "" {
+//                        sendAmountFiat = manager.rust.displayFiatAmount(amount: 0)
+//                    }
+//                }
+//                .onChange(of: sendAmountFiat, initial: false) { _, new in
+//                    guard metadata.fiatOrBtc == .fiat else { return }
+//                    let selectedCurrency = Database().globalConfig().selectedFiatCurrency()
+//
+//                    // allow clearing with the clear button
+//                    if new == selectedCurrency.symbol() {
+//                        fiatText = selectedCurrency.symbol()
+//                    }
+//                }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button("sats") {
@@ -191,10 +186,11 @@ struct EnterAmountView: View {
             }
 
             HStack(spacing: 4) {
-                Text(metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmount)
-                    .contentTransition(.numericText())
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                // TODO:
+//                Text(metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmount)
+//                    .contentTransition(.numericText())
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
 
                 if metadata.fiatOrBtc == .fiat {
                     Text(manager.unit)

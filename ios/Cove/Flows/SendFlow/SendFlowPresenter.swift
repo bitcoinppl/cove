@@ -8,6 +8,8 @@
 import SwiftUI
 
 @Observable class SendFlowPresenter {
+    typealias FocusField = SetAmountFocusField
+
     @ObservationIgnored
     let app: AppManager
 
@@ -19,18 +21,13 @@ import SwiftUI
     var maxSelected: Amount?
 
     var disappearing: Bool = false
-    var focusField: FocusField?
+    var focusField: SetAmountFocusField?
     var sheetState: TaggedItem<SheetState>? = .none
     var alertState: TaggedItem<AlertState>? = .none
 
     init(app: AppManager, manager: WalletManager) {
         self.app = app
         self.manager = manager
-    }
-
-    enum FocusField: Hashable {
-        case amount
-        case address
     }
 
     enum SheetState: Equatable {

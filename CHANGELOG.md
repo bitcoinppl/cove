@@ -17,6 +17,7 @@
 
 - Extracted out multiple modules into their own crates
 - Updated build script to work with multiple crates and to create a SPM package for iOS
+- Complete refactor of send flow, moved logic over to rust
 
 ## [0.3.0] - 2025-04-07
 

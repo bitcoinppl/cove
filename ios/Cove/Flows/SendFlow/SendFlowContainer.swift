@@ -17,6 +17,7 @@ public struct SendFlowContainer: View {
     // private
     @State private var manager: WalletManager? = nil
     @State private var presenter: SendFlowPresenter? = nil
+    @State private var sendFlowManager: SendFlowManager? = nil
 
     func initOnAppear() {
         let id = sendRoute.id()
@@ -25,9 +26,12 @@ public struct SendFlowContainer: View {
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
             let manager = try app.getWalletManager(id: id)
+            let sendFlowManager = SendFlowManager(manager.rust.newSendFlowManager())
+            let presenter = SendFlowPresenter(app: app, manager: manager)
 
             self.manager = manager
-            presenter = SendFlowPresenter(app: app, manager: manager)
+            self.sendFlowManager = sendFlowManager
+            self.presenter = presenter
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -39,7 +43,7 @@ public struct SendFlowContainer: View {
         switch sendRoute {
         case let .setAmount(id: id, address: address, amount: amount):
             SendFlowSetAmountScreen(
-                id: id, manager: manager, address: address?.string() ?? "", amount: amount
+                id: id, address: address?.string() ?? "", amount: amount
             )
         case let .confirm(confirm):
             SendFlowConfirmScreen(

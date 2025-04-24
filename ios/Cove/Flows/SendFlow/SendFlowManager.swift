@@ -14,11 +14,28 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     private let logger = Log(id: "SendFlowManager")
     var rust: RustSendFlowManager
 
-    var enteringBtcAmount: String = ""
-    var enteringFiatAmount: String = ""
+    private var _enteringBtcAmount: String = ""
+    private var _enteringFiatAmount: String = ""
 
     var btcAmount: Amount = .fromSat(sats: 0)
     var fiatAmount: Double = 0.0
+
+    var selectedFeeRate: FeeRateOptionWithTotalFee? = nil
+    var feeRateOptions: FeeRateOptionsWithTotalFee? = nil
+
+    var enteringBtcAmount: Binding<String> {
+        Binding(
+            get: { self._enteringBtcAmount },
+            set: { self.dispatch(action: .changeEnteringBtcAmount($0)) }
+        )
+    }
+
+    var enteringFiatAmount: Binding<String> {
+        Binding(
+            get: { self._enteringFiatAmount },
+            set: { self.dispatch(action: .changeEnteringFiatAmount($0)) }
+        )
+    }
 
     public init(_ rust: RustSendFlowManager) {
         self.rust = rust

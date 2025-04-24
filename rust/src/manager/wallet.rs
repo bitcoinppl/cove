@@ -254,7 +254,9 @@ impl RustWalletManager {
     #[uniffi::method]
     pub fn new_send_flow_manager(&self) -> Arc<RustSendFlowManager> {
         let addr = self.actor.downgrade();
-        RustSendFlowManager::new(addr, self.reconcile_receiver.clone()).into()
+        let metadata = self.metadata.read().clone();
+
+        RustSendFlowManager::new(metadata, addr, self.reconcile_receiver.clone()).into()
     }
 
     #[uniffi::method]
@@ -429,8 +431,8 @@ impl RustWalletManager {
         Ok(txns)
     }
 
-    #[uniffi::method]
     /// gets the transactions for the wallet that are currently available
+    #[uniffi::method]
     pub async fn get_transactions(&self) {
         let Ok(txns) = call!(self.actor.transactions()).await else { return };
 

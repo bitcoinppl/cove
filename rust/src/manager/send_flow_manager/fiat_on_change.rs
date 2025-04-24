@@ -11,26 +11,26 @@ use cove_util::format::NumberFormatter as _;
 /// Handles the logic for what happens when the fiat amount onChange is called
 
 #[derive(Debug, Clone, uniffi::Object)]
-struct SendFlowFiatOnChangeHandler {
-    prices: Arc<PriceResponse>,
-    selected_currency: FiatCurrency,
-    converter: Converter,
+pub struct FiatOnChangeHandler {
+    pub prices: Arc<PriceResponse>,
+    pub selected_currency: FiatCurrency,
+    pub converter: Converter,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-struct SendFlowFiatOnChangeResult {
+struct FiatOnChangeResult {
     fiat_text: Option<String>,
     fiat_value: Option<f64>,
     btc_amount: Option<Arc<Amount>>,
 }
 
-impl Default for SendFlowFiatOnChangeResult {
+impl Default for FiatOnChangeResult {
     fn default() -> Self {
         Self::no_change()
     }
 }
 
-impl SendFlowFiatOnChangeResult {
+impl FiatOnChangeResult {
     fn no_change() -> Self {
         Self {
             fiat_text: None,
@@ -48,6 +48,8 @@ impl SendFlowFiatOnChangeResult {
     }
 }
 
+pub type Error = SendFlowFiatOnChangeError;
+
 #[derive(Debug, Clone, uniffi::Enum, thiserror::Error)]
 enum SendFlowFiatOnChangeError {
     #[error("invalid fiat amount: {error} ({input})")]
@@ -58,7 +60,7 @@ enum SendFlowFiatOnChangeError {
 }
 
 #[uniffi::export]
-impl SendFlowFiatOnChangeHandler {
+impl FiatOnChangeHandler {
     #[uniffi::constructor]
     pub fn new(prices: Arc<PriceResponse>, selected_currency: FiatCurrency) -> Self {
         let converter = Converter::global();
@@ -75,7 +77,7 @@ impl SendFlowFiatOnChangeHandler {
         &self,
         old_value: String,
         new_value: String,
-    ) -> Result<SendFlowFiatOnChangeResult, SendFlowFiatOnChangeError> {
+    ) -> Result<FiatOnChangeResult, SendFlowFiatOnChangeError> {
         let old_value = old_value.trim();
         let new_value = new_value.trim();
 
@@ -95,22 +97,22 @@ impl SendFlowFiatOnChangeHandler {
 
         // if the new value is the symbol, then we don't need to do anything
         if new_value == symbol {
-            return Ok(SendFlowFiatOnChangeResult::empty_zero(symbol));
+            return Ok(FiatOnChangeResult::empty_zero(symbol));
         }
 
         // don't allow deleting the fiat amount symbol
         if new_value.is_empty() && !symbol.is_empty() {
-            return Ok(SendFlowFiatOnChangeResult::empty_zero(symbol));
+            return Ok(FiatOnChangeResult::empty_zero(symbol));
         }
 
         // if old value is the same as the new value, then we don't need to do anything
         if old_value == new_value {
-            return Ok(SendFlowFiatOnChangeResult::no_change());
+            return Ok(FiatOnChangeResult::no_change());
         }
 
         // don't allow adding more than 1 decimal point
         if number_of_decimal_points > 1 {
-            return Ok(SendFlowFiatOnChangeResult {
+            return Ok(FiatOnChangeResult {
                 fiat_text: Some(old_value.to_string()),
                 ..Default::default()
             });
@@ -118,12 +120,12 @@ impl SendFlowFiatOnChangeHandler {
 
         // if the only change was formatting (adding ,) then we don't need to do anything
         if old_value_raw == new_value_raw {
-            return Ok(SendFlowFiatOnChangeResult::no_change());
+            return Ok(FiatOnChangeResult::no_change());
         }
 
         // if its 0.00 (starting state) and they enter an amount auto delete the 0.00
         if old_value_raw == "0.00" && new_value_raw.len() > 3 {
-            let mut change = SendFlowFiatOnChangeResult::no_change();
+            let mut change = FiatOnChangeResult::no_change();
             let new_value = new_value_raw.trim_start_matches("0.00");
 
             change.fiat_text = Some(format!("{symbol}{new_value}"));
@@ -133,7 +135,7 @@ impl SendFlowFiatOnChangeHandler {
 
         // if 0.00 and start deleting, just delete the entire thing
         if old_value_raw == "0.00" && new_value_raw.len() == 3 {
-            let mut change = SendFlowFiatOnChangeResult::no_change();
+            let mut change = FiatOnChangeResult::no_change();
             change.fiat_text = Some(symbol.to_string());
             change.fiat_value = Some(0.0);
             return Ok(change);
@@ -167,7 +169,7 @@ impl SendFlowFiatOnChangeHandler {
         let fiat_value_int = (fiat_value.trunc() as u64).thousands_int();
         let fiat_text = format!("{symbol}{fiat_value_int}{int_value_suffix}");
 
-        let change = SendFlowFiatOnChangeResult {
+        let change = FiatOnChangeResult {
             fiat_text: Some(fiat_text),
             fiat_value: Some(fiat_value),
             btc_amount: Some(btc_amount.into()),
