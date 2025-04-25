@@ -35,9 +35,23 @@ impl FeeClient {
         }
     }
 
+    /// Always returns the cached fees, will also update the fees cache in the background if needed
+    pub fn fees(&self) -> Option<FeeResponse> {
+        if let Some(cached) = FEES.load().as_ref() {
+            let now = Instant::now();
+            if now.duration_since(cached.last_fetched) > std::time::Duration::from_secs(ONE_MIN) {
+                crate::task::spawn(async move { FEE_CLIENT.fetch_and_get_fees().await });
+            }
+
+            return Some(cached.fees);
+        }
+
+        None
+    }
+
     /// Get fees from the memory cache if it exists and is less than 60 seconds old
     /// otherwise get the new fees from the server
-    pub async fn get_fees(&self) -> Result<FeeResponse, reqwest::Error> {
+    pub async fn fetch_and_get_fees(&self) -> Result<FeeResponse, reqwest::Error> {
         if let Some(cached) = FEES.load().as_ref() {
             let now = Instant::now();
             if now.duration_since(cached.last_fetched) < std::time::Duration::from_secs(ONE_MIN) {
@@ -146,7 +160,7 @@ pub async fn init_fees() {
         return;
     }
 
-    let result = tryhard::retry_fn(move || FEE_CLIENT.get_fees())
+    let result = tryhard::retry_fn(move || FEE_CLIENT.fetch_and_get_fees())
         .retries(20)
         .exponential_backoff(std::time::Duration::from_millis(10))
         .max_delay(std::time::Duration::from_secs(5))

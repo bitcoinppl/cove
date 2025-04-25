@@ -337,7 +337,7 @@ impl RustWalletManager {
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client
-            .get_fees()
+            .fetch_and_get_fees()
             .await
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
@@ -830,7 +830,7 @@ impl RustWalletManager {
     pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client
-            .get_fees()
+            .fetch_and_get_fees()
             .await
             .map_err(|error| Error::FeesError(error.to_string()))?;
 

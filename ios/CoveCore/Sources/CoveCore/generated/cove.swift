@@ -2794,7 +2794,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     
     func emailMailto(ios: String)  -> String
     
-    func fees() async throws  -> FeeResponse
+    func fees() throws  -> FeeResponse
     
     /**
      * Find tapsigner wallet by card ident
@@ -2844,7 +2844,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
      */
     func numWallets()  -> UInt16
     
-    func prices() async throws  -> PriceResponse
+    func prices() throws  -> PriceResponse
     
     /**
      * Change the default route, and reset the routes
@@ -2985,21 +2985,11 @@ open func emailMailto(ios: String) -> String  {
 })
 }
     
-open func fees()async throws  -> FeeResponse  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_ffiapp_fees(
-                    self.uniffiClonePointer()
-                    
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFeeResponse_lift,
-            errorHandler: FfiConverterTypeAppError_lift
-        )
+open func fees()throws  -> FeeResponse  {
+    return try  FfiConverterTypeFeeResponse_lift(try rustCallWithError(FfiConverterTypeAppError_lift) {
+    uniffi_cove_fn_method_ffiapp_fees(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -3119,21 +3109,11 @@ open func numWallets() -> UInt16  {
 })
 }
     
-open func prices()async throws  -> PriceResponse  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_ffiapp_prices(
-                    self.uniffiClonePointer()
-                    
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_pointer,
-            completeFunc: ffi_cove_rust_future_complete_pointer,
-            freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypePriceResponse_lift,
-            errorHandler: FfiConverterTypeAppError_lift
-        )
+open func prices()throws  -> PriceResponse  {
+    return try  FfiConverterTypePriceResponse_lift(try rustCallWithError(FfiConverterTypeAppError_lift) {
+    uniffi_cove_fn_method_ffiapp_prices(self.uniffiClonePointer(),$0
+    )
+})
 }
     
     /**
@@ -3368,6 +3348,145 @@ public func FfiConverterTypeFiatClient_lift(_ pointer: UnsafeMutableRawPointer) 
 #endif
 public func FfiConverterTypeFiatClient_lower(_ value: FiatClient) -> UnsafeMutableRawPointer {
     return FfiConverterTypeFiatClient.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Handles the logic for what happens when the fiat amount onChange is called
+ */
+public protocol FiatOnChangeHandlerProtocol: AnyObject, Sendable {
+    
+    func onChange(oldValue: String, newValue: String) throws  -> FiatOnChangeResult
+    
+}
+/**
+ * Handles the logic for what happens when the fiat amount onChange is called
+ */
+open class FiatOnChangeHandler: FiatOnChangeHandlerProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_cove_fn_clone_fiatonchangehandler(self.pointer, $0) }
+    }
+public convenience init(prices: PriceResponse, selectedCurrency: FiatCurrency) {
+    let pointer =
+        try! rustCall() {
+    uniffi_cove_fn_constructor_fiatonchangehandler_new(
+        FfiConverterTypePriceResponse_lower(prices),
+        FfiConverterTypeFiatCurrency_lower(selectedCurrency),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_fiatonchangehandler(pointer, $0) }
+    }
+
+    
+
+    
+open func onChange(oldValue: String, newValue: String)throws  -> FiatOnChangeResult  {
+    return try  FfiConverterTypeFiatOnChangeResult_lift(try rustCallWithError(FfiConverterTypeSendFlowFiatOnChangeError_lift) {
+    uniffi_cove_fn_method_fiatonchangehandler_on_change(self.uniffiClonePointer(),
+        FfiConverterString.lower(oldValue),
+        FfiConverterString.lower(newValue),$0
+    )
+})
+}
+    
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFiatOnChangeHandler: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = FiatOnChangeHandler
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FiatOnChangeHandler {
+        return FiatOnChangeHandler(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: FiatOnChangeHandler) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatOnChangeHandler {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: FiatOnChangeHandler, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFiatOnChangeHandler_lift(_ pointer: UnsafeMutableRawPointer) throws -> FiatOnChangeHandler {
+    return try FfiConverterTypeFiatOnChangeHandler.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFiatOnChangeHandler_lower(_ value: FiatOnChangeHandler) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFiatOnChangeHandler.lower(value)
 }
 
 
@@ -8206,145 +8325,6 @@ public func FfiConverterTypeSeedQr_lower(_ value: SeedQr) -> UnsafeMutableRawPoi
 
 
 
-/**
- * Handles the logic for what happens when the fiat amount onChange is called
- */
-public protocol SendFlowFiatOnChangeHandlerProtocol: AnyObject, Sendable {
-    
-    func onChange(oldValue: String, newValue: String) throws  -> SendFlowFiatOnChangeResult
-    
-}
-/**
- * Handles the logic for what happens when the fiat amount onChange is called
- */
-open class SendFlowFiatOnChangeHandler: SendFlowFiatOnChangeHandlerProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_fn_clone_sendflowfiatonchangehandler(self.pointer, $0) }
-    }
-public convenience init(prices: PriceResponse, selectedCurrency: FiatCurrency) {
-    let pointer =
-        try! rustCall() {
-    uniffi_cove_fn_constructor_sendflowfiatonchangehandler_new(
-        FfiConverterTypePriceResponse_lower(prices),
-        FfiConverterTypeFiatCurrency_lower(selectedCurrency),$0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_fn_free_sendflowfiatonchangehandler(pointer, $0) }
-    }
-
-    
-
-    
-open func onChange(oldValue: String, newValue: String)throws  -> SendFlowFiatOnChangeResult  {
-    return try  FfiConverterTypeSendFlowFiatOnChangeResult_lift(try rustCallWithError(FfiConverterTypeSendFlowFiatOnChangeError_lift) {
-    uniffi_cove_fn_method_sendflowfiatonchangehandler_on_change(self.uniffiClonePointer(),
-        FfiConverterString.lower(oldValue),
-        FfiConverterString.lower(newValue),$0
-    )
-})
-}
-    
-
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeSendFlowFiatOnChangeHandler: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = SendFlowFiatOnChangeHandler
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SendFlowFiatOnChangeHandler {
-        return SendFlowFiatOnChangeHandler(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: SendFlowFiatOnChangeHandler) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowFiatOnChangeHandler {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: SendFlowFiatOnChangeHandler, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSendFlowFiatOnChangeHandler_lift(_ pointer: UnsafeMutableRawPointer) throws -> SendFlowFiatOnChangeHandler {
-    return try FfiConverterTypeSendFlowFiatOnChangeHandler.lift(pointer)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSendFlowFiatOnChangeHandler_lower(_ value: SendFlowFiatOnChangeHandler) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeSendFlowFiatOnChangeHandler.lower(value)
-}
-
-
-
-
-
-
 public protocol SetupCmdProtocol: AnyObject, Sendable {
     
 }
@@ -10945,6 +10925,62 @@ public func FfiConverterTypeFiatAmount_lower(_ value: FiatAmount) -> RustBuffer 
 }
 
 
+public struct FiatOnChangeResult {
+    public var fiatText: String?
+    public var fiatValue: Double?
+    public var btcAmount: Amount?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fiatText: String?, fiatValue: Double?, btcAmount: Amount?) {
+        self.fiatText = fiatText
+        self.fiatValue = fiatValue
+        self.btcAmount = btcAmount
+    }
+}
+
+#if compiler(>=6)
+extension FiatOnChangeResult: Sendable {}
+#endif
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFiatOnChangeResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FiatOnChangeResult {
+        return
+            try FiatOnChangeResult(
+                fiatText: FfiConverterOptionString.read(from: &buf), 
+                fiatValue: FfiConverterOptionDouble.read(from: &buf), 
+                btcAmount: FfiConverterOptionTypeAmount.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FiatOnChangeResult, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.fiatText, into: &buf)
+        FfiConverterOptionDouble.write(value.fiatValue, into: &buf)
+        FfiConverterOptionTypeAmount.write(value.btcAmount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFiatOnChangeResult_lift(_ buf: RustBuffer) throws -> FiatOnChangeResult {
+    return try FfiConverterTypeFiatOnChangeResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFiatOnChangeResult_lower(_ value: FiatOnChangeResult) -> RustBuffer {
+    return FfiConverterTypeFiatOnChangeResult.lower(value)
+}
+
+
 public struct FoundAddress {
     public var type: WalletAddressType
     public var firstAddress: String
@@ -11692,89 +11728,29 @@ public func FfiConverterTypeScanningInfo_lower(_ value: ScanningInfo) -> RustBuf
 }
 
 
-public struct SendFlowFiatOnChangeResult {
-    public var fiatText: String?
-    public var fiatValue: Double?
-    public var btcAmount: Amount?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(fiatText: String?, fiatValue: Double?, btcAmount: Amount?) {
-        self.fiatText = fiatText
-        self.fiatValue = fiatValue
-        self.btcAmount = btcAmount
-    }
-}
-
-#if compiler(>=6)
-extension SendFlowFiatOnChangeResult: Sendable {}
-#endif
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeSendFlowFiatOnChangeResult: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowFiatOnChangeResult {
-        return
-            try SendFlowFiatOnChangeResult(
-                fiatText: FfiConverterOptionString.read(from: &buf), 
-                fiatValue: FfiConverterOptionDouble.read(from: &buf), 
-                btcAmount: FfiConverterOptionTypeAmount.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: SendFlowFiatOnChangeResult, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.fiatText, into: &buf)
-        FfiConverterOptionDouble.write(value.fiatValue, into: &buf)
-        FfiConverterOptionTypeAmount.write(value.btcAmount, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSendFlowFiatOnChangeResult_lift(_ buf: RustBuffer) throws -> SendFlowFiatOnChangeResult {
-    return try FfiConverterTypeSendFlowFiatOnChangeResult.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSendFlowFiatOnChangeResult_lower(_ value: SendFlowFiatOnChangeResult) -> RustBuffer {
-    return FfiConverterTypeSendFlowFiatOnChangeResult.lower(value)
-}
-
-
 public struct SendFlowManagerState {
-    public var mode: FiatOrBtc
-    public var unit: Unit
-    public var fiatCurrency: FiatCurrency
+    public var metadata: WalletMetadata
     public var feeRateOptionsBase: FeeRateOptions?
     public var enteringBtcAmount: String
     public var enteringFiatAmount: String
     public var amountSats: UInt64
     public var amountFiat: Double
     public var maxSelected: Amount?
-    public var setAmountFocusField: SetAmountFocusField?
+    public var focusField: SetAmountFocusField?
     public var selectedFeeRate: FeeRateOptionWithTotalFee?
     public var feeRateOptions: FeeRateOptionsWithTotalFee?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(mode: FiatOrBtc, unit: Unit, fiatCurrency: FiatCurrency, feeRateOptionsBase: FeeRateOptions?, enteringBtcAmount: String, enteringFiatAmount: String, amountSats: UInt64, amountFiat: Double, maxSelected: Amount?, setAmountFocusField: SetAmountFocusField?, selectedFeeRate: FeeRateOptionWithTotalFee?, feeRateOptions: FeeRateOptionsWithTotalFee?) {
-        self.mode = mode
-        self.unit = unit
-        self.fiatCurrency = fiatCurrency
+    public init(metadata: WalletMetadata, feeRateOptionsBase: FeeRateOptions?, enteringBtcAmount: String, enteringFiatAmount: String, amountSats: UInt64, amountFiat: Double, maxSelected: Amount?, focusField: SetAmountFocusField?, selectedFeeRate: FeeRateOptionWithTotalFee?, feeRateOptions: FeeRateOptionsWithTotalFee?) {
+        self.metadata = metadata
         self.feeRateOptionsBase = feeRateOptionsBase
         self.enteringBtcAmount = enteringBtcAmount
         self.enteringFiatAmount = enteringFiatAmount
         self.amountSats = amountSats
         self.amountFiat = amountFiat
         self.maxSelected = maxSelected
-        self.setAmountFocusField = setAmountFocusField
+        self.focusField = focusField
         self.selectedFeeRate = selectedFeeRate
         self.feeRateOptions = feeRateOptions
     }
@@ -11793,32 +11769,28 @@ public struct FfiConverterTypeSendFlowManagerState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowManagerState {
         return
             try SendFlowManagerState(
-                mode: FfiConverterTypeFiatOrBtc.read(from: &buf), 
-                unit: FfiConverterTypeUnit.read(from: &buf), 
-                fiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf), 
+                metadata: FfiConverterTypeWalletMetadata.read(from: &buf), 
                 feeRateOptionsBase: FfiConverterOptionTypeFeeRateOptions.read(from: &buf), 
                 enteringBtcAmount: FfiConverterString.read(from: &buf), 
                 enteringFiatAmount: FfiConverterString.read(from: &buf), 
                 amountSats: FfiConverterUInt64.read(from: &buf), 
                 amountFiat: FfiConverterDouble.read(from: &buf), 
                 maxSelected: FfiConverterOptionTypeAmount.read(from: &buf), 
-                setAmountFocusField: FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), 
+                focusField: FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), 
                 selectedFeeRate: FfiConverterOptionTypeFeeRateOptionWithTotalFee.read(from: &buf), 
                 feeRateOptions: FfiConverterOptionTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
     }
 
     public static func write(_ value: SendFlowManagerState, into buf: inout [UInt8]) {
-        FfiConverterTypeFiatOrBtc.write(value.mode, into: &buf)
-        FfiConverterTypeUnit.write(value.unit, into: &buf)
-        FfiConverterTypeFiatCurrency.write(value.fiatCurrency, into: &buf)
+        FfiConverterTypeWalletMetadata.write(value.metadata, into: &buf)
         FfiConverterOptionTypeFeeRateOptions.write(value.feeRateOptionsBase, into: &buf)
         FfiConverterString.write(value.enteringBtcAmount, into: &buf)
         FfiConverterString.write(value.enteringFiatAmount, into: &buf)
         FfiConverterUInt64.write(value.amountSats, into: &buf)
         FfiConverterDouble.write(value.amountFiat, into: &buf)
         FfiConverterOptionTypeAmount.write(value.maxSelected, into: &buf)
-        FfiConverterOptionTypeSetAmountFocusField.write(value.setAmountFocusField, into: &buf)
+        FfiConverterOptionTypeSetAmountFocusField.write(value.focusField, into: &buf)
         FfiConverterOptionTypeFeeRateOptionWithTotalFee.write(value.selectedFeeRate, into: &buf)
         FfiConverterOptionTypeFeeRateOptionsWithTotalFee.write(value.feeRateOptions, into: &buf)
     }
@@ -24798,7 +24770,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_email_mailto() != 16522) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_fees() != 44559) {
+    if (uniffi_cove_checksum_method_ffiapp_fees() != 4920) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_find_tap_signer_wallet() != 59228) {
@@ -24834,7 +24806,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_num_wallets() != 28903) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_prices() != 12896) {
+    if (uniffi_cove_checksum_method_ffiapp_prices() != 60317) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_reset_default_route_to() != 40613) {
@@ -24856,6 +24828,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_version() != 12247) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_fiatonchangehandler_on_change() != 29157) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_filehandler_read() != 31508) {
@@ -25335,9 +25310,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_seedqr_grouped_plain_words() != 35569) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_sendflowfiatonchangehandler_on_change() != 5451) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 43346) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25521,6 +25493,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_ffiapp_new() != 11955) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_fiatonchangehandler_new() != 5281) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_filehandler_new() != 50695) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25582,9 +25557,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_seedqr_new_from_str() != 6520) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_constructor_sendflowfiatonchangehandler_new() != 23785) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_setupcmd_try_new() != 59849) {
@@ -25662,10 +25634,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 

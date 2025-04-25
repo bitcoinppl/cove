@@ -125,6 +125,11 @@ impl App {
         FIAT_CLIENT.prices()
     }
 
+    /// Return the current fees and check if an update is needed
+    pub fn fees(&self) -> Option<FeeResponse> {
+        FEE_CLIENT.fees()
+    }
+
     /// Handle event received from frontend
     pub fn handle_action(&self, event: AppAction) {
         // Handle event
@@ -188,7 +193,7 @@ impl App {
                 debug!("updating fees");
 
                 crate::task::spawn(async move {
-                    match FEE_CLIENT.get_fees().await {
+                    match FEE_CLIENT.fetch_and_get_fees().await {
                         Ok(fees) => {
                             Updater::send_update(AppMessage::FeesChanged(fees));
                         }
@@ -451,13 +456,10 @@ impl FfiApp {
     }
 
     #[uniffi::method]
-    pub async fn fees(&self) -> Result<FeeResponse, Error> {
-        let fees = FEE_CLIENT
-            .get_fees()
-            .await
-            .map_err(|error| Error::FeesError(error.to_string()))?;
-
-        Ok(fees)
+    pub fn fees(&self) -> Result<FeeResponse, Error> {
+        App::global()
+            .fees()
+            .ok_or_else(|| Error::FeesError("no fees saved".to_string()))
     }
 
     /// DANGER: This will wipe all wallet data on this device
@@ -541,7 +543,7 @@ impl FfiApp {
         crate::task::spawn(async move {
             crate::fee_client::init_fees().await;
 
-            let fees = FEE_CLIENT.get_fees().await;
+            let fees = FEE_CLIENT.fetch_and_get_fees().await;
             if let Ok(fees) = fees {
                 Updater::send_update(AppMessage::FeesChanged(fees));
             }

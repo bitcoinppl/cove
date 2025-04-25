@@ -58,6 +58,10 @@ import SwiftUI
         self.rust = rust
         database = Database()
 
+        // set the cached prices and fees
+        prices = try? rust.prices()
+        fees = try? rust.fees()
+
         self.rust.listenForUpdates(updater: self)
     }
 
