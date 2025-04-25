@@ -1,7 +1,8 @@
 {
-    "rust-analyzer.cachePriming.enable": true,
-    "rust-analyzer.checkOnSave": true,
-    "rust-analyzer.check.workspace": true,
-    "rust-analyzer.cargo.allTargets": false,
-    "rust-analyzer.check.command": "check"
+  "rust-analyzer.cachePriming.enable": true,
+  "rust-analyzer.checkOnSave": true,
+  "rust-analyzer.check.workspace": true,
+  "rust-analyzer.cargo.allTargets": false,
+  "rust-analyzer.cargo.targetDir": true,
+  "rust-analyzer.check.command": "check"
 }

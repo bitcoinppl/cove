@@ -1,8 +1,14 @@
+pub mod btc_on_change;
 pub mod fiat_on_change;
 
-use std::sync::Arc;
+use std::{sync::Arc, thread::JoinHandle};
 
-use crate::{app::App, database::Database, wallet::metadata::WalletMetadata};
+use crate::{
+    app::{App, reconcile::AppStateReconcileMessage},
+    database::Database,
+    fiat::FiatCurrency,
+    wallet::metadata::WalletMetadata,
+};
 use act_zero::WeakAddr;
 use cove_types::{
     amount::Amount,
@@ -31,24 +37,25 @@ pub trait SendFlowManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: Message);
 }
 
-#[derive(Clone, Debug, uniffi::Object)]
+#[derive(Debug, uniffi::Object)]
 pub struct RustSendFlowManager {
     app: App,
     wallet_actor: WeakAddr<WalletActor>,
 
+    state_listeners: Vec<JoinHandle<()>>,
     pub state: Arc<RwLock<State>>,
 
     reconciler: Sender<Message>,
     reconcile_receiver: Arc<Receiver<Message>>,
-    wallet_manager_listener: Arc<Receiver<WalletManagerReconcileMessage>>,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct SendFlowManagerState {
     // private
     metadata: WalletMetadata,
-
     fee_rate_options_base: Option<Arc<FeeRateOptions>>,
+    btc_price_in_fiat: Option<f64>,
+    selected_fiat_currency: FiatCurrency,
 
     // public
     pub entering_btc_amount: String,
@@ -83,17 +90,28 @@ impl RustSendFlowManager {
     pub fn new(
         metadata: WalletMetadata,
         wallet_manager: WeakAddr<WalletActor>,
-        wallet_manager_listener: Arc<Receiver<WalletManagerReconcileMessage>>,
+        wallet_manager_receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
     ) -> Self {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
+        let state = Arc::new(RwLock::new(State::new(metadata)));
+
+        let manager_listeners = {
+            let wallet_manager_listener =
+                start_wallet_manager_listener(state.clone(), wallet_manager_receiver);
+
+            let app_listener = start_app_manager_listener(state.clone(), App::global().receiver());
+
+            vec![wallet_manager_listener, app_listener]
+        };
+
         Self {
             app: App::global().clone(),
+            state,
             wallet_actor: wallet_manager,
-            state: Arc::new(RwLock::new(State::new(metadata))),
+            state_listeners: manager_listeners,
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
-            wallet_manager_listener,
         }
     }
 }
@@ -143,8 +161,18 @@ impl RustSendFlowManager {
 }
 
 impl RustSendFlowManager {
-    fn btc_field_changed(&self, _old_value: String, _new_value: String) -> Option<()> {
-        // TODO
+    fn btc_field_changed(&self, old_value: String, new_value: String) -> Option<()> {
+        let state = self.state.clone();
+        if self.state.read().fee_rate_options.is_none() {
+            crate::task::spawn(async move {
+                get_fee_rate_options(state).await;
+            });
+        }
+
+        todo!()
+    }
+
+    async fn get_fee_rate_options(&self) {
         todo!()
     }
 
@@ -177,10 +205,15 @@ impl RustSendFlowManager {
     }
 }
 
-fn handle_wallet_manager_updates(
+async fn get_fee_rate_options(state: Arc<RwLock<State>>) {
+    todo!()
+}
+
+// Listens for updates from the wallet manager
+fn start_wallet_manager_listener(
     state: Arc<RwLock<State>>,
-    receiver: Receiver<WalletManagerReconcileMessage>,
-) {
+    receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
+) -> JoinHandle<()> {
     type Message = WalletManagerReconcileMessage;
 
     std::thread::spawn(move || {
@@ -194,7 +227,28 @@ fn handle_wallet_manager_updates(
                 _ => {}
             }
         }
-    });
+    })
+}
+
+// Listens for updates from the app manager
+fn start_app_manager_listener(
+    state: Arc<RwLock<State>>,
+    receiver: Arc<Receiver<AppStateReconcileMessage>>,
+) -> JoinHandle<()> {
+    type Message = AppStateReconcileMessage;
+
+    std::thread::spawn(move || {
+        while let Ok(message) = receiver.recv() {
+            match message {
+                Message::FiatCurrencyChanged(currency) => {
+                    let mut state = state.write();
+                    state.selected_fiat_currency = currency;
+                }
+
+                _ => {}
+            }
+        }
+    })
 }
 
 impl State {
@@ -210,6 +264,23 @@ impl State {
             focus_field: None,
             selected_fee_rate: None,
             fee_rate_options: None,
+            btc_price_in_fiat: None,
+            selected_fiat_currency: Database::global()
+                .global_config
+                .fiat_currency()
+                .unwrap_or_default(),
         }
+    }
+}
+
+// on drop, stop all listeners
+impl Drop for RustSendFlowManager {
+    fn drop(&mut self) {
+        // TODO: cancel all listeners
+        todo!()
+
+        // self.state_listeners
+        //     .drain(..)
+        //     .for_each(|handle| handle.cancel().unwrap());
     }
 }
