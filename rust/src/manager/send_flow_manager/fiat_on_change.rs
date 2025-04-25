@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     converter::{Converter, ConverterError},
     fiat::{FiatCurrency, client::PriceResponse},
@@ -10,18 +8,18 @@ use cove_util::format::NumberFormatter as _;
 
 /// Handles the logic for what happens when the fiat amount onChange is called
 
-#[derive(Debug, Clone, uniffi::Object)]
+#[derive(Debug, Clone)]
 pub struct FiatOnChangeHandler {
-    pub prices: Arc<PriceResponse>,
-    pub selected_currency: FiatCurrency,
-    pub converter: Converter,
+    prices: PriceResponse,
+    selected_currency: FiatCurrency,
+    converter: Converter,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
-struct FiatOnChangeResult {
-    fiat_text: Option<String>,
-    fiat_value: Option<f64>,
-    btc_amount: Option<Arc<Amount>>,
+#[derive(Debug, Clone)]
+pub struct FiatOnChangeResult {
+    pub fiat_text: Option<String>,
+    pub fiat_value: Option<f64>,
+    pub btc_amount: Option<Amount>,
 }
 
 impl Default for FiatOnChangeResult {
@@ -49,9 +47,10 @@ impl FiatOnChangeResult {
 }
 
 pub type Error = SendFlowFiatOnChangeError;
+type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone, uniffi::Enum, thiserror::Error)]
-enum SendFlowFiatOnChangeError {
+pub enum SendFlowFiatOnChangeError {
     #[error("invalid fiat amount: {error} ({input})")]
     InvalidFiatAmount { error: String, input: String },
 
@@ -59,10 +58,8 @@ enum SendFlowFiatOnChangeError {
     ConverterError(#[from] ConverterError),
 }
 
-#[uniffi::export]
 impl FiatOnChangeHandler {
-    #[uniffi::constructor]
-    pub fn new(prices: Arc<PriceResponse>, selected_currency: FiatCurrency) -> Self {
+    pub fn new(prices: PriceResponse, selected_currency: FiatCurrency) -> Self {
         let converter = Converter::global();
 
         Self {
@@ -72,12 +69,7 @@ impl FiatOnChangeHandler {
         }
     }
 
-    #[uniffi::method]
-    pub fn on_change(
-        &self,
-        old_value: String,
-        new_value: String,
-    ) -> Result<FiatOnChangeResult, SendFlowFiatOnChangeError> {
+    pub fn on_change(&self, old_value: String, new_value: String) -> Result<FiatOnChangeResult> {
         let old_value = old_value.trim();
         let new_value = new_value.trim();
 
@@ -172,7 +164,7 @@ impl FiatOnChangeHandler {
         let change = FiatOnChangeResult {
             fiat_text: Some(fiat_text),
             fiat_value: Some(fiat_value),
-            btc_amount: Some(btc_amount.into()),
+            btc_amount: Some(btc_amount),
         };
 
         Ok(change)

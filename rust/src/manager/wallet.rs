@@ -268,7 +268,7 @@ impl RustWalletManager {
         Converter::global().convert_from_fiat_string(
             fiat_amount,
             self.selected_fiat_currency(),
-            prices,
+            *prices.as_ref(),
         )
     }
 

@@ -2,13 +2,14 @@ pub mod fiat_on_change;
 
 use std::sync::Arc;
 
-use crate::{app::App, wallet::metadata::WalletMetadata};
+use crate::{app::App, database::Database, wallet::metadata::WalletMetadata};
 use act_zero::WeakAddr;
 use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
 };
 use crossbeam::channel::{Receiver, Sender};
+use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::RwLock;
 
 use super::wallet::{WalletManagerReconcileMessage, actor::WalletActor};
@@ -123,10 +124,13 @@ impl RustSendFlowManager {
         match action {
             Action::ChangeEnteringBtcAmount(string) => {
                 self.state.write().entering_btc_amount = string.clone();
-                self.btc_field_changed(string);
+                let old_value = self.state.read().entering_btc_amount.clone();
+                self.btc_field_changed(old_value, string);
             }
             Action::ChangeEnteringFiatAmount(string) => {
-                self.state.write().entering_fiat_amount = string;
+                self.state.write().entering_fiat_amount = string.clone();
+                let old_value = self.state.read().entering_fiat_amount.clone();
+                self.fiat_field_changed(old_value, string);
             }
             Action::ChangeSetAmountFocusField(set_amount_focus_field) => {
                 self.state.write().focus_field = set_amount_focus_field;
@@ -139,9 +143,37 @@ impl RustSendFlowManager {
 }
 
 impl RustSendFlowManager {
-    fn btc_field_changed(&self, amount: String) -> Option<()> {
-        let prices = self.app.prices();
-        None
+    fn btc_field_changed(&self, _old_value: String, _new_value: String) -> Option<()> {
+        // TODO
+        todo!()
+    }
+
+    fn fiat_field_changed(&self, old_value: String, new_value: String) -> Option<()> {
+        let prices = self.app.prices()?;
+        let selected_currency = Database::global()
+            .global_config
+            .fiat_currency()
+            .unwrap_or_default();
+
+        let handler = FiatOnChangeHandler::new(prices, selected_currency);
+        let Ok(result) = handler.on_change(old_value, new_value) else {
+            tracing::error!("unable to get fiat on change result");
+            return None;
+        };
+
+        if let Some(fiat_text) = result.fiat_text {
+            self.state.write().entering_fiat_amount = fiat_text;
+        }
+
+        if let Some(fiat_value) = result.fiat_value {
+            self.state.write().amount_fiat = fiat_value;
+        }
+
+        if let Some(btc_amount) = result.btc_amount {
+            self.state.write().amount_sats = btc_amount.as_sats();
+        }
+
+        Some(())
     }
 }
 
