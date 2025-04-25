@@ -2,20 +2,14 @@ pub mod fiat_on_change;
 
 use std::sync::Arc;
 
+use crate::{app::App, wallet::metadata::WalletMetadata};
 use act_zero::WeakAddr;
 use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
 };
 use crossbeam::channel::{Receiver, Sender};
-use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::RwLock;
-
-use crate::{
-    app::{App, FfiApp},
-    fiat::client::PriceResponse,
-    wallet::metadata::WalletMetadata,
-};
 
 use super::wallet::{WalletManagerReconcileMessage, actor::WalletActor};
 
@@ -38,9 +32,9 @@ pub trait SendFlowManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustSendFlowManager {
-    prices: Option<Arc<PriceResponse>>,
-
+    app: App,
     wallet_actor: WeakAddr<WalletActor>,
+
     pub state: Arc<RwLock<State>>,
 
     reconciler: Sender<Message>,
@@ -93,6 +87,7 @@ impl RustSendFlowManager {
         let (sender, receiver) = crossbeam::channel::bounded(1000);
 
         Self {
+            app: App::global().clone(),
             wallet_actor: wallet_manager,
             state: Arc::new(RwLock::new(State::new(metadata))),
             reconciler: sender,
@@ -144,8 +139,9 @@ impl RustSendFlowManager {
 }
 
 impl RustSendFlowManager {
-    fn btc_field_changed(&self, amount: String) {
-        // self.dispatch(Action::ChangeEnteringBtcAmount(amount));
+    fn btc_field_changed(&self, amount: String) -> Option<()> {
+        let prices = self.app.prices();
+        None
     }
 }
 

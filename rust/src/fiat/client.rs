@@ -106,8 +106,23 @@ impl FiatClient {
         Ok(historical_prices)
     }
 
-    /// Get the current price for a currency
-    pub async fn prices(&self) -> Result<PriceResponse, reqwest::Error> {
+    /// Get the cached prices, will fetch and update the prices in the background if needed
+    /// Returns None if the prices are not cached
+    pub fn prices(&self) -> Option<PriceResponse> {
+        if let Some(prices) = PRICES.load().as_ref() {
+            let now_secs = Timestamp::now().as_second() as u64;
+            if (now_secs - prices.time) > self.wait_before_new_prices {
+                crate::task::spawn(async move { fetch_and_update_prices_if_needed().await });
+            }
+
+            return Some(*prices);
+        }
+
+        None
+    }
+
+    /// Always returns the latest prcies, will also update the prices cache
+    pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, reqwest::Error> {
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
             if now_secs - prices.time < self.wait_before_new_prices {
@@ -128,7 +143,7 @@ impl FiatClient {
 
     /// Get the current price for a currency
     async fn price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
-        let prices = self.prices().await?;
+        let prices = self.get_or_fetch_prices().await?;
 
         let price = match currency {
             FiatCurrency::Usd => prices.usd,
@@ -161,7 +176,7 @@ impl FiatClient {
 pub async fn init_prices() -> Result<()> {
     let fiat_client = &FIAT_CLIENT;
 
-    let prices = tryhard::retry_fn(|| fiat_client.prices())
+    let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
         .retries(20)
         .exponential_backoff(Duration::from_millis(10))
         .max_delay(Duration::from_secs(5))
@@ -203,7 +218,7 @@ fn update_prices(prices: PriceResponse) -> Result<()> {
 }
 
 /// Update prices if needed
-pub async fn update_prices_if_needed() -> Result<()> {
+pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
     if let Some(prices) = PRICES.load().as_ref() {
         let now_secs = Timestamp::now().as_second() as u64;
         if now_secs - prices.time < ONE_MIN {
@@ -212,7 +227,7 @@ pub async fn update_prices_if_needed() -> Result<()> {
     }
 
     let fiat_client = &FIAT_CLIENT;
-    let prices = tryhard::retry_fn(|| fiat_client.prices())
+    let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
         .retries(5)
         .exponential_backoff(Duration::from_millis(10))
         .max_delay(Duration::from_secs(1))
@@ -228,7 +243,7 @@ mod ffi {
 
     #[uniffi::export]
     async fn update_prices_if_needed() {
-        if let Err(error) = crate::fiat::client::update_prices_if_needed().await {
+        if let Err(error) = crate::fiat::client::fetch_and_update_prices_if_needed().await {
             error!("unable to update prices: {error:?}");
         }
     }
@@ -252,7 +267,7 @@ mod tests {
     async fn test_get_prices() {
         crate::database::delete_database();
         let fiat_client = &FIAT_CLIENT;
-        let fiat = fiat_client.prices().await.unwrap();
+        let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
         assert!(fiat.usd > 0);
     }
 
@@ -266,7 +281,7 @@ mod tests {
     async fn test_get_value_in_usd() {
         crate::database::delete_database();
         let fiat_client = &FIAT_CLIENT;
-        let fiat = fiat_client.prices().await.unwrap();
+        let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
         let value_in_usd = fiat_client
             .current_value_in_currency(Amount::one_btc(), FiatCurrency::Usd)
             .await
@@ -278,7 +293,7 @@ mod tests {
     async fn test_get_value_in_usd_with_currency() {
         crate::database::delete_database();
         let fiat_client = &FIAT_CLIENT;
-        let fiat = fiat_client.prices().await.unwrap();
+        let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
 
         let half_a_btc = Amount::from_sat(50_000_000);
         let value_in_usd = fiat_client

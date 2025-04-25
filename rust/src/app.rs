@@ -29,7 +29,7 @@ use tracing::{debug, error, warn};
 
 pub static APP: OnceCell<App> = OnceCell::new();
 
-#[derive(Clone, uniffi::Record)]
+#[derive(Clone, Debug, uniffi::Record)]
 pub struct AppState {
     router: Router,
 }
@@ -43,7 +43,7 @@ impl AppState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct App {
     state: Arc<RwLock<AppState>>,
     update_receiver: Arc<Receiver<AppMessage>>,
@@ -120,6 +120,11 @@ impl App {
         APP.get_or_init(App::new)
     }
 
+    /// Return the current prices and check if an update is needed
+    pub fn prices(&self) -> Option<PriceResponse> {
+        FIAT_CLIENT.prices()
+    }
+
     /// Handle event received from frontend
     pub fn handle_action(&self, event: AppAction) {
         // Handle event
@@ -168,7 +173,7 @@ impl App {
                 debug!("updating fiat prices");
 
                 crate::task::spawn(async move {
-                    match FIAT_CLIENT.prices().await {
+                    match FIAT_CLIENT.get_or_fetch_prices().await {
                         Ok(prices) => {
                             Updater::send_update(AppMessage::FiatPricesChanged(prices.into()))
                         }
@@ -439,13 +444,10 @@ impl FfiApp {
     }
 
     #[uniffi::method]
-    pub async fn prices(&self) -> Result<PriceResponse, Error> {
-        let prices = FIAT_CLIENT
+    pub fn prices(&self) -> Result<PriceResponse, Error> {
+        App::global()
             .prices()
-            .await
-            .map_err(|e| Error::PricesError(e.to_string()))?;
-
-        Ok(prices)
+            .ok_or_else(|| Error::PricesError("no prices saved".to_string()))
     }
 
     #[uniffi::method]
@@ -503,7 +505,7 @@ impl FfiApp {
         crate::task::spawn(async move {
             // init prices and update the client state
             if crate::fiat::client::init_prices().await.is_ok() {
-                let prices = FIAT_CLIENT.prices().await;
+                let prices = FIAT_CLIENT.get_or_fetch_prices().await;
                 if let Ok(prices) = prices {
                     Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
@@ -528,7 +530,7 @@ impl FfiApp {
                     }
                 }
 
-                let prices = FIAT_CLIENT.prices().await;
+                let prices = FIAT_CLIENT.get_or_fetch_prices().await;
                 if let Ok(prices) = prices {
                     Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }

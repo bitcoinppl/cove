@@ -20,7 +20,7 @@ impl FiatAmount {
     pub fn try_new(sent_and_received: &SentAndReceived, currency: FiatCurrency) -> Result<Self> {
         let prices = PRICES.load().as_ref().ok_or_else(|| {
             crate::task::spawn(async {
-                let _ = crate::fiat::client::update_prices_if_needed().await;
+                let _ = crate::fiat::client::fetch_and_update_prices_if_needed().await;
             });
 
             FiatAmountError::PricesUnavailable("prices not available".to_string())
