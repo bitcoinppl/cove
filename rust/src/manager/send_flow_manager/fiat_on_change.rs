@@ -15,21 +15,11 @@ pub struct FiatOnChangeHandler {
     converter: Converter,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Changeset {
     pub fiat_text: Option<String>,
     pub fiat_value: Option<f64>,
     pub btc_amount: Option<Amount>,
-}
-
-impl Default for Changeset {
-    fn default() -> Self {
-        Self {
-            fiat_text: None,
-            fiat_value: None,
-            btc_amount: None,
-        }
-    }
 }
 
 impl Changeset {
@@ -37,7 +27,7 @@ impl Changeset {
         Self {
             fiat_text: Some(symbol.to_string()),
             fiat_value: Some(0.0),
-            btc_amount: Some(Amount::from_sat(0).into()),
+            btc_amount: Some(Amount::from_sat(0)),
         }
     }
 }
@@ -123,17 +113,18 @@ impl FiatOnChangeHandler {
 
         // if 0.00 and start deleting, just delete the entire thing
         if old_value_raw == "0.00" && new_value_raw.len() == 3 {
-            let mut change = Changeset::default();
-            change.fiat_text = Some(symbol.to_string());
-            change.fiat_value = Some(0.0);
-            return Ok(change);
+            return Ok(Changeset {
+                fiat_text: Some(symbol.to_string()),
+                fiat_value: Some(0.0),
+                ..Default::default()
+            });
         }
 
         // convert the fiat amount to btc amount
         let btc_amount = self.converter.convert_from_fiat_string(
             &new_value_raw,
             self.selected_currency,
-            self.prices.clone(),
+            self.prices,
         );
 
         // get how many decimals there are after the decimal point

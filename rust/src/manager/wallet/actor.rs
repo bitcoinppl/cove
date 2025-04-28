@@ -22,9 +22,12 @@ use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_common::consts::GAP_LIMIT;
-use cove_types::confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput};
-use flume::Sender;
+use cove_types::{
+    confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
+    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+};
 use eyre::Result;
+use flume::Sender;
 use std::{
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
@@ -157,11 +160,12 @@ impl WalletActor {
     }
 
     // Build a transaction but don't advance the change address index
+    #[into_actor_result]
     pub async fn build_ephemeral_drain_tx(
         &mut self,
         address: Address,
         fee: FeeRate,
-    ) -> ActorResult<Psbt> {
+    ) -> Result<Psbt, Error> {
         let script_pubkey = address.script_pubkey();
         let mut tx_builder = self.wallet.bdk.build_tx();
 
@@ -170,10 +174,13 @@ impl WalletActor {
             .drain_to(script_pubkey)
             .fee_rate(fee.into());
 
-        let psbt = tx_builder.finish()?;
+        let psbt = tx_builder
+            .finish()
+            .map_err(|err| Error::BuildTxError(err.to_string()))?;
+
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
 
-        Produces::ok(psbt)
+        Ok(psbt)
     }
 
     #[into_actor_result]
@@ -198,15 +205,16 @@ impl WalletActor {
     }
 
     // Build a transaction but don't advance the change address index
+    #[into_actor_result]
     pub async fn build_ephemeral_tx(
         &mut self,
         amount: Amount,
         address: Address,
         fee: BdkFeeRate,
-    ) -> ActorResult<Psbt> {
+    ) -> Result<Psbt, Error> {
         let psbt = self.do_build_tx(amount, address, fee).await?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
-        Produces::ok(psbt)
+        Ok(psbt)
     }
 
     // cancel a transaction, reset the address & change address index
@@ -256,6 +264,107 @@ impl WalletActor {
             .collect();
 
         Produces::ok(SplitOutput { external, internal })
+    }
+
+    #[into_actor_result]
+    pub async fn fee_rate_options_with_total_fee(
+        &mut self,
+        fee_rate_options: FeeRateOptions,
+        amount: Amount,
+        address: Address,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
+        let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
+        let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
+
+        let fast_psbt = self
+            .do_build_ephemeral_tx(amount, address.clone(), fast_fee_rate)
+            .await?;
+
+        let medium_psbt = self
+            .do_build_ephemeral_tx(amount, address.clone(), medium_fee_rate)
+            .await?;
+
+        let slow_psbt = self
+            .do_build_ephemeral_tx(amount, address.clone(), slow_fee_rate)
+            .await?;
+
+        let options = FeeRateOptionsWithTotalFee {
+            fast: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.fast,
+                fast_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            medium: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.medium,
+                medium_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            slow: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.slow,
+                slow_psbt
+                    .fee()
+                    .map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            custom: None,
+        };
+
+        Ok(options)
+    }
+
+    #[into_actor_result]
+    pub async fn fee_rate_options_with_total_fee_for_drain(
+        &mut self,
+        fee_rate_options: FeeRateOptionsWithTotalFee,
+        address: Address,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let mut options = fee_rate_options;
+
+        let fast_fee_rate = options.fast.fee_rate;
+        let fast_psbt: Psbt = self
+            .do_build_ephemeral_drain_tx(address.clone(), fast_fee_rate)
+            .await?;
+
+        let medium_fee_rate = options.medium.fee_rate;
+        let medium_psbt: Psbt = self
+            .do_build_ephemeral_drain_tx(address.clone(), medium_fee_rate)
+            .await?;
+
+        let slow_fee_rate = options.slow.fee_rate;
+        let slow_psbt: Psbt = self
+            .do_build_ephemeral_drain_tx(address.clone(), slow_fee_rate)
+            .await?;
+
+        options.fast.total_fee = fast_psbt
+            .fee()
+            .map_err(|e| Error::FeesError(e.to_string()))?
+            .into();
+
+        options.medium.total_fee = medium_psbt
+            .fee()
+            .map_err(|e| Error::FeesError(e.to_string()))?
+            .into();
+
+        options.slow.total_fee = slow_psbt
+            .fee()
+            .map_err(|e| Error::FeesError(e.to_string()))?
+            .into();
+
+        if let Some(mut custom) = options.custom {
+            let custom_fee_rate = custom.fee_rate;
+            let custom_psbt: Psbt = self
+                .do_build_ephemeral_drain_tx(address, custom_fee_rate)
+                .await?;
+
+            custom.total_fee = custom_psbt
+                .fee()
+                .map_err(|e| Error::FeesError(e.to_string()))?
+                .into();
+        }
+
+        Ok(options)
     }
 
     #[into_actor_result]

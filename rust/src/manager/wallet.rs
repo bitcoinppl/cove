@@ -45,7 +45,7 @@ use crate::{
 };
 
 use cove_types::confirm::{AddressAndAmount, ConfirmDetails, SplitOutput};
-use cove_types::fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee};
+use cove_types::fees::FeeRateOptions;
 
 use super::send_flow_manager::RustSendFlowManager;
 
@@ -837,138 +837,6 @@ impl RustWalletManager {
         Ok(fees.into())
     }
 
-    pub async fn fee_rate_options_with_total_fee_for_drain(
-        &self,
-        fee_rate_options: Arc<FeeRateOptionsWithTotalFee>,
-        address: Arc<Address>,
-    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
-        let address = Arc::unwrap_or_clone(address);
-        let mut options = Arc::unwrap_or_clone(fee_rate_options);
-
-        let fast_fee_rate = options.fast.fee_rate;
-        let fast_psbt: Psbt = call!(
-            self.actor
-                .build_ephemeral_drain_tx(address.clone(), fast_fee_rate)
-        )
-        .await
-        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-        .into();
-
-        let medium_fee_rate = options.medium.fee_rate;
-        let medium_psbt: Psbt = call!(
-            self.actor
-                .build_ephemeral_drain_tx(address.clone(), medium_fee_rate)
-        )
-        .await
-        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-        .into();
-
-        let slow_fee_rate = options.slow.fee_rate;
-        let slow_psbt: Psbt = call!(
-            self.actor
-                .build_ephemeral_drain_tx(address.clone(), slow_fee_rate)
-        )
-        .await
-        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-        .into();
-
-        options.fast.total_fee = fast_psbt
-            .fee()
-            .map_err(|e| Error::FeesError(e.to_string()))?;
-
-        options.medium.total_fee = medium_psbt
-            .fee()
-            .map_err(|e| Error::FeesError(e.to_string()))?;
-
-        options.slow.total_fee = slow_psbt
-            .fee()
-            .map_err(|e| Error::FeesError(e.to_string()))?;
-
-        if let Some(mut custom) = options.custom {
-            let custom_fee_rate = custom.fee_rate;
-            let custom_psbt: Psbt = call!(
-                self.actor
-                    .build_ephemeral_drain_tx(address, custom_fee_rate)
-            )
-            .await
-            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-            .into();
-
-            custom.total_fee = custom_psbt
-                .fee()
-                .map_err(|e| Error::FeesError(e.to_string()))?;
-        }
-
-        Ok(options)
-    }
-
-    pub async fn fee_rate_options_with_total_fee(
-        &self,
-        fee_rate_options: Option<Arc<FeeRateOptions>>,
-        amount: Arc<Amount>,
-        address: Arc<Address>,
-    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
-        let fee_rate_options = match fee_rate_options {
-            Some(fee_rate_options) => Arc::unwrap_or_clone(fee_rate_options),
-            None => self.fee_rate_options().await?,
-        };
-
-        let amount = Arc::unwrap_or_clone(amount).into();
-        let address: Address = Arc::unwrap_or_clone(address);
-
-        let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
-        let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
-        let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
-
-        let fast_psbt = call!(self.actor.build_ephemeral_tx(
-            amount,
-            address.clone(),
-            fast_fee_rate
-        ))
-        .await
-        .map_err(|error| Error::BuildTxError(error.to_string()))?;
-
-        let medium_psbt = call!(self.actor.build_ephemeral_tx(
-            amount,
-            address.clone(),
-            medium_fee_rate
-        ))
-        .await
-        .map_err(|error| Error::BuildTxError(error.to_string()))?;
-
-        let slow_psbt = call!(self.actor.build_ephemeral_tx(
-            amount,
-            address.clone(),
-            slow_fee_rate
-        ))
-        .await
-        .map_err(|error| Error::BuildTxError(error.to_string()))?;
-
-        let options = FeeRateOptionsWithTotalFee {
-            fast: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.fast,
-                fast_psbt
-                    .fee()
-                    .map_err(|e| Error::FeesError(e.to_string()))?,
-            ),
-            medium: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.medium,
-                medium_psbt
-                    .fee()
-                    .map_err(|e| Error::FeesError(e.to_string()))?,
-            ),
-            slow: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.slow,
-                slow_psbt
-                    .fee()
-                    .map_err(|e| Error::FeesError(e.to_string()))?,
-            ),
-            custom: None,
-        };
-
-        Ok(options)
-    }
-
     pub async fn build_drain_transaction(
         &self,
         address: Arc<Address>,
@@ -979,7 +847,7 @@ impl RustWalletManager {
 
         let psbt: Psbt = call!(self.actor.build_ephemeral_drain_tx(address, fee))
             .await
-            .map_err(|_| Error::UnknownError("failed to get max send psbt".to_string()))?
+            .unwrap()?
             .into();
 
         Ok(psbt)
@@ -1013,7 +881,7 @@ impl RustWalletManager {
 
         let psbt = call!(actor.build_ephemeral_tx(amount, address, fee_rate))
             .await
-            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+            .unwrap()?;
 
         Ok(psbt.into())
     }
