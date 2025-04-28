@@ -20,8 +20,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     var btcAmount: Amount = .fromSat(sats: 0)
     var fiatAmount: Double = 0.0
 
+    var focusField: SetAmountFocusField? = nil
     var selectedFeeRate: FeeRateOptionWithTotalFee? = nil
     var feeRateOptions: FeeRateOptionsWithTotalFee? = nil
+    var maxSelected: Amount? = nil
 
     var enteringBtcAmount: Binding<String> {
         Binding(
@@ -53,10 +55,26 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
             await MainActor.run {
                 switch message {
-                    case let .updateAmountFiat(fiat):
-                        self.fiatAmount = fiat
-                    case let .updateAmountSats(sats):
-                        self.btcAmount = Amount.fromSat(sats: sats)
+                case let .updateAmountFiat(fiat):
+                    self.fiatAmount = fiat
+                case let .updateAmountSats(sats):
+                    self.btcAmount = Amount.fromSat(sats: sats)
+                case let .updateFeeRateOptions(options):
+                    self.feeRateOptions = options
+                case let .updateEnteringBtcAmount(amount):
+                    self._enteringBtcAmount = amount
+                case let .updateEnteringFiatAmount(amount):
+                    self._enteringFiatAmount = amount
+                case let .updateFocusField(field):
+                    self.focusField = field
+                case let .updateSelectedFeeRate(rate):
+                    self.selectedFeeRate = rate
+                case let .updateMaxSelected(max):
+                    self.maxSelected = max
+                case let .updateFeeRate(rate):
+                    self.selectedFeeRate = rate
+                case let .setAlert(title: title, message: message):
+                    AppManager.shared.alertState = .init(.general(title: title, message: message))
                 }
             }
         }
