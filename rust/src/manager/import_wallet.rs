@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bip39::{Language, Mnemonic};
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
@@ -73,7 +73,7 @@ pub type Error = ImportWalletError;
 impl RustImportWalletManager {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = flume::bounded(1000);
 
         Self {
             state: Arc::new(RwLock::new(ImportWalletManagerState::new())),

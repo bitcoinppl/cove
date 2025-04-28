@@ -1,12 +1,13 @@
 pub mod btc_on_change;
 pub mod fiat_on_change;
 
-use std::{sync::Arc, thread::JoinHandle};
+use std::sync::Arc;
 
 use crate::{
     app::{App, reconcile::AppStateReconcileMessage},
     database::Database,
     fiat::FiatCurrency,
+    task,
     wallet::metadata::WalletMetadata,
 };
 use act_zero::WeakAddr;
@@ -14,9 +15,10 @@ use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
 };
-use crossbeam::channel::{Receiver, Sender};
 use fiat_on_change::FiatOnChangeHandler;
+use flume::{Receiver, Sender};
 use parking_lot::RwLock;
+use tokio::task::JoinHandle;
 
 use super::wallet::{WalletManagerReconcileMessage, actor::WalletActor};
 
@@ -38,6 +40,7 @@ pub trait SendFlowManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
 }
 
 #[derive(Debug, uniffi::Object)]
+
 pub struct RustSendFlowManager {
     app: App,
     wallet_actor: WeakAddr<WalletActor>,
@@ -92,7 +95,7 @@ impl RustSendFlowManager {
         wallet_manager: WeakAddr<WalletActor>,
         wallet_manager_receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
     ) -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = flume::bounded(1000);
 
         let state = Arc::new(RwLock::new(State::new(metadata)));
 
@@ -216,8 +219,8 @@ fn start_wallet_manager_listener(
 ) -> JoinHandle<()> {
     type Message = WalletManagerReconcileMessage;
 
-    std::thread::spawn(move || {
-        while let Ok(message) = receiver.recv() {
+    task::spawn(async move {
+        while let Ok(message) = receiver.recv_async().await {
             match message {
                 Message::WalletMetadataChanged(metadata) => {
                     let mut state = state.write();
@@ -237,8 +240,8 @@ fn start_app_manager_listener(
 ) -> JoinHandle<()> {
     type Message = AppStateReconcileMessage;
 
-    std::thread::spawn(move || {
-        while let Ok(message) = receiver.recv() {
+    task::spawn(async move {
+        while let Ok(message) = receiver.recv_async().await {
             match message {
                 Message::FiatCurrencyChanged(currency) => {
                     let mut state = state.write();
@@ -276,11 +279,8 @@ impl State {
 // on drop, stop all listeners
 impl Drop for RustSendFlowManager {
     fn drop(&mut self) {
-        // TODO: cancel all listeners
-        todo!()
-
-        // self.state_listeners
-        //     .drain(..)
-        //     .for_each(|handle| handle.cancel().unwrap());
+        self.state_listeners
+            .drain(..)
+            .for_each(|handle| handle.abort());
     }
 }

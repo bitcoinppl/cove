@@ -23,7 +23,7 @@ use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_common::consts::GAP_LIMIT;
 use cove_types::confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput};
-use crossbeam::channel::Sender;
+use flume::Sender;
 use eyre::Result;
 use std::{
     sync::Arc,

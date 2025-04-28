@@ -4,7 +4,7 @@ use act_zero::*;
 use bdk_chain::bitcoin::{Address, Network};
 use bdk_wallet::{KeychainKind, Wallet as BdkWallet};
 use bip39::Mnemonic;
-use crossbeam::channel::Sender;
+use flume::Sender;
 use eyre::Context;
 use pubport::formats::Json;
 use tracing::{debug, error, info, warn};

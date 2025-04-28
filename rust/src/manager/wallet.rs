@@ -7,7 +7,7 @@ use std::{
 
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
@@ -212,7 +212,7 @@ pub enum WalletManagerError {
 impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
@@ -274,7 +274,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor]
     pub fn try_new_from_xpub(xpub: String) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let wallet = Wallet::try_new_persisted_from_xpub(xpub)?;
         let id = wallet.id.clone();
@@ -304,7 +304,7 @@ impl RustWalletManager {
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let wallet =
             Wallet::try_new_persisted_from_tap_signer(tap_signer.clone(), derive_info, backup)?;
@@ -1235,7 +1235,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor]
     pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let wallet = Wallet::preview_new_wallet();
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();

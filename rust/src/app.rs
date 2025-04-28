@@ -20,7 +20,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
@@ -81,7 +81,7 @@ impl App {
 
         // Set up the updater channel
         let (sender, receiver): (Sender<AppMessage>, Receiver<AppMessage>) =
-            crossbeam::channel::bounded(1000);
+            flume::bounded(1000);
 
         Updater::init(sender);
         let state = Arc::new(RwLock::new(AppState::new()));

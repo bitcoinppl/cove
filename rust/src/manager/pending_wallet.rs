@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 use tracing::error;
 
@@ -79,7 +79,7 @@ pub enum WalletCreationError {
 impl RustPendingWalletManager {
     #[uniffi::constructor]
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = flume::bounded(1000);
 
         Self {
             state: Arc::new(RwLock::new(PendingWalletManagerState::new(number_of_words))),

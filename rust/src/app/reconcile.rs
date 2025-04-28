@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crossbeam::channel::Sender;
+use flume::Sender;
 use once_cell::sync::OnceCell;
 
 use crate::{
@@ -45,7 +45,7 @@ impl Updater {
     pub fn global() -> &'static Self {
         #[cfg(test)]
         {
-            let (sender, receiver) = crossbeam::channel::bounded(1000);
+            let (sender, receiver) = flume::bounded(1000);
             Box::leak(Box::new(receiver));
             Self::init(sender);
         }

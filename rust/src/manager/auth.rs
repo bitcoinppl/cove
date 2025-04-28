@@ -1,7 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use cove_macros::impl_default_for;
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error};
@@ -90,7 +90,7 @@ pub enum TrickPinError {
 
 impl RustAuthManager {
     fn init() -> Arc<Self> {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = flume::bounded(1000);
 
         Self {
             state: Arc::new(RwLock::new(AuthManagerState::new())),
