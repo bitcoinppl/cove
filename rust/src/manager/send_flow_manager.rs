@@ -98,6 +98,8 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateSelectedFeeRate(Arc<FeeRateOptionWithTotalFee>),
     UpdateFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
 
+    SetMaxSelected(Option<Arc<Amount>>),
+
     // side effects
     SetAlert(Option<SendFlowAlertState>),
 }
