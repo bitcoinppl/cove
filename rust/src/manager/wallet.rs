@@ -256,7 +256,7 @@ impl RustWalletManager {
         let addr = self.actor.downgrade();
         let metadata = self.metadata.read().clone();
 
-        RustSendFlowManager::new(metadata, addr, self.reconcile_receiver.clone()).into()
+        RustSendFlowManager::new(metadata, addr, self.reconcile_receiver.clone())
     }
 
     #[uniffi::method]

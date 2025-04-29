@@ -1,11 +1,8 @@
-use std::sync::Arc;
-
 use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
 use cove_types::{amount::Amount, unit::Unit};
 use cove_util::format::NumberFormatter as _;
-use parking_lot::RwLock;
 
-use super::State;
+use super::state::State;
 
 #[derive(Debug, Clone)]
 pub struct BtcOnChangeHandler {
@@ -23,7 +20,7 @@ pub struct Changeset {
 }
 
 impl BtcOnChangeHandler {
-    pub fn new(state: Arc<RwLock<State>>) -> Self {
+    pub fn new(state: State) -> Self {
         let state = state.read();
 
         let metadata = state.metadata.clone();

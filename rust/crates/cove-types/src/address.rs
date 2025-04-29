@@ -220,8 +220,8 @@ impl AddressWithNetwork {
 #[uniffi::export]
 impl Address {
     #[uniffi::constructor]
-    pub fn from_string(address: String, network: Network) -> Result<Self> {
-        let bdk_address = BdkAddress::from_str(&address)
+    pub fn from_string(address: &str, network: Network) -> Result<Self> {
+        let bdk_address = BdkAddress::from_str(address)
             .map_err(|_| Error::InvalidAddress)?
             .require_network(network.into())
             .map_err(|_| Error::WrongNetwork { current: network })?;

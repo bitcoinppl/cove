@@ -50,25 +50,55 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpentInFiat: String {
-        // TODO: add total spent in fiat depending on metadata.selectedUnit
-//        guard let totalSpentInBtc else { return "---" }
-//        guard let prices = app.prices else { return "---" }
-//
-//        let fiat = totalSpentInBtc * Double(prices.get())
-//        return "≈ \(manager.rust.displayFiatAmount(amount: fiat))"
-        ""
+        guard let amount = sendFlowManager.amount else { return "---" }
+        guard let selectedFeeRate = sendFlowManager.selectedFeeRate else { return "---" }
+        guard let prices = app.prices else { return "---" }
+
+        let totalSpent = amount + selectedFeeRate.totalFee()
+        let totalInSats = Double(totalSpent.asSats())
+        let fiat = totalInSats / 100_000_000 * Double(prices.get())
+
+        return "≈ \(manager.rust.displayFiatAmount(amount: fiat))"
     }
 
     private var totalSending: String {
-        // TODO: add total sending in btc depending on metadata.selectedUnit
-        ""
+        guard let amount = sendFlowManager.amount else { return "---" }
+
+        if metadata.selectedUnit == .btc {
+            return "\(amount.btcString()) BTC"
+        } else {
+            return "\(amount.satsString()) sats"
+        }
     }
 
     // MARK: Actions
 
     // validate, create final psbt and send to next screen
     private func next() {
-        // TODO:
+        guard let amount = sendFlowManager.amount else {
+            setAlertState(.invalidNumber)
+            return
+        }
+
+        guard validateAddress(displayAlert: true) else {
+            presenter.focusField = .address
+            return
+        }
+
+        guard validateAmount(displayAlert: true) else {
+            presenter.focusField = .amount
+            return
+        }
+
+        // Call the stubbed function we will implement in Rust later
+        sendFlowManager.rust.prepareTransactionForConfirmation(
+            amount: amount,
+            address: address,
+            selectedFeeRate: sendFlowManager.selectedFeeRate
+        )
+
+        // Navigate to the next screen in the flow
+        presenter.navigateToConfirmation()
     }
 
     // doing it this way prevents an alert popping up when the user just goes back
@@ -111,20 +141,19 @@ struct SendFlowSetAmountScreen: View {
                         // Account Section
                         AccountSection
 
-                        // TODO:
-//                        if feeRateOptions != nil,
-//                           selectedFeeRate != nil,
-//                           Address.isValid(address)
-//                        {
-//                            // Network Fee Section
-//                            NetworkFeeSection
-//
-//                            // Total Spending Section
-//                            TotalSpendingSection
-//
-//                            // Next Button
-//                            NextButtonBottom
-//                        }
+                        if sendFlowManager.feeRateOptions != nil,
+                           sendFlowManager.selectedFeeRate != nil,
+                           Address.isValid(address)
+                        {
+                            // Network Fee Section
+                            NetworkFeeSection
+
+                            // Total Spending Section
+                            TotalSpendingSection
+
+                            // Next Button
+                            NextButtonBottom
+                        }
                     }
 
                     .toolbar {
@@ -160,14 +189,8 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
         .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
         .task {
-            // TODO:
-//            guard let feeRateOptions = try? await manager.rust.getFeeOptions() else {
-//                return
-//            }
-//
-//            await MainActor.run {
-//                feeRateOptionsBase = feeRateOptions
-//            }
+            // No need to manually load fee options anymore
+            // SendFlowManager will load them automatically
         }
         .task {
             Task {
@@ -186,18 +209,17 @@ struct SendFlowSetAmountScreen: View {
             // HACK: Bug in SwiftUI where keyboard toolbar is broken
             try? await Task.sleep(for: .milliseconds(700))
 
-            // TODO:
-//            await MainActor.run {
-//                if sendAmount == "0" || sendAmount == "" {
-//                    presenter.focusField = .amount
-//                    return
-//                }
-//
-//                if address == "" {
-//                    presenter.focusField = .address
-//                    return
-//                }
-//            }
+            await MainActor.run {
+                if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 {
+                    presenter.focusField = .amount
+                    return
+                }
+
+                if address.isEmpty {
+                    presenter.focusField = .address
+                    return
+                }
+            }
         }
         .onAppear {
             if metadata.walletType == .watchOnly {
@@ -229,13 +251,25 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalFeeString: String {
-        // TODO:
-        ""
+        guard let selectedFeeRate = sendFlowManager.selectedFeeRate else { return "---" }
+
+        if metadata.selectedUnit == .btc {
+            return "\(selectedFeeRate.totalFee().btcString()) BTC"
+        } else {
+            return "\(selectedFeeRate.totalFee().satsString()) sats"
+        }
     }
 
     private var totalSpent: String {
-        // TODO:
-        ""
+        guard let amount = sendFlowManager.amount, let selectedFeeRate = sendFlowManager.selectedFeeRate else { return "---" }
+
+        let totalSpent = amount + selectedFeeRate.totalFee()
+
+        if metadata.selectedUnit == .btc {
+            return "\(totalSpent.btcString()) BTC"
+        } else {
+            return "\(totalSpent.satsString()) sats"
+        }
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
@@ -263,42 +297,39 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func validateAmount(
-        _: String? = nil, displayAlert _: Bool = false
+        _: String? = nil, displayAlert: Bool = false
     ) -> Bool {
-        // TODO:
-//        let sendAmountRaw = amount ?? sendAmount
-//        if displayAlert {
-//            Log.debug("validating amount: \(sendAmount)")
-//        }
-//
-//        let sendAmount = sendAmountRaw.replacingOccurrences(of: ",", with: "")
-//        guard let amount = Double(sendAmount) else {
-//            if displayAlert { setAlertState(.invalidNumber) }
-//            return false
-//        }
-//
-//        let balance = Double(manager.balance.spendable().asSats())
-//        let amountSats = amountSats(amount)
-//
-//        if amountSats < 5000 {
-//            if displayAlert { setAlertState(.sendAmountToLow) }
-//            return false
-//        }
-//
-//        if amountSats > balance {
-//            if displayAlert { setAlertState(.insufficientFunds) }
-//            return false
-//        }
-//
-//        if let selectedFeeRate {
-//            let totalFeeSats = Double(selectedFeeRate.totalFee().asSats())
-//            if (amountSats + totalFeeSats) > balance {
-//                if displayAlert { setAlertState(.insufficientFunds) }
-//                return false
-//            }
-//        }
+        guard let amount = sendFlowManager.amount else {
+            if displayAlert { setAlertState(.invalidNumber) }
+            return false
+        }
 
-        true
+        if displayAlert {
+            Log.debug("validating amount: \(amount)")
+        }
+
+        let amountSats = amount.asSats()
+        let balance = manager.balance.spendable().asSats()
+
+        if amountSats < 5000 {
+            if displayAlert { setAlertState(.sendAmountToLow) }
+            return false
+        }
+
+        if amountSats > balance {
+            if displayAlert { setAlertState(.insufficientFunds) }
+            return false
+        }
+
+        if let selectedFeeRate = sendFlowManager.selectedFeeRate {
+            let totalFeeSats = selectedFeeRate.totalFee().asSats()
+            if (amountSats + totalFeeSats) > balance {
+                if displayAlert { setAlertState(.insufficientFunds) }
+                return false
+            }
+        }
+
+        return true
     }
 
     private func amountSats(_ amount: Double) -> Double {
@@ -318,42 +349,35 @@ struct SendFlowSetAmountScreen: View {
 
     private func clearSendAmount() {
         Log.debug("clearSendAmount")
-        // TODO: clear send amount
 
-//        if metadata.fiatOrBtc == .fiat {
-//            Log.debug("fiat \(sendAmountFiat)")
-//            sendAmountFiat = app.selectedFiatCurrency.symbol()
-//            sendAmount = "0"
-//            return
-//        }
-//
-//        if metadata.fiatOrBtc == .btc {
-//            sendAmount = ""
-//            sendAmountFiat = manager.rust.displayFiatAmount(amount: 0.0)
-//            return
-//        }
+        if metadata.fiatOrBtc == .fiat {
+            sendFlowManager.dispatch(action: .changeEnteringFiatAmount(app.selectedFiatCurrency.symbol()))
+            sendFlowManager.dispatch(action: .changeEnteringBtcAmount("0"))
+            return
+        }
+
+        if metadata.fiatOrBtc == .btc {
+            sendFlowManager.dispatch(action: .changeEnteringBtcAmount(""))
+            sendFlowManager.dispatch(action: .changeEnteringFiatAmount(manager.rust.displayFiatAmount(amount: 0.0)))
+            return
+        }
     }
 
     // MARK: OnChange Functions
 
-    private func selectedUnitChanged(_: Unit, _: Unit) {
-//    TODO: selectedUnitChanged
-//        let sendAmount = sendAmount.replacingOccurrences(of: ",", with: "")
-//        guard let amount = Double(sendAmount) else { return }
-//        if amount == 0 { return }
-//        if oldUnit == newUnit { return }
-//
-//        switch newUnit {
-//        case .btc:
-//            self.sendAmount = Double(amount / 100_000_000).btcFmt()
-//        case .sat:
-//            let sendAmount = Int(amount * 100_000_000)
-//            if presenter.focusField == .address || presenter.focusField == .none {
-//                self.sendAmount = ThousandsFormatter(sendAmount).fmt()
-//            } else {
-//                self.sendAmount = String(sendAmount)
-//            }
-//        }
+    private func selectedUnitChanged(oldUnit: Unit, newUnit: Unit) {
+        guard let amount = sendFlowManager.amount else { return }
+        if amount.asSats() == 0 { return }
+        if oldUnit == newUnit { return }
+
+        // Call stubbed function we'll implement in Rust later
+        let formattedAmount = sendFlowManager.rust.formatAmountForUnit(
+            amount: amount.asSats(),
+            unit: newUnit,
+            focusedOnAmount: presenter.focusField == .amount
+        )
+
+        sendFlowManager.dispatch(action: .changeEnteringBtcAmount(formattedAmount))
     }
 
     // presenter focus field changed
@@ -379,43 +403,49 @@ struct SendFlowSetAmountScreen: View {
         }
     }
 
-    private func setMaxSelected(_: FeeRateOptionWithTotalFee? = nil) {
-        // TODO:
+    private func setMaxSelected() {
+        sendFlowManager.dispatch(action: .setMaxSelected)
     }
 
-    private func scannedCodeChanged(_: TaggedString?, _: TaggedString?) {
-        // TODO:
-//        guard let newValue else { return }
-//        presenter.sheetState = nil
-//
-//        let addressWithNetwork = try? AddressWithNetwork(address: newValue.item)
-//
-//        guard let addressWithNetwork else {
-//            setAlertState(.invalidAddress(newValue.item))
-//            return
-//        }
-//
-//        address = addressWithNetwork.address().string()
-//        guard validateAddress(address, displayAlert: true) else { return }
-//
-//        // TODO:
-//        if let amount = addressWithNetwork.amount() {
-        ////            setAmount(amount)
-//            if !validateAmount(displayAlert: true) {
-//                presenter.focusField = .amount
-//                return
-//            }
-//        }
-//
-//        if sendAmount == "0" || sendAmount == "" || !validateAmount() {
-//            return DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-//                presenter.focusField = .amount
-//            }
-//        }
-//
-//        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-//            presenter.focusField = .none
-//        }
+    private func scannedCodeChanged(_: TaggedString?, newValue: TaggedString?) {
+        guard let newValue else { return }
+        presenter.sheetState = nil
+
+        let addressWithNetwork = try? AddressWithNetwork(address: newValue.item)
+
+        guard let addressWithNetwork else {
+            setAlertState(.invalidAddress(newValue.item))
+            return
+        }
+
+        address = addressWithNetwork.address().string()
+        sendFlowManager.dispatch(action: .changeAddress(address))
+        guard validateAddress(address, displayAlert: true) else { return }
+
+        if let scannedAmount = addressWithNetwork.amount() {
+            // Call the stubbed function we will implement in Rust
+            let formattedAmount = sendFlowManager.rust.formatAmountFromScannedQR(
+                amount: scannedAmount.asSats(),
+                unit: metadata.selectedUnit
+            )
+
+            sendFlowManager.dispatch(action: .changeEnteringBtcAmount(formattedAmount))
+
+            if !validateAmount(displayAlert: true) {
+                presenter.focusField = .amount
+                return
+            }
+        }
+
+        if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 || !validateAmount() {
+            return DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                presenter.focusField = .amount
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            presenter.focusField = .none
+        }
     }
 
     @ViewBuilder
@@ -666,28 +696,41 @@ struct SendFlowSetAmountScreen: View {
             QrCodeAddressView(app: _app, scannedCode: $scannedCode)
                 .presentationDetents([.large])
         case .fee:
-            // TODO:
-            EmptyView()
-//            SendFlowSelectFeeRateView(
-//                manager: manager,
-//                feeOptions: Binding(get: { feeRateOptions! }, set: { /* feeRateOptions = $0 */ }),
-//                selectedOption: Binding(
-//                    get: { selectedFeeRate! },
-//                    set: { newValue in
-//                        // in maxSelected mode, so adjust with new rate
-//                        if presenter.maxSelected != nil {
-//                            setMaxSelected(newValue)
-//                        }
-//
-            ////                        selectedFeeRate = newValue
-//                    }
-//                ),
-//                selectedPresentationDetent: $selectedPresentationDetent
-//            )
-//            .presentationDetents(
-//                [.height(440), .height(550), .large],
-//                selection: $selectedPresentationDetent
-//            )
+            SendFlowSelectFeeRateView(
+                manager: manager,
+                feeOptions: Binding(get: {
+                    guard let feeRateOptions = sendFlowManager.feeRateOptions else {
+                        return FeeRateOptionsWithTotalFee.previewNew()
+                    }
+                    return feeRateOptions
+                }, set: { _ in /* No-op, handled by SendFlowManager */ }),
+                selectedOption: Binding(
+                    get: {
+                        guard let selectedFeeRate = sendFlowManager.selectedFeeRate else {
+                            // Default to medium if nothing selected
+                            if let options = sendFlowManager.feeRateOptions {
+                                return options.medium()
+                            }
+                            return FeeRateOptionsWithTotalFee.previewNew().medium()
+                        }
+                        return selectedFeeRate
+                    },
+                    set: { newValue in
+                        // in maxSelected mode, adjust with new rate
+                        sendFlowManager.dispatch(action: .selectFeeRate(newValue))
+
+                        if let maxSelected = sendFlowManager.maxSelected {
+                            // If max is selected, we need to recalculate with the new fee rate
+                            sendFlowManager.dispatch(action: .setMaxSelected(maxSelected))
+                        }
+                    }
+                ),
+                selectedPresentationDetent: $selectedPresentationDetent
+            )
+            .presentationDetents(
+                [.height(440), .height(550), .large],
+                selection: $selectedPresentationDetent
+            )
         }
     }
 }
