@@ -9,6 +9,7 @@ use cove_types::{
 
 use super::SetAmountFocusField;
 use crate::{
+    app::App,
     database::Database,
     fiat::FiatCurrency,
     wallet::{Address, metadata::WalletMetadata},
@@ -22,7 +23,7 @@ pub struct SendFlowManagerState {
     // private
     pub(crate) metadata: WalletMetadata,
     pub(crate) fee_rate_options_base: Option<Arc<FeeRateOptions>>,
-    pub(crate) btc_price_in_fiat: Option<f64>,
+    pub(crate) btc_price_in_fiat: Option<u64>,
     pub(crate) selected_fiat_currency: FiatCurrency,
     pub(crate) first_address: Option<Arc<Address>>,
 
@@ -64,6 +65,8 @@ impl State {
 /// MARK: SendFlowManagerState
 impl SendFlowManagerState {
     pub fn new(metadata: WalletMetadata) -> Self {
+        let btc_price_in_fiat = App::global().prices().map(|prices| prices.get());
+
         Self {
             metadata,
             fee_rate_options_base: None,
@@ -77,7 +80,7 @@ impl SendFlowManagerState {
             address: None,
             selected_fee_rate: None,
             fee_rate_options: None,
-            btc_price_in_fiat: None,
+            btc_price_in_fiat,
             selected_fiat_currency: Database::global()
                 .global_config
                 .fiat_currency()

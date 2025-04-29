@@ -8,7 +8,7 @@ use super::state::State;
 pub struct BtcOnChangeHandler {
     metadata: WalletMetadata,
     max_selected: Option<Amount>,
-    btc_price_in_fiat: Option<f64>,
+    btc_price_in_fiat: Option<u64>,
 }
 
 #[derive(Debug, Default)]
@@ -25,7 +25,6 @@ impl BtcOnChangeHandler {
 
         let metadata = state.metadata.clone();
         let max_selected = state.max_selected.as_deref().copied();
-
         let btc_price_in_fiat = state.btc_price_in_fiat;
 
         Self {
@@ -116,7 +115,7 @@ impl BtcOnChangeHandler {
 
         // set the fiat amount display
         if let Some(price) = self.btc_price_in_fiat {
-            changeset.amount_fiat = Some(amount.as_btc() * price);
+            changeset.amount_fiat = Some(amount.as_btc() * (price as f64));
         }
 
         // if its sat add thousands formatting

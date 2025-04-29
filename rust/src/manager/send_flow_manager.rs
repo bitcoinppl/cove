@@ -11,7 +11,10 @@ use crate::{
     fee_client::FEE_CLIENT,
     task,
     transaction::FeeRate,
-    wallet::{Address, metadata::WalletMetadata},
+    wallet::{
+        Address,
+        metadata::{FiatOrBtc, WalletMetadata},
+    },
 };
 use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
@@ -22,6 +25,7 @@ use cove_types::{
     psbt::Psbt,
     unit::Unit,
 };
+use cove_util::format::NumberFormatter as _;
 use fiat_on_change::FiatOnChangeHandler;
 use flume::{Receiver, Sender};
 use parking_lot::RwLock;
@@ -95,6 +99,8 @@ pub enum SendFlowManagerAction {
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
     ChangeAddress(String),
 
+    NotifySelectedUnitedChanged { old: Unit, new: Unit },
+
     SelectMaxSend,
 }
 
@@ -129,8 +135,6 @@ impl RustSendFlowManager {
 
         // in background run init tasks
         me.background_init_tasks();
-
-        // return Arc<Self>
         me
     }
 }
@@ -159,59 +163,68 @@ impl RustSendFlowManager {
         self.state.read().amount_sats.unwrap_or(0)
     }
 
-    /// Formats an amount based on the selected unit
     #[uniffi::method]
-    pub fn format_amount_for_unit(
-        &self,
-        amount: u64,
-        unit: Unit,
-        focused_on_amount: bool,
-    ) -> String {
-        // TODO: Implement this function
-        // This is a stub that will be implemented later
-        if unit == Unit::Btc {
-            let btc_amount = amount as f64 / 100_000_000.0;
-            format!("{:.8}", btc_amount)
-        } else {
-            // sats
-            if focused_on_amount {
-                // If focused, don't format with commas
-                format!("{}", amount)
-            } else {
-                // Add commas for thousands
-                let amount_string = amount.to_string();
-                // Simple implementation - will be replaced with proper formatting later
-                amount_string
-            }
+    pub fn total_spent_btc_string(&self) -> String {
+        let Some(total_spent) = self.total_spent_btc_amount() else {
+            return "---".to_string();
+        };
+
+        match self.state.read().metadata.selected_unit {
+            Unit::Btc => format!("{} BTC", total_spent.as_btc()),
+            Unit::Sat => format!("{} sats", total_spent.as_sats()),
         }
     }
 
-    /// Formats amount from scanned QR code
     #[uniffi::method]
-    pub fn format_amount_from_scanned_qr(&self, amount: u64, unit: Unit) -> String {
-        // TODO: Implement this function
-        // This is a stub that will be implemented later
-        self.format_amount_for_unit(amount, unit, false)
+    pub fn total_spent_fiat(&self) -> String {
+        let Some(total_spent) = self.total_spent_btc_amount() else {
+            return "---".to_string();
+        };
+
+        let Some(btc_price_in_fiat) = self.state.read().btc_price_in_fiat else {
+            return "---".to_string();
+        };
+
+        let total_spent_in_fiat = total_spent.as_btc() * (btc_price_in_fiat as f64);
+        format!("≈ {}", self.display_fiat_amount(total_spent_in_fiat, true))
     }
 
-    /// Prepares transaction for confirmation screen
     #[uniffi::method]
-    pub fn prepare_transaction_for_confirmation(
-        &self,
-        amount: Arc<Amount>,
-        address: String,
-        selected_fee_rate: Option<Arc<FeeRateOptionWithTotalFee>>,
-    ) {
-        // TODO: Implement this function
-        // This is a stub that will be implemented later
-        tracing::debug!(
-            "Preparing transaction: amount={:?}, address={}, fee_rate={:?}",
-            amount,
-            address,
-            selected_fee_rate
-        );
+    pub fn total_fee_string(&self) -> String {
+        let Some(selected_fee_rate) = &self.state.read().selected_fee_rate else {
+            return "---".to_string();
+        };
+
+        let total_fee = selected_fee_rate.total_fee();
+        match self.state.read().metadata.selected_unit {
+            Unit::Btc => format!("{} BTC", total_fee.as_btc()),
+            Unit::Sat => format!("{} sats", total_fee.as_sats()),
+        }
     }
 
+    #[uniffi::method(default(with_suffix = true))]
+    pub fn display_fiat_amount(&self, amount: f64, with_suffix: bool) -> String {
+        {
+            let sensitive_visible = self.state.read().metadata.sensitive_visible;
+            if !sensitive_visible {
+                return "**************".to_string();
+            }
+        }
+
+        let fiat = amount.thousands_fiat();
+        let currency = self.state.read().selected_fiat_currency;
+
+        let symbol = currency.symbol();
+        let suffix = currency.suffix();
+
+        if with_suffix && !suffix.is_empty() {
+            return format!("{symbol}{fiat} {suffix}");
+        }
+
+        format!("{symbol}{fiat}")
+    }
+
+    /// MARK: Action handler
     /// action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
@@ -252,10 +265,15 @@ impl RustSendFlowManager {
                     }
                 });
             }
+
+            Action::NotifySelectedUnitedChanged { old, new } => {
+                self.handle_selected_unit_changed(old, new);
+            }
         }
     }
 }
 
+/// MARK: State mutating impl
 impl RustSendFlowManager {
     fn btc_field_changed(self: Arc<Self>, old_value: String, new_value: String) -> Option<()> {
         let state: State = self.state.clone().into();
@@ -328,12 +346,6 @@ impl RustSendFlowManager {
         Some(())
     }
 
-    fn send(&self, message: SendFlowManagerReconcileMessage) {
-        if let Err(err) = self.reconciler.send(message) {
-            error!("unable to send message to send flow manager: {err}");
-        }
-    }
-
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
         let address = {
             let state = self.state.read();
@@ -382,6 +394,88 @@ impl RustSendFlowManager {
         self.send(Message::SetMaxSelected(total.into()));
 
         Ok(())
+    }
+
+    async fn get_and_update_base_fee_rate_options(self: &Arc<Self>) -> Option<Arc<FeeRateOptions>> {
+        let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
+        let fees = Arc::new(FeeRateOptions::from(fee_response));
+
+        self.state.write().fee_rate_options_base = Some(fees.clone());
+
+        Some(fees)
+    }
+
+    fn handle_selected_unit_changed(&self, old: Unit, new: Unit) {
+        if old == new {
+            return;
+        }
+
+        // if we are entering fiat, then we don't need to update the entering field
+        if self.state.read().metadata.fiat_or_btc == FiatOrBtc::Fiat {
+            return;
+        }
+
+        let amount_sats = match self.state.read().amount_sats {
+            Some(amount_sats) => amount_sats,
+            None => {
+                self.state.write().entering_btc_amount = String::new();
+                self.send(Message::UpdateEnteringBtcAmount(String::new()));
+                return;
+            }
+        };
+
+        match new {
+            Unit::Btc => {
+                let amount_string = Amount::from_sat(amount_sats).btc_string();
+                self.state.write().entering_btc_amount = amount_string.clone();
+                self.send(Message::UpdateEnteringBtcAmount(amount_string));
+            }
+            Unit::Sat => {
+                let amount_string = amount_sats.thousands_int();
+                self.state.write().entering_btc_amount = amount_string.clone();
+                self.send(Message::UpdateEnteringBtcAmount(amount_string));
+            }
+        }
+    }
+}
+
+/// MARK: helper method impls
+impl RustSendFlowManager {
+    fn send(&self, message: SendFlowManagerReconcileMessage) {
+        if let Err(err) = self.reconciler.send(message) {
+            error!("unable to send message to send flow manager: {err}");
+        }
+    }
+
+    fn total_spent_btc_amount(&self) -> Option<Amount> {
+        let selected_fee_rate = self.state.read().selected_fee_rate.as_ref()?.clone();
+        let amount_sats = self.state.read().amount_sats?;
+
+        let amount = Amount::from_sat(amount_sats);
+        let total_fee = selected_fee_rate.total_fee();
+
+        Some(amount + total_fee)
+    }
+
+    // Get the first address for the wallet
+    // Get the fee rate options
+    fn background_init_tasks(self: &Arc<Self>) {
+        let me = self.clone();
+        task::spawn(async move {
+            // get and save first address
+            me.get_first_address().await;
+
+            // get fee rate options
+            me.get_fee_rate_options().await;
+        });
+    }
+
+    async fn get_first_address(self: &Arc<Self>) {
+        let actor = self.wallet_actor.clone();
+        if let Ok(first_address) = call!(actor.address_at(0)).await {
+            let address = first_address.address.clone().into();
+            self.state.write().first_address = Some(Arc::new(address));
+        }
     }
 
     async fn get_fee_rate_options(self: &Arc<Self>) {
@@ -457,36 +551,6 @@ impl RustSendFlowManager {
             fee_rate_options_with_total_fee,
         ));
     }
-
-    async fn get_and_update_base_fee_rate_options(self: &Arc<Self>) -> Option<Arc<FeeRateOptions>> {
-        let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
-        let fees = Arc::new(FeeRateOptions::from(fee_response));
-
-        self.state.write().fee_rate_options_base = Some(fees.clone());
-
-        Some(fees)
-    }
-
-    async fn get_first_address(self: &Arc<Self>) {
-        let actor = self.wallet_actor.clone();
-        if let Ok(first_address) = call!(actor.address_at(0)).await {
-            let address = first_address.address.clone().into();
-            self.state.write().first_address = Some(Arc::new(address));
-        }
-    }
-
-    // Get the first address for the wallet
-    // Get the fee rate options
-    fn background_init_tasks(self: &Arc<Self>) {
-        let me = self.clone();
-        task::spawn(async move {
-            // get and save first address
-            me.get_first_address().await;
-
-            // get fee rate options
-            me.get_fee_rate_options().await;
-        });
-    }
 }
 
 // Listens for updates from the wallet manager
@@ -515,9 +579,16 @@ fn start_app_manager_listener(
 
     task::spawn(async move {
         while let Ok(message) = receiver.recv_async().await {
-            if let Message::FiatCurrencyChanged(currency) = message {
-                let mut state = state.write();
-                state.selected_fiat_currency = currency;
+            match message {
+                Message::FiatCurrencyChanged(currency) => {
+                    let mut state = state.write();
+                    state.selected_fiat_currency = currency;
+                }
+                Message::FiatPricesChanged(prices) => {
+                    let fiat_currency = state.read().selected_fiat_currency;
+                    state.write().btc_price_in_fiat = Some(prices.get_for_currency(fiat_currency));
+                }
+                _ => {}
             }
         }
     })

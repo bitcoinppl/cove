@@ -50,15 +50,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpentInFiat: String {
-        guard let amount = sendFlowManager.amount else { return "---" }
-        guard let selectedFeeRate = sendFlowManager.selectedFeeRate else { return "---" }
-        guard let prices = app.prices else { return "---" }
-
-        let totalSpent = amount + selectedFeeRate.totalFee()
-        let totalInSats = Double(totalSpent.asSats())
-        let fiat = totalInSats / 100_000_000 * Double(prices.get())
-
-        return "≈ \(manager.rust.displayFiatAmount(amount: fiat))"
+        sendFlowManager.rust.totalSpentInFiat()
     }
 
     private var totalSending: String {
@@ -76,7 +68,7 @@ struct SendFlowSetAmountScreen: View {
     // validate, create final psbt and send to next screen
     private func next() {
         guard let amount = sendFlowManager.amount else {
-            setAlertState(.invalidNumber)
+            setAlertState(.InvalidNumber)
             return
         }
 
@@ -102,8 +94,8 @@ struct SendFlowSetAmountScreen: View {
     }
 
     // doing it this way prevents an alert popping up when the user just goes back
-    private func setAlertState(_ alertState: AlertState) {
-        presenter.setAlertState(alertState)
+    private func setAlertState(_: SendFlowError) {
+        // TODO: use the manager
     }
 
     var selectedFeeRate: FeeRateOptionWithTotalFee? {
@@ -251,25 +243,11 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalFeeString: String {
-        guard let selectedFeeRate = sendFlowManager.selectedFeeRate else { return "---" }
-
-        if metadata.selectedUnit == .btc {
-            return "\(selectedFeeRate.totalFee().btcString()) BTC"
-        } else {
-            return "\(selectedFeeRate.totalFee().satsString()) sats"
-        }
+        sendFlowManager.rust.totalFeeString()
     }
 
     private var totalSpent: String {
-        guard let amount = sendFlowManager.amount, let selectedFeeRate = sendFlowManager.selectedFeeRate else { return "---" }
-
-        let totalSpent = amount + selectedFeeRate.totalFee()
-
-        if metadata.selectedUnit == .btc {
-            return "\(totalSpent.btcString()) BTC"
-        } else {
-            return "\(totalSpent.satsString()) sats"
-        }
+        sendFlowManager.rust.totalSpentBtcString()
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
@@ -300,7 +278,7 @@ struct SendFlowSetAmountScreen: View {
         _: String? = nil, displayAlert: Bool = false
     ) -> Bool {
         guard let amount = sendFlowManager.amount else {
-            if displayAlert { setAlertState(.invalidNumber) }
+            if displayAlert { setAlertState(.InvalidNumber) }
             return false
         }
 
@@ -332,33 +310,21 @@ struct SendFlowSetAmountScreen: View {
         return true
     }
 
-    private func amountSats(_ amount: Double) -> Double {
-        let maxBtc = 21_000_000
-        let maxSats = Double(maxBtc * 100_000_000)
-
-        if amount == 0 {
-            return 0
-        }
-
-        if metadata.selectedUnit == .sat {
-            return min(amount, maxSats)
-        }
-
-        return min(amount * 100_000_000, maxSats)
-    }
-
     private func clearSendAmount() {
         Log.debug("clearSendAmount")
 
         if metadata.fiatOrBtc == .fiat {
-            sendFlowManager.dispatch(action: .changeEnteringFiatAmount(app.selectedFiatCurrency.symbol()))
+            sendFlowManager.dispatch(
+                action: .changeEnteringFiatAmount(app.selectedFiatCurrency.symbol()))
+
             sendFlowManager.dispatch(action: .changeEnteringBtcAmount("0"))
             return
         }
 
         if metadata.fiatOrBtc == .btc {
             sendFlowManager.dispatch(action: .changeEnteringBtcAmount(""))
-            sendFlowManager.dispatch(action: .changeEnteringFiatAmount(manager.rust.displayFiatAmount(amount: 0.0)))
+            sendFlowManager.dispatch(
+                action: .changeEnteringFiatAmount(manager.rust.displayFiatAmount(amount: 0.0)))
             return
         }
     }
@@ -366,18 +332,7 @@ struct SendFlowSetAmountScreen: View {
     // MARK: OnChange Functions
 
     private func selectedUnitChanged(oldUnit: Unit, newUnit: Unit) {
-        guard let amount = sendFlowManager.amount else { return }
-        if amount.asSats() == 0 { return }
-        if oldUnit == newUnit { return }
-
-        // Call stubbed function we'll implement in Rust later
-        let formattedAmount = sendFlowManager.rust.formatAmountForUnit(
-            amount: amount.asSats(),
-            unit: newUnit,
-            focusedOnAmount: presenter.focusField == .amount
-        )
-
-        sendFlowManager.dispatch(action: .changeEnteringBtcAmount(formattedAmount))
+        sendFlowManager.dispatch(action: .notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
     }
 
     // presenter focus field changed
@@ -437,7 +392,9 @@ struct SendFlowSetAmountScreen: View {
             }
         }
 
-        if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 || !validateAmount() {
+        if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0
+            || !validateAmount()
+        {
             return DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 presenter.focusField = .amount
             }
@@ -698,12 +655,14 @@ struct SendFlowSetAmountScreen: View {
         case .fee:
             SendFlowSelectFeeRateView(
                 manager: manager,
-                feeOptions: Binding(get: {
-                    guard let feeRateOptions = sendFlowManager.feeRateOptions else {
-                        return FeeRateOptionsWithTotalFee.previewNew()
-                    }
-                    return feeRateOptions
-                }, set: { _ in /* No-op, handled by SendFlowManager */ }),
+                feeOptions: Binding(
+                    get: {
+                        guard let feeRateOptions = sendFlowManager.feeRateOptions else {
+                            return FeeRateOptionsWithTotalFee.previewNew()
+                        }
+                        return feeRateOptions
+                    }, set: { _ in /* No-op, handled by SendFlowManager */ }
+                ),
                 selectedOption: Binding(
                     get: {
                         guard let selectedFeeRate = sendFlowManager.selectedFeeRate else {

@@ -32,13 +32,6 @@ import SwiftUI
         case fee
     }
 
-    func setAlertState(_ alertState: SendFlowAlertState) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            guard !self.disappearing else { return }
-            self.alertState = TaggedItem(alertState)
-        }
-    }
-
     var showingAlert: Binding<Bool> {
         Binding(
             get: { self.alertState != nil && !self.disappearing },
@@ -60,71 +53,97 @@ import SwiftUI
     }
 
     var alertTitle: String {
-        guard let alertState else { return "" }
+        switch alertState?.item {
+        case let .error(error):
+            errorAlertTitle(error)
+        case .none:
+            ""
+        }
+    }
 
-        return {
-            switch alertState.item {
-            case .emptyAddress, .invalidAddress, .wrongNetwork:
-                "Invalid Address"
-            case .invalidNumber, .zeroAmount: "Invalid Amount"
-            case .insufficientFunds, .noBalance: "Insufficient Funds"
-            case .sendAmountToLow: "Send Amount Too Low"
-            case .unableToGetFeeRate: "Unable to get fee rate"
-            case .unableToBuildTxn: "Unable to build transaction"
-            }
-        }()
+    private func errorAlertTitle(_ error: SendFlowError) -> String {
+        switch error {
+        case .EmptyAddress, .InvalidAddress, .WrongNetwork:
+            "Invalid Address"
+        case .InvalidNumber, .ZeroAmount: "Invalid Amount"
+        case .InsufficientFunds, .NoBalance: "Insufficient Funds"
+        case .SendAmountToLow: "Send Amount Too Low"
+        case .UnableToGetFeeRate: "Unable to get fee rate"
+        case .UnableToBuildTxn: "Unable to build transaction"
+        case .UnableToGetMaxSend:
+            "Unable to get max send"
+        }
     }
 
     @ViewBuilder
     func alertMessage(alert: TaggedItem<SendFlowAlertState>) -> some View {
-        let text =
-            switch alert.item {
-            case .emptyAddress:
-                "Please enter an address"
-            case .invalidNumber:
-                "Please enter a valid number for the amout to send"
-            case .zeroAmount:
-                "Can't send an empty transaction. Please enter a valid amount"
-            case .noBalance:
-                "You do not have any bitcoin in your wallet. Please add some to send a transaction"
-            case let .invalidAddress(address):
-                "The address \(address) is invalid"
-            case let .wrongNetwork(address):
-                "The address \(address) is on the wrong network. You are on \(manager.walletMetadata.network)"
-            case .insufficientFunds:
-                "You do not have enough bitcoin in your wallet to cover the amount plus fees"
-            case .sendAmountToLow:
-                "Send amount is too low. Please send atleast 5000 sats"
-            case .unableToGetFeeRate:
-                "Are you connected to the internet?"
-            case let .unableToBuildTxn(msg):
-                msg
-            }
+        switch alert.item {
+        case let .error(error):
+            Text(errorAlertMessage(error))
+        }
+    }
 
-        Text(text)
+    private func errorAlertMessage(_ error: SendFlowError) -> String {
+        switch error {
+        case .EmptyAddress:
+            "Please enter an address"
+        case .InvalidNumber:
+            "Please enter a valid number for the amout to send"
+        case .ZeroAmount:
+            "Can't send an empty transaction. Please enter a valid amount"
+        case .NoBalance:
+            "You do not have any bitcoin in your wallet. Please add some to send a transaction"
+        case let .InvalidAddress(address):
+            "The address \(address) is invalid"
+        case let .WrongNetwork(address):
+            "The address \(address) is on the wrong network. You are on \(manager.walletMetadata.network)"
+        case .InsufficientFunds:
+            "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+        case .SendAmountToLow:
+            "Send amount is too low. Please send atleast 5000 sats"
+        case .UnableToGetFeeRate:
+            "Are you connected to the internet?"
+        case let .UnableToBuildTxn(msg):
+            msg
+        case let .UnableToGetMaxSend(msg):
+            msg
+        }
     }
 
     @ViewBuilder
     func alertButtons(alert: TaggedItem<SendFlowAlertState>) -> some View {
         switch alert.item {
-        case .emptyAddress, .wrongNetwork, .invalidAddress:
+        case let .error(error):
+            errorAlertButtons(error)
+        }
+    }
+
+    @ViewBuilder
+    private func errorAlertButtons(_ error: SendFlowError) -> some View {
+        switch error {
+        case .EmptyAddress, .WrongNetwork, .InvalidAddress:
             Button("OK") {
                 self.alertState = .none
                 self.focusField = .address
             }
-        case .noBalance:
+        case .NoBalance:
             Button("Go Back") {
                 self.alertState = .none
                 self.app.popRoute()
             }
-        case .invalidNumber, .insufficientFunds, .sendAmountToLow, .zeroAmount:
+        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount:
             Button("OK") {
                 self.focusField = .amount
                 self.alertState = .none
             }
-        case .unableToGetFeeRate, .unableToBuildTxn:
+        case .UnableToGetFeeRate, .UnableToBuildTxn:
             Button("OK") {
                 self.focusField = .none
+                self.alertState = .none
+            }
+        case .UnableToGetMaxSend:
+            Button("OK") {
+                self.focusField = .amount
                 self.alertState = .none
             }
         }
