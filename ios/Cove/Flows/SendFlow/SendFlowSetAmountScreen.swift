@@ -13,7 +13,7 @@ import SwiftUI
 
 private typealias FocusField = SendFlowPresenter.FocusField
 private typealias SheetState = SendFlowPresenter.SheetState
-private typealias AlertState = SendFlowPresenter.AlertState
+private typealias AlertState = SendFlowAlertState
 
 struct SendFlowSetAmountScreen: View {
     @Environment(SendFlowPresenter.self) private var presenter

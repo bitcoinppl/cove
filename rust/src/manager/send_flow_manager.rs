@@ -1,3 +1,4 @@
+pub mod alert_state;
 pub mod btc_on_change;
 pub mod fiat_on_change;
 
@@ -12,6 +13,7 @@ use crate::{
     wallet::{Address, metadata::WalletMetadata},
 };
 use act_zero::{WeakAddr, call};
+use alert_state::SendFlowAlertState;
 use btc_on_change::BtcOnChangeHandler;
 use cove_types::{
     amount::Amount,
@@ -97,7 +99,7 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
 
     // side effects
-    SetAlert { title: String, message: String },
+    SetAlert(Option<SendFlowAlertState>),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]

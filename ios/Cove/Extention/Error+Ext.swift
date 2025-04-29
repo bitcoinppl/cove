@@ -54,3 +54,4 @@ extension SendFlowFiatOnChangeError {
         describeSendFlowFiatOnChangeError(error: self)
     }
 }
+

@@ -16,14 +16,11 @@ import SwiftUI
     @ObservationIgnored
     let manager: WalletManager
 
-    var amount: Amount?
-    var address: Address?
-    var maxSelected: Amount?
-
     var disappearing: Bool = false
+
     var focusField: SetAmountFocusField?
     var sheetState: TaggedItem<SheetState>? = .none
-    var alertState: TaggedItem<AlertState>? = .none
+    var alertState: TaggedItem<SendFlowAlertState>? = .none
 
     init(app: AppManager, manager: WalletManager) {
         self.app = app
@@ -35,29 +32,7 @@ import SwiftUI
         case fee
     }
 
-    enum AlertState: Equatable {
-        case emptyAddress
-        case invalidNumber
-        case invalidAddress(String)
-        case wrongNetwork(String)
-        case noBalance
-        case zeroAmount
-        case insufficientFunds
-        case sendAmountToLow
-        case unableToGetFeeRate
-        case unableToBuildTxn(String)
-
-        init(_ error: AddressError, address: String) {
-            switch error {
-            case .EmptyAddress: self = .emptyAddress
-            case .InvalidAddress: self = .invalidAddress(address)
-            case .WrongNetwork: self = .wrongNetwork(address)
-            default: self = .invalidAddress(address)
-            }
-        }
-    }
-
-    func setAlertState(_ alertState: AlertState) {
+    func setAlertState(_ alertState: SendFlowAlertState) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             guard !self.disappearing else { return }
             self.alertState = TaggedItem(alertState)
@@ -101,7 +76,7 @@ import SwiftUI
     }
 
     @ViewBuilder
-    func alertMessage(alert: TaggedItem<AlertState>) -> some View {
+    func alertMessage(alert: TaggedItem<SendFlowAlertState>) -> some View {
         let text =
             switch alert.item {
             case .emptyAddress:
@@ -130,7 +105,7 @@ import SwiftUI
     }
 
     @ViewBuilder
-    func alertButtons(alert: TaggedItem<AlertState>) -> some View {
+    func alertButtons(alert: TaggedItem<SendFlowAlertState>) -> some View {
         switch alert.item {
         case .emptyAddress, .wrongNetwork, .invalidAddress:
             Button("OK") {

@@ -26,8 +26,8 @@ public struct SendFlowContainer: View {
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
             let manager = try app.getWalletManager(id: id)
-            let sendFlowManager = SendFlowManager(manager.rust.newSendFlowManager())
             let presenter = SendFlowPresenter(app: app, manager: manager)
+            let sendFlowManager = SendFlowManager(manager.rust.newSendFlowManager(), presenter: presenter)
 
             self.manager = manager
             self.sendFlowManager = sendFlowManager

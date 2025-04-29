@@ -17485,6 +17485,141 @@ extension SeedQrError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum SendFlowAlertState {
+    
+    case emptyAddress
+    case invalidNumber
+    case invalidAddress(String
+    )
+    case wrongNetwork(String
+    )
+    case noBalance
+    case zeroAmount
+    case insufficientFunds
+    case sendAmountToLow
+    case unableToGetFeeRate
+    case unableToBuildTxn(String
+    )
+}
+
+
+#if compiler(>=6)
+extension SendFlowAlertState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowAlertState: FfiConverterRustBuffer {
+    typealias SwiftType = SendFlowAlertState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowAlertState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .emptyAddress
+        
+        case 2: return .invalidNumber
+        
+        case 3: return .invalidAddress(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .wrongNetwork(try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .noBalance
+        
+        case 6: return .zeroAmount
+        
+        case 7: return .insufficientFunds
+        
+        case 8: return .sendAmountToLow
+        
+        case 9: return .unableToGetFeeRate
+        
+        case 10: return .unableToBuildTxn(try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendFlowAlertState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .emptyAddress:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .invalidNumber:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .invalidAddress(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .wrongNetwork(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case .noBalance:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .zeroAmount:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .insufficientFunds:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .sendAmountToLow:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .unableToGetFeeRate:
+            writeInt(&buf, Int32(9))
+        
+        
+        case let .unableToBuildTxn(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowAlertState_lift(_ buf: RustBuffer) throws -> SendFlowAlertState {
+    return try FfiConverterTypeSendFlowAlertState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowAlertState_lower(_ value: SendFlowAlertState) -> RustBuffer {
+    return FfiConverterTypeSendFlowAlertState.lower(value)
+}
+
+
+extension SendFlowAlertState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum SendFlowErrorAlert {
     
     case signAndBroadcast(String
@@ -17761,7 +17896,7 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateFeeRateOptions(FeeRateOptionsWithTotalFee
     )
-    case setAlert(title: String, message: String
+    case setAlert(SendFlowAlertState?
     )
 }
 
@@ -17807,7 +17942,7 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 9: return .updateFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
         
-        case 10: return .setAlert(title: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
+        case 10: return .setAlert(try FfiConverterOptionTypeSendFlowAlertState.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -17863,10 +17998,9 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
             
         
-        case let .setAlert(title,message):
+        case let .setAlert(v1):
             writeInt(&buf, Int32(10))
-            FfiConverterString.write(title, into: &buf)
-            FfiConverterString.write(message, into: &buf)
+            FfiConverterOptionTypeSendFlowAlertState.write(v1, into: &buf)
             
         }
     }
@@ -23227,6 +23361,30 @@ fileprivate struct FfiConverterOptionTypeRoute: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSendFlowAlertState: FfiConverterRustBuffer {
+    typealias SwiftType = SendFlowAlertState?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSendFlowAlertState.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSetAmountFocusField: FfiConverterRustBuffer {
     typealias SwiftType = SetAmountFocusField?
 
@@ -23923,6 +24081,14 @@ private func uniffiForeignFutureFree(handle: UInt64) {
 public func uniffiForeignFutureHandleCountCove() -> Int {
     UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.count
 }
+public func addressErrorToAlertState(error: AddressError, address: String) -> SendFlowAlertState  {
+    return try!  FfiConverterTypeSendFlowAlertState_lift(try! rustCall() {
+    uniffi_cove_fn_func_address_error_to_alert_state(
+        FfiConverterTypeAddressError_lower(error),
+        FfiConverterString.lower(address),$0
+    )
+})
+}
 public func afterPinActionUserMessage(action: AfterPinAction) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_after_pin_action_user_message(
@@ -24320,6 +24486,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_cove_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_cove_checksum_func_address_error_to_alert_state() != 20331) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_after_pin_action_user_message() != 26922) {
         return InitializationResult.apiChecksumMismatch
@@ -25464,10 +25633,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

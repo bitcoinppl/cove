@@ -10,6 +10,7 @@ import SwiftUI
 struct SendFlowCustomFeeRateView: View {
     @Environment(AppManager.self) private var app
     @Environment(WalletManager.self) private var manager
+    @Environment(SendFlowManager.self) private var sendFlowManager
     @Environment(SendFlowPresenter.self) private var presenter
 
     // args
@@ -60,11 +61,11 @@ struct SendFlowCustomFeeRateView: View {
     }
 
     func getTotalSatsDeduped(for feeRate: Float) {
-        guard let address = presenter.address else { return }
-        guard let amount = presenter.amount else { return }
+        guard let address = sendFlowManager.address else { return }
+        guard let amount = sendFlowManager.amount else { return }
 
         let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
-        let isMaxSelected = presenter.maxSelected != nil
+        let isMaxSelected = sendFlowManager.maxSelected != nil
 
         if let totalSatsTask { totalSatsTask.cancel() }
         totalSatsTask = Task {

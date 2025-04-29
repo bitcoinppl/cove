@@ -17,10 +17,11 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     private var _enteringBtcAmount: String = ""
     private var _enteringFiatAmount: String = ""
 
-    var btcAmount: Amount = .fromSat(sats: 0)
-    var fiatAmount: Double = 0.0
+    var address: Address? = nil
+    var amount: Amount? = nil
+    var fiatAmount: Double? = nil
 
-    var focusField: SetAmountFocusField? = nil
+    var presenter: SendFlowPresenter
     var selectedFeeRate: FeeRateOptionWithTotalFee? = nil
     var feeRateOptions: FeeRateOptionsWithTotalFee? = nil
     var maxSelected: Amount? = nil
@@ -39,8 +40,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         )
     }
 
-    public init(_ rust: RustSendFlowManager) {
+    public init(_ rust: RustSendFlowManager, presenter: SendFlowPresenter) {
         self.rust = rust
+        self.presenter = presenter
+
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -58,23 +61,23 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
                 case let .updateAmountFiat(fiat):
                     self.fiatAmount = fiat
                 case let .updateAmountSats(sats):
-                    self.btcAmount = Amount.fromSat(sats: sats)
+                    self.amount = Amount.fromSat(sats: sats)
                 case let .updateFeeRateOptions(options):
                     self.feeRateOptions = options
                 case let .updateEnteringBtcAmount(amount):
                     self._enteringBtcAmount = amount
                 case let .updateEnteringFiatAmount(amount):
                     self._enteringFiatAmount = amount
-                case let .updateFocusField(field):
-                    self.focusField = field
                 case let .updateSelectedFeeRate(rate):
                     self.selectedFeeRate = rate
                 case let .updateMaxSelected(max):
                     self.maxSelected = max
                 case let .updateFeeRate(rate):
                     self.selectedFeeRate = rate
-                case let .setAlert(title: title, message: message):
-                    AppManager.shared.alertState = .init(.general(title: title, message: message))
+                case let .updateFocusField(field):
+                    self.presenter.focusField = field
+                case let .setAlert(alertState):
+                    self.presenter.alertState = alertState.map(TaggedItem.init)
                 }
             }
         }

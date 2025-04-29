@@ -222,3 +222,9 @@ extension HardwareWalletMetadata {
         hardwareWalletIsTapSigner(hardwareWallet: self)
     }
 }
+
+extension SendFlowAlertState {
+    init(_ addressError: AddressError, address: String) {
+        self = addressErrorToAlertState(error: addressError, address: address)
+    }
+}
