@@ -12,7 +12,7 @@ use crate::{
     app::App,
     database::Database,
     fiat::FiatCurrency,
-    wallet::{Address, metadata::WalletMetadata},
+    wallet::{Address, balance::Balance, metadata::WalletMetadata},
 };
 
 #[derive(Debug, Clone, derive_more::Deref)]
@@ -26,17 +26,19 @@ pub struct SendFlowManagerState {
     pub(crate) btc_price_in_fiat: Option<u64>,
     pub(crate) selected_fiat_currency: FiatCurrency,
     pub(crate) first_address: Option<Arc<Address>>,
+    pub(crate) wallet_balance: Option<Arc<Balance>>,
 
     // public
     pub entering_btc_amount: String,
     pub entering_fiat_amount: String,
+    pub entering_address: String,
 
     pub amount_sats: Option<u64>,
     pub amount_fiat: Option<f64>,
 
     pub max_selected: Option<Arc<Amount>>,
 
-    pub address: Option<String>,
+    pub address: Option<Arc<Address>>,
     pub focus_field: Option<SetAmountFocusField>,
 
     pub selected_fee_rate: Option<Arc<FeeRateOptionWithTotalFee>>,
@@ -72,6 +74,7 @@ impl SendFlowManagerState {
             fee_rate_options_base: None,
             entering_btc_amount: String::new(),
             entering_fiat_amount: String::new(),
+            entering_address: String::new(),
             first_address: None,
             amount_sats: None,
             amount_fiat: None,
@@ -79,6 +82,7 @@ impl SendFlowManagerState {
             focus_field: None,
             address: None,
             selected_fee_rate: None,
+            wallet_balance: None,
             fee_rate_options: None,
             btc_price_in_fiat,
             selected_fiat_currency: Database::global()

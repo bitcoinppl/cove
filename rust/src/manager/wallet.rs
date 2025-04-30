@@ -252,11 +252,11 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn new_send_flow_manager(&self) -> Arc<RustSendFlowManager> {
-        let addr = self.actor.downgrade();
+    pub fn new_send_flow_manager(self: Arc<Self>) -> Arc<RustSendFlowManager> {
+        let me = self.clone();
         let metadata = self.metadata.read().clone();
 
-        RustSendFlowManager::new(metadata, addr, self.reconcile_receiver.clone())
+        RustSendFlowManager::new(metadata, me, self.reconcile_receiver.clone())
     }
 
     #[uniffi::method]

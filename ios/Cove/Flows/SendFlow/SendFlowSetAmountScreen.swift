@@ -50,7 +50,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpentInFiat: String {
-        sendFlowManager.rust.totalSpentInFiat()
+        sendFlowManager.rust.totalSpentFiat()
     }
 
     private var totalSending: String {
@@ -675,12 +675,11 @@ struct SendFlowSetAmountScreen: View {
                         return selectedFeeRate
                     },
                     set: { newValue in
-                        // in maxSelected mode, adjust with new rate
                         sendFlowManager.dispatch(action: .selectFeeRate(newValue))
 
+                        // in maxSelected mode, adjust with new rate
                         if let maxSelected = sendFlowManager.maxSelected {
-                            // If max is selected, we need to recalculate with the new fee rate
-                            sendFlowManager.dispatch(action: .setMaxSelected(maxSelected))
+                            sendFlowManager.dispatch(action: .selectMaxSend)
                         }
                     }
                 ),
