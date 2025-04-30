@@ -1,4 +1,4 @@
-use cove_types::address::AddressError;
+use cove_types::{Network, address::AddressError};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum SendFlowError {
@@ -11,8 +11,8 @@ pub enum SendFlowError {
     #[error("invalid address: {0}")]
     InvalidAddress(String),
 
-    #[error("wrong network: {0}")]
-    WrongNetwork(String),
+    #[error("wrong network {address} is for network: {valid_for}, current network: {current}")]
+    WrongNetwork { address: String, valid_for: Network, current: Network },
 
     #[error("no balance")]
     NoBalance,
@@ -41,7 +41,10 @@ impl SendFlowError {
         match error {
             AddressError::EmptyAddress => Self::EmptyAddress,
             AddressError::InvalidAddress => Self::InvalidAddress(address),
-            AddressError::WrongNetwork { .. } => Self::WrongNetwork(address),
+            AddressError::WrongNetwork { current, valid_for } => {
+                Self::WrongNetwork { address, valid_for, current }
+            }
+
             _ => Self::InvalidAddress(address),
         }
     }

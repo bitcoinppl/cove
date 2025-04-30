@@ -20,6 +20,7 @@ use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
 use btc_on_change::BtcOnChangeHandler;
 use cove_types::{
+    address::AddressWithNetwork,
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
     psbt::Psbt,
@@ -103,6 +104,8 @@ pub enum SendFlowManagerAction {
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
     NotifySelectedUnitedChanged { old: Unit, new: Unit },
+    NotifyScanCodeChanged { old: String, new: String },
+
     SelectMaxSend,
 }
 
@@ -346,6 +349,10 @@ impl RustSendFlowManager {
             Action::NotifySelectedUnitedChanged { old, new } => {
                 self.handle_selected_unit_changed(old, new);
             }
+
+            Action::NotifyScanCodeChanged { old, new } => {
+                self.handle_scan_code_changed(old, new);
+            }
         }
     }
 }
@@ -520,6 +527,51 @@ impl RustSendFlowManager {
             }
         }
     }
+
+    fn handle_scan_code_changed(&self, _old_value: String, new_value: String) {
+        let network = self.state.read().metadata.network;
+        let address_with_network = match AddressWithNetwork::try_new(&new_value) {
+            Ok(address_with_network) => address_with_network,
+            Err(err) => {
+                let error = SendFlowError::from_address_error(err, new_value);
+                return self.send_alert(error);
+            }
+        };
+
+        if address_with_network.network != network {
+            let error = SendFlowError::WrongNetwork {
+                address: address_with_network.address.to_string(),
+                valid_for: address_with_network.network,
+                current: network,
+            };
+            return self.send_alert(error);
+        }
+
+        // set address
+        let address = Arc::new(address_with_network.address);
+        self.state.write().address = Some(address.clone());
+        self.state.write().entering_address = address.to_string();
+        self.send(Message::UpdateEnteringAddress(new_value));
+
+        // set amount if its valid
+        if let Some(amount) = address_with_network.amount {
+            self.state.write().amount_sats = Some(amount.to_sat());
+            self.send(Message::UpdateAmountSats(amount.to_sat()));
+        }
+
+        // if amount is invalid, go to amount field
+        if !self.validate_amount(false) {
+            let focus_field = SetAmountFocusField::Amount;
+            self.state.write().focus_field = Some(focus_field);
+            self.send(Message::UpdateFocusField(Some(focus_field)));
+        }
+
+        // if both address and amount are valid, then clear the focus field
+        if self.validate_amount(false) && self.validate_address(false) {
+            self.state.write().focus_field = None;
+            self.send(Message::UpdateFocusField(None));
+        }
+    }
 }
 
 /// MARK: helper method impls
@@ -528,6 +580,10 @@ impl RustSendFlowManager {
         if let Err(err) = self.reconciler.send(message) {
             error!("unable to send message to send flow manager: {err}");
         }
+    }
+
+    fn send_alert(&self, alert: impl Into<SendFlowAlertState>) {
+        self.send(Message::SetAlert(alert.into()));
     }
 
     fn total_spent_btc_amount(&self) -> Option<Amount> {
@@ -628,6 +684,13 @@ impl RustSendFlowManager {
         // update the state
         let fee_rate_options_with_total_fee = Arc::new(fee_rate_options);
         state.write().fee_rate_options = Some(fee_rate_options_with_total_fee.clone());
+
+        // if no fee rate is selected, then set the default to medium
+        if self.state.read().selected_fee_rate.is_none() {
+            let medium = Arc::new(fee_rate_options_with_total_fee.clone().medium);
+            self.state.write().selected_fee_rate = Some(medium.clone());
+            self.send(Message::UpdateFeeRate(medium));
+        }
 
         let _ = sender.send(Message::UpdateFeeRateOptions(fee_rate_options_with_total_fee));
     }

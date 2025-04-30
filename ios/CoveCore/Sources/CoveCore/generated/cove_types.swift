@@ -3738,7 +3738,7 @@ public enum AddressError: Swift.Error {
     )
     case InvalidAddress
     case UnsupportedNetwork
-    case WrongNetwork(current: Network
+    case WrongNetwork(current: Network, validFor: Network
     )
     case EmptyAddress
 }
@@ -3764,7 +3764,8 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
         case 3: return .InvalidAddress
         case 4: return .UnsupportedNetwork
         case 5: return .WrongNetwork(
-            current: try FfiConverterTypeNetwork.read(from: &buf)
+            current: try FfiConverterTypeNetwork.read(from: &buf), 
+            validFor: try FfiConverterTypeNetwork.read(from: &buf)
             )
         case 6: return .EmptyAddress
 
@@ -3796,9 +3797,10 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
         
         
-        case let .WrongNetwork(current):
+        case let .WrongNetwork(current,validFor):
             writeInt(&buf, Int32(5))
             FfiConverterTypeNetwork.write(current, into: &buf)
+            FfiConverterTypeNetwork.write(validFor, into: &buf)
             
         
         case .EmptyAddress:

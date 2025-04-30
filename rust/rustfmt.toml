@@ -1,5 +1,6 @@
-single_line_let_else_max_width = 80
+single_line_let_else_max_width = 100
 single_line_if_else_max_width = 100
+max_width = 100
 
 use_small_heuristics = "Max"           # ﬂattens more constructs
 control_brace_style = "AlwaysSameLine" # don’t move `{`/`}` to next line 
@@ -10,5 +11,3 @@ force_multiline_blocks = false # single‐statement bodies can be `{ foo(); }`
 # Make other single‐item constructs one‐line, too
 fn_single_line = true         # e.g. `fn foo() { /*...*/ }`
 struct_lit_single_line = true # e.g. `Foo { x: 1, y: 2 }`
-
-max_width = 100

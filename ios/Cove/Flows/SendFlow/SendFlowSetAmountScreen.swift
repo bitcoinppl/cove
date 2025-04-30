@@ -256,58 +256,15 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func validateAddress(
-        _ address: String? = nil, displayAlert: Bool = false
+        _: String? = nil, displayAlert: Bool = false
     ) -> Bool {
-        let address = address ?? self.address
-        if address.isEmpty {
-            if displayAlert { setAlertState(.emptyAddress) }
-            return false
-        }
-
-        if case let .failure(error) = Address.checkValid(address) {
-            if displayAlert {
-                setAlertState(.init(error, address: address))
-            }
-            return false
-        }
-
-        return true
+        sendFlowManager.rust.validateAddress(displayAlert: displayAlert)
     }
 
     private func validateAmount(
         _: String? = nil, displayAlert: Bool = false
     ) -> Bool {
-        guard let amount = sendFlowManager.amount else {
-            if displayAlert { setAlertState(.InvalidNumber) }
-            return false
-        }
-
-        if displayAlert {
-            Log.debug("validating amount: \(amount)")
-        }
-
-        let amountSats = amount.asSats()
-        let balance = manager.balance.spendable().asSats()
-
-        if amountSats < 5000 {
-            if displayAlert { setAlertState(.sendAmountToLow) }
-            return false
-        }
-
-        if amountSats > balance {
-            if displayAlert { setAlertState(.insufficientFunds) }
-            return false
-        }
-
-        if let selectedFeeRate = sendFlowManager.selectedFeeRate {
-            let totalFeeSats = selectedFeeRate.totalFee().asSats()
-            if (amountSats + totalFeeSats) > balance {
-                if displayAlert { setAlertState(.insufficientFunds) }
-                return false
-            }
-        }
-
-        return true
+        sendFlowManager.rust.validateAmount(displayAlert: displayAlert)
     }
 
     private func clearSendAmount() {
@@ -362,47 +319,10 @@ struct SendFlowSetAmountScreen: View {
         sendFlowManager.dispatch(action: .setMaxSelected)
     }
 
-    private func scannedCodeChanged(_: TaggedString?, newValue: TaggedString?) {
+    private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
         guard let newValue else { return }
         presenter.sheetState = nil
-
-        let addressWithNetwork = try? AddressWithNetwork(address: newValue.item)
-
-        guard let addressWithNetwork else {
-            setAlertState(.invalidAddress(newValue.item))
-            return
-        }
-
-        address = addressWithNetwork.address().string()
-        sendFlowManager.dispatch(action: .changeAddress(address))
-        guard validateAddress(address, displayAlert: true) else { return }
-
-        if let scannedAmount = addressWithNetwork.amount() {
-            // Call the stubbed function we will implement in Rust
-            let formattedAmount = sendFlowManager.rust.formatAmountFromScannedQR(
-                amount: scannedAmount.asSats(),
-                unit: metadata.selectedUnit
-            )
-
-            sendFlowManager.dispatch(action: .changeEnteringBtcAmount(formattedAmount))
-
-            if !validateAmount(displayAlert: true) {
-                presenter.focusField = .amount
-                return
-            }
-        }
-
-        if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0
-            || !validateAmount()
-        {
-            return DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                presenter.focusField = .amount
-            }
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            presenter.focusField = .none
-        }
+        sendFlowManager.dispatch(action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
     }
 
     @ViewBuilder
