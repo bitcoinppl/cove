@@ -17932,13 +17932,14 @@ public enum SendFlowManagerAction {
     )
     case changeSetAmountFocusField(SetAmountFocusField?
     )
+    case selectMaxSend
+    case clearSendAmount
     case selectFeeRate(FeeRateOptionWithTotalFee
     )
     case notifySelectedUnitedChanged(old: Unit, new: Unit
     )
     case notifyScanCodeChanged(old: String, new: String
     )
-    case selectMaxSend
 }
 
 
@@ -17968,16 +17969,18 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 4: return .changeSetAmountFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
         
-        case 5: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        case 5: return .selectMaxSend
+        
+        case 6: return .clearSendAmount
+        
+        case 7: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
         )
         
-        case 6: return .notifySelectedUnitedChanged(old: try FfiConverterTypeUnit.read(from: &buf), new: try FfiConverterTypeUnit.read(from: &buf)
+        case 8: return .notifySelectedUnitedChanged(old: try FfiConverterTypeUnit.read(from: &buf), new: try FfiConverterTypeUnit.read(from: &buf)
         )
         
-        case 7: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
+        case 9: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
         )
-        
-        case 8: return .selectMaxSend
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18007,26 +18010,30 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterOptionTypeSetAmountFocusField.write(v1, into: &buf)
             
         
-        case let .selectFeeRate(v1):
+        case .selectMaxSend:
             writeInt(&buf, Int32(5))
+        
+        
+        case .clearSendAmount:
+            writeInt(&buf, Int32(6))
+        
+        
+        case let .selectFeeRate(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
             
         
         case let .notifySelectedUnitedChanged(old,new):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(8))
             FfiConverterTypeUnit.write(old, into: &buf)
             FfiConverterTypeUnit.write(new, into: &buf)
             
         
         case let .notifyScanCodeChanged(old,new):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(old, into: &buf)
             FfiConverterString.write(new, into: &buf)
             
-        
-        case .selectMaxSend:
-            writeInt(&buf, Int32(8))
-        
         }
     }
 }
@@ -25865,8 +25872,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

@@ -101,12 +101,13 @@ pub enum SendFlowManagerAction {
 
     ChangeSetAmountFocusField(Option<SetAmountFocusField>),
 
+    SelectMaxSend,
+    ClearSendAmount,
+
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
     NotifySelectedUnitedChanged { old: Unit, new: Unit },
     NotifyScanCodeChanged { old: String, new: String },
-
-    SelectMaxSend,
 }
 
 impl RustSendFlowManager {
@@ -346,6 +347,10 @@ impl RustSendFlowManager {
                 });
             }
 
+            Action::ClearSendAmount => {
+                self.clear_send_amount();
+            }
+
             Action::NotifySelectedUnitedChanged { old, new } => {
                 self.handle_selected_unit_changed(old, new);
             }
@@ -439,6 +444,15 @@ impl RustSendFlowManager {
         if let Some(address) = address {
             self.state.write().address = Some(Arc::new(address));
         }
+    }
+
+    fn clear_send_amount(&self) {
+        let mut state = self.state.write();
+        state.amount_sats = None;
+        self.send(Message::UpdateAmountSats(0));
+
+        state.amount_fiat = None;
+        self.send(Message::UpdateAmountFiat(0.0));
     }
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {

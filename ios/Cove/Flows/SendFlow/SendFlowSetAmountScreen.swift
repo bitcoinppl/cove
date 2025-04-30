@@ -255,35 +255,16 @@ struct SendFlowSetAmountScreen: View {
             && validateAddress(displayAlert: displayAlert)
     }
 
-    private func validateAddress(
-        _: String? = nil, displayAlert: Bool = false
-    ) -> Bool {
+    private func validateAddress(_: String? = nil, displayAlert: Bool = false) -> Bool {
         sendFlowManager.rust.validateAddress(displayAlert: displayAlert)
     }
 
-    private func validateAmount(
-        _: String? = nil, displayAlert: Bool = false
-    ) -> Bool {
+    private func validateAmount(_: String? = nil, displayAlert: Bool = false) -> Bool {
         sendFlowManager.rust.validateAmount(displayAlert: displayAlert)
     }
 
     private func clearSendAmount() {
-        Log.debug("clearSendAmount")
-
-        if metadata.fiatOrBtc == .fiat {
-            sendFlowManager.dispatch(
-                action: .changeEnteringFiatAmount(app.selectedFiatCurrency.symbol()))
-
-            sendFlowManager.dispatch(action: .changeEnteringBtcAmount("0"))
-            return
-        }
-
-        if metadata.fiatOrBtc == .btc {
-            sendFlowManager.dispatch(action: .changeEnteringBtcAmount(""))
-            sendFlowManager.dispatch(
-                action: .changeEnteringFiatAmount(manager.rust.displayFiatAmount(amount: 0.0)))
-            return
-        }
+        sendFlowManager.dispatch(action: .clearSendAmount)
     }
 
     // MARK: OnChange Functions
@@ -316,7 +297,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func setMaxSelected() {
-        sendFlowManager.dispatch(action: .setMaxSelected)
+        sendFlowManager.dispatch(action: .selectMaxSend)
     }
 
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
