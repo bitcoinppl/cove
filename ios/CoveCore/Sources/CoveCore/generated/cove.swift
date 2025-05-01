@@ -6940,6 +6940,10 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
+    func sendAmountBtc()  -> String
+    
+    func sendAmountFiat()  -> String
+    
     func totalFeeString()  -> String
     
     func totalSpentBtcString()  -> String
@@ -7041,6 +7045,20 @@ open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCal
         FfiConverterCallbackInterfaceSendFlowManagerReconciler_lower(reconciler),$0
     )
 }
+}
+    
+open func sendAmountBtc() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_send_amount_btc(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func sendAmountFiat() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_send_amount_fiat(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func totalFeeString() -> String  {
@@ -7158,8 +7176,6 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     func buildTransaction(amount: Amount, address: Address) async throws  -> Psbt
     
     func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> Psbt
-    
-    func confirmTxn(amount: Amount, address: Address, feeRate: FeeRate) async throws  -> ConfirmDetails
     
     func convertAndDisplayFiat(amount: Amount, prices: PriceResponse, withSuffix: Bool)  -> String
     
@@ -7483,23 +7499,6 @@ open func buildTransactionWithFeeRate(amount: Amount, address: Address, feeRate:
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
             liftFunc: FfiConverterTypePsbt_lift,
-            errorHandler: FfiConverterTypeWalletManagerError_lift
-        )
-}
-    
-open func confirmTxn(amount: Amount, address: Address, feeRate: FeeRate)async throws  -> ConfirmDetails  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_rustwalletmanager_confirm_txn(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeAmount_lower(amount),FfiConverterTypeAddress_lower(address),FfiConverterTypeFeeRate_lower(feeRate)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_pointer,
-            completeFunc: ffi_cove_rust_future_complete_pointer,
-            freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeConfirmDetails_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -12197,6 +12196,8 @@ public enum AppAction {
     
     case updateRoute(routes: [Route]
     )
+    case pushRoute(Route
+    )
     case changeNetwork(network: Network
     )
     case changeColorScheme(ColorSchemeSelection
@@ -12227,21 +12228,24 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 1: return .updateRoute(routes: try FfiConverterSequenceTypeRoute.read(from: &buf)
         )
         
-        case 2: return .changeNetwork(network: try FfiConverterTypeNetwork.read(from: &buf)
+        case 2: return .pushRoute(try FfiConverterTypeRoute.read(from: &buf)
         )
         
-        case 3: return .changeColorScheme(try FfiConverterTypeColorSchemeSelection.read(from: &buf)
+        case 3: return .changeNetwork(network: try FfiConverterTypeNetwork.read(from: &buf)
         )
         
-        case 4: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
+        case 4: return .changeColorScheme(try FfiConverterTypeColorSchemeSelection.read(from: &buf)
         )
         
-        case 5: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        case 5: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
         )
         
-        case 6: return .updateFiatPrices
+        case 6: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        )
         
-        case 7: return .updateFees
+        case 7: return .updateFiatPrices
+        
+        case 8: return .updateFees
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -12256,32 +12260,37 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             FfiConverterSequenceTypeRoute.write(routes, into: &buf)
             
         
-        case let .changeNetwork(network):
+        case let .pushRoute(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeRoute.write(v1, into: &buf)
+            
+        
+        case let .changeNetwork(network):
+            writeInt(&buf, Int32(3))
             FfiConverterTypeNetwork.write(network, into: &buf)
             
         
         case let .changeColorScheme(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeColorSchemeSelection.write(v1, into: &buf)
             
         
         case let .changeFiatCurrency(v1):
-            writeInt(&buf, Int32(4))
+            writeInt(&buf, Int32(5))
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
             
         
         case let .setSelectedNode(v1):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterTypeNode.write(v1, into: &buf)
             
         
         case .updateFiatPrices:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
         
         
         case .updateFees:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
         
         }
     }
@@ -12417,6 +12426,8 @@ public enum AppStateReconcileMessage {
     )
     case walletModeChanged(WalletMode
     )
+    case pushedRoute(Route
+    )
 }
 
 
@@ -12461,6 +12472,9 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         )
         
         case 10: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
+        )
+        
+        case 11: return .pushedRoute(try FfiConverterTypeRoute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -12519,6 +12533,11 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case let .walletModeChanged(v1):
             writeInt(&buf, Int32(10))
             FfiConverterTypeWalletMode.write(v1, into: &buf)
+            
+        
+        case let .pushedRoute(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterTypeRoute.write(v1, into: &buf)
             
         }
     }
@@ -17634,6 +17653,8 @@ public enum SendFlowError: Swift.Error {
     case UnableToGetFeeRate
     case UnableToBuildTxn(String
     )
+    case UnableToSaveUnsignedTransaction(String
+    )
 }
 
 
@@ -17669,6 +17690,9 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
         case 9: return .SendAmountToLow
         case 10: return .UnableToGetFeeRate
         case 11: return .UnableToBuildTxn(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 12: return .UnableToSaveUnsignedTransaction(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -17730,6 +17754,11 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
         
         case let .UnableToBuildTxn(v1):
             writeInt(&buf, Int32(11))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .UnableToSaveUnsignedTransaction(v1):
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -17934,12 +17963,15 @@ public enum SendFlowManagerAction {
     )
     case selectMaxSend
     case clearSendAmount
+    case setAddress(Address
+    )
     case selectFeeRate(FeeRateOptionWithTotalFee
     )
     case notifySelectedUnitedChanged(old: Unit, new: Unit
     )
     case notifyScanCodeChanged(old: String, new: String
     )
+    case finalizeAndGoToNextScreen
 }
 
 
@@ -17973,14 +18005,19 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         
         case 6: return .clearSendAmount
         
-        case 7: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        case 7: return .setAddress(try FfiConverterTypeAddress.read(from: &buf)
         )
         
-        case 8: return .notifySelectedUnitedChanged(old: try FfiConverterTypeUnit.read(from: &buf), new: try FfiConverterTypeUnit.read(from: &buf)
+        case 8: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
         )
         
-        case 9: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
+        case 9: return .notifySelectedUnitedChanged(old: try FfiConverterTypeUnit.read(from: &buf), new: try FfiConverterTypeUnit.read(from: &buf)
         )
+        
+        case 10: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 11: return .finalizeAndGoToNextScreen
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18018,22 +18055,31 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
         
         
-        case let .selectFeeRate(v1):
+        case let .setAddress(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterTypeAddress.write(v1, into: &buf)
+            
+        
+        case let .selectFeeRate(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
             
         
         case let .notifySelectedUnitedChanged(old,new):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterTypeUnit.write(old, into: &buf)
             FfiConverterTypeUnit.write(new, into: &buf)
             
         
         case let .notifyScanCodeChanged(old,new):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(old, into: &buf)
             FfiConverterString.write(new, into: &buf)
             
+        
+        case .finalizeAndGoToNextScreen:
+            writeInt(&buf, Int32(11))
+        
         }
     }
 }
@@ -25381,6 +25427,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc() != 62416) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_fiat() != 26629) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustsendflowmanager_total_fee_string() != 6643) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25418,9 +25470,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_build_transaction_with_fee_rate() != 34180) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_rustwalletmanager_confirm_txn() != 15631) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_convert_and_display_fiat() != 37610) {
@@ -25872,8 +25921,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

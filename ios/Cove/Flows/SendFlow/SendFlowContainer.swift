@@ -29,6 +29,13 @@ public struct SendFlowContainer: View {
             let presenter = SendFlowPresenter(app: app, manager: manager)
             let sendFlowManager = SendFlowManager(manager.rust.newSendFlowManager(), presenter: presenter)
 
+            switch sendRoute {
+            case let .setAmount(id: id, address: address, amount: amount):
+                if let address { sendFlowManager.dispatch(action: .setAddress(address)) }
+
+            default: ()
+            }
+
             self.manager = manager
             self.sendFlowManager = sendFlowManager
             self.presenter = presenter
@@ -39,12 +46,10 @@ public struct SendFlowContainer: View {
     }
 
     @ViewBuilder
-    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager) -> some View {
+    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager, sendFlowManager: SendFlowManager) -> some View {
         switch sendRoute {
-        case let .setAmount(id: id, address: address, amount: amount):
-            SendFlowSetAmountScreen(
-                id: id, address: address?.string() ?? "", amount: amount
-            )
+        case let .setAmount(id: id, address: _, amount: amount):
+            SendFlowSetAmountScreen(id: id, amount: amount)
         case let .confirm(confirm):
             SendFlowConfirmScreen(
                 id: confirm.id, manager: manager,
@@ -58,12 +63,13 @@ public struct SendFlowContainer: View {
     }
 
     public var body: some View {
-        if let manager, let presenter {
+        if let manager, let presenter, let sendFlowManager {
             Group {
-                sendRouteToScreen(sendRoute: sendRoute, manager: manager)
+                sendRouteToScreen(sendRoute: sendRoute, manager: manager, sendFlowManager: sendFlowManager)
             }
             .environment(manager)
             .environment(presenter)
+            .environment(sendFlowManager)
             .onAppear {
                 presenter.disappearing = false
 
@@ -75,8 +81,7 @@ public struct SendFlowContainer: View {
                         }
                     }
 
-                    presenter.setAlertState(.noBalance)
-                    return
+                    return presenter.alertState = .init(.error(.NoBalance))
                 }
             }
             .alert(

@@ -7,13 +7,14 @@ pub mod state;
 use std::sync::Arc;
 
 use crate::{
-    app::{App, reconcile::AppStateReconcileMessage},
+    app::{App, AppAction, FfiApp, reconcile::AppStateReconcileMessage},
     fee_client::FEE_CLIENT,
+    router::RouteFactory,
     task,
     transaction::FeeRate,
     wallet::{
         Address,
-        metadata::{FiatOrBtc, WalletMetadata},
+        metadata::{FiatOrBtc, WalletMetadata, WalletType},
     },
 };
 use act_zero::{WeakAddr, call};
@@ -104,10 +105,13 @@ pub enum SendFlowManagerAction {
     SelectMaxSend,
     ClearSendAmount,
 
+    SetAddress(Arc<Address>),
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
     NotifySelectedUnitedChanged { old: Unit, new: Unit },
     NotifyScanCodeChanged { old: String, new: String },
+
+    FinalizeAndGoToNextScreen,
 }
 
 impl RustSendFlowManager {
@@ -172,6 +176,34 @@ impl RustSendFlowManager {
     #[uniffi::method]
     pub fn amount_sats(&self) -> u64 {
         self.state.read().amount_sats.unwrap_or(0)
+    }
+
+    #[uniffi::method]
+    pub fn send_amount_btc(&self) -> String {
+        let Some(send_amount) = self.state.read().amount_sats else {
+            return "---".to_string();
+        };
+
+        let send_amount = Amount::from_sat(send_amount);
+        match self.state.read().metadata.selected_unit {
+            Unit::Btc => format!("{} BTC", send_amount.as_btc()),
+            Unit::Sat => format!("{} sats", send_amount.as_sats()),
+        }
+    }
+
+    #[uniffi::method]
+    pub fn send_amount_fiat(&self) -> String {
+        let Some(send_amount) = self.state.read().amount_sats else {
+            return "---".to_string();
+        };
+
+        let Some(btc_price_in_fiat) = self.state.read().btc_price_in_fiat else {
+            return "---".to_string();
+        };
+
+        let send_amount = Amount::from_sat(send_amount);
+        let send_amount_in_fiat = send_amount.as_btc() * (btc_price_in_fiat as f64);
+        format!("≈ {}", self.display_fiat_amount(send_amount_in_fiat, true))
     }
 
     #[uniffi::method]
@@ -357,6 +389,15 @@ impl RustSendFlowManager {
 
             Action::NotifyScanCodeChanged { old, new } => {
                 self.handle_scan_code_changed(old, new);
+            }
+
+            Action::FinalizeAndGoToNextScreen => {
+                self.finalize_and_go_to_next_screen();
+            }
+
+            Action::SetAddress(address) => {
+                self.state.write().address = Some(address.clone());
+                self.state.write().entering_address = address.to_string();
             }
         }
     }
@@ -585,6 +626,80 @@ impl RustSendFlowManager {
             self.state.write().focus_field = None;
             self.send(Message::UpdateFocusField(None));
         }
+    }
+
+    /// Create the PSBT and everything is valid go to the next screen
+    fn finalize_and_go_to_next_screen(&self) {
+        if !self.validate_amount(true) || !self.validate_address(true) {
+            return;
+        };
+
+        let Some(amount_sats) = self.state.read().amount_sats else {
+            return self.send_alert(SendFlowError::InvalidNumber);
+        };
+
+        let amount = Amount::from_sat(amount_sats);
+
+        let Some(address) = self.state.read().address.clone() else {
+            let invalid_address = self.state.read().entering_address.clone();
+            return self.send_alert(SendFlowError::InvalidAddress(invalid_address));
+        };
+
+        let Some(selected_fee_rate) = self.state.read().selected_fee_rate.clone() else {
+            return self.send_alert(SendFlowError::UnableToGetFeeRate);
+        };
+
+        self.send(Message::UpdateFocusField(None));
+        let manager = self.wallet_manager.clone();
+        let sender = self.reconciler.clone();
+        let wallet_type = self.state.read().metadata.wallet_type;
+        let wallet_id = self.state.read().metadata.id.clone();
+
+        task::spawn(async move {
+            let confirm_details =
+                manager.confirm_txn(amount, address, selected_fee_rate.fee_rate).await;
+
+            let details = match confirm_details {
+                Ok(details) => details,
+                Err(error) => {
+                    let error = SendFlowError::UnableToBuildTxn(error.to_string());
+                    return send_alert(sender, error);
+                }
+            };
+
+            let details = Arc::new(details);
+
+            // save the unsigned transaction if its a cold wallet
+            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly) {
+                if let Err(e) = manager.save_unsigned_transaction(details.clone()) {
+                    let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
+                    send_alert(sender.clone(), error);
+                }
+            }
+
+            // update the route send the frontend to the proper next screen
+            let next_route = match wallet_type {
+                WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None, None),
+                WalletType::Cold | WalletType::XpubOnly => {
+                    RouteFactory::new().send_hardware_export(wallet_id, details.into())
+                }
+                WalletType::WatchOnly => {
+                    return send_alert(
+                        sender,
+                        SendFlowError::UnableToBuildTxn("watch only".to_string()),
+                    );
+                }
+            };
+
+            FfiApp::global().dispatch(AppAction::PushRoute(next_route));
+        });
+    }
+}
+
+fn send_alert(sender: Sender<Message>, alert: impl Into<SendFlowAlertState>) {
+    let message = Message::SetAlert(alert.into());
+    if let Err(err) = sender.send(message) {
+        error!("unable to send message to send flow manager: {err}");
     }
 }
 

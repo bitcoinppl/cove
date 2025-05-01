@@ -190,6 +190,9 @@ import SwiftUI
                 case let .routeUpdated(routes: routes):
                     self.router.routes = routes
 
+                case let .pushedRoute(route):
+                    self.router.routes.append(route)
+
                 case .databaseUpdated:
                     self.database = Database()
 

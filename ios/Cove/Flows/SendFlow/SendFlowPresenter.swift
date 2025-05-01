@@ -72,6 +72,8 @@ import SwiftUI
         case .UnableToBuildTxn: "Unable to build transaction"
         case .UnableToGetMaxSend:
             "Unable to get max send"
+        case .UnableToSaveUnsignedTransaction:
+            "Unable to Save Unsigned Transaction"
         }
     }
 
@@ -95,8 +97,8 @@ import SwiftUI
             "You do not have any bitcoin in your wallet. Please add some to send a transaction"
         case let .InvalidAddress(address):
             "The address \(address) is invalid"
-        case let .WrongNetwork(address):
-            "The address \(address) is on the wrong network. You are on \(manager.walletMetadata.network)"
+        case let .WrongNetwork(address: address, validFor: validFor, current: currentNetwork):
+            "The address \(address) is on the wrong network, is it for (\(validFor). You are on \(currentNetwork)"
         case .InsufficientFunds:
             "You do not have enough bitcoin in your wallet to cover the amount plus fees"
         case .SendAmountToLow:
@@ -106,6 +108,8 @@ import SwiftUI
         case let .UnableToBuildTxn(msg):
             msg
         case let .UnableToGetMaxSend(msg):
+            msg
+        case let .UnableToSaveUnsignedTransaction(msg):
             msg
         }
     }
@@ -136,9 +140,9 @@ import SwiftUI
                 self.focusField = .amount
                 self.alertState = .none
             }
-        case .UnableToGetFeeRate, .UnableToBuildTxn:
+        case .UnableToGetFeeRate, .UnableToBuildTxn, .UnableToSaveUnsignedTransaction:
             Button("OK") {
-                self.focusField = .none
+                self.focusField = .amount
                 self.alertState = .none
             }
         case .UnableToGetMaxSend:

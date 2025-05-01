@@ -25,7 +25,6 @@ struct SendFlowSetAmountScreen: View {
 
     let id: WalletId
 
-    @State var address: String = ""
     @State var amount: Amount? = nil
 
     // private
@@ -53,6 +52,10 @@ struct SendFlowSetAmountScreen: View {
         sendFlowManager.rust.totalSpentFiat()
     }
 
+    private var address: Binding<String> {
+        sendFlowManager.enteringAddress
+    }
+
     private var totalSending: String {
         guard let amount = sendFlowManager.amount else { return "---" }
 
@@ -67,35 +70,12 @@ struct SendFlowSetAmountScreen: View {
 
     // validate, create final psbt and send to next screen
     private func next() {
-        guard let amount = sendFlowManager.amount else {
-            setAlertState(.InvalidNumber)
-            return
-        }
-
-        guard validateAddress(displayAlert: true) else {
-            presenter.focusField = .address
-            return
-        }
-
-        guard validateAmount(displayAlert: true) else {
-            presenter.focusField = .amount
-            return
-        }
-
-        // Call the stubbed function we will implement in Rust later
-        sendFlowManager.rust.prepareTransactionForConfirmation(
-            amount: amount,
-            address: address,
-            selectedFeeRate: sendFlowManager.selectedFeeRate
-        )
-
-        // Navigate to the next screen in the flow
-        presenter.navigateToConfirmation()
+        sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen)
     }
 
     // doing it this way prevents an alert popping up when the user just goes back
-    private func setAlertState(_: SendFlowError) {
-        // TODO: use the manager
+    private func setAlertState(_ error: SendFlowError) {
+        sendFlowManager.presenter.alertState = .init(.error(error))
     }
 
     var selectedFeeRate: FeeRateOptionWithTotalFee? {
@@ -126,7 +106,7 @@ struct SendFlowSetAmountScreen: View {
                         // Address Section
                         VStack {
                             Divider()
-                            EnterAddressView(address: $address)
+                            EnterAddressView(address: sendFlowManager.enteringAddress)
                             Divider()
                         }
 
@@ -135,7 +115,7 @@ struct SendFlowSetAmountScreen: View {
 
                         if sendFlowManager.feeRateOptions != nil,
                            sendFlowManager.selectedFeeRate != nil,
-                           Address.isValid(address)
+                           sendFlowManager.address != nil
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -181,10 +161,6 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
         .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
         .task {
-            // No need to manually load fee options anymore
-            // SendFlowManager will load them automatically
-        }
-        .task {
             Task {
                 await MainActor.run {
                     withAnimation(
@@ -207,7 +183,7 @@ struct SendFlowSetAmountScreen: View {
                     return
                 }
 
-                if address.isEmpty {
+                if address.wrappedValue.isEmpty {
                     presenter.focusField = .address
                     return
                 }
@@ -274,18 +250,12 @@ struct SendFlowSetAmountScreen: View {
     }
 
     // presenter focus field changed
-    private func focusFieldChanged(
-        _ oldField: FocusField?, _ newField: FocusField?
-    ) {
+    private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {
         Log.debug(
-            "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))"
-        )
+            "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))")
 
         _privateFocusField = newField
-
-        if newField == .none, feeRateOptions == nil {
-            let _ = validate(displayAlert: true)
-        }
+        if newField == .none { let _ = validate(displayAlert: true) }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
@@ -300,17 +270,22 @@ struct SendFlowSetAmountScreen: View {
         sendFlowManager.dispatch(action: .selectMaxSend)
     }
 
+    private func clearAddress() {
+        sendFlowManager.dispatch(action: .changeEnteringAddress(""))
+    }
+
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
         guard let newValue else { return }
         presenter.sheetState = nil
-        sendFlowManager.dispatch(action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
+        sendFlowManager.dispatch(
+            action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
     }
 
     @ViewBuilder
     var AmountKeyboardToolbar: some View {
         HStack {
             Group {
-                if address.isEmpty {
+                if address.wrappedValue.isEmpty {
                     Button(action: { presenter.focusField = .address }) {
                         Text("Next")
                     }
@@ -352,9 +327,10 @@ struct SendFlowSetAmountScreen: View {
     var AddressKeyboardToolbar: some View {
         HStack {
             Group {
-                if address.isEmpty || !validateAddress() {
+                if address.wrappedValue.isEmpty || !validateAddress() {
                     Button(action: {
-                        address = UIPasteboard.general.string ?? ""
+                        let address = UIPasteboard.general.string ?? ""
+                        sendFlowManager.dispatch(action: .changeEnteringAddress(address))
                         if address.isEmpty { return }
                         if !validateAddress() { return }
                         if !validateAmount() {
@@ -389,7 +365,7 @@ struct SendFlowSetAmountScreen: View {
 
             Spacer()
 
-            Button(action: { address = "" }) {
+            Button(action: { clearAddress() }) {
                 Label("Clear", systemImage: "xmark.circle")
             }
             .buttonStyle(.bordered)
@@ -601,7 +577,6 @@ struct SendFlowSetAmountScreen: View {
 
             SendFlowSetAmountScreen(
                 id: WalletId(),
-                address: "bc1q08uzlzk9lzq2an7gfn3l4ejglcjgwnud9jgqpc"
             )
             .environment(manager)
             .environment(AppManager.shared)
@@ -617,7 +592,6 @@ struct SendFlowSetAmountScreen: View {
 
             SendFlowSetAmountScreen(
                 id: WalletId(),
-                address: ""
             )
             .environment(manager)
             .environment(AppManager.shared)

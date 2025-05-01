@@ -2,7 +2,7 @@ use cove_types::address::AddressError;
 
 use super::error::SendFlowError;
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum SendFlowAlertState {
     Error(SendFlowError),
 }

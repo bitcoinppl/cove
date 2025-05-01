@@ -16,6 +16,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
     private var _enteringBtcAmount: String = ""
     private var _enteringFiatAmount: String = ""
+    private var _enteringAddress: String = ""
 
     var address: Address? = nil
     var amount: Amount? = nil
@@ -27,16 +28,26 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     var maxSelected: Amount? = nil
 
     var enteringBtcAmount: Binding<String> {
-        Binding(
-            get: { self._enteringBtcAmount },
-            set: { self.dispatch(action: .changeEnteringBtcAmount($0)) }
-        )
+        binding(\._enteringBtcAmount) { .changeEnteringBtcAmount($0) }
     }
 
     var enteringFiatAmount: Binding<String> {
-        Binding(
-            get: { self._enteringFiatAmount },
-            set: { self.dispatch(action: .changeEnteringFiatAmount($0)) }
+        binding(\._enteringFiatAmount) { .changeEnteringFiatAmount($0) }
+    }
+
+    var enteringAddress: Binding<String> {
+        binding(\._enteringAddress) { .changeEnteringAddress($0) }
+    }
+
+    private func binding(
+        _ keyPath: KeyPath<SendFlowManager, String>,
+        _ action: @escaping (String) -> SendFlowManagerAction
+    ) -> Binding<String> {
+        Binding<String>(
+            get: { self[keyPath: keyPath] },
+            set: { newValue in
+                self.dispatch(action: action(newValue))
+            }
         )
     }
 
@@ -54,7 +65,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
                 return
             }
 
-            self.logger.debug("reconcile: \(message)")
+            logger.debug("reconcile: \(message)")
 
             await MainActor.run {
                 switch message {
@@ -66,25 +77,31 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
                     self.feeRateOptions = options
                 case let .updateEnteringBtcAmount(amount):
                     self._enteringBtcAmount = amount
+                case let .updateEnteringAddress(address):
+                    self._enteringAddress = address
                 case let .updateEnteringFiatAmount(amount):
                     self._enteringFiatAmount = amount
                 case let .updateSelectedFeeRate(rate):
                     self.selectedFeeRate = rate
-                case let .updateMaxSelected(max):
-                    self.maxSelected = max
                 case let .updateFeeRate(rate):
                     self.selectedFeeRate = rate
                 case let .updateFocusField(field):
                     self.presenter.focusField = field
                 case let .setAlert(alertState):
-                    self.presenter.alertState = alertState.map(TaggedItem.init)
+                    self.presenter.alertState = .init(alertState)
+                case .clearAlert:
+                    self.presenter.alertState = .none
+                case let .setMaxSelected(maxSelected):
+                    self.maxSelected = maxSelected
+                case .unsetMaxSelected:
+                    self.maxSelected = nil
                 }
             }
         }
     }
 
     public func dispatch(action: SendFlowManagerAction) {
-        self.logger.debug("dispatch: \(action)")
-        self.rust.dispatch(action: action)
+        logger.debug("dispatch: \(action)")
+        rust.dispatch(action: action)
     }
 }

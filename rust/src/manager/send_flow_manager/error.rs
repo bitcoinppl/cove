@@ -34,6 +34,9 @@ pub enum SendFlowError {
 
     #[error("unable to build txn: {0}")]
     UnableToBuildTxn(String),
+
+    #[error("unable to save unsigned transaction")]
+    UnableToSaveUnsignedTransaction(String),
 }
 
 impl SendFlowError {

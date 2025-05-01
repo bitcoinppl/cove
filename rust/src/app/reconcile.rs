@@ -28,6 +28,7 @@ pub enum AppStateReconcileMessage {
     FeesChanged(FeeResponse),
     FiatCurrencyChanged(FiatCurrency),
     WalletModeChanged(WalletMode),
+    PushedRoute(Route),
 }
 
 // alias for easier imports on the rust side
@@ -54,10 +55,7 @@ impl Updater {
     }
 
     pub fn send_update(message: AppStateReconcileMessage) {
-        Self::global()
-            .0
-            .send(message)
-            .expect("failed to send update");
+        Self::global().0.send(message).expect("failed to send update");
     }
 }
 
