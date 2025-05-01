@@ -15,7 +15,7 @@ use crate::{
     wallet::metadata::WalletMode,
 };
 
-#[derive(uniffi::Enum)]
+#[derive(Debug, uniffi::Enum)]
 #[allow(clippy::enum_variant_names)]
 pub enum AppStateReconcileMessage {
     DefaultRouteChanged(Route, Vec<Route>),

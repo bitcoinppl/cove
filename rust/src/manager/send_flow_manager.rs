@@ -34,7 +34,7 @@ use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 use state::{SendFlowManagerState, State};
 use tokio::task::JoinHandle;
-use tracing::error;
+use tracing::{debug, error};
 
 use super::wallet::{RustWalletManager, WalletManagerReconcileMessage, actor::WalletActor};
 
@@ -179,21 +179,21 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
-    pub fn send_amount_btc(&self) -> String {
-        let Some(send_amount) = self.state.read().amount_sats else {
+    pub fn send_amount_btc(&self, amount_sats: Option<u64>) -> String {
+        let Some(send_amount) = amount_sats else {
             return "---".to_string();
         };
 
         let send_amount = Amount::from_sat(send_amount);
         match self.state.read().metadata.selected_unit {
-            Unit::Btc => format!("{} BTC", send_amount.as_btc()),
-            Unit::Sat => format!("{} sats", send_amount.as_sats()),
+            Unit::Btc => format!("{}", send_amount.as_btc()),
+            Unit::Sat => format!("{}", send_amount.as_sats()),
         }
     }
 
     #[uniffi::method]
-    pub fn send_amount_fiat(&self) -> String {
-        let Some(send_amount) = self.state.read().amount_sats else {
+    pub fn send_amount_fiat(&self, amount_sats: Option<u64>) -> String {
+        let Some(amount_sats) = amount_sats else {
             return "---".to_string();
         };
 
@@ -201,14 +201,18 @@ impl RustSendFlowManager {
             return "---".to_string();
         };
 
-        let send_amount = Amount::from_sat(send_amount);
+        let send_amount = Amount::from_sat(amount_sats);
         let send_amount_in_fiat = send_amount.as_btc() * (btc_price_in_fiat as f64);
-        format!("≈ {}", self.display_fiat_amount(send_amount_in_fiat, true))
+        format!("{}", self.display_fiat_amount(send_amount_in_fiat, true))
     }
 
     #[uniffi::method]
-    pub fn total_spent_btc_string(&self) -> String {
-        let Some(total_spent) = self.total_spent_btc_amount() else {
+    pub fn total_spent_btc_string(&self, amount_sats: Option<u64>) -> String {
+        let Some(amount_sats) = amount_sats else {
+            return "---".to_string();
+        };
+
+        let Some(total_spent) = self.total_spent_btc_amount(amount_sats) else {
             return "---".to_string();
         };
 
@@ -219,8 +223,12 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
-    pub fn total_spent_fiat(&self) -> String {
-        let Some(total_spent) = self.total_spent_btc_amount() else {
+    pub fn total_spent_fiat(&self, amount_sats: Option<u64>) -> String {
+        let Some(amount_sats) = amount_sats else {
+            return "---".to_string();
+        };
+
+        let Some(total_spent) = self.total_spent_btc_amount(amount_sats) else {
             return "---".to_string();
         };
 
@@ -341,13 +349,11 @@ impl RustSendFlowManager {
     pub fn dispatch(self: Arc<Self>, action: Action) {
         match action {
             Action::ChangeEnteringBtcAmount(string) => {
-                self.state.write().entering_btc_amount = string.clone();
                 let old_value = self.state.read().entering_btc_amount.clone();
                 self.btc_field_changed(old_value, string);
             }
 
             Action::ChangeEnteringFiatAmount(string) => {
-                self.state.write().entering_fiat_amount = string.clone();
                 let old_value = self.state.read().entering_fiat_amount.clone();
                 self.fiat_field_changed(old_value, string);
             }
@@ -442,6 +448,11 @@ impl RustSendFlowManager {
         if let Some(amount) = changes.amount_fiat {
             state.amount_fiat = Some(amount);
             self.send(Message::UpdateAmountFiat(amount));
+        }
+
+        if let Some(entering_amount) = changes.entering_amount_btc {
+            state.entering_btc_amount = entering_amount.clone();
+            self.send(Message::UpdateEnteringBtcAmount(entering_amount));
         }
 
         Some(())
@@ -715,9 +726,8 @@ impl RustSendFlowManager {
         self.send(Message::SetAlert(alert.into()));
     }
 
-    fn total_spent_btc_amount(&self) -> Option<Amount> {
+    fn total_spent_btc_amount(&self, amount_sats: u64) -> Option<Amount> {
         let selected_fee_rate = self.state.read().selected_fee_rate.as_ref()?.clone();
-        let amount_sats = self.state.read().amount_sats?;
 
         let amount = Amount::from_sat(amount_sats);
         let total_fee = selected_fee_rate.total_fee();

@@ -27,20 +27,40 @@ struct EnterAmountView: View {
         return sendFlowManager.enteringFiatAmount
     }
 
+    var sendAmountFiat: String {
+        sendFlowManager.rust.sendAmountFiat(amountSats: sendFlowManager.amount?.asSats())
+    }
+
+    var sendAmountBtc: String {
+        sendFlowManager.rust.sendAmountBtc(amountSats: sendFlowManager.amount?.asSats())
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
-                TextField("", text: textField)
-                    .contentTransition(.numericText())
-                    .focused($focusField, equals: .amount)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 48, weight: .bold))
-                    .keyboardType(.decimalPad)
-                    .offset(x: offset)
-                    .padding(.horizontal, 30)
-                    .minimumScaleFactor(0.01)
-                    .lineLimit(1)
-                    .scrollDisabled(true)
+                ZStack {
+                    Text(textField.wrappedValue)
+                        .font(.system(size: 48, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .allowsHitTesting(false)
+                        .offset(x: offset)
+                        .padding(.horizontal, 30)
+                        .minimumScaleFactor(0.01)
+                        .lineLimit(1)
+                        .scrollDisabled(true)
+                        .animation(nil, value: textField.wrappedValue)
+
+                    TextField("", text: textField)
+                        .font(.system(size: 48, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .keyboardType(.decimalPad)
+                        .foregroundColor(.clear) // hide the text
+                        .accentColor(.clear) // hide the cursor/caret
+                        .background(Color.clear) // ensure no background shows
+                        .offset(x: offset)
+                        .padding(.horizontal, 30)
+                        .focused($focusField, equals: .amount)
+                }
 
                 HStack(spacing: 0) {
                     if metadata.fiatOrBtc == .btc {
@@ -89,7 +109,7 @@ struct EnterAmountView: View {
             }
 
             HStack(spacing: 4) {
-                Text(metadata.fiatOrBtc == .btc ? sendFlowManager.rust.sendAmountFiat() : sendFlowManager.rust.sendAmountBtc())
+                Text(metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmountBtc)
                     .contentTransition(.numericText())
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -101,9 +121,12 @@ struct EnterAmountView: View {
                 }
             }
             .onTapGesture {
+                Log.debug("Tapped on amount text \(metadata.fiatOrBtc) \(app.prices == nil)")
                 if metadata.fiatOrBtc == .btc, app.prices == nil { return }
                 manager.dispatch(action: .toggleFiatOrBtc)
             }
+            .onChange(of: sendFlowManager._enteringBtcAmount, initial: false) { _, newValue in
+                print("onChange \(newValue)")
         }
     }
 }

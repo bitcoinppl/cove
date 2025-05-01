@@ -28,7 +28,13 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     var maxSelected: Amount? = nil
 
     var enteringBtcAmount: Binding<String> {
-        binding(\._enteringBtcAmount) { .changeEnteringBtcAmount($0) }
+        Binding(
+            get: { self._enteringBtcAmount },
+            set: { newValue in
+                guard self._enteringBtcAmount != newValue else { return }
+                self.dispatch(action: .changeEnteringBtcAmount(newValue))
+            }
+        )
     }
 
     var enteringFiatAmount: Binding<String> {
@@ -68,33 +74,35 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             logger.debug("reconcile: \(message)")
 
             await MainActor.run {
-                switch message {
-                case let .updateAmountFiat(fiat):
-                    self.fiatAmount = fiat
-                case let .updateAmountSats(sats):
-                    self.amount = Amount.fromSat(sats: sats)
-                case let .updateFeeRateOptions(options):
-                    self.feeRateOptions = options
-                case let .updateEnteringBtcAmount(amount):
-                    self._enteringBtcAmount = amount
-                case let .updateEnteringAddress(address):
-                    self._enteringAddress = address
-                case let .updateEnteringFiatAmount(amount):
-                    self._enteringFiatAmount = amount
-                case let .updateSelectedFeeRate(rate):
-                    self.selectedFeeRate = rate
-                case let .updateFeeRate(rate):
-                    self.selectedFeeRate = rate
-                case let .updateFocusField(field):
-                    self.presenter.focusField = field
-                case let .setAlert(alertState):
-                    self.presenter.alertState = .init(alertState)
-                case .clearAlert:
-                    self.presenter.alertState = .none
-                case let .setMaxSelected(maxSelected):
-                    self.maxSelected = maxSelected
-                case .unsetMaxSelected:
-                    self.maxSelected = nil
+                withAnimation {
+                    switch message {
+                        case let .updateAmountFiat(fiat):
+                            self.fiatAmount = fiat
+                        case let .updateAmountSats(sats):
+                            self.amount = Amount.fromSat(sats: sats)
+                        case let .updateFeeRateOptions(options):
+                            self.feeRateOptions = options
+                        case let .updateEnteringBtcAmount(amount):
+                            self._enteringBtcAmount = amount
+                        case let .updateEnteringAddress(address):
+                            self._enteringAddress = address
+                        case let .updateEnteringFiatAmount(amount):
+                            self._enteringFiatAmount = amount
+                        case let .updateSelectedFeeRate(rate):
+                            self.selectedFeeRate = rate
+                        case let .updateFeeRate(rate):
+                            self.selectedFeeRate = rate
+                        case let .updateFocusField(field):
+                            self.presenter.focusField = field
+                        case let .setAlert(alertState):
+                            self.presenter.alertState = .init(alertState)
+                        case .clearAlert:
+                            self.presenter.alertState = .none
+                        case let .setMaxSelected(maxSelected):
+                            self.maxSelected = maxSelected
+                        case .unsetMaxSelected:
+                            self.maxSelected = nil
+                    }
                 }
             }
         }

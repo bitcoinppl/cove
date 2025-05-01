@@ -49,7 +49,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpentInFiat: String {
-        sendFlowManager.rust.totalSpentFiat()
+        sendFlowManager.rust.totalSpentFiat(amountSats: sendFlowManager.amount?.asSats() ?? 0)
     }
 
     private var address: Binding<String> {
@@ -223,7 +223,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpent: String {
-        sendFlowManager.rust.totalSpentBtcString()
+        sendFlowManager.rust.totalSpentBtcString(amountSats: sendFlowManager.amount?.asSats() ?? 0)
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {

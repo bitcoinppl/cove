@@ -6940,15 +6940,15 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
-    func sendAmountBtc()  -> String
+    func sendAmountBtc(amountSats: UInt64?)  -> String
     
-    func sendAmountFiat()  -> String
+    func sendAmountFiat(amountSats: UInt64?)  -> String
     
     func totalFeeString()  -> String
     
-    func totalSpentBtcString()  -> String
+    func totalSpentBtcString(amountSats: UInt64?)  -> String
     
-    func totalSpentFiat()  -> String
+    func totalSpentFiat(amountSats: UInt64?)  -> String
     
     func validateAddress(displayAlert: Bool)  -> Bool
     
@@ -7047,16 +7047,18 @@ open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCal
 }
 }
     
-open func sendAmountBtc() -> String  {
+open func sendAmountBtc(amountSats: UInt64?) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustsendflowmanager_send_amount_btc(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_rustsendflowmanager_send_amount_btc(self.uniffiClonePointer(),
+        FfiConverterOptionUInt64.lower(amountSats),$0
     )
 })
 }
     
-open func sendAmountFiat() -> String  {
+open func sendAmountFiat(amountSats: UInt64?) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustsendflowmanager_send_amount_fiat(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_rustsendflowmanager_send_amount_fiat(self.uniffiClonePointer(),
+        FfiConverterOptionUInt64.lower(amountSats),$0
     )
 })
 }
@@ -7068,16 +7070,18 @@ open func totalFeeString() -> String  {
 })
 }
     
-open func totalSpentBtcString() -> String  {
+open func totalSpentBtcString(amountSats: UInt64?) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustsendflowmanager_total_spent_btc_string(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_rustsendflowmanager_total_spent_btc_string(self.uniffiClonePointer(),
+        FfiConverterOptionUInt64.lower(amountSats),$0
     )
 })
 }
     
-open func totalSpentFiat() -> String  {
+open func totalSpentFiat(amountSats: UInt64?) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustsendflowmanager_total_spent_fiat(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_rustsendflowmanager_total_spent_fiat(self.uniffiClonePointer(),
+        FfiConverterOptionUInt64.lower(amountSats),$0
     )
 })
 }
@@ -25427,19 +25431,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc() != 62416) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc() != 46126) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_fiat() != 26629) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_fiat() != 12014) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_total_fee_string() != 6643) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_total_spent_btc_string() != 24946) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_total_spent_btc_string() != 46681) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_total_spent_fiat() != 9908) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_total_spent_fiat() != 10717) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_validate_address() != 61046) {
@@ -25919,10 +25923,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 
