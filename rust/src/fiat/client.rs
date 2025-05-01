@@ -33,7 +33,7 @@ pub struct FiatClient {
 }
 
 #[derive(
-    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, uniffi::Object,
+    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object,
 )]
 #[serde(rename_all = "UPPERCASE")]
 pub struct PriceResponse {
@@ -51,10 +51,7 @@ pub struct PriceResponse {
 #[uniffi::export]
 impl PriceResponse {
     pub fn get(&self) -> u64 {
-        let currency = Database::global()
-            .global_config
-            .fiat_currency()
-            .unwrap_or_default();
+        let currency = Database::global().global_config.fiat_currency().unwrap_or_default();
 
         self.get_for_currency(currency)
     }
@@ -85,11 +82,7 @@ impl FiatClient {
 
     #[allow(dead_code)]
     fn new_with_url(url: String) -> Self {
-        Self {
-            url,
-            client: reqwest::Client::new(),
-            wait_before_new_prices: ONE_MIN,
-        }
+        Self { url, client: reqwest::Client::new(), wait_before_new_prices: ONE_MIN }
     }
 
     /// Get historical price and exchange rates for a specific timestamp
@@ -187,9 +180,7 @@ pub async fn init_prices() -> Result<()> {
             PRICES.swap(Arc::new(Some(prices)));
 
             let db = Database::global();
-            db.global_cache
-                .set_prices(prices)
-                .context("unable to set prices")?;
+            db.global_cache.set_prices(prices).context("unable to set prices")?;
         }
 
         Err(error) => {
@@ -210,9 +201,7 @@ fn update_prices(prices: PriceResponse) -> Result<()> {
     PRICES.swap(Arc::new(Some(prices)));
 
     let db = Database::global();
-    db.global_cache
-        .set_prices(prices)
-        .context("unable to save prices to the database")?;
+    db.global_cache.set_prices(prices).context("unable to save prices to the database")?;
 
     Ok(())
 }
@@ -296,10 +285,8 @@ mod tests {
         let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
 
         let half_a_btc = Amount::from_sat(50_000_000);
-        let value_in_usd = fiat_client
-            .current_value_in_currency(half_a_btc, FiatCurrency::Usd)
-            .await
-            .unwrap();
+        let value_in_usd =
+            fiat_client.current_value_in_currency(half_a_btc, FiatCurrency::Usd).await.unwrap();
 
         assert_eq!(value_in_usd, (fiat.usd as f64) / 2.0);
     }

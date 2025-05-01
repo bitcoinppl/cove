@@ -6940,6 +6940,8 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
+    func sanitizeEnteringAmount(old: String, new: String)  -> String?
+    
     func sendAmountBtc(amountSats: UInt64?)  -> String
     
     func sendAmountFiat(amountSats: UInt64?)  -> String
@@ -7045,6 +7047,15 @@ open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCal
         FfiConverterCallbackInterfaceSendFlowManagerReconciler_lower(reconciler),$0
     )
 }
+}
+    
+open func sanitizeEnteringAmount(old: String, new: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_sanitize_entering_amount(self.uniffiClonePointer(),
+        FfiConverterString.lower(old),
+        FfiConverterString.lower(new),$0
+    )
+})
 }
     
 open func sendAmountBtc(amountSats: UInt64?) -> String  {
@@ -17973,7 +17984,11 @@ public enum SendFlowManagerAction {
     )
     case notifySelectedUnitedChanged(old: Unit, new: Unit
     )
+    case notifyBtcOrFiatChanged(old: FiatOrBtc, new: FiatOrBtc
+    )
     case notifyScanCodeChanged(old: String, new: String
+    )
+    case notifyPricesChanged(PriceResponse
     )
     case finalizeAndGoToNextScreen
 }
@@ -18018,10 +18033,16 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 9: return .notifySelectedUnitedChanged(old: try FfiConverterTypeUnit.read(from: &buf), new: try FfiConverterTypeUnit.read(from: &buf)
         )
         
-        case 10: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
+        case 10: return .notifyBtcOrFiatChanged(old: try FfiConverterTypeFiatOrBtc.read(from: &buf), new: try FfiConverterTypeFiatOrBtc.read(from: &buf)
         )
         
-        case 11: return .finalizeAndGoToNextScreen
+        case 11: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 12: return .notifyPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
+        )
+        
+        case 13: return .finalizeAndGoToNextScreen
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18075,14 +18096,25 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterTypeUnit.write(new, into: &buf)
             
         
-        case let .notifyScanCodeChanged(old,new):
+        case let .notifyBtcOrFiatChanged(old,new):
             writeInt(&buf, Int32(10))
+            FfiConverterTypeFiatOrBtc.write(old, into: &buf)
+            FfiConverterTypeFiatOrBtc.write(new, into: &buf)
+            
+        
+        case let .notifyScanCodeChanged(old,new):
+            writeInt(&buf, Int32(11))
             FfiConverterString.write(old, into: &buf)
             FfiConverterString.write(new, into: &buf)
             
         
+        case let .notifyPricesChanged(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterTypePriceResponse.write(v1, into: &buf)
+            
+        
         case .finalizeAndGoToNextScreen:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -25431,6 +25463,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_entering_amount() != 46467) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc() != 46126) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -25923,10 +25958,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

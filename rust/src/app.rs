@@ -115,11 +115,6 @@ impl App {
         APP.get_or_init(App::new)
     }
 
-    /// Returns the app's receiver which can be used to listen for updates
-    pub fn receiver(&self) -> Arc<Receiver<AppMessage>> {
-        self.update_receiver.clone()
-    }
-
     /// Return the current prices and check if an update is needed
     pub fn prices(&self) -> Option<PriceResponse> {
         FIAT_CLIENT.prices()

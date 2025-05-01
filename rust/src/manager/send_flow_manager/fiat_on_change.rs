@@ -17,7 +17,7 @@ pub struct FiatOnChangeHandler {
 
 #[derive(Debug, Clone, Default)]
 pub struct Changeset {
-    pub fiat_text: Option<String>,
+    pub entering_fiat_amount: Option<String>,
     pub fiat_value: Option<f64>,
     pub btc_amount: Option<Amount>,
 }
@@ -25,7 +25,7 @@ pub struct Changeset {
 impl Changeset {
     fn empty_zero(symbol: &str) -> Self {
         Self {
-            fiat_text: Some(symbol.to_string()),
+            entering_fiat_amount: Some(symbol.to_string()),
             fiat_value: Some(0.0),
             btc_amount: Some(Amount::from_sat(0)),
         }
@@ -48,11 +48,7 @@ impl FiatOnChangeHandler {
     pub fn new(prices: PriceResponse, selected_currency: FiatCurrency) -> Self {
         let converter = Converter::global();
 
-        Self {
-            prices,
-            selected_currency,
-            converter,
-        }
+        Self { prices, selected_currency, converter }
     }
 
     pub fn on_change(&self, old_value: String, new_value: String) -> Result<Changeset> {
@@ -63,15 +59,11 @@ impl FiatOnChangeHandler {
 
         let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
 
-        let new_value_raw = new_value
-            .chars()
-            .filter(|c| c.is_numeric() || *c == '.')
-            .collect::<String>();
+        let new_value_raw =
+            new_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
 
-        let old_value_raw = old_value
-            .chars()
-            .filter(|c| c.is_numeric() || *c == '.')
-            .collect::<String>();
+        let old_value_raw =
+            old_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
 
         // if the new value is the symbol, then we don't need to do anything
         if new_value == symbol {
@@ -91,7 +83,7 @@ impl FiatOnChangeHandler {
         // don't allow adding more than 1 decimal point
         if number_of_decimal_points > 1 {
             return Ok(Changeset {
-                fiat_text: Some(old_value.to_string()),
+                entering_fiat_amount: Some(old_value.to_string()),
                 ..Default::default()
             });
         };
@@ -106,7 +98,7 @@ impl FiatOnChangeHandler {
             let mut change = Changeset::default();
             let new_value = new_value_raw.trim_start_matches("0.00");
 
-            change.fiat_text = Some(format!("{symbol}{new_value}"));
+            change.entering_fiat_amount = Some(format!("{symbol}{new_value}"));
             change.fiat_value = Some(self.converter.get_fiat_value(old_value).unwrap_or_default());
             return Ok(change);
         }
@@ -114,7 +106,7 @@ impl FiatOnChangeHandler {
         // if 0.00 and start deleting, just delete the entire thing
         if old_value_raw == "0.00" && new_value_raw.len() == 3 {
             return Ok(Changeset {
-                fiat_text: Some(symbol.to_string()),
+                entering_fiat_amount: Some(symbol.to_string()),
                 fiat_value: Some(0.0),
                 ..Default::default()
             });
@@ -149,7 +141,7 @@ impl FiatOnChangeHandler {
         let fiat_text = format!("{symbol}{fiat_value_int}{int_value_suffix}");
 
         let change = Changeset {
-            fiat_text: Some(fiat_text),
+            entering_fiat_amount: Some(fiat_text),
             fiat_value: Some(fiat_value),
             btc_amount: Some(btc_amount),
         };

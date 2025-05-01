@@ -255,7 +255,7 @@ impl RustWalletManager {
         let me = self.clone();
         let metadata = self.metadata.read().clone();
 
-        RustSendFlowManager::new(metadata, me, self.reconcile_receiver.clone())
+        RustSendFlowManager::new(metadata, me)
     }
 
     #[uniffi::method]

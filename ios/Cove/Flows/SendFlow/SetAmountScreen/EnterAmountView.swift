@@ -15,6 +15,8 @@ struct EnterAmountView: View {
     @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
 
+    @State private var enteringAmount: String = ""
+
     var metadata: WalletMetadata { manager.walletMetadata }
 
     var offset: CGFloat {
@@ -22,7 +24,7 @@ struct EnterAmountView: View {
         return metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
     }
 
-    var textField: Binding<String> {
+    var textField: String {
         if metadata.fiatOrBtc == .btc { return sendFlowManager.enteringBtcAmount }
         return sendFlowManager.enteringFiatAmount
     }
@@ -38,29 +40,32 @@ struct EnterAmountView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
-                ZStack {
-                    Text(textField.wrappedValue)
-                        .font(.system(size: 48, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .allowsHitTesting(false)
-                        .offset(x: offset)
-                        .padding(.horizontal, 30)
-                        .minimumScaleFactor(0.01)
-                        .lineLimit(1)
-                        .scrollDisabled(true)
-                        .animation(nil, value: textField.wrappedValue)
+                TextField("", text: $enteringAmount)
+                    .font(.system(size: 48, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .keyboardType(.decimalPad)
+                    .minimumScaleFactor(0.01)
+                    .lineLimit(1)
+                    .scrollDisabled(true)
+                    .offset(x: offset)
+                    .padding(.horizontal, 30)
+                    .focused($focusField, equals: .amount)
+                    .onChange(of: enteringAmount, initial: true) { oldValue, newValue in
+                        if let newEnteringAmount = sendFlowManager.rust.sanitizeEnteringAmount(old: oldValue, new: newValue) {
+                            return enteringAmount = newEnteringAmount
+                        }
 
-                    TextField("", text: textField)
-                        .font(.system(size: 48, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .keyboardType(.decimalPad)
-                        .foregroundColor(.clear) // hide the text
-                        .accentColor(.clear) // hide the cursor/caret
-                        .background(Color.clear) // ensure no background shows
-                        .offset(x: offset)
-                        .padding(.horizontal, 30)
-                        .focused($focusField, equals: .amount)
-                }
+                        switch metadata.fiatOrBtc {
+                            case .btc: sendFlowManager.dispatch(action: .changeEnteringBtcAmount(newValue))
+                            case .fiat: sendFlowManager.dispatch(action: .changeEnteringFiatAmount(newValue))
+                        }
+                    }
+                    .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { oldValue, newValue in
+                        print("sendFlowManager.enteringBtcAmount: \(oldValue) --> \(newValue)")
+                        if case .btc = metadata.fiatOrBtc {
+                            enteringAmount = newValue
+                        }
+                    }
 
                 HStack(spacing: 0) {
                     if metadata.fiatOrBtc == .btc {
@@ -121,12 +126,9 @@ struct EnterAmountView: View {
                 }
             }
             .onTapGesture {
-                Log.debug("Tapped on amount text \(metadata.fiatOrBtc) \(app.prices == nil)")
                 if metadata.fiatOrBtc == .btc, app.prices == nil { return }
                 manager.dispatch(action: .toggleFiatOrBtc)
             }
-            .onChange(of: sendFlowManager._enteringBtcAmount, initial: false) { _, newValue in
-                print("onChange \(newValue)")
         }
     }
 }

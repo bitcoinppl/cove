@@ -3,9 +3,20 @@ use numfmt::Numeric;
 pub trait NumberFormatter: Numeric {
     fn thousands_int(self) -> String;
     fn thousands_fiat(self) -> String;
+    fn thousands(self) -> String;
 }
 
 impl<T: Numeric> NumberFormatter for T {
+    fn thousands(self) -> String {
+        if self.is_zero() {
+            return "0".to_string();
+        }
+
+        let mut f = numfmt::Formatter::new().separator(',').unwrap();
+
+        f.fmt(self).to_string()
+    }
+
     fn thousands_int(self) -> String {
         if self.is_zero() {
             return "0".to_string();
@@ -47,6 +58,25 @@ impl<T: Numeric> NumberFormatter for T {
             None => format!("{}.00", fmt),
         }
     }
+}
+
+pub fn btc_typing(amount: &str) -> Option<String> {
+    let mut split_on_decimal = amount.split('.');
+    let before_decimal = split_on_decimal.next().unwrap_or(amount);
+    let after_decimal = split_on_decimal.next();
+
+    let int_part = before_decimal.parse::<u64>().ok()?;
+    let int_part_string = int_part.thousands_int();
+
+    let after_decimal_parts = match after_decimal {
+        Some(after_decimal) => (".", after_decimal),
+        None => ("", ""),
+    };
+
+    let final_string =
+        format!("{}{}{}", int_part_string, after_decimal_parts.0, after_decimal_parts.1);
+
+    Some(final_string)
 }
 
 #[cfg(test)]

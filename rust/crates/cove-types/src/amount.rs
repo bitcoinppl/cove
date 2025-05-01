@@ -53,6 +53,13 @@ impl Amount {
         self.0.to_btc()
     }
 
+    pub fn fmt_string(&self, unit: Unit) -> String {
+        match unit {
+            Unit::Btc => self.btc_string(),
+            Unit::Sat => self.sats_string(),
+        }
+    }
+
     pub fn fmt_string_with_unit(&self, unit: Unit) -> String {
         match unit {
             Unit::Btc => self.btc_string_with_unit(),
@@ -73,10 +80,7 @@ impl Amount {
     }
 
     pub fn sats_string(&self) -> String {
-        let mut f = Formatter::new()
-            .separator(',')
-            .unwrap()
-            .precision(Precision::Decimals(0));
+        let mut f = Formatter::new().separator(',').unwrap().precision(Precision::Decimals(0));
 
         f.fmt(self.as_sats() as f64).to_string()
     }

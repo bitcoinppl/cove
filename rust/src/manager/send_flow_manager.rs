@@ -7,8 +7,9 @@ pub mod state;
 use std::sync::Arc;
 
 use crate::{
-    app::{App, AppAction, FfiApp, reconcile::AppStateReconcileMessage},
+    app::{App, AppAction, FfiApp},
     fee_client::FEE_CLIENT,
+    fiat::client::PriceResponse,
     router::RouteFactory,
     task,
     transaction::FeeRate,
@@ -33,10 +34,9 @@ use fiat_on_change::FiatOnChangeHandler;
 use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 use state::{SendFlowManagerState, State};
-use tokio::task::JoinHandle;
-use tracing::{debug, error};
+use tracing::error;
 
-use super::wallet::{RustWalletManager, WalletManagerReconcileMessage, actor::WalletActor};
+use super::wallet::{RustWalletManager, actor::WalletActor};
 
 pub type Error = error::SendFlowError;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -63,7 +63,6 @@ pub struct RustSendFlowManager {
     app: App,
 
     wallet_manager: Arc<RustWalletManager>,
-    state_listeners: Vec<JoinHandle<()>>,
     pub state: Arc<RwLock<SendFlowManagerState>>,
 
     reconciler: Sender<Message>,
@@ -108,36 +107,25 @@ pub enum SendFlowManagerAction {
     SetAddress(Arc<Address>),
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
+    // front end lets the one of the values were changed
     NotifySelectedUnitedChanged { old: Unit, new: Unit },
+    NotifyBtcOrFiatChanged { old: FiatOrBtc, new: FiatOrBtc },
     NotifyScanCodeChanged { old: String, new: String },
+    NotifyPricesChanged(Arc<PriceResponse>),
 
     FinalizeAndGoToNextScreen,
 }
 
 impl RustSendFlowManager {
-    pub fn new(
-        metadata: WalletMetadata,
-        wallet_manager: Arc<RustWalletManager>,
-        wallet_manager_receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
-    ) -> Arc<Self> {
+    pub fn new(metadata: WalletMetadata, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
         let (sender, receiver) = flume::bounded(100);
 
         let state = State::new(metadata);
-
-        let manager_listeners = {
-            let wallet_manager_listener =
-                start_wallet_manager_listener(state.clone(), wallet_manager_receiver);
-
-            let app_listener = start_app_manager_listener(state.clone(), App::global().receiver());
-
-            vec![wallet_manager_listener, app_listener]
-        };
 
         let me: Arc<Self> = Self {
             app: App::global().clone(),
             state: state.into_inner(),
             wallet_manager,
-            state_listeners: manager_listeners,
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
@@ -176,6 +164,24 @@ impl RustSendFlowManager {
     #[uniffi::method]
     pub fn amount_sats(&self) -> u64 {
         self.state.read().amount_sats.unwrap_or(0)
+    }
+
+    #[uniffi::method]
+    pub fn sanitize_entering_amount(&self, old: String, new: String) -> Option<String> {
+        if new == "00" {
+            return Some("0".to_string());
+        }
+
+        if new.ends_with("..") {
+            return Some(old);
+        }
+
+        let unit = self.state.read().metadata.selected_unit;
+        if new.ends_with('.') && unit == Unit::Sat {
+            return Some(old);
+        }
+
+        None
     }
 
     #[uniffi::method]
@@ -385,16 +391,22 @@ impl RustSendFlowManager {
                 });
             }
 
-            Action::ClearSendAmount => {
-                self.clear_send_amount();
-            }
+            Action::ClearSendAmount => self.clear_send_amount(),
 
             Action::NotifySelectedUnitedChanged { old, new } => {
-                self.handle_selected_unit_changed(old, new);
+                self.handle_selected_unit_changed(old, new)
             }
 
             Action::NotifyScanCodeChanged { old, new } => {
                 self.handle_scan_code_changed(old, new);
+            }
+
+            Action::NotifyBtcOrFiatChanged { old, new } => {
+                self.handle_btc_or_fiat_changed(old, new);
+            }
+
+            Action::NotifyPricesChanged(prices) => {
+                self.handle_prices_changed(prices);
             }
 
             Action::FinalizeAndGoToNextScreen => {
@@ -424,6 +436,7 @@ impl RustSendFlowManager {
         let state: State = self.state.clone().into();
         let handler = BtcOnChangeHandler::new(state.clone());
         let changes: btc_on_change::Changeset = handler.on_change(&old_value, &new_value);
+        println!("btc_on_change_handler changes: {changes:?}");
 
         let mut state = state.write();
 
@@ -468,9 +481,9 @@ impl RustSendFlowManager {
             return None;
         };
 
-        if let Some(fiat_text) = result.fiat_text {
-            self.state.write().entering_fiat_amount = fiat_text.clone();
-            self.send(Message::UpdateEnteringFiatAmount(fiat_text));
+        if let Some(entering_fiat_amount) = result.entering_fiat_amount {
+            self.state.write().entering_fiat_amount = entering_fiat_amount.clone();
+            self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
         }
 
         if let Some(amount_fiat) = result.fiat_value {
@@ -592,6 +605,16 @@ impl RustSendFlowManager {
                 self.send(Message::UpdateEnteringBtcAmount(amount_string));
             }
         }
+    }
+
+    fn handle_btc_or_fiat_changed(&self, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
+        self.state.write().metadata.fiat_or_btc = new_value;
+    }
+
+    fn handle_prices_changed(&self, prices: Arc<PriceResponse>) {
+        // todo!()
+        // self.state.write().btc_price_in_fiat = Some(prices.get());
+        // self.send(Message::UpdateBtcPriceInFiat(prices.get()));
     }
 
     fn handle_scan_code_changed(&self, _old_value: String, new_value: String) {
@@ -838,60 +861,5 @@ impl RustSendFlowManager {
         let balance = self.wallet_manager.balance().await;
         let wallet_balance = Arc::new(balance);
         self.state.write().wallet_balance = Some(wallet_balance.clone());
-    }
-}
-
-// Listens for updates from the wallet manager
-fn start_wallet_manager_listener(
-    state: State,
-    receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
-) -> JoinHandle<()> {
-    type Message = WalletManagerReconcileMessage;
-
-    task::spawn(async move {
-        while let Ok(message) = receiver.recv_async().await {
-            match message {
-                Message::WalletMetadataChanged(metadata) => {
-                    let mut state = state.write();
-                    state.metadata = metadata;
-                }
-                Message::WalletBalanceChanged(balance) => {
-                    let mut state = state.write();
-                    state.wallet_balance = Some(balance);
-                }
-                _ => (),
-            }
-        }
-    })
-}
-
-// Listens for updates from the app manager
-fn start_app_manager_listener(
-    state: State,
-    receiver: Arc<Receiver<AppStateReconcileMessage>>,
-) -> JoinHandle<()> {
-    type Message = AppStateReconcileMessage;
-
-    task::spawn(async move {
-        while let Ok(message) = receiver.recv_async().await {
-            match message {
-                Message::FiatCurrencyChanged(currency) => {
-                    let mut state = state.write();
-                    state.selected_fiat_currency = currency;
-                }
-                Message::FiatPricesChanged(prices) => {
-                    let fiat_currency = state.read().selected_fiat_currency;
-                    state.write().btc_price_in_fiat = Some(prices.get_for_currency(fiat_currency));
-                }
-                _ => {}
-            }
-        }
-    })
-}
-
-// on drop, stop all listeners
-impl Drop for RustSendFlowManager {
-    fn drop(&mut self) {
-        self.state_listeners.drain(..).for_each(|handle| handle.abort());
     }
 }

@@ -1,6 +1,6 @@
 use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
 use cove_types::{amount::Amount, unit::Unit};
-use cove_util::format::NumberFormatter as _;
+use cove_util::format::{self, NumberFormatter as _};
 
 use super::state::State;
 
@@ -27,14 +27,11 @@ impl BtcOnChangeHandler {
         let max_selected = state.max_selected.as_deref().copied();
         let btc_price_in_fiat = state.btc_price_in_fiat;
 
-        Self {
-            metadata,
-            max_selected,
-            btc_price_in_fiat,
-        }
+        Self { metadata, max_selected, btc_price_in_fiat }
     }
 
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Changeset {
+        println!("btc_on_change_handler old: {old_value}, new: {new_value}");
         // ---------------------------------------------------------------------
         // 1. early exits / sanitation
         // ---------------------------------------------------------------------
@@ -47,16 +44,24 @@ impl BtcOnChangeHandler {
 
         if new.is_empty() {
             return Changeset {
+                entering_amount_btc: Some("".into()),
+                amount_btc: Some(Amount::from_sat(0)),
                 amount_fiat: Some(0.0),
                 ..Default::default()
             };
         }
 
         if new == "00" {
-            return Changeset {
-                entering_amount_btc: Some("0".into()),
-                ..Default::default()
-            };
+            return Changeset { entering_amount_btc: Some("0".into()), ..Default::default() };
+        }
+
+        if new.ends_with("..") {
+            return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
+        }
+
+        // don't allow adding . to sats
+        if new.ends_with('.') && self.metadata.selected_unit == Unit::Sat {
+            return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
         }
 
         // ---------------------------------------------------------------------
@@ -84,19 +89,13 @@ impl BtcOnChangeHandler {
         // ---------------------------------------------------------------------
         let amount = match self.metadata.selected_unit {
             Unit::Sat => unformatted.parse::<u64>().ok().map(Amount::from_sat),
-            Unit::Btc => unformatted
-                .parse::<f64>()
-                .ok()
-                .and_then(|v| Amount::from_btc(v).ok()),
+            Unit::Btc => unformatted.parse::<f64>().ok().and_then(|v| Amount::from_btc(v).ok()),
         };
 
         let amount = match amount {
             Some(a) => a,
             None => {
-                return Changeset {
-                    entering_amount_btc: Some(old.into()),
-                    ..Default::default()
-                };
+                return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
             }
         };
 
@@ -118,10 +117,10 @@ impl BtcOnChangeHandler {
             changeset.amount_fiat = Some(amount.as_btc() * (price as f64));
         }
 
-        // if its sat add thousands formatting
-        if self.metadata.selected_unit == Unit::Sat {
-            changeset.entering_amount_btc = Some(amount.as_sats().thousands_int());
-        }
+        match self.metadata.selected_unit {
+            Unit::Sat => changeset.entering_amount_btc = Some(amount.as_sats().thousands_int()),
+            Unit::Btc => changeset.entering_amount_btc = format::btc_typing(&unformatted),
+        };
 
         changeset
     }

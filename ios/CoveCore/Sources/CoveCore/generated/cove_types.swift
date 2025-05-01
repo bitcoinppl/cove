@@ -1054,6 +1054,8 @@ public protocol AmountProtocol: AnyObject, Sendable {
     
     func btcStringWithUnit()  -> String
     
+    func fmtString(unit: Unit)  -> String
+    
     func fmtStringWithUnit(unit: Unit)  -> String
     
     func satsString()  -> String
@@ -1159,6 +1161,14 @@ open func btcString() -> String  {
 open func btcStringWithUnit() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_amount_btc_string_with_unit(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func fmtString(unit: Unit) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_amount_fmt_string(self.uniffiClonePointer(),
+        FfiConverterTypeUnit_lower(unit),$0
     )
 })
 }
@@ -5103,6 +5113,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 14319) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_amount_fmt_string() != 40458) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 13588) {

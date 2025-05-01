@@ -159,7 +159,17 @@ struct SendFlowSetAmountScreen: View {
             presenter.focusField = new
         }
         .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
-        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
+        .onChange(of: metadata.selectedUnit, initial: true) { oldUnit, newUnit in
+            sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
+        }
+        .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
+            sendFlowManager.dispatch(.notifyBtcOrFiatChanged(old: old, new: new))
+        }
+        .onChange(of: app.prices, initial: true) { _, newPrices in
+            guard let prices = newPrices else { return }
+            sendFlowManager.dispatch(.notifyPricesChanged(prices))
+        }
+
         .task {
             Task {
                 await MainActor.run {
