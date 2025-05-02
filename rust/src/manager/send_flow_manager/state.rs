@@ -67,13 +67,16 @@ impl State {
 /// MARK: SendFlowManagerState
 impl SendFlowManagerState {
     pub fn new(metadata: WalletMetadata) -> Self {
+        let selected_fiat_currency =
+            Database::global().global_config.fiat_currency().unwrap_or_default();
+
         let btc_price_in_fiat = App::global().prices().map(|prices| prices.get());
 
         Self {
             metadata,
             fee_rate_options_base: None,
             entering_btc_amount: String::new(),
-            entering_fiat_amount: String::new(),
+            entering_fiat_amount: selected_fiat_currency.symbol().to_string(),
             entering_address: String::new(),
             first_address: None,
             amount_sats: None,
@@ -85,10 +88,7 @@ impl SendFlowManagerState {
             wallet_balance: None,
             fee_rate_options: None,
             btc_price_in_fiat,
-            selected_fiat_currency: Database::global()
-                .global_config
-                .fiat_currency()
-                .unwrap_or_default(),
+            selected_fiat_currency,
         }
     }
 }

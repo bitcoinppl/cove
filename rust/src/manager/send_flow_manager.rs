@@ -35,7 +35,7 @@ use fiat_on_change::FiatOnChangeHandler;
 use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 use state::{SendFlowManagerState, State};
-use tracing::error;
+use tracing::{debug, error};
 
 use super::wallet::{RustWalletManager, actor::WalletActor};
 
@@ -364,8 +364,17 @@ impl RustSendFlowManager {
 
         let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
 
+        let old_value_raw =
+            old_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
+
         let new_value_raw =
             new_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
+
+        // if its 0.00 (starting state) and they enter an amount auto delete the 0.00
+        if old_value_raw == "0.00" && new_value_raw.len() > 3 {
+            let new_value = new_value_raw.trim_start_matches("0.00");
+            return Some(format!("{symbol}{new_value}"));
+        }
 
         // if the new value is the symbol, then we don't need to do anything
         if new_value == symbol {
@@ -541,13 +550,17 @@ impl RustSendFlowManager {
 
         let handler = FiatOnChangeHandler::new(prices, selected_currency);
 
-        let new_value =
-            self.sanitize_fiat_entering_amount(&old_value, &new_value).unwrap_or(new_value);
+        let new_value_sanitized = self.sanitize_fiat_entering_amount(&old_value, &new_value);
+        let new_value_sanitized = new_value_sanitized.as_ref().unwrap_or(&new_value);
 
-        let Ok(result) = handler.on_change(old_value, new_value) else {
+        let Ok(result) = handler.on_change(&old_value, &new_value_sanitized) else {
             tracing::error!("unable to get fiat on change result");
             return None;
         };
+
+        debug!(
+            "result: {result:?}, old_value: {old_value}, new_value: {new_value}, new_value_sanitized: {new_value_sanitized}"
+        );
 
         if let Some(entering_fiat_amount) = result.entering_fiat_amount {
             self.state.write().entering_fiat_amount = entering_fiat_amount.clone();

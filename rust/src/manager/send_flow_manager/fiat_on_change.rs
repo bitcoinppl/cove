@@ -4,8 +4,6 @@ use crate::{
     transaction::Amount,
 };
 
-use cove_util::format::NumberFormatter as _;
-
 use super::sanitize;
 
 /// Handles the logic for what happens when the fiat amount onChange is called
@@ -51,7 +49,7 @@ impl FiatOnChangeHandler {
         Self { prices, selected_currency, converter: Converter::new() }
     }
 
-    pub fn on_change(&self, old_value: String, new_value: String) -> Result<Changeset> {
+    pub fn on_change(&self, old_value: &str, new_value: &str) -> Result<Changeset> {
         let old_value = old_value.trim();
         let new_value = new_value.trim();
 
@@ -66,12 +64,7 @@ impl FiatOnChangeHandler {
             old_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
 
         // if the new value is the symbol, then we don't need to do anything
-        if new_value == symbol {
-            return Ok(Changeset::empty_zero(symbol));
-        }
-
-        // don't allow deleting the fiat amount symbol
-        if new_value.is_empty() && !symbol.is_empty() {
+        if new_value == symbol || new_value.is_empty() {
             return Ok(Changeset::empty_zero(symbol));
         }
 
@@ -93,25 +86,6 @@ impl FiatOnChangeHandler {
             return Ok(Changeset::default());
         }
 
-        // if its 0.00 (starting state) and they enter an amount auto delete the 0.00
-        if old_value_raw == "0.00" && new_value_raw.len() > 3 {
-            let mut change = Changeset::default();
-            let new_value = new_value_raw.trim_start_matches("0.00");
-
-            change.entering_fiat_amount = Some(format!("{symbol}{new_value}"));
-            change.fiat_value = Some(self.converter.parse_fiat_str(old_value).unwrap_or_default());
-            return Ok(change);
-        }
-
-        // if 0.00 and start deleting, just delete the entire thing
-        if old_value_raw == "0.00" && new_value_raw.len() == 3 {
-            return Ok(Changeset {
-                entering_fiat_amount: Some(symbol.to_string()),
-                fiat_value: Some(0.0),
-                ..Default::default()
-            });
-        }
-
         // convert the fiat amount to btc amount
         let btc_amount = self.converter.convert_from_fiat_string(
             &new_value_raw,
@@ -119,17 +93,14 @@ impl FiatOnChangeHandler {
             self.prices,
         );
 
-        // get how many decimals there are after the decimal point
-        let int_value_suffix =
-            sanitize::limit_decimal_places(&new_value_raw, 2).unwrap_or_default();
-
-        // format to thousands
+        // get fiat value as a f64
         let fiat_value = self.converter.parse_fiat_str(&new_value_raw)?;
 
-        // get the fiat text, taking into account the the decimals might not be complete
-        let fiat_value_int = (fiat_value.trunc() as u64).thousands_int();
-        let fiat_text = format!("{symbol}{fiat_value_int}{int_value_suffix}");
+        // get how many decimals there are after the decimal point
+        let (dollars, cents_with_decimal_point) =
+            sanitize::seperate_and_limit_dollars_and_cents(&new_value_raw, 2);
 
+        let fiat_text = format!("{symbol}{dollars}{cents_with_decimal_point}");
         let change = Changeset {
             entering_fiat_amount: Some(fiat_text),
             fiat_value: Some(fiat_value),
