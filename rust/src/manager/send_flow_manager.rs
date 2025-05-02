@@ -329,11 +329,80 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
-    pub fn sanitize_entering_amount(&self, old: &str, new: &str) -> Option<String> {
-        match self.state.read().metadata.fiat_or_btc {
-            FiatOrBtc::Btc => self.sanitize_btc_entering_amount(old, new),
-            FiatOrBtc::Fiat => self.sanitize_fiat_entering_amount(old, new),
+    fn sanitize_btc_entering_amount(&self, old: &str, new: &str) -> Option<String> {
+        let new = new.trim();
+
+        if new == "00" {
+            return Some("0".to_string());
         }
+
+        if new.ends_with("..") {
+            return Some(old.to_string());
+        }
+
+        let unit = self.state.read().metadata.selected_unit;
+        if new.ends_with('.') && unit == Unit::Sat {
+            return Some(old.to_string());
+        }
+
+        None
+    }
+
+    #[uniffi::method]
+    fn sanitize_fiat_entering_amount(&self, old: &str, new: &str) -> Option<String> {
+        let old_value = old.trim();
+        let new_value = new.trim();
+
+        let currency = self.state.read().selected_fiat_currency;
+        let symbol = currency.symbol();
+
+        if new.is_empty() {
+            return Some(symbol.to_string());
+        }
+
+        let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
+
+        let new_value_raw =
+            new_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
+
+        // if the new value is the symbol, then we don't need to do anything
+        if new_value == symbol {
+            return None;
+        }
+
+        // don't allow deleting the fiat amount symbol
+        if new_value.is_empty() && !symbol.is_empty() {
+            return Some(symbol.to_string());
+        }
+
+        // if old value is the same as the new value, then we don't need to do anything
+        if old_value == new_value {
+            return None;
+        }
+
+        // don't allow adding more than 1 decimal point
+        if number_of_decimal_points > 1 {
+            return Some(old_value.to_string());
+        };
+
+        // remove leading 0s
+        if new_value_raw == "00" {
+            return Some(old_value.to_string());
+        }
+
+        // limit the number of decimals
+        let int_value_suffix = sanitize::limit_decimal_places(&new_value_raw, 2)?;
+        let fiat_value_int = new_value_raw.parse::<f64>().ok().map(f64::trunc).map(|v| v as u64);
+
+        let fiat_value = match fiat_value_int {
+            Some(fiat_value_int) => fiat_value_int.thousands_int(),
+            None => {
+                return Some(old_value.to_string());
+            }
+        };
+
+        let fiat_value = format!("{symbol}{fiat_value}{int_value_suffix}");
+        Some(fiat_value)
     }
 
     // MARK: Action handler
@@ -903,81 +972,6 @@ impl RustSendFlowManager {
         let balance = self.wallet_manager.balance().await;
         let wallet_balance = Arc::new(balance);
         self.state.write().wallet_balance = Some(wallet_balance.clone());
-    }
-
-    fn sanitize_btc_entering_amount(&self, old: &str, new: &str) -> Option<String> {
-        let new = new.trim();
-
-        if new == "00" {
-            return Some("0".to_string());
-        }
-
-        if new.ends_with("..") {
-            return Some(old.to_string());
-        }
-
-        let unit = self.state.read().metadata.selected_unit;
-        if new.ends_with('.') && unit == Unit::Sat {
-            return Some(old.to_string());
-        }
-
-        None
-    }
-
-    fn sanitize_fiat_entering_amount(&self, old: &str, new: &str) -> Option<String> {
-        let old_value = old.trim();
-        let new_value = new.trim();
-
-        let currency = self.state.read().selected_fiat_currency;
-        let symbol = currency.symbol();
-
-        if new.is_empty() {
-            return Some(symbol.to_string());
-        }
-
-        let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
-
-        let new_value_raw =
-            new_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
-
-        // if the new value is the symbol, then we don't need to do anything
-        if new_value == symbol {
-            return None;
-        }
-
-        // don't allow deleting the fiat amount symbol
-        if new_value.is_empty() && !symbol.is_empty() {
-            return Some(symbol.to_string());
-        }
-
-        // if old value is the same as the new value, then we don't need to do anything
-        if old_value == new_value {
-            return None;
-        }
-
-        // don't allow adding more than 1 decimal point
-        if number_of_decimal_points > 1 {
-            return Some(old_value.to_string());
-        };
-
-        // remove leading 0s
-        if new_value_raw == "00" {
-            return Some(old_value.to_string());
-        }
-
-        // limit the number of decimals
-        let int_value_suffix = sanitize::limit_decimal_places(&new_value_raw, 2)?;
-        let fiat_value_int = new_value_raw.parse::<f64>().ok().map(f64::trunc).map(|v| v as u64);
-
-        let fiat_value = match fiat_value_int {
-            Some(fiat_value_int) => fiat_value_int.thousands_int(),
-            None => {
-                return Some(old_value.to_string());
-            }
-        };
-
-        let fiat_value = format!("{symbol}{fiat_value}{int_value_suffix}");
-        Some(fiat_value)
     }
 }
 

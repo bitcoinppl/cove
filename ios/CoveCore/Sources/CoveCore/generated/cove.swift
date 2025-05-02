@@ -2444,7 +2444,7 @@ public func FfiConverterTypeConfirmedTransaction_lower(_ value: ConfirmedTransac
 
 public protocol ConverterProtocol: AnyObject, Sendable {
     
-    func getFiatValue(fiatAmount: String) throws  -> Double
+    func parseFiatStr(fiatAmount: String) throws  -> Double
     
     func removeFiatSuffix(fiatAmount: String)  -> String
     
@@ -2508,9 +2508,9 @@ public convenience init() {
     
 
     
-open func getFiatValue(fiatAmount: String)throws  -> Double  {
+open func parseFiatStr(fiatAmount: String)throws  -> Double  {
     return try  FfiConverterDouble.lift(try rustCallWithError(FfiConverterTypeConverterError_lift) {
-    uniffi_cove_fn_method_converter_get_fiat_value(self.uniffiClonePointer(),
+    uniffi_cove_fn_method_converter_parse_fiat_str(self.uniffiClonePointer(),
         FfiConverterString.lower(fiatAmount),$0
     )
 })
@@ -6940,7 +6940,9 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
-    func sanitizeEnteringAmount(old: String, new: String)  -> String?
+    func sanitizeBtcEnteringAmount(old: String, new: String)  -> String?
+    
+    func sanitizeFiatEnteringAmount(old: String, new: String)  -> String?
     
     func sendAmountBtc(amountSats: UInt64?)  -> String
     
@@ -7049,9 +7051,18 @@ open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCal
 }
 }
     
-open func sanitizeEnteringAmount(old: String, new: String) -> String?  {
+open func sanitizeBtcEnteringAmount(old: String, new: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_fn_method_rustsendflowmanager_sanitize_entering_amount(self.uniffiClonePointer(),
+    uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(self.uniffiClonePointer(),
+        FfiConverterString.lower(old),
+        FfiConverterString.lower(new),$0
+    )
+})
+}
+    
+open func sanitizeFiatEnteringAmount(old: String, new: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(self.uniffiClonePointer(),
         FfiConverterString.lower(old),
         FfiConverterString.lower(new),$0
     )
@@ -25043,7 +25054,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_confirmedtransaction_sent_and_received() != 59599) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_converter_get_fiat_value() != 6670) {
+    if (uniffi_cove_checksum_method_converter_parse_fiat_str() != 5358) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_converter_remove_fiat_suffix() != 50019) {
@@ -25463,7 +25474,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_entering_amount() != 46467) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 57490) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount() != 61265) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc() != 46126) {
@@ -25958,10 +25972,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

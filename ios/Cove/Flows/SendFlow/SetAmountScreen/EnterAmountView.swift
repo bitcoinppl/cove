@@ -15,7 +15,15 @@ struct EnterAmountView: View {
     @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
 
-    @State private var enteringAmount: String = ""
+    @State private var enteringBtcAmount: String = ""
+    @State private var enteringFiatAmount: String = ""
+
+    private var enteringAmount: Binding<String> {
+        switch metadata.fiatOrBtc {
+        case .btc: $enteringBtcAmount
+        case .fiat: $enteringFiatAmount
+        }
+    }
 
     var metadata: WalletMetadata { manager.walletMetadata }
 
@@ -40,7 +48,7 @@ struct EnterAmountView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
-                TextField("", text: $enteringAmount)
+                TextField("", text: enteringAmount)
                     .font(.system(size: 48, weight: .bold))
                     .multilineTextAlignment(.center)
                     .keyboardType(.decimalPad)
@@ -50,21 +58,29 @@ struct EnterAmountView: View {
                     .offset(x: offset)
                     .padding(.horizontal, 30)
                     .focused($focusField, equals: .amount)
-                    .onChange(of: enteringAmount, initial: true) { oldValue, newValue in
-                        if let newEnteringAmount = sendFlowManager.rust.sanitizeEnteringAmount(old: oldValue, new: newValue) {
-                            return enteringAmount = newEnteringAmount
+                    .onChange(of: enteringBtcAmount, initial: true) { oldValue, newValue in
+                        if let newEnteringAmount =
+                            sendFlowManager.rust.sanitizeBtcEnteringAmount(old: oldValue, new: newValue)
+                        {
+                            return enteringBtcAmount = newEnteringAmount
                         }
 
-                        switch metadata.fiatOrBtc {
-                            case .btc: sendFlowManager.dispatch(action: .changeEnteringBtcAmount(newValue))
-                            case .fiat: sendFlowManager.dispatch(action: .changeEnteringFiatAmount(newValue))
+                        sendFlowManager.dispatch(action: .changeEnteringBtcAmount(newValue))
+                    }
+                    .onChange(of: enteringFiatAmount, initial: true) { oldValue, newValue in
+                        if let newEnteringAmount =
+                            sendFlowManager.rust.sanitizeFiatEnteringAmount(old: oldValue, new: newValue)
+                        {
+                            return enteringFiatAmount = newEnteringAmount
                         }
+
+                        sendFlowManager.dispatch(action: .changeEnteringFiatAmount(newValue))
                     }
                     .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { _, newValue in
-                        if case .btc = metadata.fiatOrBtc { enteringAmount = newValue }
+                        enteringBtcAmount = newValue
                     }
                     .onChange(of: sendFlowManager.enteringFiatAmount, initial: true) { _, newValue in
-                        if case .fiat = metadata.fiatOrBtc { enteringAmount = newValue }
+                        enteringFiatAmount = newValue
                     }
 
                 HStack(spacing: 0) {
