@@ -62,6 +62,7 @@ struct EnterAmountView: View {
                         if let newEnteringAmount =
                             sendFlowManager.rust.sanitizeBtcEnteringAmount(old: oldValue, new: newValue)
                         {
+                            Log.debug("btcEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")
                             return enteringBtcAmount = newEnteringAmount
                         }
 
@@ -71,6 +72,7 @@ struct EnterAmountView: View {
                         if let newEnteringAmount =
                             sendFlowManager.rust.sanitizeFiatEnteringAmount(old: oldValue, new: newValue)
                         {
+                            Log.debug("fiatEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")
                             return enteringFiatAmount = newEnteringAmount
                         }
 

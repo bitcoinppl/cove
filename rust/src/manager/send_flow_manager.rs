@@ -332,19 +332,43 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     fn sanitize_btc_entering_amount(&self, old: &str, new: &str) -> Option<String> {
+        let unit = self.state.read().metadata.selected_unit;
+
         let new = new.trim();
 
         if new == "00" {
             return Some("0".to_string());
         }
 
-        if new.ends_with("..") {
+        // decimal points `.` count
+        let number_of_periods = new.chars().filter(|c| *c == '.').count();
+
+        if unit == Unit::Sat && number_of_periods > 0 {
             return Some(old.to_string());
         }
 
-        let unit = self.state.read().metadata.selected_unit;
-        if new.ends_with('.') && unit == Unit::Sat {
+        if number_of_periods > 1 {
             return Some(old.to_string());
+        }
+
+        // entering in btc, can't have more than 8 decimals
+        let (before_decimal, after_decimal) = cove_util::split_at_decimal_point(new);
+
+        // remove 1 leading zero if it exists
+        let mut before_decimal_cleaned = before_decimal;
+        if before_decimal.len() > 1 && before_decimal.starts_with('0') {
+            before_decimal_cleaned = &before_decimal[1..];
+        }
+
+        if after_decimal.len() > 8 {
+            let last_digit = after_decimal.chars().last().expect("after_decimal is not empty");
+            let new = format!("{}.{}{}", before_decimal_cleaned, &after_decimal[..7], last_digit);
+            return Some(new);
+        }
+
+        // cleaning did something so return the new value
+        if before_decimal_cleaned != before_decimal {
+            return Some(before_decimal_cleaned.to_string());
         }
 
         None
@@ -354,6 +378,11 @@ impl RustSendFlowManager {
     fn sanitize_fiat_entering_amount(&self, old: &str, new: &str) -> Option<String> {
         let old_value = old.trim();
         let new_value = new.trim();
+
+        // if old value is the same as the new value, then we don't need to do anything
+        if old_value == new_value {
+            return None;
+        }
 
         let currency = self.state.read().selected_fiat_currency;
         let symbol = currency.symbol();
@@ -386,11 +415,6 @@ impl RustSendFlowManager {
             return Some(symbol.to_string());
         }
 
-        // if old value is the same as the new value, then we don't need to do anything
-        if old_value == new_value {
-            return None;
-        }
-
         // don't allow adding more than 1 decimal point
         if number_of_decimal_points > 1 {
             return Some(old_value.to_string());
@@ -402,7 +426,9 @@ impl RustSendFlowManager {
         }
 
         // limit the number of decimals
-        let int_value_suffix = sanitize::limit_decimal_places(&new_value_raw, 2)?;
+        let int_value_suffix =
+            sanitize::limit_decimal_places(&new_value_raw, 2).unwrap_or_default();
+
         let fiat_value_int = new_value_raw.parse::<f64>().ok().map(f64::trunc).map(|v| v as u64);
 
         let fiat_value = match fiat_value_int {
@@ -490,7 +516,7 @@ impl RustSendFlowManager {
 
 /// MARK: State mutating impl
 impl RustSendFlowManager {
-    fn btc_field_changed(self: Arc<Self>, old_value: String, new_value: String) -> Option<()> {
+    fn btc_field_changed(self: Arc<Self>, old: String, new: String) -> Option<()> {
         let state: State = self.state.clone().into();
 
         let me = self.clone();
@@ -504,10 +530,9 @@ impl RustSendFlowManager {
         let handler = BtcOnChangeHandler::new(state.clone());
 
         // sanitize the new value before passing it to the handler
-        let new_value =
-            self.sanitize_btc_entering_amount(&old_value, &new_value).unwrap_or(new_value);
-
-        let changes: btc_on_change::Changeset = handler.on_change(&old_value, &new_value);
+        let new_value_sanitized = self.sanitize_btc_entering_amount(&old, &new);
+        let new_value_sanitized = new_value_sanitized.as_ref().unwrap_or(&new);
+        let changes: btc_on_change::Changeset = handler.on_change(&old, &new_value_sanitized);
 
         tracing::trace!("btc_on_change_handler changes: {changes:?}");
 
