@@ -105,27 +105,38 @@ struct EnterAmountView: View {
                 }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
-                        Button("sats") {
+                        Button(action: {
                             manager.dispatch(action: .updateUnit(.sat))
                             showingMenu = false
+                        }) {
+                            Text("sats")
+                                .frame(maxWidth: .infinity)
+                                .padding(12)
+                                .background(Color.clear)
                         }
-                        .padding(12)
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())
 
                         Divider()
 
-                        Button("btc") {
+                        Button(action: {
                             manager.dispatch(action: .updateUnit(.btc))
                             showingMenu = false
+                        }) {
+                            Text("btc")
+                                .frame(maxWidth: .infinity)
+                                .padding(12)
+                                .background(Color.clear)
                         }
-                        .padding(12)
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                     }
                     .padding(.vertical, 8)
                     .padding(.horizontal, 12)
                     .frame(minWidth: 120, maxWidth: 200)
                     .presentationCompactAdaptation(.popover)
                     .foregroundStyle(.primary.opacity(0.8))
+                    .contentShape(Rectangle())
                 }
             }
 

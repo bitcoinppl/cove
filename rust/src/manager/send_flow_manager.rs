@@ -134,7 +134,6 @@ impl RustSendFlowManager {
 
         // in background run init tasks and setup
         me.background_init_tasks();
-        me.set_entering_amount_default();
         me
     }
 
@@ -184,9 +183,12 @@ impl RustSendFlowManager {
             return "---".to_string();
         };
 
-        let amount_sats = amount_sats.unwrap_or(0);
-        let send_amount = Amount::from_sat(amount_sats);
-        let send_amount_in_fiat = send_amount.as_btc() * (btc_price_in_fiat as f64);
+        let send_amount_in_fiat = self.state.read().amount_fiat.unwrap_or_else(|| {
+            let amount_sats = amount_sats.unwrap_or(0);
+            let send_amount = Amount::from_sat(amount_sats);
+            let send_amount_in_fiat = send_amount.as_btc().ceil() * (btc_price_in_fiat as f64);
+            send_amount_in_fiat
+        });
 
         format!("{}", self.display_fiat_amount(send_amount_in_fiat, true))
     }
@@ -578,37 +580,25 @@ impl RustSendFlowManager {
     }
 
     fn clear_send_amount(&self) {
+        let currency = self.state.read().selected_fiat_currency;
         let mut state = self.state.write();
+
         state.amount_sats = None;
         self.send(Message::UpdateAmountSats(0));
 
         state.amount_fiat = None;
         self.send(Message::UpdateAmountFiat(0.0));
 
-        self.set_entering_amount_default();
-    }
+        // fiat
+        let entering_fiat_amount = format!("{}", currency.symbol());
+        state.entering_fiat_amount = entering_fiat_amount.clone();
+        self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
 
-    fn set_entering_amount_default(&self) {
-        let fiat_or_btc = self.state.read().metadata.fiat_or_btc;
+        // btc
+        state.entering_btc_amount = String::new();
+        self.send(Message::UpdateEnteringBtcAmount(String::new()));
 
-        match fiat_or_btc {
-            FiatOrBtc::Fiat => {
-                let currency = self.state.read().selected_fiat_currency;
-                let entering_fiat_amount = format!("{}0.00", currency.symbol());
-
-                self.state.write().entering_fiat_amount = entering_fiat_amount.clone();
-                self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
-            }
-            FiatOrBtc::Btc => {
-                let amount_string = match self.state.read().metadata.selected_unit {
-                    Unit::Btc => Amount::from_sat(0).btc_string(),
-                    Unit::Sat => "0".to_string(),
-                };
-
-                self.state.write().entering_btc_amount = amount_string.clone();
-                self.send(Message::UpdateEnteringBtcAmount(amount_string));
-            }
-        }
+        drop(state);
     }
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
@@ -670,6 +660,17 @@ impl RustSendFlowManager {
 
         if old == new {
             return;
+        }
+
+        // if its already empty clear everythign
+        {
+            if old == Unit::Btc && self.state.read().entering_btc_amount.is_empty() {
+                return self.clear_send_amount();
+            }
+
+            if old == Unit::Sat && self.state.read().entering_fiat_amount.is_empty() {
+                return self.clear_send_amount();
+            }
         }
 
         // if we are entering fiat, then we don't need to update the entering field
