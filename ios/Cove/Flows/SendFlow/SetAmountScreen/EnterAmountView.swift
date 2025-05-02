@@ -60,11 +60,11 @@ struct EnterAmountView: View {
                             case .fiat: sendFlowManager.dispatch(action: .changeEnteringFiatAmount(newValue))
                         }
                     }
-                    .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { oldValue, newValue in
-                        print("sendFlowManager.enteringBtcAmount: \(oldValue) --> \(newValue)")
-                        if case .btc = metadata.fiatOrBtc {
-                            enteringAmount = newValue
-                        }
+                    .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { _, newValue in
+                        if case .btc = metadata.fiatOrBtc { enteringAmount = newValue }
+                    }
+                    .onChange(of: sendFlowManager.enteringFiatAmount, initial: true) { _, newValue in
+                        if case .fiat = metadata.fiatOrBtc { enteringAmount = newValue }
                     }
 
                 HStack(spacing: 0) {

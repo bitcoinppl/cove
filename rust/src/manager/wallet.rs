@@ -264,7 +264,7 @@ impl RustWalletManager {
         fiat_amount: &str,
         prices: Arc<PriceResponse>,
     ) -> Amount {
-        Converter::global().convert_from_fiat_string(
+        Converter::new().convert_from_fiat_string(
             fiat_amount,
             self.selected_fiat_currency(),
             *prices.as_ref(),

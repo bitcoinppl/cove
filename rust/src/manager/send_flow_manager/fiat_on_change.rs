@@ -6,6 +6,8 @@ use crate::{
 
 use cove_util::format::NumberFormatter as _;
 
+use super::sanitize;
+
 /// Handles the logic for what happens when the fiat amount onChange is called
 
 #[derive(Debug, Clone)]
@@ -46,9 +48,7 @@ pub enum SendFlowFiatOnChangeError {
 
 impl FiatOnChangeHandler {
     pub fn new(prices: PriceResponse, selected_currency: FiatCurrency) -> Self {
-        let converter = Converter::global();
-
-        Self { prices, selected_currency, converter }
+        Self { prices, selected_currency, converter: Converter::new() }
     }
 
     pub fn on_change(&self, old_value: String, new_value: String) -> Result<Changeset> {
@@ -99,7 +99,7 @@ impl FiatOnChangeHandler {
             let new_value = new_value_raw.trim_start_matches("0.00");
 
             change.entering_fiat_amount = Some(format!("{symbol}{new_value}"));
-            change.fiat_value = Some(self.converter.get_fiat_value(old_value).unwrap_or_default());
+            change.fiat_value = Some(self.converter.parse_fiat_str(old_value).unwrap_or_default());
             return Ok(change);
         }
 
@@ -120,21 +120,11 @@ impl FiatOnChangeHandler {
         );
 
         // get how many decimals there are after the decimal point
-        let last_index = new_value_raw.len().saturating_sub(1);
-        let int_value_suffix = match memchr::memchr(b'.', new_value_raw.as_bytes()) {
-            Some(decimal_index) => {
-                let decimals = last_index - decimal_index;
-
-                // get the decimal point and the decimals after it to a max of 2 decimals
-                let decimals = decimals.min(2);
-                new_value_raw[decimal_index..=decimal_index + decimals].to_string()
-            }
-
-            None => "".to_string(),
-        };
+        let int_value_suffix =
+            sanitize::limit_decimal_places(&new_value_raw, 2).unwrap_or_default();
 
         // format to thousands
-        let fiat_value = self.converter.get_fiat_value(&new_value_raw)?;
+        let fiat_value = self.converter.parse_fiat_str(&new_value_raw)?;
 
         // get the fiat text, taking into account the the decimals might not be complete
         let fiat_value_int = (fiat_value.trunc() as u64).thousands_int();

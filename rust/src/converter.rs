@@ -4,12 +4,6 @@ use crate::{
     fiat::{FiatCurrency, client::PriceResponse},
     transaction::Amount,
 };
-/// Functions that help display and convert different units
-/// Maybe later we can move this into a seperate folder called presenters
-///
-use std::sync::{Arc, LazyLock};
-
-pub static CONVERTER: LazyLock<Arc<Converter>> = LazyLock::new(|| Arc::new(Converter));
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct Converter;
@@ -24,6 +18,10 @@ pub enum ConverterError {
 }
 
 impl Converter {
+    pub fn new() -> Self {
+        Self
+    }
+
     pub fn convert_from_fiat_string(
         &self,
         fiat_amount: &str,
@@ -39,7 +37,7 @@ impl Converter {
         }
 
         let fiat_value = self
-            .get_fiat_value(fiat_amount)
+            .parse_fiat_str(fiat_amount)
             .tap_err(|error| {
                 tracing::error!("failed to convert fiat amount: {error} ({fiat_amount})")
             })
@@ -66,18 +64,16 @@ impl Converter {
 impl Converter {
     #[uniffi::constructor(name = "new")]
     pub fn global() -> Self {
-        CONVERTER.as_ref().clone()
+        Self::new()
     }
 
-    pub fn get_fiat_value(&self, fiat_amount: &str) -> Result<f64> {
+    pub fn parse_fiat_str(&self, fiat_amount: &str) -> Result<f64> {
         if fiat_amount.is_empty() {
             return Ok(0.0);
         }
 
-        let fiat_amount = fiat_amount
-            .chars()
-            .filter(|c| c.is_numeric() || *c == '.')
-            .collect::<String>();
+        let fiat_amount =
+            fiat_amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
 
         if fiat_amount.is_empty() || FiatCurrency::is_symbol(&fiat_amount) {
             return Ok(0.0);

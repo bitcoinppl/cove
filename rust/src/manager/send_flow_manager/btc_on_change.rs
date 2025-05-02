@@ -31,9 +31,9 @@ impl BtcOnChangeHandler {
     }
 
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Changeset {
-        println!("btc_on_change_handler old: {old_value}, new: {new_value}");
+        tracing::trace!("btc_on_change_handler on_change {old_value} -> {new_value}");
         // ---------------------------------------------------------------------
-        // 1. early exits / sanitation
+        // 1. early exits
         // ---------------------------------------------------------------------
         if self.metadata.fiat_or_btc == FiatOrBtc::Fiat {
             return Changeset::default();
@@ -49,19 +49,6 @@ impl BtcOnChangeHandler {
                 amount_fiat: Some(0.0),
                 ..Default::default()
             };
-        }
-
-        if new == "00" {
-            return Changeset { entering_amount_btc: Some("0".into()), ..Default::default() };
-        }
-
-        if new.ends_with("..") {
-            return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
-        }
-
-        // don't allow adding . to sats
-        if new.ends_with('.') && self.metadata.selected_unit == Unit::Sat {
-            return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
         }
 
         // ---------------------------------------------------------------------

@@ -2,6 +2,7 @@ pub mod alert_state;
 pub mod btc_on_change;
 pub mod error;
 pub mod fiat_on_change;
+mod sanitize;
 pub mod state;
 
 use std::sync::Arc;
@@ -131,8 +132,9 @@ impl RustSendFlowManager {
         }
         .into();
 
-        // in background run init tasks
+        // in background run init tasks and setup
         me.background_init_tasks();
+        me.set_entering_amount_default();
         me
     }
 
@@ -167,48 +169,25 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
-    pub fn sanitize_entering_amount(&self, old: String, new: String) -> Option<String> {
-        if new == "00" {
-            return Some("0".to_string());
-        }
-
-        if new.ends_with("..") {
-            return Some(old);
-        }
-
-        let unit = self.state.read().metadata.selected_unit;
-        if new.ends_with('.') && unit == Unit::Sat {
-            return Some(old);
-        }
-
-        None
-    }
-
-    #[uniffi::method]
     pub fn send_amount_btc(&self, amount_sats: Option<u64>) -> String {
-        let Some(send_amount) = amount_sats else {
-            return "---".to_string();
-        };
-
+        let send_amount = amount_sats.unwrap_or(0);
         let send_amount = Amount::from_sat(send_amount);
         match self.state.read().metadata.selected_unit {
-            Unit::Btc => format!("{}", send_amount.as_btc()),
-            Unit::Sat => format!("{}", send_amount.as_sats()),
+            Unit::Btc => format!("{}", send_amount.as_btc().thousands()),
+            Unit::Sat => format!("{}", send_amount.as_sats().thousands_int()),
         }
     }
 
     #[uniffi::method]
     pub fn send_amount_fiat(&self, amount_sats: Option<u64>) -> String {
-        let Some(amount_sats) = amount_sats else {
-            return "---".to_string();
-        };
-
         let Some(btc_price_in_fiat) = self.state.read().btc_price_in_fiat else {
             return "---".to_string();
         };
 
+        let amount_sats = amount_sats.unwrap_or(0);
         let send_amount = Amount::from_sat(amount_sats);
         let send_amount_in_fiat = send_amount.as_btc() * (btc_price_in_fiat as f64);
+
         format!("{}", self.display_fiat_amount(send_amount_in_fiat, true))
     }
 
@@ -349,6 +328,14 @@ impl RustSendFlowManager {
         true
     }
 
+    #[uniffi::method]
+    pub fn sanitize_entering_amount(&self, old: &str, new: &str) -> Option<String> {
+        match self.state.read().metadata.fiat_or_btc {
+            FiatOrBtc::Btc => self.sanitize_btc_entering_amount(old, new),
+            FiatOrBtc::Fiat => self.sanitize_fiat_entering_amount(old, new),
+        }
+    }
+
     // MARK: Action handler
     /// action from the frontend to change the state of the view model
     #[uniffi::method]
@@ -435,8 +422,14 @@ impl RustSendFlowManager {
 
         let state: State = self.state.clone().into();
         let handler = BtcOnChangeHandler::new(state.clone());
+
+        // sanitize the new value before passing it to the handler
+        let new_value =
+            self.sanitize_btc_entering_amount(&old_value, &new_value).unwrap_or(new_value);
+
         let changes: btc_on_change::Changeset = handler.on_change(&old_value, &new_value);
-        println!("btc_on_change_handler changes: {changes:?}");
+
+        tracing::trace!("btc_on_change_handler changes: {changes:?}");
 
         let mut state = state.write();
 
@@ -476,6 +469,10 @@ impl RustSendFlowManager {
         let selected_currency = self.state.read().selected_fiat_currency;
 
         let handler = FiatOnChangeHandler::new(prices, selected_currency);
+
+        let new_value =
+            self.sanitize_fiat_entering_amount(&old_value, &new_value).unwrap_or(new_value);
+
         let Ok(result) = handler.on_change(old_value, new_value) else {
             tracing::error!("unable to get fiat on change result");
             return None;
@@ -518,6 +515,31 @@ impl RustSendFlowManager {
 
         state.amount_fiat = None;
         self.send(Message::UpdateAmountFiat(0.0));
+
+        self.set_entering_amount_default();
+    }
+
+    fn set_entering_amount_default(&self) {
+        let fiat_or_btc = self.state.read().metadata.fiat_or_btc;
+
+        match fiat_or_btc {
+            FiatOrBtc::Fiat => {
+                let currency = self.state.read().selected_fiat_currency;
+                let entering_fiat_amount = format!("{}0.00", currency.symbol());
+
+                self.state.write().entering_fiat_amount = entering_fiat_amount.clone();
+                self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
+            }
+            FiatOrBtc::Btc => {
+                let amount_string = match self.state.read().metadata.selected_unit {
+                    Unit::Btc => Amount::from_sat(0).btc_string(),
+                    Unit::Sat => "0".to_string(),
+                };
+
+                self.state.write().entering_btc_amount = amount_string.clone();
+                self.send(Message::UpdateEnteringBtcAmount(amount_string));
+            }
+        }
     }
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
@@ -575,6 +597,8 @@ impl RustSendFlowManager {
     }
 
     fn handle_selected_unit_changed(&self, old: Unit, new: Unit) {
+        self.state.write().metadata.selected_unit = new;
+
         if old == new {
             return;
         }
@@ -586,11 +610,7 @@ impl RustSendFlowManager {
 
         let amount_sats = match self.state.read().amount_sats {
             Some(amount_sats) => amount_sats,
-            None => {
-                self.state.write().entering_btc_amount = String::new();
-                self.send(Message::UpdateEnteringBtcAmount(String::new()));
-                return;
-            }
+            None => return,
         };
 
         match new {
@@ -609,12 +629,41 @@ impl RustSendFlowManager {
 
     fn handle_btc_or_fiat_changed(&self, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
         self.state.write().metadata.fiat_or_btc = new_value;
+
+        match new_value {
+            FiatOrBtc::Btc => {
+                let amount_sats = self.state.read().amount_sats.unwrap_or_default();
+                let amount = Amount::from_sat(amount_sats);
+
+                let amount_fmt = match self.state.read().metadata.selected_unit {
+                    Unit::Btc => amount.btc_string(),
+                    Unit::Sat => amount.sats_string(),
+                };
+
+                self.state.write().entering_btc_amount = amount_fmt.clone();
+                self.send(Message::UpdateEnteringBtcAmount(amount_fmt));
+            }
+
+            FiatOrBtc::Fiat => {
+                let currency = self.state.read().selected_fiat_currency;
+                let fiat_amount = self.state.read().amount_fiat.unwrap_or_default();
+                let fiat_amount_fmt = format!(
+                    "{}{}{}",
+                    currency.symbol(),
+                    fiat_amount.thousands_fiat(),
+                    currency.suffix()
+                );
+
+                self.state.write().entering_fiat_amount = fiat_amount_fmt.clone();
+                self.send(Message::UpdateEnteringFiatAmount(fiat_amount_fmt));
+            }
+        }
     }
 
     fn handle_prices_changed(&self, prices: Arc<PriceResponse>) {
-        // todo!()
-        // self.state.write().btc_price_in_fiat = Some(prices.get());
-        // self.send(Message::UpdateBtcPriceInFiat(prices.get()));
+        let selected_currency = self.state.read().selected_fiat_currency;
+        let btc_price_in_fiat = prices.get_for_currency(selected_currency);
+        self.state.write().btc_price_in_fiat = Some(btc_price_in_fiat);
     }
 
     fn handle_scan_code_changed(&self, _old_value: String, new_value: String) {
@@ -727,13 +776,6 @@ impl RustSendFlowManager {
 
             FfiApp::global().dispatch(AppAction::PushRoute(next_route));
         });
-    }
-}
-
-fn send_alert(sender: Sender<Message>, alert: impl Into<SendFlowAlertState>) {
-    let message = Message::SetAlert(alert.into());
-    if let Err(err) = sender.send(message) {
-        error!("unable to send message to send flow manager: {err}");
     }
 }
 
@@ -861,5 +903,87 @@ impl RustSendFlowManager {
         let balance = self.wallet_manager.balance().await;
         let wallet_balance = Arc::new(balance);
         self.state.write().wallet_balance = Some(wallet_balance.clone());
+    }
+
+    fn sanitize_btc_entering_amount(&self, old: &str, new: &str) -> Option<String> {
+        let new = new.trim();
+
+        if new == "00" {
+            return Some("0".to_string());
+        }
+
+        if new.ends_with("..") {
+            return Some(old.to_string());
+        }
+
+        let unit = self.state.read().metadata.selected_unit;
+        if new.ends_with('.') && unit == Unit::Sat {
+            return Some(old.to_string());
+        }
+
+        None
+    }
+
+    fn sanitize_fiat_entering_amount(&self, old: &str, new: &str) -> Option<String> {
+        let old_value = old.trim();
+        let new_value = new.trim();
+
+        let currency = self.state.read().selected_fiat_currency;
+        let symbol = currency.symbol();
+
+        if new.is_empty() {
+            return Some(symbol.to_string());
+        }
+
+        let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
+
+        let new_value_raw =
+            new_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
+
+        // if the new value is the symbol, then we don't need to do anything
+        if new_value == symbol {
+            return None;
+        }
+
+        // don't allow deleting the fiat amount symbol
+        if new_value.is_empty() && !symbol.is_empty() {
+            return Some(symbol.to_string());
+        }
+
+        // if old value is the same as the new value, then we don't need to do anything
+        if old_value == new_value {
+            return None;
+        }
+
+        // don't allow adding more than 1 decimal point
+        if number_of_decimal_points > 1 {
+            return Some(old_value.to_string());
+        };
+
+        // remove leading 0s
+        if new_value_raw == "00" {
+            return Some(old_value.to_string());
+        }
+
+        // limit the number of decimals
+        let int_value_suffix = sanitize::limit_decimal_places(&new_value_raw, 2)?;
+        let fiat_value_int = new_value_raw.parse::<f64>().ok().map(f64::trunc).map(|v| v as u64);
+
+        let fiat_value = match fiat_value_int {
+            Some(fiat_value_int) => fiat_value_int.thousands_int(),
+            None => {
+                return Some(old_value.to_string());
+            }
+        };
+
+        let fiat_value = format!("{symbol}{fiat_value}{int_value_suffix}");
+        Some(fiat_value)
+    }
+}
+
+fn send_alert(sender: Sender<Message>, alert: impl Into<SendFlowAlertState>) {
+    let message = Message::SetAlert(alert.into());
+    if let Err(err) = sender.send(message) {
+        error!("unable to send message to send flow manager: {err}");
     }
 }
