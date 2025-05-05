@@ -114,8 +114,8 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if sendFlowManager.feeRateOptions != nil,
-                           sendFlowManager.selectedFeeRate != nil,
-                           sendFlowManager.address != nil
+                            sendFlowManager.selectedFeeRate != nil,
+                            sendFlowManager.address != nil
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -167,7 +167,6 @@ struct SendFlowSetAmountScreen: View {
             guard let prices = newPrices else { return }
             sendFlowManager.dispatch(.notifyPricesChanged(prices))
         }
-            
 
         .task {
             Task {
@@ -236,7 +235,6 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
-        Log.debug("validate \(displayAlert)")
         return validateAmount(displayAlert: displayAlert)
             && validateAddress(displayAlert: displayAlert)
     }
@@ -287,14 +285,16 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
-        Log.debug("scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))")
+        Log.debug(
+            "scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))")
         guard let newValue else { return }
         presenter.sheetState = nil
         sendFlowManager.dispatch(
             action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
-        
-        
-        Log.debug("fee \(sendFlowManager.feeRateOptions), selected \(sendFlowManager.selectedFeeRate) \(sendFlowManager.address)")
+
+        Log.debug(
+            "fee \(sendFlowManager.feeRateOptions), selected \(sendFlowManager.selectedFeeRate) \(sendFlowManager.address)"
+        )
     }
 
     @ViewBuilder
@@ -569,11 +569,6 @@ struct SendFlowSetAmountScreen: View {
                     },
                     set: { newValue in
                         sendFlowManager.dispatch(action: .selectFeeRate(newValue))
-
-                        // in maxSelected mode, adjust with new rate
-                        if sendFlowManager.maxSelected != .none {
-                            sendFlowManager.dispatch(action: .selectMaxSend)
-                        }
                     }
                 ),
                 selectedPresentationDetent: $selectedPresentationDetent

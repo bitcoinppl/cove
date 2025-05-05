@@ -35,7 +35,7 @@ use fiat_on_change::FiatOnChangeHandler;
 use flume::{Receiver, Sender};
 use parking_lot::Mutex;
 use state::{SendFlowManagerState, State};
-use tracing::{debug, error};
+use tracing::{debug, error, trace};
 
 use super::wallet::{RustWalletManager, actor::WalletActor};
 
@@ -321,7 +321,8 @@ impl RustSendFlowManager {
             return false;
         }
 
-        if let Some(fee_rate) = &self.state.lock().selected_fee_rate {
+        let selected_fee_rate = self.state.lock().selected_fee_rate.clone();
+        if let Some(fee_rate) = &selected_fee_rate {
             let fee = fee_rate.total_fee().to_sat();
             if amount + fee > spendable_balance {
                 if display_alert {
@@ -458,8 +459,7 @@ impl RustSendFlowManager {
         let new_value_sanitized = new_value_sanitized.as_ref().unwrap_or(&new);
         let changes: btc_on_change::Changeset = handler.on_change(&old, new_value_sanitized);
 
-        tracing::trace!("btc_on_change_handler changes: {changes:?}");
-
+        debug!("btc_on_change_handler changes: {changes:?}");
         let mut state = state.lock();
 
         match changes.max_selected {
@@ -507,7 +507,7 @@ impl RustSendFlowManager {
             return None;
         };
 
-        debug!(
+        trace!(
             "result: {result:?}, old_value: {old_value}, new_value: {new_value}, new_value_sanitized: {new_value_sanitized}"
         );
 
@@ -563,15 +563,23 @@ impl RustSendFlowManager {
         drop(state);
     }
 
+    /// When amount is changed, we will need to update the entering and fiat amounts
     fn handle_amount_changed(&self, amount: &Amount) {
-        let unit = self.state.lock().metadata.selected_unit;
-        let fiat_or_btc = self.state.lock().metadata.fiat_or_btc;
+        debug!("handle_amount_changed: {amount:?}");
+        let (unit, fiat_or_btc, btc_price_in_fiat) = {
+            let state = self.state.lock();
+
+            let unit = state.metadata.selected_unit;
+            let fiat_or_btc = state.metadata.fiat_or_btc;
+            let btc_price_in_fiat = state.btc_price_in_fiat;
+
+            (unit, fiat_or_btc, btc_price_in_fiat)
+        };
 
         let amount_sats = amount.to_sat();
         self.state.lock().amount_sats = Some(amount_sats);
         self.send(Message::UpdateAmountSats(amount_sats));
 
-        let btc_price_in_fiat = self.state.lock().btc_price_in_fiat;
         if let Some(price) = btc_price_in_fiat {
             let amount_fiat = amount.as_btc() * (price as f64);
             self.state.lock().amount_fiat = Some(amount_fiat);
@@ -602,7 +610,10 @@ impl RustSendFlowManager {
     }
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
-        let address = {
+        debug!("select_max_send");
+
+        // access the mutex once
+        let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
             let state = self.state.lock();
             let address_string = &state.entering_address;
 
@@ -610,10 +621,14 @@ impl RustSendFlowManager {
                 .ok()
                 .or_else(|| state.first_address.clone().map(Arc::unwrap_or_clone));
 
-            address.ok_or(Error::InvalidAddress(address_string.to_string()))?
+            let selected_fee_rate_base = state.fee_rate_options_base.clone();
+            let fee_rate_options = state.fee_rate_options.clone();
+            let selected_fee_rate = state.selected_fee_rate.clone();
+            let address = address.ok_or(Error::InvalidAddress(address_string.to_string()))?;
+
+            (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base)
         };
 
-        let fee_rate_options = self.state.lock().fee_rate_options.clone();
         if fee_rate_options.is_none() {
             self.get_fee_rate_options().await;
         }
@@ -623,15 +638,9 @@ impl RustSendFlowManager {
         // use the selected fee rate if we have have
         // or the medium base fee rate
         // or a default of 50 sat/vb
-        let fee_rate = self
-            .state
-            .lock()
-            .selected_fee_rate
-            .clone()
+        let fee_rate = selected_fee_rate
             .map(|selected| selected.fee_rate)
-            .or_else(|| {
-                self.state.lock().fee_rate_options_base.clone().map(|base| base.medium.fee_rate)
-            })
+            .or_else(|| selected_fee_rate_base.map(|base| base.medium.fee_rate))
             .unwrap_or_else(|| FeeRate::from_sat_per_vb(50.0));
 
         let psbt: Psbt = call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate))
@@ -640,8 +649,11 @@ impl RustSendFlowManager {
             .map_err(|error| Error::UnableToGetMaxSend(error.to_string()))?
             .into();
 
-        let total = psbt.output_total_amount();
-        self.send(Message::SetMaxSelected(total.into()));
+        let total = Arc::new(psbt.output_total_amount());
+
+        self.state.lock().max_selected = Some(total.clone());
+        self.send(Message::SetMaxSelected(total.clone()));
+        self.handle_amount_changed(&total);
 
         Ok(())
     }
@@ -664,11 +676,16 @@ impl RustSendFlowManager {
 
         // if its already empty clear everythign
         {
-            if old == Unit::Btc && self.state.lock().entering_btc_amount.is_empty() {
+            let state = self.state.lock();
+            let entering_btc_amount_is_empty = state.entering_btc_amount.is_empty();
+            let entering_fiat_amount_is_empty = state.entering_fiat_amount.is_empty();
+            drop(state);
+
+            if old == Unit::Btc && entering_btc_amount_is_empty {
                 return self.clear_send_amount();
             }
 
-            if old == Unit::Sat && self.state.lock().entering_fiat_amount.is_empty() {
+            if old == Unit::Sat && entering_fiat_amount_is_empty {
                 return self.clear_send_amount();
             }
         }
@@ -868,6 +885,7 @@ impl RustSendFlowManager {
 /// MARK: helper method impls
 impl RustSendFlowManager {
     fn send(&self, message: SendFlowManagerReconcileMessage) {
+        debug!("send: {message:?}");
         if let Err(err) = self.reconciler.send(message) {
             error!("unable to send message to send flow manager: {err}");
         }

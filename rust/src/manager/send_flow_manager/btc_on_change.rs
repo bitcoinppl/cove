@@ -1,4 +1,5 @@
 use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
+use cove_common::consts::MAX_SATS;
 use cove_types::{amount::Amount, unit::Unit};
 use cove_util::format::{self, NumberFormatter as _};
 use tracing::debug;
@@ -98,6 +99,7 @@ impl BtcOnChangeHandler {
         // ---------------------------------------------------------------------
         // 3. parse to `Amount`
         // ---------------------------------------------------------------------
+
         let amount = match self.metadata.selected_unit {
             Unit::Sat => unformatted.parse::<u64>().ok().map(Amount::from_sat),
             Unit::Btc => unformatted.parse::<f64>().ok().and_then(|v| Amount::from_btc(v).ok()),
@@ -110,6 +112,11 @@ impl BtcOnChangeHandler {
                 return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
             }
         };
+
+        // check if its over the max
+        if amount.as_sats() > MAX_SATS {
+            return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
+        }
 
         // ---------------------------------------------------------------------
         // 4. apply rules
