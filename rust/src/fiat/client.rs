@@ -7,7 +7,7 @@ use arc_swap::ArcSwap;
 use eyre::{Context as _, Result};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use crate::{database::Database, fiat::FiatCurrency, transaction::Amount};
 use cove_macros::impl_default_for;
@@ -39,6 +39,9 @@ pub struct FiatClient {
 pub struct PriceResponse {
     #[serde(rename = "time")]
     pub time: u64,
+
+    #[serde(default = "fetched_at")]
+    pub fetched_at: u64,
     pub usd: u64,
     pub eur: u64,
     pub gbp: u64,
@@ -116,15 +119,23 @@ impl FiatClient {
 
     /// Always returns the latest prcies, will also update the prices cache
     pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, reqwest::Error> {
+        debug!("get_or_fetch_prices");
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
-            if now_secs - prices.time < self.wait_before_new_prices {
+            if now_secs - prices.fetched_at < self.wait_before_new_prices {
                 return Ok(*prices);
             }
         }
 
         let response = self.client.get(&self.url).send().await?;
         let prices: PriceResponse = response.json().await?;
+
+        // saved prices are the same as the new ones don't need to update
+        if let Some(saved_prices) = *PRICES.load().as_ref() {
+            if prices == saved_prices {
+                return Ok(saved_prices);
+            }
+        }
 
         // update global prices
         if let Err(error) = update_prices(prices) {
@@ -167,6 +178,7 @@ impl FiatClient {
 
 /// Get prices from the server, and save them in the database and cache in memory
 pub async fn init_prices() -> Result<()> {
+    debug!("init_prices");
     let fiat_client = &FIAT_CLIENT;
 
     let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
@@ -198,8 +210,9 @@ pub async fn init_prices() -> Result<()> {
 
 /// update price in database and cache
 fn update_prices(prices: PriceResponse) -> Result<()> {
-    PRICES.swap(Arc::new(Some(prices)));
+    debug!("update_prices");
 
+    PRICES.swap(Arc::new(Some(prices)));
     let db = Database::global();
     db.global_cache.set_prices(prices).context("unable to save prices to the database")?;
 
@@ -208,9 +221,10 @@ fn update_prices(prices: PriceResponse) -> Result<()> {
 
 /// Update prices if needed
 pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
+    debug!("fetch_and_update_prices_if_needed");
     if let Some(prices) = PRICES.load().as_ref() {
         let now_secs = Timestamp::now().as_second() as u64;
-        if now_secs - prices.time < ONE_MIN {
+        if now_secs - prices.fetched_at < ONE_MIN {
             return Ok(());
         }
     }
@@ -221,6 +235,13 @@ pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
         .exponential_backoff(Duration::from_millis(10))
         .max_delay(Duration::from_secs(1))
         .await?;
+
+    // saved prices are the same as the new ones don't need to update
+    if let Some(saved_prices) = *PRICES.load().as_ref() {
+        if prices == saved_prices {
+            return Ok(());
+        }
+    }
 
     update_prices(prices)?;
 
@@ -337,4 +358,8 @@ mod tests {
 #[uniffi::export]
 fn prices_are_equal(lhs: Arc<PriceResponse>, rhs: Arc<PriceResponse>) -> bool {
     lhs == rhs
+}
+
+fn fetched_at() -> u64 {
+    Timestamp::now().as_second() as u64
 }
