@@ -7,7 +7,7 @@ use arc_swap::ArcSwap;
 use eyre::{Context as _, Result};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::{database::Database, fiat::FiatCurrency, transaction::Amount};
 use cove_macros::impl_default_for;
@@ -119,7 +119,7 @@ impl FiatClient {
 
     /// Always returns the latest prcies, will also update the prices cache
     pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, reqwest::Error> {
-        debug!("get_or_fetch_prices");
+        trace!("get_or_fetch_prices");
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
             if now_secs - prices.fetched_at < self.wait_before_new_prices {
@@ -127,6 +127,7 @@ impl FiatClient {
             }
         }
 
+        debug!("fetching prices");
         let response = self.client.get(&self.url).send().await?;
         let prices: PriceResponse = response.json().await?;
 
@@ -221,7 +222,7 @@ fn update_prices(prices: PriceResponse) -> Result<()> {
 
 /// Update prices if needed
 pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
-    debug!("fetch_and_update_prices_if_needed");
+    trace!("fetch_and_update_prices_if_needed");
     if let Some(prices) = PRICES.load().as_ref() {
         let now_secs = Timestamp::now().as_second() as u64;
         if now_secs - prices.fetched_at < ONE_MIN {
@@ -229,6 +230,7 @@ pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
         }
     }
 
+    debug!("fetching prices");
     let fiat_client = &FIAT_CLIENT;
     let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
         .retries(5)
