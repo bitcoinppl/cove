@@ -63,9 +63,16 @@ impl<T: Numeric> NumberFormatter for T {
 }
 
 pub fn btc_typing(amount: &str) -> Option<String> {
+    if amount == "." {
+        return Some("0.".to_string());
+    }
+
     let (before_decimal, decimal, after_decimal) = split_at_decimal_point(amount);
 
-    let int_part_string = before_decimal.parse::<u64>().ok()?.thousands_int();
+    let int_part_string = match before_decimal {
+        "" => "0".to_string(),
+        before => before.parse::<u64>().ok()?.thousands_int(),
+    };
 
     let max_decimal_places_to_take = after_decimal.len().min(8);
     let decimal_places = &after_decimal[..max_decimal_places_to_take];
@@ -91,5 +98,7 @@ mod tests {
         assert_eq!(btc_typing("0.00"), Some("0.00".to_string()));
         assert_eq!(btc_typing("0."), Some("0.".to_string()));
         assert_eq!(btc_typing("12345.123456789100"), Some("12,345.12345678".to_string()));
+        assert_eq!(btc_typing(".00"), Some("0.00".to_string()));
+        assert_eq!(btc_typing("."), Some("0.".to_string()));
     }
 }
