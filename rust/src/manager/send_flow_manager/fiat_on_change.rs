@@ -1,3 +1,5 @@
+use cove_util::format::NumberFormatter as _;
+
 use crate::{
     converter::{Converter, ConverterError},
     fiat::{FiatCurrency, client::PriceResponse},
@@ -100,7 +102,10 @@ impl FiatOnChangeHandler {
         let (dollars, cents_with_decimal_point) =
             sanitize::seperate_and_limit_dollars_and_cents(&new_value_raw, 2);
 
-        let fiat_text = format!("{symbol}{dollars}{cents_with_decimal_point}");
+        let dollars = dollars.parse::<u64>().ok().unwrap_or_default();
+        let dollars_formatted = dollars.thousands_int();
+
+        let fiat_text = format!("{symbol}{dollars_formatted}{cents_with_decimal_point}");
         let change = Changeset {
             entering_fiat_amount: Some(fiat_text),
             fiat_value: Some(fiat_value),

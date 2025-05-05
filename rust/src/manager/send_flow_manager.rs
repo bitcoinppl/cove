@@ -332,114 +332,30 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     fn sanitize_btc_entering_amount(&self, old: &str, new: &str) -> Option<String> {
-        let unit = self.state.read().metadata.selected_unit;
+        let on_change_handler = BtcOnChangeHandler::new(self.state.clone());
+        let changeset = on_change_handler.on_change(old, new);
+        let entering_amount_btc = changeset.entering_amount_btc?;
 
-        let new = new.trim();
+        if entering_amount_btc == new {
+            return None;
+        };
 
-        if new == "00" {
-            return Some("0".to_string());
-        }
-
-        // decimal points `.` count
-        let number_of_periods = new.chars().filter(|c| *c == '.').count();
-
-        if unit == Unit::Sat && number_of_periods > 0 {
-            return Some(old.to_string());
-        }
-
-        if number_of_periods > 1 {
-            return Some(old.to_string());
-        }
-
-        // entering in btc, can't have more than 8 decimals
-        let (before_decimal, after_decimal) = cove_util::split_at_decimal_point(new);
-
-        // remove 1 leading zero if it exists
-        let mut before_decimal_cleaned = before_decimal;
-        if before_decimal.len() > 1 && before_decimal.starts_with('0') {
-            before_decimal_cleaned = &before_decimal[1..];
-        }
-
-        if after_decimal.len() > 8 {
-            let last_digit = after_decimal.chars().last().expect("after_decimal is not empty");
-            let new = format!("{}.{}{}", before_decimal_cleaned, &after_decimal[..7], last_digit);
-            return Some(new);
-        }
-
-        // cleaning did something so return the new value
-        if before_decimal_cleaned != before_decimal {
-            return Some(before_decimal_cleaned.to_string());
-        }
-
-        None
+        Some(entering_amount_btc)
     }
 
     #[uniffi::method]
-    fn sanitize_fiat_entering_amount(&self, old: &str, new: &str) -> Option<String> {
-        let old_value = old.trim();
-        let new_value = new.trim();
+    fn sanitize_fiat_entering_amount(&self, old_value: &str, new_value: &str) -> Option<String> {
+        let prices = self.app.prices()?;
+        let selected_currency = self.state.read().selected_fiat_currency;
 
-        // if old value is the same as the new value, then we don't need to do anything
-        if old_value == new_value {
+        let handler = FiatOnChangeHandler::new(prices, selected_currency);
+        let changed = handler.on_change(old_value, new_value).ok()?.entering_fiat_amount?;
+
+        if changed == new_value {
             return None;
         }
 
-        let currency = self.state.read().selected_fiat_currency;
-        let symbol = currency.symbol();
-
-        if new.is_empty() {
-            return Some(symbol.to_string());
-        }
-
-        let number_of_decimal_points = new_value.chars().filter(|c| *c == '.').count();
-
-        let old_value_raw =
-            old_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
-
-        let new_value_raw =
-            new_value.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
-
-        // if its 0.00 (starting state) and they enter an amount auto delete the 0.00
-        if old_value_raw == "0.00" && new_value_raw.len() > 3 {
-            let new_value = new_value_raw.trim_start_matches("0.00");
-            return Some(format!("{symbol}{new_value}"));
-        }
-
-        // if the new value is the symbol, then we don't need to do anything
-        if new_value == symbol {
-            return None;
-        }
-
-        // don't allow deleting the fiat amount symbol
-        if new_value.is_empty() && !symbol.is_empty() {
-            return Some(symbol.to_string());
-        }
-
-        // don't allow adding more than 1 decimal point
-        if number_of_decimal_points > 1 {
-            return Some(old_value.to_string());
-        };
-
-        // remove leading 0s
-        if new_value_raw == "00" {
-            return Some(old_value.to_string());
-        }
-
-        // limit the number of decimals
-        let int_value_suffix =
-            sanitize::limit_decimal_places(&new_value_raw, 2).unwrap_or_default();
-
-        let fiat_value_int = new_value_raw.parse::<f64>().ok().map(f64::trunc).map(|v| v as u64);
-
-        let fiat_value = match fiat_value_int {
-            Some(fiat_value_int) => fiat_value_int.thousands_int(),
-            None => {
-                return Some(old_value.to_string());
-            }
-        };
-
-        let fiat_value = format!("{symbol}{fiat_value}{int_value_suffix}");
-        Some(fiat_value)
+        Some(changed)
     }
 
     // MARK: Action handler

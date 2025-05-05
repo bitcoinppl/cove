@@ -1,5 +1,7 @@
 use numfmt::Numeric;
 
+use crate::split_at_decimal_point;
+
 pub trait NumberFormatter: Numeric {
     fn thousands_int(self) -> String;
     fn thousands_fiat(self) -> String;
@@ -61,17 +63,14 @@ impl<T: Numeric> NumberFormatter for T {
 }
 
 pub fn btc_typing(amount: &str) -> Option<String> {
-    let mut split_on_decimal = amount.split('.');
-    let before_decimal = split_on_decimal.next().unwrap_or(amount);
-    let after_decimal = split_on_decimal.next();
-
-    let int_part = before_decimal.parse::<u64>().ok()?;
-    let int_part_string = int_part.thousands_int();
+    let (before_decimal, after_decimal) = split_at_decimal_point(amount);
 
     let after_decimal_parts = match after_decimal {
-        Some(after_decimal) => (".", after_decimal),
-        None => ("", ""),
+        "" => ("", ""),
+        after_decimal => (".", after_decimal),
     };
+
+    let int_part_string = before_decimal.parse::<u64>().ok()?.thousands_int();
 
     let final_string =
         format!("{}{}{}", int_part_string, after_decimal_parts.0, after_decimal_parts.1);

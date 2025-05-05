@@ -20,7 +20,8 @@ pub struct Changeset {
 }
 
 impl BtcOnChangeHandler {
-    pub fn new(state: State) -> Self {
+    pub fn new(state: impl Into<State>) -> Self {
+        let state = state.into();
         let state = state.read();
 
         let metadata = state.metadata.clone();
@@ -31,9 +32,8 @@ impl BtcOnChangeHandler {
     }
 
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Changeset {
-        tracing::trace!("btc_on_change_handler on_change {old_value} -> {new_value}");
         // ---------------------------------------------------------------------
-        // 1. early exits
+        // 1. early exits and sanitization
         // ---------------------------------------------------------------------
         if self.metadata.fiat_or_btc == FiatOrBtc::Fiat {
             return Changeset::default();
@@ -42,6 +42,15 @@ impl BtcOnChangeHandler {
         let old = old_value.trim();
         let new = new_value.trim();
 
+        if new == "00" {
+            return Changeset {
+                entering_amount_btc: Some("0".into()),
+                amount_btc: Some(Amount::from_sat(0)),
+                amount_fiat: Some(0.0),
+                ..Default::default()
+            };
+        }
+
         if new.is_empty() {
             return Changeset {
                 entering_amount_btc: Some("".into()),
@@ -49,6 +58,19 @@ impl BtcOnChangeHandler {
                 amount_fiat: Some(0.0),
                 ..Default::default()
             };
+        }
+
+        let unit = self.metadata.selected_unit;
+
+        // decimal points `.` count
+        let number_of_periods = new.chars().filter(|c| *c == '.').count();
+
+        if unit == Unit::Sat && number_of_periods > 0 {
+            return Changeset { entering_amount_btc: Some(old.to_string()), ..Default::default() };
+        }
+
+        if number_of_periods > 1 {
+            return Changeset { entering_amount_btc: Some(old.to_string()), ..Default::default() };
         }
 
         // ---------------------------------------------------------------------
