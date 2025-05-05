@@ -76,6 +76,7 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateEnteringBtcAmount(String),
     UpdateEnteringFiatAmount(String),
     UpdateEnteringAddress(String),
+    UpdateAddress(Arc<Address>),
 
     SetMaxSelected(Arc<Amount>),
     UnsetMaxSelected,
@@ -105,7 +106,6 @@ pub enum SendFlowManagerAction {
     SelectMaxSend,
     ClearSendAmount,
 
-    SetAddress(Arc<Address>),
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
     // front end lets the one of the values were changed
@@ -113,6 +113,10 @@ pub enum SendFlowManagerAction {
     NotifyBtcOrFiatChanged { old: FiatOrBtc, new: FiatOrBtc },
     NotifyScanCodeChanged { old: String, new: String },
     NotifyPricesChanged(Arc<PriceResponse>),
+
+    // starting with an amount and address from scan
+    NotifyAddressChanged(Arc<Address>),
+    NotifyAmountChanged(Arc<Amount>),
 
     FinalizeAndGoToNextScreen,
 }
@@ -229,7 +233,7 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     pub fn total_fee_string(&self) -> String {
-        let Some(selected_fee_rate) = &self.state.lock().selected_fee_rate else {
+        let Some(selected_fee_rate) = &self.state.lock().selected_fee_rate.clone() else {
             return "---".to_string();
         };
 
@@ -422,9 +426,13 @@ impl RustSendFlowManager {
                 self.finalize_and_go_to_next_screen();
             }
 
-            Action::SetAddress(address) => {
+            Action::NotifyAddressChanged(address) => {
                 self.state.lock().address = Some(address.clone());
                 self.state.lock().entering_address = address.to_string();
+            }
+
+            Action::NotifyAmountChanged(amount) => {
+                self.handle_amount_changed(&amount);
             }
         }
     }
@@ -553,6 +561,44 @@ impl RustSendFlowManager {
         self.send(Message::UpdateEnteringBtcAmount(String::new()));
 
         drop(state);
+    }
+
+    fn handle_amount_changed(&self, amount: &Amount) {
+        let unit = self.state.lock().metadata.selected_unit;
+        let fiat_or_btc = self.state.lock().metadata.fiat_or_btc;
+
+        let amount_sats = amount.to_sat();
+        self.state.lock().amount_sats = Some(amount_sats);
+        self.send(Message::UpdateAmountSats(amount_sats));
+
+        let btc_price_in_fiat = self.state.lock().btc_price_in_fiat;
+        if let Some(price) = btc_price_in_fiat {
+            let amount_fiat = amount.as_btc() * (price as f64);
+            self.state.lock().amount_fiat = Some(amount_fiat);
+            self.send(Message::UpdateAmountFiat(amount_fiat));
+        }
+
+        match fiat_or_btc {
+            FiatOrBtc::Fiat => {
+                if let Some(price) = btc_price_in_fiat {
+                    let amount_fiat = amount.as_btc() * (price as f64);
+
+                    let enterting_amount_fiat = amount_fiat.thousands_fiat();
+                    self.state.lock().entering_fiat_amount = enterting_amount_fiat.clone();
+                    self.send(Message::UpdateEnteringFiatAmount(enterting_amount_fiat));
+                }
+            }
+
+            FiatOrBtc::Btc => {
+                let amount_string = match unit {
+                    Unit::Btc => amount.btc_string(),
+                    Unit::Sat => amount.sats_string(),
+                };
+
+                self.state.lock().entering_btc_amount = amount_string.clone();
+                self.send(Message::UpdateEnteringBtcAmount(amount_string));
+            }
+        }
     }
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
@@ -687,24 +733,30 @@ impl RustSendFlowManager {
     fn handle_prices_changed(&self, prices: Arc<PriceResponse>) {
         let selected_currency = self.state.lock().selected_fiat_currency;
         let btc_price_in_fiat = prices.get_for_currency(selected_currency);
+
         self.state.lock().btc_price_in_fiat = Some(btc_price_in_fiat);
+
+        let Some(amount) = self.state.lock().amount_sats else {
+            return;
+        };
+
+        let amount_fiat = Amount::from_sat(amount).as_btc() * (btc_price_in_fiat as f64);
+        self.state.lock().amount_fiat = Some(amount_fiat);
+        self.send(Message::UpdateAmountFiat(amount_fiat));
     }
 
     fn handle_scan_code_changed(&self, _old_value: String, new_value: String) {
         debug!("handle_scan_code_changed {new_value}");
 
-        debug!(
-            "fee_rate_options_base {:?}, selected_fee_rate {:?}",
-            self.state.lock().fee_rate_options,
-            self.state.lock().selected_fee_rate
-        );
-
         let network = self.state.lock().metadata.network;
-        let address_with_network = match AddressWithNetwork::try_new(&new_value) {
-            Ok(address_with_network) => address_with_network,
-            Err(err) => {
-                let error = SendFlowError::from_address_error(err, new_value);
-                return self.send_alert(error);
+        let address_with_network = {
+            let new_value_moved = new_value;
+            match AddressWithNetwork::try_new(&new_value_moved) {
+                Ok(address_with_network) => address_with_network,
+                Err(err) => {
+                    let error = SendFlowError::from_address_error(err, new_value_moved);
+                    return self.send_alert(error);
+                }
             }
         };
 
@@ -719,14 +771,16 @@ impl RustSendFlowManager {
 
         // set address
         let address = Arc::new(address_with_network.address);
+
         self.state.lock().address = Some(address.clone());
+        self.send(Message::UpdateAddress(address.clone()));
+
         self.state.lock().entering_address = address.to_string();
-        self.send(Message::UpdateEnteringAddress(new_value));
+        self.send(Message::UpdateEnteringAddress(address.to_string()));
 
         // set amount if its valid
         if let Some(amount) = address_with_network.amount {
-            self.state.lock().amount_sats = Some(amount.to_sat());
-            self.send(Message::UpdateAmountSats(amount.to_sat()));
+            self.handle_amount_changed(&amount);
         }
 
         // if amount is invalid, go to amount field

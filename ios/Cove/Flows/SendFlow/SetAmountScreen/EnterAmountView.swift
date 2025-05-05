@@ -10,13 +10,20 @@ struct EnterAmountView: View {
     @Environment(AppManager.self) private var app
     @Environment(SendFlowPresenter.self) private var presenter
     @Environment(WalletManager.self) private var manager
-    @Environment(SendFlowManager.self) private var sendFlowManager
+    
+    let sendFlowManager: SendFlowManager
+
+    @State var enteringBtcAmount: String
+    @State var enteringFiatAmount: String
 
     @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
-
-    @State private var enteringBtcAmount: String = ""
-    @State private var enteringFiatAmount: String = ""
+    
+    init(sendFlowManager: SendFlowManager) {
+        self.sendFlowManager = sendFlowManager
+        self.enteringBtcAmount = sendFlowManager.enteringBtcAmount
+        self.enteringFiatAmount = sendFlowManager.enteringFiatAmount
+    }
 
     private var enteringAmount: Binding<String> {
         switch metadata.fiatOrBtc {
@@ -58,7 +65,7 @@ struct EnterAmountView: View {
                     .offset(x: offset)
                     .padding(.horizontal, 30)
                     .focused($focusField, equals: .amount)
-                    .onChange(of: enteringBtcAmount, initial: true) { oldValue, newValue in
+                    .onChange(of: enteringBtcAmount, initial: false) { oldValue, newValue in
                         if let newEnteringAmount = sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue),
                            newValue != newEnteringAmount
                         {
@@ -68,7 +75,7 @@ struct EnterAmountView: View {
 
                         sendFlowManager.dispatch(action: .changeEnteringBtcAmount(newValue))
                     }
-                    .onChange(of: enteringFiatAmount, initial: true) { oldValue, newValue in
+                    .onChange(of: enteringFiatAmount, initial: false) { oldValue, newValue in
                         if let newEnteringAmount =
                             sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue: oldValue, newValue: newValue),
                             newValue != newEnteringAmount

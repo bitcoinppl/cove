@@ -49,6 +49,17 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
+    
+    public func setAddress(_ address: Address) {
+        self._enteringAddress = address.string()
+        self.address = address
+        self.dispatch(action: .notifyAddressChanged(address))
+    }
+    
+    public func setAmount(_ amount: Amount) {
+        self.amount = amount
+        self.dispatch(action: .notifyAmountChanged(amount))
+    }
 
     func reconcile(message: SendFlowManagerReconcileMessage) {
         Task { [weak self] in
@@ -67,6 +78,8 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
                     self.amount = Amount.fromSat(sats: sats)
                 case let .updateFeeRateOptions(options):
                     self.feeRateOptions = options
+                case let .updateAddress(address):
+                    self.address = address
                 case let .updateEnteringBtcAmount(amount):
                     self.enteringBtcAmount = amount
                 case let .updateEnteringAddress(address):

@@ -30,8 +30,9 @@ public struct SendFlowContainer: View {
             let sendFlowManager = SendFlowManager(manager.rust.newSendFlowManager(), presenter: presenter)
 
             switch sendRoute {
-            case let .setAmount(id: id, address: address, amount: amount):
-                if let address { sendFlowManager.dispatch(action: .setAddress(address)) }
+            case let .setAmount(id: _, address: address, amount: amount):
+                if let address {sendFlowManager.setAddress(address) }
+                if let amount { sendFlowManager.setAmount(amount) }
 
             default: ()
             }

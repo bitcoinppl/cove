@@ -101,7 +101,7 @@ struct SendFlowSetAmountScreen: View {
                         AmountInfoSection
 
                         // Amount input
-                        EnterAmountView()
+                        EnterAmountView(sendFlowManager: sendFlowManager)
 
                         // Address Section
                         VStack {
@@ -159,6 +159,7 @@ struct SendFlowSetAmountScreen: View {
             presenter.focusField = new
         }
         .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
+        .onChange(of: scannedCode, initial: true, scannedCodeChanged)
         .onChange(of: metadata.selectedUnit, initial: true) { oldUnit, newUnit in
             sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
         }
@@ -169,6 +170,7 @@ struct SendFlowSetAmountScreen: View {
             guard let prices = newPrices else { return }
             sendFlowManager.dispatch(.notifyPricesChanged(prices))
         }
+            
 
         .task {
             Task {
@@ -277,18 +279,24 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func setMaxSelected() {
+        Log.debug("setMaxSelected")
         sendFlowManager.dispatch(action: .selectMaxSend)
     }
 
     private func clearAddress() {
+        Log.debug("clearAddress")
         sendFlowManager.dispatch(action: .changeEnteringAddress(""))
     }
 
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
+        Log.debug("scannedCodeChanged \(String(describing: old)) -> \(String(describing: newValue))")
         guard let newValue else { return }
         presenter.sheetState = nil
         sendFlowManager.dispatch(
             action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
+        
+        
+        Log.debug("fee \(sendFlowManager.feeRateOptions), selected \(sendFlowManager.selectedFeeRate) \(sendFlowManager.address)")
     }
 
     @ViewBuilder
@@ -565,7 +573,7 @@ struct SendFlowSetAmountScreen: View {
                         sendFlowManager.dispatch(action: .selectFeeRate(newValue))
 
                         // in maxSelected mode, adjust with new rate
-                        if let maxSelected = sendFlowManager.maxSelected {
+                        if sendFlowManager.maxSelected != .none {
                             sendFlowManager.dispatch(action: .selectMaxSend)
                         }
                     }
