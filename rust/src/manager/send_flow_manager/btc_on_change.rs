@@ -23,7 +23,7 @@ pub struct Changeset {
 impl BtcOnChangeHandler {
     pub fn new(state: impl Into<State>) -> Self {
         let state = state.into();
-        let state = state.read();
+        let state = state.lock();
 
         let metadata = state.metadata.clone();
         let max_selected = state.max_selected.as_deref().copied();

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{Mutex, MutexGuard};
 
 use cove_types::{
     amount::Amount,
@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, derive_more::Deref)]
-pub struct State(Arc<RwLock<SendFlowManagerState>>);
+pub struct State(Arc<Mutex<SendFlowManagerState>>);
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct SendFlowManagerState {
@@ -48,19 +48,15 @@ pub struct SendFlowManagerState {
 /// MARK: State
 impl State {
     pub fn new(metadata: WalletMetadata) -> Self {
-        Self(Arc::new(RwLock::new(SendFlowManagerState::new(metadata))))
+        Self(Arc::new(Mutex::new(SendFlowManagerState::new(metadata))))
     }
 
-    pub fn into_inner(self) -> Arc<RwLock<SendFlowManagerState>> {
+    pub fn into_inner(self) -> Arc<Mutex<SendFlowManagerState>> {
         self.0
     }
 
-    pub fn read(&self) -> RwLockReadGuard<'_, SendFlowManagerState> {
-        self.0.read()
-    }
-
-    pub fn write(&self) -> RwLockWriteGuard<'_, SendFlowManagerState> {
-        self.0.write()
+    pub fn lock(&self) -> MutexGuard<'_, SendFlowManagerState> {
+        self.0.lock()
     }
 }
 
@@ -95,12 +91,12 @@ impl SendFlowManagerState {
 
 impl From<SendFlowManagerState> for State {
     fn from(state: SendFlowManagerState) -> Self {
-        Self(Arc::new(RwLock::new(state)))
+        Self(Arc::new(Mutex::new(state)))
     }
 }
 
-impl From<Arc<RwLock<SendFlowManagerState>>> for State {
-    fn from(state: Arc<RwLock<SendFlowManagerState>>) -> Self {
+impl From<Arc<Mutex<SendFlowManagerState>>> for State {
+    fn from(state: Arc<Mutex<SendFlowManagerState>>) -> Self {
         Self(state)
     }
 }

@@ -157,6 +157,21 @@ impl AddressWithNetwork {
 
         Err(Error::UnsupportedNetwork)
     }
+
+    pub fn is_valid_for_network(&self, network: Network) -> bool {
+        match (self.network, network) {
+            // same network valid
+            (Network::Bitcoin, Network::Bitcoin) => true,
+            (Network::Testnet, Network::Testnet) => true,
+            (Network::Signet, Network::Signet) => true,
+
+            // testnet valid for signet and visa versa
+            (Network::Testnet, Network::Signet) => true,
+            (Network::Signet, Network::Testnet) => true,
+
+            _ => false,
+        }
+    }
 }
 
 fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
