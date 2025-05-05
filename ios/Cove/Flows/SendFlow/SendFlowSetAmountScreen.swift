@@ -154,10 +154,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .padding(.top, 0)
-        .onChange(of: _privateFocusField, initial: true) { _, new in
-            guard let new else { return }
-            presenter.focusField = new
-        }
+        .onChange(of: _privateFocusField, initial: true) { _, new in presenter.focusField = new }
         .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
         .onChange(of: scannedCode, initial: true, scannedCodeChanged)
         .onChange(of: metadata.selectedUnit, initial: true) { oldUnit, newUnit in
@@ -239,7 +236,8 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func validate(displayAlert: Bool = false) -> Bool {
-        validateAmount(displayAlert: displayAlert)
+        Log.debug("validate \(displayAlert)")
+        return validateAmount(displayAlert: displayAlert)
             && validateAddress(displayAlert: displayAlert)
     }
 
