@@ -172,8 +172,8 @@ impl RustSendFlowManager {
         let send_amount = amount_sats.unwrap_or(0);
         let send_amount = Amount::from_sat(send_amount);
         match self.state.read().metadata.selected_unit {
-            Unit::Btc => format!("{}", send_amount.as_btc().thousands()),
-            Unit::Sat => format!("{}", send_amount.as_sats().thousands_int()),
+            Unit::Btc => send_amount.as_btc().thousands().to_string(),
+            Unit::Sat => send_amount.as_sats().thousands_int().to_string(),
         }
     }
 
@@ -186,11 +186,11 @@ impl RustSendFlowManager {
         let send_amount_in_fiat = self.state.read().amount_fiat.unwrap_or_else(|| {
             let amount_sats = amount_sats.unwrap_or(0);
             let send_amount = Amount::from_sat(amount_sats);
-            let send_amount_in_fiat = send_amount.as_btc().ceil() * (btc_price_in_fiat as f64);
-            send_amount_in_fiat
+
+            send_amount.as_btc().ceil() * (btc_price_in_fiat as f64)
         });
 
-        format!("{}", self.display_fiat_amount(send_amount_in_fiat, true))
+        self.display_fiat_amount(send_amount_in_fiat, true).to_string()
     }
 
     #[uniffi::method]
@@ -331,12 +331,12 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
-    fn sanitize_btc_entering_amount(&self, old: &str, new: &str) -> Option<String> {
+    fn sanitize_btc_entering_amount(&self, old_value: &str, new_value: &str) -> Option<String> {
         let on_change_handler = BtcOnChangeHandler::new(self.state.clone());
-        let changeset = on_change_handler.on_change(old, new);
+        let changeset = on_change_handler.on_change(old_value, new_value);
         let entering_amount_btc = changeset.entering_amount_btc?;
 
-        if entering_amount_btc == new {
+        if entering_amount_btc == new_value {
             return None;
         };
 
@@ -448,7 +448,7 @@ impl RustSendFlowManager {
         // sanitize the new value before passing it to the handler
         let new_value_sanitized = self.sanitize_btc_entering_amount(&old, &new);
         let new_value_sanitized = new_value_sanitized.as_ref().unwrap_or(&new);
-        let changes: btc_on_change::Changeset = handler.on_change(&old, &new_value_sanitized);
+        let changes: btc_on_change::Changeset = handler.on_change(&old, new_value_sanitized);
 
         tracing::trace!("btc_on_change_handler changes: {changes:?}");
 
@@ -494,7 +494,7 @@ impl RustSendFlowManager {
         let new_value_sanitized = self.sanitize_fiat_entering_amount(&old_value, &new_value);
         let new_value_sanitized = new_value_sanitized.as_ref().unwrap_or(&new_value);
 
-        let Ok(result) = handler.on_change(&old_value, &new_value_sanitized) else {
+        let Ok(result) = handler.on_change(&old_value, new_value_sanitized) else {
             tracing::error!("unable to get fiat on change result");
             return None;
         };
@@ -544,7 +544,7 @@ impl RustSendFlowManager {
         self.send(Message::UpdateAmountFiat(0.0));
 
         // fiat
-        let entering_fiat_amount = format!("{}", currency.symbol());
+        let entering_fiat_amount = currency.symbol().to_string();
         state.entering_fiat_amount = entering_fiat_amount.clone();
         self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
 
@@ -560,7 +560,7 @@ impl RustSendFlowManager {
             let state = self.state.read();
             let address_string = &state.entering_address;
 
-            let address = Address::from_string(&address_string, state.metadata.network)
+            let address = Address::from_string(address_string, state.metadata.network)
                 .ok()
                 .or_else(|| state.first_address.clone().map(Arc::unwrap_or_clone));
 
@@ -788,7 +788,7 @@ impl RustSendFlowManager {
             let next_route = match wallet_type {
                 WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None, None),
                 WalletType::Cold | WalletType::XpubOnly => {
-                    RouteFactory::new().send_hardware_export(wallet_id, details.into())
+                    RouteFactory::new().send_hardware_export(wallet_id, details)
                 }
                 WalletType::WatchOnly => {
                     return send_alert(

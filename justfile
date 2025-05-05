@@ -90,13 +90,13 @@ watch-build profile="debug" device="false":
     watchexec --exts rs just build-ios {{profile}} {{device}}
 
 test test="" flags="":
-    cd rust && cargo nextest run {{test}} -- {{flags}}
+    cd rust && cargo nextest run {{test}} --workspace {{flags}}
 
 ctest test="" flags="":
-    cd rust && cargo test {{test}} -- {{flags}}
+    cd rust && cargo test {{test}} --workspace -- {{flags}} 
 
 btest test="":
-    cd rust && bacon nextest -- {{test}}
+    cd rust && bacon nextest -- {{test}} --workspace
 
 watch-test test="" flags="":
     watchexec --exts rs just test {{test}} {{flags}}

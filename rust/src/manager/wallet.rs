@@ -1038,7 +1038,7 @@ impl RustWalletManager {
         let actor = self.actor.clone();
 
         let amount = amount.into();
-        let address = Arc::unwrap_or_clone(address).into();
+        let address = Arc::unwrap_or_clone(address);
         let fee_rate = fee_rate.into();
 
         let psbt = call!(actor.build_tx(amount, address, fee_rate)).await.unwrap()?;

@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 /// Gets the decimal point and the decimal places after it limited by the max_decimal_places
 pub fn limit_decimal_places(amount: &str, max_decimal_places: usize) -> Option<&str> {
     let (dollars, cents_with_decimal_point) =

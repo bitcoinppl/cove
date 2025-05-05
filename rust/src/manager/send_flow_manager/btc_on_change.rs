@@ -1,6 +1,7 @@
 use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
 use cove_types::{amount::Amount, unit::Unit};
 use cove_util::format::{self, NumberFormatter as _};
+use tracing::debug;
 
 use super::state::State;
 
@@ -73,15 +74,16 @@ impl BtcOnChangeHandler {
             return Changeset { entering_amount_btc: Some(old.to_string()), ..Default::default() };
         }
 
+        // starting to enter decimal point values, no changes for now
+        if new.ends_with('.') {
+            return Changeset::default();
+        }
+
         // ---------------------------------------------------------------------
         // 2. normalize for parsing
         // ---------------------------------------------------------------------
         let mut changeset = Changeset::default();
         let mut unformatted = new.replace(',', "");
-
-        if self.metadata.selected_unit == Unit::Sat {
-            unformatted = unformatted.replace('.', "");
-        }
 
         if unformatted == "." {
             unformatted = "0.".into();
@@ -104,6 +106,7 @@ impl BtcOnChangeHandler {
         let amount = match amount {
             Some(a) => a,
             None => {
+                debug!("unable to parse amount: {unformatted}");
                 return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
             }
         };

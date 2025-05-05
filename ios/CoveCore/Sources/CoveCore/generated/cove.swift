@@ -6940,9 +6940,9 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
-    func sanitizeBtcEnteringAmount(old: String, new: String)  -> String?
+    func sanitizeBtcEnteringAmount(oldValue: String, newValue: String)  -> String?
     
-    func sanitizeFiatEnteringAmount(old: String, new: String)  -> String?
+    func sanitizeFiatEnteringAmount(oldValue: String, newValue: String)  -> String?
     
     func sendAmountBtc(amountSats: UInt64?)  -> String
     
@@ -7051,20 +7051,20 @@ open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCal
 }
 }
     
-open func sanitizeBtcEnteringAmount(old: String, new: String) -> String?  {
+open func sanitizeBtcEnteringAmount(oldValue: String, newValue: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(self.uniffiClonePointer(),
-        FfiConverterString.lower(old),
-        FfiConverterString.lower(new),$0
+        FfiConverterString.lower(oldValue),
+        FfiConverterString.lower(newValue),$0
     )
 })
 }
     
-open func sanitizeFiatEnteringAmount(old: String, new: String) -> String?  {
+open func sanitizeFiatEnteringAmount(oldValue: String, newValue: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(self.uniffiClonePointer(),
-        FfiConverterString.lower(old),
-        FfiConverterString.lower(new),$0
+        FfiConverterString.lower(oldValue),
+        FfiConverterString.lower(newValue),$0
     )
 })
 }
@@ -25474,10 +25474,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 57490) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 24133) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount() != 61265) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount() != 727) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_send_amount_btc() != 46126) {
@@ -25972,10 +25972,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 

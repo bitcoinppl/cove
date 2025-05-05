@@ -59,7 +59,7 @@ struct EnterAmountView: View {
                     .padding(.horizontal, 30)
                     .focused($focusField, equals: .amount)
                     .onChange(of: enteringBtcAmount, initial: true) { oldValue, newValue in
-                        if let newEnteringAmount = sendFlowManager.rust.sanitizeBtcEnteringAmount(old: oldValue, new: newValue),
+                        if let newEnteringAmount = sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue),
                            newValue != newEnteringAmount
                         {
                             Log.debug("btcEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")
@@ -70,7 +70,7 @@ struct EnterAmountView: View {
                     }
                     .onChange(of: enteringFiatAmount, initial: true) { oldValue, newValue in
                         if let newEnteringAmount =
-                            sendFlowManager.rust.sanitizeFiatEnteringAmount(old: oldValue, new: newValue),
+                            sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue: oldValue, newValue: newValue),
                             newValue != newEnteringAmount
                         {
                             Log.debug("fiatEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")

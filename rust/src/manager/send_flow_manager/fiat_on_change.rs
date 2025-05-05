@@ -70,6 +70,14 @@ impl FiatOnChangeHandler {
             return Ok(Changeset::empty_zero(symbol));
         }
 
+        // start entering with a period
+        if new_value_raw == "." {
+            return Ok(Changeset {
+                entering_fiat_amount: Some(format!("{symbol}.")),
+                ..Default::default()
+            });
+        }
+
         // if old value is the same as the new value, then we don't need to do anything
         if old_value == new_value {
             return Ok(Changeset::default());
