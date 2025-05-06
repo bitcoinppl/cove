@@ -15,6 +15,7 @@ pub struct FiatOnChangeHandler {
     prices: PriceResponse,
     selected_currency: FiatCurrency,
     converter: Converter,
+    max_selected: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -22,6 +23,7 @@ pub struct Changeset {
     pub entering_fiat_amount: Option<String>,
     pub fiat_value: Option<f64>,
     pub btc_amount: Option<Amount>,
+    pub max_selected: Option<Option<Amount>>,
 }
 
 impl Changeset {
@@ -30,6 +32,7 @@ impl Changeset {
             entering_fiat_amount: Some(symbol.to_string()),
             fiat_value: Some(0.0),
             btc_amount: Some(Amount::from_sat(0)),
+            max_selected: None,
         }
     }
 }
@@ -47,8 +50,12 @@ pub enum SendFlowFiatOnChangeError {
 }
 
 impl FiatOnChangeHandler {
-    pub fn new(prices: PriceResponse, selected_currency: FiatCurrency) -> Self {
-        Self { prices, selected_currency, converter: Converter::new() }
+    pub fn new(
+        prices: PriceResponse,
+        selected_currency: FiatCurrency,
+        max_selected: Option<Amount>,
+    ) -> Self {
+        Self { prices, selected_currency, converter: Converter::new(), max_selected }
     }
 
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Result<Changeset> {
@@ -122,12 +129,23 @@ impl FiatOnChangeHandler {
         let dollars = dollars.parse::<u64>().ok().unwrap_or_default();
         let dollars_formatted = dollars.thousands_int();
 
-        let fiat_text = format!("{symbol}{dollars_formatted}{cents_with_decimal_point}");
-        let changes = Changeset {
+        let mut changes = Changeset {
             fiat_value: Some(fiat_value),
             btc_amount: Some(btc_amount),
-            entering_fiat_amount: if fiat_text != new_value { Some(fiat_text) } else { None },
+            ..Default::default()
         };
+
+        let fiat_text = format!("{symbol}{dollars_formatted}{cents_with_decimal_point}");
+        if fiat_text != new_value {
+            changes.entering_fiat_amount = Some(fiat_text);
+        }
+
+        if let Some(max_selected) = self.max_selected {
+            let max_selected = max_selected.as_sats();
+            if btc_amount.as_sats() < max_selected {
+                changes.max_selected = Some(None);
+            }
+        }
 
         Ok(changes)
     }

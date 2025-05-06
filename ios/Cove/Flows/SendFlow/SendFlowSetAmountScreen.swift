@@ -31,7 +31,6 @@ struct SendFlowSetAmountScreen: View {
     @State private var isLoading: Bool = true
     @State private var loadingOpacity: CGFloat = 1
 
-    @FocusState private var _privateFocusField: SendFlowPresenter.FocusField?
     @State private var scrollPosition: ScrollPosition = .init(
         idType: SendFlowPresenter.FocusField.self)
 
@@ -49,7 +48,10 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpentInFiat: String {
-        sendFlowManager.rust.totalSpentFiat(amountSats: sendFlowManager.amount?.asSats() ?? 0)
+        let _ = sendFlowManager.feeRateOptions
+        let _ = sendFlowManager.selectedFeeRate
+        let _ = sendFlowManager.amount
+        return sendFlowManager.rust.totalSpentFiat()
     }
 
     private var address: Binding<String> {
@@ -57,7 +59,10 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSending: String {
-        sendFlowManager.rust.sendAmountBtc(amountSats: sendFlowManager.amount?.asSats() ?? 0)
+        let _ = sendFlowManager.feeRateOptions
+        let _ = sendFlowManager.selectedFeeRate
+        let _ = sendFlowManager.amount
+        return sendFlowManager.rust.sendAmountBtc()
     }
 
     // MARK: Actions
@@ -108,7 +113,6 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if sendFlowManager.feeRateOptions != nil,
-                            sendFlowManager.selectedFeeRate != nil,
                             sendFlowManager.address != nil
                         {
                             // Network Fee Section
@@ -148,8 +152,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .padding(.top, 0)
-        .onChange(of: _privateFocusField, initial: true) { _, new in presenter.focusField = new }
-        .onChange(of: presenter.focusField, initial: false, focusFieldChanged)
+        .onChange(of: presenter.focusField, initial: true, focusFieldChanged)
         .onChange(of: scannedCode, initial: true, scannedCodeChanged)
         .onChange(of: metadata.selectedUnit, initial: true) { oldUnit, newUnit in
             sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
@@ -181,13 +184,32 @@ struct SendFlowSetAmountScreen: View {
 
             await MainActor.run {
                 if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 {
-                    presenter.focusField = .amount
-                    return
+                     presenter.focusField = .amount
                 }
 
                 if address.wrappedValue.isEmpty {
-                    presenter.focusField = .address
-                    return
+                     presenter.focusField = .address
+                }
+                
+                // only display error if it was already loaded with amount and address
+                if let amount = sendFlowManager.amount, amount.asSats() != 0 {
+                    let _  = self.validateAmount(displayAlert: true)
+                }
+                    
+                if sendFlowManager.address != nil {
+                    let _ = self.validateAddress(displayAlert: true)
+                }
+                
+                // all valid, scroll to bottom
+                if validate() {
+                    presenter.focusField = .none
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            presenter.focusField = .none
+                            scrollPosition.scrollTo(edge: .bottom)
+                        }
+                    }
                 }
             }
         }
@@ -209,6 +231,7 @@ struct SendFlowSetAmountScreen: View {
                     }
                 }
             }
+
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .alert(
@@ -221,14 +244,22 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalFeeString: String {
-        sendFlowManager.rust.totalFeeString()
+        let _ = sendFlowManager.address
+        let _ = sendFlowManager.feeRateOptions
+        let _ = sendFlowManager.selectedFeeRate
+        let _ = sendFlowManager.amount
+        return sendFlowManager.rust.totalFeeString()
     }
 
     private var totalSpentBtc: String {
-        sendFlowManager.rust.totalSpentBtcString(amountSats: sendFlowManager.amount?.asSats() ?? 0)
+        let _ = sendFlowManager.address
+        let _ = sendFlowManager.feeRateOptions
+        let _ = sendFlowManager.selectedFeeRate
+        let _ = sendFlowManager.amount
+        return sendFlowManager.rust.totalSpentBtcString()
     }
 
-    private func validate(displayAlert: Bool = false) -> Bool {
+    private func validate(_ displayAlert: Bool = false) -> Bool {
         return validateAmount(displayAlert: displayAlert)
             && validateAddress(displayAlert: displayAlert)
     }
@@ -256,8 +287,7 @@ struct SendFlowSetAmountScreen: View {
         Log.debug(
             "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))")
 
-        _privateFocusField = newField
-        if newField == .none { let _ = validate(displayAlert: true) }
+        sendFlowManager.dispatch(action: .notifyFocusFieldChanged(old: oldField, new: newField))
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
@@ -285,10 +315,6 @@ struct SendFlowSetAmountScreen: View {
         presenter.sheetState = nil
         sendFlowManager.dispatch(
             action: .notifyScanCodeChanged(old: old?.item ?? "", new: newValue.item))
-
-        Log.debug(
-            "fee \(sendFlowManager.feeRateOptions), selected \(sendFlowManager.selectedFeeRate) \(sendFlowManager.address)"
-        )
     }
 
     @ViewBuilder

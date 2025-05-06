@@ -18,10 +18,12 @@ public struct SendFlowContainer: View {
     @State private var manager: WalletManager? = nil
     @State private var presenter: SendFlowPresenter? = nil
     @State private var sendFlowManager: SendFlowManager? = nil
+    @State private var initCompleted: Bool = false
 
     func initOnAppear() {
         let id = sendRoute.id()
         if manager != nil { return }
+        
 
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
@@ -31,10 +33,12 @@ public struct SendFlowContainer: View {
 
             switch sendRoute {
             case let .setAmount(id: _, address: address, amount: amount):
+                self.initCompleted = false
                 if let address {sendFlowManager.setAddress(address) }
                 if let amount { sendFlowManager.setAmount(amount) }
-
-            default: ()
+                waitForInit()
+            default:
+                self.initCompleted = true
             }
 
             self.manager = manager
@@ -43,6 +47,14 @@ public struct SendFlowContainer: View {
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
+        }
+    }
+    
+    
+    func waitForInit(){
+        Task {
+            await sendFlowManager?.rust.waitForInit()
+            await MainActor.run { initCompleted = true }
         }
     }
 
@@ -64,7 +76,7 @@ public struct SendFlowContainer: View {
     }
 
     public var body: some View {
-        if let manager, let presenter, let sendFlowManager {
+        if let manager, let presenter, let sendFlowManager, initCompleted {
             Group {
                 sendRouteToScreen(sendRoute: sendRoute, manager: manager, sendFlowManager: sendFlowManager)
             }

@@ -27,6 +27,7 @@ pub struct SendFlowManagerState {
     pub(crate) selected_fiat_currency: FiatCurrency,
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
+    pub(crate) init_complete: bool,
 
     // public
     pub entering_btc_amount: String,
@@ -85,6 +86,7 @@ impl SendFlowManagerState {
             fee_rate_options: None,
             btc_price_in_fiat,
             selected_fiat_currency,
+            init_complete: false,
         }
     }
 }

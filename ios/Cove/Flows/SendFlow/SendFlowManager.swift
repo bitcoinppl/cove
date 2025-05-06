@@ -69,7 +69,6 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             }
 
             logger.debug("reconcile: \(message)")
-
             await MainActor.run {
                 switch message {
                 case let .updateAmountFiat(fiat):

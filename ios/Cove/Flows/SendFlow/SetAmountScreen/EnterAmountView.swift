@@ -40,11 +40,19 @@ struct EnterAmountView: View {
     }
 
     var sendAmountFiat: String {
-        sendFlowManager.rust.sendAmountFiat(amountSats: sendFlowManager.amount?.asSats())
+        let _ = sendFlowManager.address
+        let _ = sendFlowManager.feeRateOptions
+        let _ = sendFlowManager.selectedFeeRate
+        let _ = sendFlowManager.amount
+        return sendFlowManager.rust.sendAmountFiat()
     }
 
     var sendAmountBtc: String {
-        sendFlowManager.rust.sendAmountBtc(amountSats: sendFlowManager.amount?.asSats())
+            let _ = sendFlowManager.address
+            let _ = sendFlowManager.feeRateOptions
+            let _ = sendFlowManager.selectedFeeRate
+            let _ = sendFlowManager.amount
+        return sendFlowManager.rust.sendAmountBtc()
     }
 
     var body: some View {
@@ -120,10 +128,7 @@ struct EnterAmountView: View {
                     }
                 }
                 .onChange(of: presenter.focusField, initial: true) { _, new in focusField = new }
-                .onChange(of: focusField, initial: true) { _, newFocusField in
-                    guard let newFocusField else { return }
-                    presenter.focusField = newFocusField
-                }
+                .onChange(of: focusField, initial: true) { _, newFocusField in presenter.focusField = newFocusField }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button(action: {
