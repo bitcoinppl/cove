@@ -70,6 +70,15 @@ impl FiatOnChangeHandler {
             return Ok(Changeset::empty_zero(symbol));
         }
 
+        // early exit if same value is passed in
+        if old_value == new_value {
+            return Ok(Changeset::default());
+        }
+
+        if old_value_raw == new_value_raw {
+            return Ok(Changeset::default());
+        }
+
         // start entering with a period
         if new_value_raw == "." {
             return Ok(Changeset {
@@ -114,13 +123,13 @@ impl FiatOnChangeHandler {
         let dollars_formatted = dollars.thousands_int();
 
         let fiat_text = format!("{symbol}{dollars_formatted}{cents_with_decimal_point}");
-        let change = Changeset {
-            entering_fiat_amount: Some(fiat_text),
+        let changes = Changeset {
             fiat_value: Some(fiat_value),
             btc_amount: Some(btc_amount),
+            entering_fiat_amount: if fiat_text != new_value { Some(fiat_text) } else { None },
         };
 
-        Ok(change)
+        Ok(changes)
     }
 }
 

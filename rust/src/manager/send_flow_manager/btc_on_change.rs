@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
 use cove_common::consts::MAX_SATS;
 use cove_types::{amount::Amount, unit::Unit};
@@ -9,7 +11,7 @@ use super::state::State;
 #[derive(Debug, Clone)]
 pub struct BtcOnChangeHandler {
     metadata: WalletMetadata,
-    max_selected: Option<Amount>,
+    max_selected: Option<Arc<Amount>>,
     btc_price_in_fiat: Option<u64>,
 }
 
@@ -27,7 +29,7 @@ impl BtcOnChangeHandler {
         let state = state.lock();
 
         let metadata = state.metadata.clone();
-        let max_selected = state.max_selected.as_deref().copied();
+        let max_selected = state.max_selected.clone();
         let btc_price_in_fiat = state.btc_price_in_fiat;
 
         Self { metadata, max_selected, btc_price_in_fiat }
@@ -43,6 +45,11 @@ impl BtcOnChangeHandler {
 
         let old = old_value.trim();
         let new = new_value.trim();
+
+        // early exit if nothing changed
+        if old == new {
+            return Changeset::default();
+        }
 
         if new == "00" {
             return Changeset {
@@ -122,7 +129,7 @@ impl BtcOnChangeHandler {
         // 4. apply rules
         // ---------------------------------------------------------------------
         if let Some(max) = &self.max_selected {
-            if amount < *max {
+            if &amount < max {
                 // clear the max selected
                 changeset.max_selected = Some(None);
             }
@@ -136,10 +143,16 @@ impl BtcOnChangeHandler {
             changeset.amount_fiat = Some(amount.as_btc() * (price as f64));
         }
 
-        match self.metadata.selected_unit {
-            Unit::Sat => changeset.entering_amount_btc = Some(amount.as_sats().thousands_int()),
-            Unit::Btc => changeset.entering_amount_btc = format::btc_typing(&unformatted),
+        let entering_amount_btc = match self.metadata.selected_unit {
+            Unit::Sat => Some(amount.as_sats().thousands_int()),
+            Unit::Btc => format::btc_typing(&unformatted),
         };
+
+        if let Some(entering_amount_btc) = entering_amount_btc {
+            if entering_amount_btc != new_value {
+                changeset.entering_amount_btc = Some(entering_amount_btc);
+            }
+        }
 
         changeset
     }

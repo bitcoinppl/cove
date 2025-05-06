@@ -433,7 +433,7 @@ impl RustSendFlowManager {
             }
 
             Action::NotifyAmountChanged(amount) => {
-                self.handle_amount_changed(&amount);
+                self.handle_amount_changed(*amount);
             }
         }
     }
@@ -442,10 +442,19 @@ impl RustSendFlowManager {
 /// MARK: State mutating impl
 impl RustSendFlowManager {
     fn btc_field_changed(self: Arc<Self>, old: String, new: String) -> Option<()> {
-        let state: State = self.state.clone().into();
+        trace!("btc_field_changed {old} --> {new}");
+        if old == new {
+            return None;
+        }
 
+        // update the state
+        self.state.lock().entering_btc_amount = new.clone();
+
+        let state: State = self.state.clone().into();
         let me = self.clone();
-        if state.lock().fee_rate_options.is_none() {
+        let fee_rate_options_base = state.lock().fee_rate_options_base.clone();
+
+        if fee_rate_options_base.is_none() {
             crate::task::spawn(async move {
                 me.get_fee_rate_options().await;
             });
@@ -453,75 +462,81 @@ impl RustSendFlowManager {
 
         let state: State = self.state.clone().into();
         let handler = BtcOnChangeHandler::new(state.clone());
-
-        // sanitize the new value before passing it to the handler
-        let new_value_sanitized = self.sanitize_btc_entering_amount(&old, &new);
-        let new_value_sanitized = new_value_sanitized.as_ref().unwrap_or(&new);
-        let changes: btc_on_change::Changeset = handler.on_change(&old, new_value_sanitized);
-
+        let changes = handler.on_change(&old, &new);
         debug!("btc_on_change_handler changes: {changes:?}");
-        let mut state = state.lock();
 
-        match changes.max_selected {
-            Some(Some(max)) => {
-                let max = Arc::new(max);
-                state.max_selected = Some(max.clone());
-                self.send(Message::SetMaxSelected(max));
+        let btc_on_change::Changeset { entering_amount_btc, max_selected, amount_btc, amount_fiat } =
+            changes;
+
+        // mutate the state
+        {
+            let mut state = state.lock();
+
+            match max_selected {
+                Some(Some(max)) => {
+                    let max = Arc::new(max);
+                    state.max_selected = Some(max.clone());
+                    self.send(Message::SetMaxSelected(max));
+                }
+                Some(None) => {
+                    self.send(Message::UnsetMaxSelected);
+                }
+                None => {}
             }
-            Some(None) => {
-                self.send(Message::UnsetMaxSelected);
+
+            if let Some(amount) = amount_btc {
+                let amount_sats = amount.to_sat();
+                state.amount_sats = Some(amount_sats);
+                self.send(Message::UpdateAmountSats(amount_sats));
             }
-            None => {}
-        }
 
-        if let Some(amount) = changes.amount_btc {
-            let amount_sats = amount.to_sat();
-            state.amount_sats = Some(amount_sats);
-            self.send(Message::UpdateAmountSats(amount_sats));
-        }
+            if let Some(amount) = amount_fiat {
+                state.amount_fiat = Some(amount);
+                self.send(Message::UpdateAmountFiat(amount));
+            }
 
-        if let Some(amount) = changes.amount_fiat {
-            state.amount_fiat = Some(amount);
-            self.send(Message::UpdateAmountFiat(amount));
-        }
-
-        if let Some(entering_amount) = changes.entering_amount_btc {
-            state.entering_btc_amount = entering_amount.clone();
-            self.send(Message::UpdateEnteringBtcAmount(entering_amount));
-        }
+            if let Some(entering_amount) = entering_amount_btc {
+                state.entering_btc_amount = entering_amount.clone();
+                self.send(Message::UpdateEnteringBtcAmount(entering_amount));
+            }
+        };
 
         Some(())
     }
 
     fn fiat_field_changed(&self, old_value: String, new_value: String) -> Option<()> {
+        trace!("fiat_field_changed {old_value} --> {new_value}");
+        if old_value == new_value {
+            return None;
+        }
+
+        // update the state
+        self.state.lock().entering_fiat_amount = new_value.clone();
+
         let prices = self.app.prices()?;
         let selected_currency = self.state.lock().selected_fiat_currency;
 
         let handler = FiatOnChangeHandler::new(prices, selected_currency);
-
-        let new_value_sanitized = self.sanitize_fiat_entering_amount(&old_value, &new_value);
-        let new_value_sanitized = new_value_sanitized.as_ref().unwrap_or(&new_value);
-
-        let Ok(result) = handler.on_change(&old_value, new_value_sanitized) else {
+        let Ok(result) = handler.on_change(&old_value, &new_value) else {
             tracing::error!("unable to get fiat on change result");
             return None;
         };
 
-        trace!(
-            "result: {result:?}, old_value: {old_value}, new_value: {new_value}, new_value_sanitized: {new_value_sanitized}"
-        );
+        trace!("result: {result:?}, old_value: {old_value}, new_value: {new_value}");
 
-        if let Some(entering_fiat_amount) = result.entering_fiat_amount {
+        let fiat_on_change::Changeset { entering_fiat_amount, fiat_value, btc_amount } = result;
+
+        if let Some(entering_fiat_amount) = entering_fiat_amount {
             self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
             self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
         }
 
-        if let Some(amount_fiat) = result.fiat_value {
+        if let Some(amount_fiat) = fiat_value {
             self.state.lock().amount_fiat = Some(amount_fiat);
             self.send(Message::UpdateAmountFiat(amount_fiat));
         }
 
-        if let Some(btc_amount) = result.btc_amount {
+        if let Some(btc_amount) = btc_amount {
             let btc_amount = btc_amount.as_sats();
             self.state.lock().amount_sats = Some(btc_amount);
             self.send(Message::UpdateAmountSats(btc_amount));
@@ -564,8 +579,9 @@ impl RustSendFlowManager {
     }
 
     /// When amount is changed, we will need to update the entering and fiat amounts
-    fn handle_amount_changed(&self, amount: &Amount) {
+    fn handle_amount_changed(&self, amount: Amount) {
         debug!("handle_amount_changed: {amount:?}");
+
         let (unit, fiat_or_btc, btc_price_in_fiat) = {
             let state = self.state.lock();
 
@@ -575,16 +591,6 @@ impl RustSendFlowManager {
 
             (unit, fiat_or_btc, btc_price_in_fiat)
         };
-
-        let amount_sats = amount.to_sat();
-        self.state.lock().amount_sats = Some(amount_sats);
-        self.send(Message::UpdateAmountSats(amount_sats));
-
-        if let Some(price) = btc_price_in_fiat {
-            let amount_fiat = amount.as_btc() * (price as f64);
-            self.state.lock().amount_fiat = Some(amount_fiat);
-            self.send(Message::UpdateAmountFiat(amount_fiat));
-        }
 
         match fiat_or_btc {
             FiatOrBtc::Fiat => {
@@ -600,12 +606,22 @@ impl RustSendFlowManager {
             FiatOrBtc::Btc => {
                 let amount_string = match unit {
                     Unit::Btc => amount.btc_string(),
-                    Unit::Sat => amount.sats_string(),
+                    Unit::Sat => amount.as_sats().thousands_int(),
                 };
 
                 self.state.lock().entering_btc_amount = amount_string.clone();
                 self.send(Message::UpdateEnteringBtcAmount(amount_string));
             }
+        }
+
+        let amount_sats = amount.to_sat();
+        self.state.lock().amount_sats = Some(amount_sats);
+        self.send(Message::UpdateAmountSats(amount_sats));
+
+        if let Some(price) = btc_price_in_fiat {
+            let amount_fiat = amount.as_btc() * (price as f64);
+            self.state.lock().amount_fiat = Some(amount_fiat);
+            self.send(Message::UpdateAmountFiat(amount_fiat));
         }
     }
 
@@ -653,7 +669,8 @@ impl RustSendFlowManager {
 
         self.state.lock().max_selected = Some(total.clone());
         self.send(Message::SetMaxSelected(total.clone()));
-        self.handle_amount_changed(&total);
+
+        self.handle_amount_changed(*total);
 
         Ok(())
     }
@@ -797,7 +814,7 @@ impl RustSendFlowManager {
 
         // set amount if its valid
         if let Some(amount) = address_with_network.amount {
-            self.handle_amount_changed(&amount);
+            self.handle_amount_changed(amount);
         }
 
         // if amount is invalid, go to amount field
@@ -994,7 +1011,8 @@ impl RustSendFlowManager {
         state.lock().fee_rate_options = Some(fee_rate_options_with_total_fee.clone());
 
         // if no fee rate is selected, then set the default to medium
-        if self.state.lock().selected_fee_rate.is_none() {
+        let selected_fee_rate = self.state.lock().selected_fee_rate.clone();
+        if selected_fee_rate.is_none() {
             let medium = Arc::new(fee_rate_options_with_total_fee.clone().medium);
             self.state.lock().selected_fee_rate = Some(medium.clone());
             self.send(Message::UpdateFeeRate(medium));

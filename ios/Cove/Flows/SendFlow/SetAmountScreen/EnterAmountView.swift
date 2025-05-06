@@ -10,7 +10,7 @@ struct EnterAmountView: View {
     @Environment(AppManager.self) private var app
     @Environment(SendFlowPresenter.self) private var presenter
     @Environment(WalletManager.self) private var manager
-    
+
     let sendFlowManager: SendFlowManager
 
     @State var enteringBtcAmount: String
@@ -18,7 +18,7 @@ struct EnterAmountView: View {
 
     @FocusState private var focusField: SendFlowPresenter.FocusField?
     @State private var showingMenu: Bool = false
-    
+
     init(sendFlowManager: SendFlowManager) {
         self.sendFlowManager = sendFlowManager
         self.enteringBtcAmount = sendFlowManager.enteringBtcAmount
@@ -37,11 +37,6 @@ struct EnterAmountView: View {
     var offset: CGFloat {
         if metadata.fiatOrBtc == .fiat { return 0 }
         return metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
-    }
-
-    var textField: String {
-        if metadata.fiatOrBtc == .btc { return sendFlowManager.enteringBtcAmount }
-        return sendFlowManager.enteringFiatAmount
     }
 
     var sendAmountFiat: String {
@@ -66,30 +61,46 @@ struct EnterAmountView: View {
                     .padding(.horizontal, 30)
                     .focused($focusField, equals: .amount)
                     .onChange(of: enteringBtcAmount, initial: false) { oldValue, newValue in
-                        if let newEnteringAmount = sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue),
-                           newValue != newEnteringAmount
+                        Log.debug("onChange \(oldValue) -> \(newValue)")
+                        if oldValue == newValue { return }
+                        if let newEnteringAmount = sendFlowManager.rust.sanitizeBtcEnteringAmount(
+                            oldValue: oldValue, newValue: newValue),
+                            newValue != newEnteringAmount
                         {
-                            Log.debug("btcEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")
-                            return enteringBtcAmount = newEnteringAmount
+                            Log.debug(
+                                "btcEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")
+                            enteringBtcAmount = newEnteringAmount
+                            return
                         }
-
+                        
+                        if sendFlowManager.enteringBtcAmount == newValue { return }
                         sendFlowManager.dispatch(action: .changeEnteringBtcAmount(newValue))
                     }
                     .onChange(of: enteringFiatAmount, initial: false) { oldValue, newValue in
+                        Log.debug("onChange \(oldValue) -> \(newValue)")
+                        if oldValue == newValue { return }
                         if let newEnteringAmount =
-                            sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue: oldValue, newValue: newValue),
+                            sendFlowManager.rust.sanitizeFiatEnteringAmount(
+                                oldValue: oldValue, newValue: newValue),
                             newValue != newEnteringAmount
                         {
-                            Log.debug("fiatEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")
-                            return enteringFiatAmount = newEnteringAmount
+                            Log.debug(
+                                "fiatEntering \(oldValue) -> \(newValue) -> \(newEnteringAmount)")
+                            enteringFiatAmount = newEnteringAmount
+                            return
                         }
 
+                        if sendFlowManager.enteringFiatAmount == newValue { return }
                         sendFlowManager.dispatch(action: .changeEnteringFiatAmount(newValue))
                     }
-                    .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { _, newValue in
+                    .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) {
+                        oldValue, newValue in
+                        Log.debug("enteringBtcAmount \(oldValue) -> \(newValue)")
                         enteringBtcAmount = newValue
                     }
-                    .onChange(of: sendFlowManager.enteringFiatAmount, initial: true) { _, newValue in
+                    .onChange(of: sendFlowManager.enteringFiatAmount, initial: true) {
+                        oldValue, newValue in
+                        Log.debug("enteringFiatAmount \(oldValue) -> \(newValue)")
                         enteringFiatAmount = newValue
                     }
 
