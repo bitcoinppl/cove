@@ -57,13 +57,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSending: String {
-        guard let amount = sendFlowManager.amount else { return "---" }
-
-        if metadata.selectedUnit == .btc {
-            return "\(amount.btcString()) BTC"
-        } else {
-            return "\(amount.satsString()) sats"
-        }
+        sendFlowManager.rust.sendAmountBtc(amountSats: sendFlowManager.amount?.asSats() ?? 0)
     }
 
     // MARK: Actions
@@ -230,7 +224,7 @@ struct SendFlowSetAmountScreen: View {
         sendFlowManager.rust.totalFeeString()
     }
 
-    private var totalSpent: String {
+    private var totalSpentBtc: String {
         sendFlowManager.rust.totalSpentBtcString(amountSats: sendFlowManager.amount?.asSats() ?? 0)
     }
 
@@ -507,7 +501,7 @@ struct SendFlowSetAmountScreen: View {
 
                 Spacer()
 
-                Text(totalSpent)
+                Text(totalSpentBtc)
                     .multilineTextAlignment(.center)
                     .font(.footnote)
                     .fontWeight(.semibold)

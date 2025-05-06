@@ -208,8 +208,8 @@ impl RustSendFlowManager {
         };
 
         match self.state.lock().metadata.selected_unit {
-            Unit::Btc => format!("{} BTC", total_spent.as_btc()),
-            Unit::Sat => format!("{} sats", total_spent.as_sats()),
+            Unit::Btc => format!("{} BTC", total_spent.as_btc().thousands()),
+            Unit::Sat => format!("{} sats", total_spent.as_sats().thousands_int()),
         }
     }
 
@@ -712,11 +712,7 @@ impl RustSendFlowManager {
             return;
         }
 
-        let amount_sats = match self.state.lock().amount_sats {
-            Some(amount_sats) => amount_sats,
-            None => return,
-        };
-
+        let amount_sats = self.state.lock().amount_sats.unwrap_or(0);
         match new {
             Unit::Btc => {
                 let amount_string = Amount::from_sat(amount_sats).btc_string();
