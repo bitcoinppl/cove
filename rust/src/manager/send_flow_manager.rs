@@ -97,8 +97,6 @@ pub enum SendFlowManagerReconcileMessage {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendFlowManagerAction {
-    ChangeEnteringBtcAmount(String),
-    ChangeEnteringFiatAmount(String),
     ChangeEnteringAddress(String),
 
     ChangeSetAmountFocusField(Option<SetAmountFocusField>),
@@ -107,6 +105,11 @@ pub enum SendFlowManagerAction {
     ClearSendAmount,
 
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
+
+    // front end changing text fields
+    NotifyEnteringBtcAmountChanged(String),
+    NotifyEnteringFiatAmountChanged(String),
+    NotifyEnteringAddressChanged(String),
 
     // front end lets the one of the values were changed
     NotifySelectedUnitedChanged { old: Unit, new: Unit },
@@ -404,18 +407,18 @@ impl RustSendFlowManager {
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
         match action {
-            Action::ChangeEnteringBtcAmount(string) => {
+            Action::NotifyEnteringBtcAmountChanged(string) => {
                 let old_value = self.state.lock().entering_btc_amount.clone();
-                self.btc_field_changed(old_value, string);
+                self.handle_btc_field_changed(old_value, string);
             }
 
-            Action::ChangeEnteringFiatAmount(string) => {
+            Action::NotifyEnteringFiatAmountChanged(string) => {
                 let old_value = self.state.lock().entering_fiat_amount.clone();
-                self.fiat_field_changed(old_value, string);
+                self.handle_fiat_field_changed(old_value, string);
             }
 
-            Action::ChangeEnteringAddress(address) => {
-                self.entering_address_changed(address);
+            Action::NotifyEnteringAddressChanged(address) => {
+                self.handle_entering_address_changed(address);
             }
 
             Action::ChangeSetAmountFocusField(set_amount_focus_field) => {
@@ -471,13 +474,18 @@ impl RustSendFlowManager {
                 self.state.lock().fee_rate_options = Some(fee_options.clone());
                 self.send(Message::UpdateFeeRateOptions(fee_options));
             }
+
+            Action::ChangeEnteringAddress(string) => {
+                self.send(Message::UpdateEnteringAddress(string.clone()));
+                self.handle_entering_address_changed(string);
+            }
         }
     }
 }
 
 /// MARK: State mutating impl
 impl RustSendFlowManager {
-    fn btc_field_changed(self: Arc<Self>, old: String, new: String) -> Option<()> {
+    fn handle_btc_field_changed(self: Arc<Self>, old: String, new: String) -> Option<()> {
         trace!("btc_field_changed {old} --> {new}");
         if old == new {
             return None;
@@ -485,7 +493,6 @@ impl RustSendFlowManager {
 
         // update the state
         self.state.lock().entering_btc_amount = new.clone();
-        self.send(Message::UpdateEnteringBtcAmount(new.clone()));
 
         let state: State = self.state.clone().into();
         let me = self.clone();
@@ -542,7 +549,7 @@ impl RustSendFlowManager {
         Some(())
     }
 
-    fn fiat_field_changed(&self, old_value: String, new_value: String) -> Option<()> {
+    fn handle_fiat_field_changed(&self, old_value: String, new_value: String) -> Option<()> {
         debug!("fiat_field_changed {old_value} --> {new_value}");
         if old_value == new_value {
             return None;
@@ -550,7 +557,6 @@ impl RustSendFlowManager {
 
         // update the state
         self.state.lock().entering_fiat_amount = new_value.clone();
-        self.send(Message::UpdateEnteringFiatAmount(new_value.clone()));
 
         let prices = self.app.prices()?;
         let selected_currency = self.state.lock().selected_fiat_currency;
@@ -594,12 +600,11 @@ impl RustSendFlowManager {
         Some(())
     }
 
-    fn entering_address_changed(self: &Arc<Self>, address: String) {
+    fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
         debug!("entering_address_changed: {address}");
 
         // update the state
         self.state.lock().entering_address = address.clone();
-        self.send(Message::UpdateEnteringAddress(address.clone()));
 
         // if the address is valid, then set it in the state
         let address = Address::from_string(&address, self.state.lock().metadata.network).ok();
@@ -865,7 +870,7 @@ impl RustSendFlowManager {
             return;
         }
 
-        // if its already empty clear everythign
+        // if its already empty clear everything
         {
             let state = self.state.lock();
             let entering_btc_amount_is_empty = state.entering_btc_amount.is_empty();

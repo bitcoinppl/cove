@@ -28,17 +28,11 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     var maxSelected: Amount? = nil
 
     var enteringAddress: Binding<String> {
-        binding(\._enteringAddress) { .changeEnteringAddress($0) }
-    }
-
-    private func binding(
-        _ keyPath: KeyPath<SendFlowManager, String>,
-        _ action: @escaping (String) -> SendFlowManagerAction
-    ) -> Binding<String> {
         Binding<String>(
-            get: { self[keyPath: keyPath] },
+            get: { self._enteringAddress },
             set: { newValue in
-                self.dispatch(action: action(newValue))
+                self._enteringAddress = newValue
+                self.dispatch(action: .notifyEnteringAddressChanged(newValue))
             }
         )
     }

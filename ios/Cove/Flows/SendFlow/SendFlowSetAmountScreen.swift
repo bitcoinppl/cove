@@ -287,7 +287,7 @@ struct SendFlowSetAmountScreen: View {
 
     private func clearAddress() {
         Log.debug("clearAddress")
-        sendFlowManager.dispatch(action: .changeEnteringAddress(""))
+        sendFlowManager.dispatch(action: .notifyEnteringAddressChanged(""))
     }
 
     private func scannedCodeChanged(old: TaggedString?, newValue: TaggedString?) {
