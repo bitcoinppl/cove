@@ -159,7 +159,7 @@ struct SendFlowSetAmountScreen: View {
         }
         .padding(.top, 0)
         .onChange(of: presenter.focusField, initial: true, focusFieldChanged)
-        .onChange(of: scannedCode, initial: true, scannedCodeChanged)
+        .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .onChange(of: metadata.selectedUnit, initial: false) { oldUnit, newUnit in
             sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
         }

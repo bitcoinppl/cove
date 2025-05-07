@@ -18222,7 +18222,7 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateEnteringAddress(String
     )
-    case updateAddress(Address
+    case updateAddress(Address?
     )
     case setMaxSelected(Amount
     )
@@ -18268,7 +18268,7 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 3: return .updateEnteringAddress(try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .updateAddress(try FfiConverterTypeAddress.read(from: &buf)
+        case 4: return .updateAddress(try FfiConverterOptionTypeAddress.read(from: &buf)
         )
         
         case 5: return .setMaxSelected(try FfiConverterTypeAmount.read(from: &buf)
@@ -18324,7 +18324,7 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         
         case let .updateAddress(v1):
             writeInt(&buf, Int32(4))
-            FfiConverterTypeAddress.write(v1, into: &buf)
+            FfiConverterOptionTypeAddress.write(v1, into: &buf)
             
         
         case let .setMaxSelected(v1):
@@ -26049,9 +26049,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

@@ -76,7 +76,7 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateEnteringBtcAmount(String),
     UpdateEnteringFiatAmount(String),
     UpdateEnteringAddress(String),
-    UpdateAddress(Arc<Address>),
+    UpdateAddress(Option<Arc<Address>>),
 
     SetMaxSelected(Arc<Amount>),
     UnsetMaxSelected,
@@ -595,16 +595,16 @@ impl RustSendFlowManager {
     }
 
     fn entering_address_changed(self: &Arc<Self>, address: String) {
+        debug!("entering_address_changed: {address}");
+
         // update the state
         self.state.lock().entering_address = address.clone();
         self.send(Message::UpdateEnteringAddress(address.clone()));
 
         // if the address is valid, then set it in the state
         let address = Address::from_string(&address, self.state.lock().metadata.network).ok();
-        let Some(address) = address else { return };
-
-        let address = Arc::new(address);
-        self.state.lock().address = Some(address.clone());
+        let address = address.map(Arc::new);
+        self.state.lock().address = address.clone();
         self.send(Message::UpdateAddress(address.clone()));
 
         // when we have a valid address, use that to get the fee rate options
@@ -973,7 +973,7 @@ impl RustSendFlowManager {
         let address = Arc::new(address_with_network.address);
 
         self.state.lock().address = Some(address.clone());
-        self.send(Message::UpdateAddress(address.clone()));
+        self.send(Message::UpdateAddress(Some(address.clone())));
 
         self.state.lock().entering_address = address.to_string();
         self.send(Message::UpdateEnteringAddress(address.to_string()));
