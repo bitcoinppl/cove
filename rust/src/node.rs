@@ -1,7 +1,9 @@
 pub mod client;
 pub mod client_builder;
 
-use crate::node_connect::{BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA};
+use crate::node_connect::{
+    BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA, TESTNET4_ESPLORA,
+};
 
 use client::NodeClient;
 use cove_types::network::Network;
@@ -66,6 +68,16 @@ impl Node {
 
             Network::Signet => {
                 let (name, url) = SIGNET_ESPLORA[0];
+                Self {
+                    name: name.to_string(),
+                    network,
+                    api_type: ApiType::Esplora,
+                    url: url.to_string(),
+                }
+            }
+
+            Network::Testnet4 => {
+                let (name, url) = TESTNET4_ESPLORA[0];
                 Self {
                     name: name.to_string(),
                     network,

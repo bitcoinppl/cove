@@ -12,6 +12,7 @@
   - Show proper formatting as you type
   - Default to entering the amount in before the address
   - Small UI bug fixes
+- Testnet4 support
 
 ### Internal (non-user facing)
 
