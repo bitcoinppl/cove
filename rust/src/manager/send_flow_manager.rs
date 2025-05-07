@@ -608,10 +608,10 @@ impl RustSendFlowManager {
         let currency = self.state.lock().selected_fiat_currency;
         let mut state = self.state.lock();
 
-        state.amount_sats = None;
+        state.amount_sats = Some(0);
         self.send(Message::UpdateAmountSats(0));
 
-        state.amount_fiat = None;
+        state.amount_fiat = Some(0.0);
         self.send(Message::UpdateAmountFiat(0.0));
 
         // fiat
@@ -689,6 +689,8 @@ impl RustSendFlowManager {
         old: Option<SetAmountFocusField>,
         new: Option<SetAmountFocusField>,
     ) {
+        debug!("handle_focus_field_changed: {old:?} --> {new:?}");
+
         // most likely the first load, so ignore for now let front end handle it
         if old.is_none() && new.is_some() && self.state.lock().focus_field.is_none() {
             return;
@@ -776,7 +778,7 @@ impl RustSendFlowManager {
             .into();
 
         let total = Arc::new(psbt.output_total_amount());
-        println!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");
+        trace!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");
 
         self.state.lock().max_selected = Some(total.clone());
         self.send(Message::SetMaxSelected(total.clone()));

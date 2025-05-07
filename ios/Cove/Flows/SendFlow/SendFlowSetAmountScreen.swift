@@ -71,6 +71,12 @@ struct SendFlowSetAmountScreen: View {
     private func next() {
         sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen)
     }
+    
+    private func dismissIfValid() {
+        if validate(true) {
+            presenter.focusField = .none
+        }
+    }
 
     // doing it this way prevents an alert popping up when the user just goes back
     private func setAlertState(_ error: SendFlowError) {
@@ -183,33 +189,20 @@ struct SendFlowSetAmountScreen: View {
             try? await Task.sleep(for: .milliseconds(700))
 
             await MainActor.run {
+                Log.debug("SendFlowSetAmountScreen: onAppear \(sendFlowManager.amount)")
                 if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 {
-                     presenter.focusField = .amount
+                    presenter.focusField = .amount
+                } else if address.wrappedValue.isEmpty {
+                    presenter.focusField = .address
                 }
 
-                if address.wrappedValue.isEmpty {
-                     presenter.focusField = .address
-                }
-                
                 // only display error if it was already loaded with amount and address
                 if let amount = sendFlowManager.amount, amount.asSats() != 0 {
-                    let _  = self.validateAmount(displayAlert: true)
+                    let _ = self.validateAmount(displayAlert: true)
                 }
-                    
+
                 if sendFlowManager.address != nil {
                     let _ = self.validateAddress(displayAlert: true)
-                }
-                
-                // all valid, scroll to bottom
-                if validate() {
-                    presenter.focusField = .none
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        withAnimation(.easeInOut(duration: 0.4)) {
-                            presenter.focusField = .none
-                            scrollPosition.scrollTo(edge: .bottom)
-                        }
-                    }
                 }
             }
         }
@@ -219,19 +212,6 @@ struct SendFlowSetAmountScreen: View {
                 app.popRoute()
                 return
             }
-
-            // all valid, scroll to bottom
-            if validate() {
-                presenter.focusField = .none
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        presenter.focusField = .none
-                        scrollPosition.scrollTo(edge: .bottom)
-                    }
-                }
-            }
-
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .alert(
@@ -289,10 +269,12 @@ struct SendFlowSetAmountScreen: View {
 
         sendFlowManager.dispatch(action: .notifyFocusFieldChanged(old: oldField, new: newField))
 
+        guard let newField else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             withAnimation(.easeInOut(duration: 0.4)) {
                 // if keyboard opening directly to amount, dont update scroll position
                 if newField == .amount, oldField == .none { return }
+                Log.debug("scrolling to \(String(describing: newField))")
                 scrollPosition.scrollTo(id: newField)
             }
         }
@@ -326,7 +308,7 @@ struct SendFlowSetAmountScreen: View {
                         Text("Next")
                     }
                 } else {
-                    Button(action: { presenter.focusField = .none }) {
+                    Button(action: dismissIfValid) {
                         Text("Done")
                     }
                 }
@@ -349,7 +331,7 @@ struct SendFlowSetAmountScreen: View {
             .buttonStyle(.bordered)
             .tint(.primary)
 
-            Button(action: { presenter.focusField = .none }) {
+            Button(action: dismissIfValid) {
                 Label("Done", systemImage: "keyboard.chevron.compact.down")
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.primary)
@@ -407,7 +389,7 @@ struct SendFlowSetAmountScreen: View {
             .buttonStyle(.bordered)
             .tint(.primary)
 
-            Button(action: { presenter.focusField = .none }) {
+            Button(action: dismissIfValid) {
                 Label("Done", systemImage: "keyboard.chevron.compact.down")
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.primary)
