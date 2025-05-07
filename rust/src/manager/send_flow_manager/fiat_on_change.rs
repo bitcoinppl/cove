@@ -119,12 +119,24 @@ impl FiatOnChangeHandler {
             self.prices,
         );
 
+        let mut fiat_value_to_parse = new_value_raw.as_str();
+
+        // if its already 0.00, just start entering dollars
+        if old_value_raw == "0.00" {
+            fiat_value_to_parse = fiat_value_to_parse.trim_start_matches("0.00");
+        }
+
+        // if the old value is 0.00, and we are erasing, erase all of it
+        if old_value_raw == "0.00" && new_value_raw == "0.0" {
+            fiat_value_to_parse = "";
+        }
+
         // get fiat value as a f64
-        let fiat_value = self.converter.parse_fiat_str(&new_value_raw)?;
+        let fiat_value = self.converter.parse_fiat_str(&fiat_value_to_parse)?;
 
         // get how many decimals there are after the decimal point
         let (dollars, cents_with_decimal_point) =
-            sanitize::seperate_and_limit_dollars_and_cents(&new_value_raw, 2);
+            sanitize::seperate_and_limit_dollars_and_cents(&fiat_value_to_parse, 2);
 
         let dollars = dollars.parse::<u64>().ok().unwrap_or_default();
         let dollars_formatted = dollars.thousands_int();
