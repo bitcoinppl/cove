@@ -357,20 +357,6 @@ impl RustSendFlowManager {
             return false;
         }
 
-        let selected_fee_rate = self.state.lock().selected_fee_rate.clone();
-        if let Some(fee_rate) = &selected_fee_rate {
-            let fee = fee_rate.total_fee().to_sat();
-            if amount + fee > spendable_balance {
-                let msg = Message::SetAlert(SendFlowError::InsufficientFunds.into());
-                if display_alert {
-                    self.send(msg);
-                } else {
-                    debug!("validate_amount_failed: {msg:?}");
-                };
-                return false;
-            }
-        }
-
         true
     }
 
