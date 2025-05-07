@@ -199,7 +199,10 @@ impl RustSendFlowManager {
         let amount_sats = self.amount_sats();
         let send_amount = Amount::from_sat(amount_sats);
         match self.state.lock().metadata.selected_unit {
-            Unit::Btc => send_amount.as_btc().thousands().to_string(),
+            Unit::Btc => {
+                let string = send_amount.as_btc().thousands();
+                if string.contains("e") { send_amount.btc_string() } else { string.to_string() }
+            }
             Unit::Sat => send_amount.as_sats().thousands_int().to_string(),
         }
     }
