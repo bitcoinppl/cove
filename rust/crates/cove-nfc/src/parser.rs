@@ -337,7 +337,7 @@ mod tests {
         let NdefPayload::Text(payload_string) = payload else { panic!("payload is not text") };
 
         let descriptor_string =
-            std::fs::read_to_string("../test/data/descriptor.txt").unwrap().trim().to_string();
+            std::fs::read_to_string("test/data/descriptor.txt").unwrap().trim().to_string();
 
         assert_eq!(payload_string.text, descriptor_string);
     }
@@ -355,7 +355,7 @@ mod tests {
         let NdefPayload::Data(payload) = payload else { panic!("payload is not data") };
 
         let payload_string = String::from_utf8(payload).unwrap();
-        let export_string = std::fs::read_to_string("../test/data/export.json").unwrap();
+        let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
 
         let payload_json = serde_json::from_str::<serde_json::Value>(&payload_string).unwrap();
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
@@ -384,7 +384,7 @@ mod tests {
 
         let NdefPayload::Data(payload) = &record.payload else { panic!("payload is not data") };
 
-        let export_string = std::fs::read_to_string("../test/data/export.json").unwrap();
+        let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
 
         assert_eq!(serde_json::from_slice::<serde_json::Value>(payload).unwrap(), export_json);
@@ -401,7 +401,7 @@ mod tests {
         assert_eq!(record.type_, b"T");
 
         let known_descriptor_string =
-            std::fs::read_to_string("../test/data/descriptor.txt").unwrap().trim().to_string();
+            std::fs::read_to_string("test/data/descriptor.txt").unwrap().trim().to_string();
 
         let NdefPayload::Text(payload_string) = &record.payload else {
             panic!("payload is not text")

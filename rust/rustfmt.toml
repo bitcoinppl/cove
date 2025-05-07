@@ -1,7 +1,5 @@
 max_width = 100
-single_line_let_else_max_width = 100
-single_line_if_else_max_width = 100
-use_small_heuristics = "Max"         # ﬂattens more constructs
+use_small_heuristics = "Max" # ﬂattens more constructs
 
 # nightly
 # struct_lit_single_line = true # e.g. `Foo { x: 1, y: 2 }`
