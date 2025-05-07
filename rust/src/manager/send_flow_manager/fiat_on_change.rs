@@ -132,11 +132,11 @@ impl FiatOnChangeHandler {
         }
 
         // get fiat value as a f64
-        let fiat_value = self.converter.parse_fiat_str(&fiat_value_to_parse)?;
+        let fiat_value = self.converter.parse_fiat_str(fiat_value_to_parse)?;
 
         // get how many decimals there are after the decimal point
         let (dollars, cents_with_decimal_point) =
-            sanitize::seperate_and_limit_dollars_and_cents(&fiat_value_to_parse, 2);
+            sanitize::seperate_and_limit_dollars_and_cents(fiat_value_to_parse, 2);
 
         let dollars = dollars.parse::<u64>().ok().unwrap_or_default();
         let dollars_formatted = dollars.thousands_int();
