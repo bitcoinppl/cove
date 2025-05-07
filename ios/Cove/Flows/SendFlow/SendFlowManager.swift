@@ -27,6 +27,11 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     var feeRateOptions: FeeRateOptionsWithTotalFee? = nil
     var maxSelected: Amount? = nil
 
+    // presenting
+    var sendAmountFiat: String = ""
+    var sendAmountBtc: String = ""
+    var totalSpentInFiat: String = ""
+
     var enteringAddress: Binding<String> {
         Binding<String>(
             get: { self._enteringAddress },
@@ -42,6 +47,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.presenter = presenter
 
         self.enteringFiatAmount = rust.enteringFiatAmount()
+        self.sendAmountFiat = rust.sendAmountFiat()
+        self.sendAmountBtc = rust.sendAmountBtc()
+        self.totalSpentInFiat = rust.totalSpentFiat()
+
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -67,31 +76,49 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             await MainActor.run {
                 switch message {
                 case let .updateAmountFiat(fiat):
+                    self.totalSpentInFiat = self.rust.totalSpentFiat()
+                    self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.fiatAmount = fiat
+
                 case let .updateAmountSats(sats):
+                    self.totalSpentInFiat = self.rust.totalSpentFiat()
+                    self.sendAmountBtc = self.rust.sendAmountBtc()
+                    self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.amount = Amount.fromSat(sats: sats)
+
                 case let .updateFeeRateOptions(options):
                     self.feeRateOptions = options
+
                 case let .updateAddress(address):
                     self.address = address
+
                 case let .updateEnteringBtcAmount(amount):
                     self.enteringBtcAmount = amount
+
                 case let .updateEnteringAddress(address):
                     self._enteringAddress = address
+
                 case let .updateEnteringFiatAmount(amount):
                     self.enteringFiatAmount = amount
+
                 case let .updateSelectedFeeRate(rate):
+                    self.totalSpentInFiat = self.rust.totalSpentFiat()
+                    self.sendAmountBtc = self.rust.sendAmountBtc()
+                    self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.selectedFeeRate = rate
-                case let .updateFeeRate(rate):
-                    self.selectedFeeRate = rate
+
                 case let .updateFocusField(field):
                     self.presenter.focusField = field
+
                 case let .setAlert(alertState):
                     self.presenter.alertState = .init(alertState)
+
                 case .clearAlert:
                     self.presenter.alertState = .none
+
                 case let .setMaxSelected(maxSelected):
                     self.maxSelected = maxSelected
+
                 case .unsetMaxSelected:
                     self.maxSelected = nil
                 }

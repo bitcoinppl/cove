@@ -85,7 +85,6 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateAmountFiat(f64),
 
     UpdateFocusField(Option<SetAmountFocusField>),
-    UpdateFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
     UpdateSelectedFeeRate(Arc<FeeRateOptionWithTotalFee>),
     UpdateFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
@@ -131,7 +130,7 @@ pub enum SendFlowManagerAction {
 
 impl RustSendFlowManager {
     pub fn new(metadata: WalletMetadata, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
-        let (sender, receiver) = flume::bounded(100);
+        let (sender, receiver) = flume::bounded(50);
 
         let state = State::new(metadata);
 
@@ -200,7 +199,10 @@ impl RustSendFlowManager {
         let amount_sats = self.amount_sats();
         let send_amount = Amount::from_sat(amount_sats);
         match self.state.lock().metadata.selected_unit {
-            Unit::Btc => send_amount.as_btc().thousands().to_string(),
+            Unit::Btc => {
+                let string = send_amount.as_btc().thousands();
+                if string.contains("e") { send_amount.btc_string() } else { string.to_string() }
+            }
             Unit::Sat => send_amount.as_sats().thousands_int().to_string(),
         }
     }
@@ -393,6 +395,8 @@ impl RustSendFlowManager {
     /// action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
+        debug!("dispatch: {action:?}");
+
         match action {
             Action::NotifyEnteringBtcAmountChanged(string) => {
                 let old_value = self.state.lock().entering_btc_amount.clone();
@@ -644,7 +648,7 @@ impl RustSendFlowManager {
 
     fn selected_fee_rate_changed(self: &Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
         self.state.lock().selected_fee_rate = Some(fee_rate.clone());
-        self.send(Message::UpdateFeeRate(fee_rate.clone()));
+        self.send(Message::UpdateSelectedFeeRate(fee_rate.clone()));
 
         // max was selected before, so we need to update it to match the new fee rate
         let max_selected = self.state.lock().max_selected.clone();
@@ -872,15 +876,11 @@ impl RustSendFlowManager {
         // if its already empty clear everything
         {
             let state = self.state.lock();
+            let amount_is_empty = state.amount_sats.is_none();
             let entering_btc_amount_is_empty = state.entering_btc_amount.is_empty();
-            let entering_fiat_amount_is_empty = state.entering_fiat_amount.is_empty();
             drop(state);
 
-            if old == Unit::Btc && entering_btc_amount_is_empty {
-                return self.clear_send_amount();
-            }
-
-            if old == Unit::Sat && entering_fiat_amount_is_empty {
+            if entering_btc_amount_is_empty || amount_is_empty {
                 return self.clear_send_amount();
             }
         }
@@ -890,7 +890,10 @@ impl RustSendFlowManager {
             return;
         }
 
-        let amount_sats = self.state.lock().amount_sats.unwrap_or(0);
+        let Some(amount_sats) = self.state.lock().amount_sats else {
+            return;
+        };
+
         match new {
             Unit::Btc => {
                 let amount_string = Amount::from_sat(amount_sats).btc_string();
@@ -908,9 +911,12 @@ impl RustSendFlowManager {
     fn handle_btc_or_fiat_changed(&self, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
         self.state.lock().metadata.fiat_or_btc = new_value;
 
+        let Some(amount_sats) = self.state.lock().amount_sats else {
+            return;
+        };
+
         match new_value {
             FiatOrBtc::Btc => {
-                let amount_sats = self.state.lock().amount_sats.unwrap_or_default();
                 let amount = Amount::from_sat(amount_sats);
 
                 let amount_fmt = match self.state.lock().metadata.selected_unit {
@@ -1228,13 +1234,13 @@ impl RustSendFlowManager {
 
                 if new_selected_fee_rate != selected_fee_rate {
                     self.state.lock().selected_fee_rate = Some(new_selected_fee_rate.clone());
-                    self.send(Message::UpdateFeeRate(new_selected_fee_rate));
+                    self.send(Message::UpdateSelectedFeeRate(new_selected_fee_rate));
                 }
             }
             None => {
                 let medium = Arc::new(fee_rate_options_with_total_fee.clone().medium);
                 self.state.lock().selected_fee_rate = Some(medium.clone());
-                self.send(Message::UpdateFeeRate(medium));
+                self.send(Message::UpdateSelectedFeeRate(medium));
             }
         }
 
