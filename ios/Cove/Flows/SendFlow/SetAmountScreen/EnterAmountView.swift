@@ -8,6 +8,7 @@ import SwiftUI
 
 struct EnterAmountView: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
     @Environment(SendFlowPresenter.self) private var presenter
     @Environment(WalletManager.self) private var manager
 
@@ -129,6 +130,12 @@ struct EnterAmountView: View {
                     _, new in focusField = new
                 }
                 .onChange(of: focusField, initial: true) { _, new in
+                    if auth.lockState == .locked {
+                        focusField = .none
+                        presenter.focusField = .none
+                        return
+                    }
+
                     if new == .none {
                         focusField = presenter.focusField
                     } else {
