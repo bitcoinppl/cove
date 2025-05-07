@@ -130,7 +130,7 @@ pub enum SendFlowManagerAction {
 
 impl RustSendFlowManager {
     pub fn new(metadata: WalletMetadata, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
-        let (sender, receiver) = flume::bounded(100);
+        let (sender, receiver) = flume::bounded(50);
 
         let state = State::new(metadata);
 
