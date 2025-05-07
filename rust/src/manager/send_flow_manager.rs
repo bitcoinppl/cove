@@ -655,6 +655,11 @@ impl RustSendFlowManager {
         if max_selected.is_some() {
             self.clone().dispatch(Action::SelectMaxSend);
         }
+
+        if self.validate_amount(false) && self.validate_address(false) {
+            self.state.lock().focus_field = None;
+            self.send(Message::UpdateFocusField(None));
+        }
     }
 
     /// When amount is changed, we will need to update the entering and fiat amounts
