@@ -472,6 +472,7 @@ impl RustSendFlowManager {
 
         // update the state
         self.state.lock().entering_btc_amount = new.clone();
+        self.send(Message::UpdateEnteringBtcAmount(new.clone()));
 
         let state: State = self.state.clone().into();
         let me = self.clone();
@@ -536,6 +537,7 @@ impl RustSendFlowManager {
 
         // update the state
         self.state.lock().entering_fiat_amount = new_value.clone();
+        self.send(Message::UpdateEnteringFiatAmount(new_value.clone()));
 
         let prices = self.app.prices()?;
         let selected_currency = self.state.lock().selected_fiat_currency;
@@ -581,6 +583,7 @@ impl RustSendFlowManager {
     }
 
     fn entering_address_changed(self: &Arc<Self>, address: String) {
+        // update the state
         self.state.lock().entering_address = address.clone();
         self.send(Message::UpdateEnteringAddress(address.clone()));
 
