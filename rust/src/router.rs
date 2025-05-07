@@ -16,19 +16,13 @@ use derive_more::From;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
-    LoadAndReset {
-        reset_to: Vec<Arc<BoxedRoute>>,
-        after_millis: u32,
-    },
+    LoadAndReset { reset_to: Vec<Arc<BoxedRoute>>, after_millis: u32 },
     ListWallets,
     SelectedWallet(WalletId),
     NewWallet(NewWalletRoute),
     Settings(SettingsRoute),
     SecretWords(WalletId),
-    TransactionDetails {
-        id: WalletId,
-        details: Arc<TransactionDetails>,
-    },
+    TransactionDetails { id: WalletId, details: Arc<TransactionDetails> },
     Send(SendRoute),
 }
 
@@ -89,15 +83,8 @@ pub enum WalletSettingsRoute {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendRoute {
-    SetAmount {
-        id: WalletId,
-        address: Option<Arc<Address>>,
-        amount: Option<Arc<Amount>>,
-    },
-    HardwareExport {
-        id: WalletId,
-        details: Arc<ConfirmDetails>,
-    },
+    SetAmount { id: WalletId, address: Option<Arc<Address>>, amount: Option<Arc<Amount>> },
+    HardwareExport { id: WalletId, details: Arc<ConfirmDetails> },
     Confirm(SendRouteConfirmArgs),
 }
 
@@ -131,10 +118,7 @@ pub enum TapSignerRoute {
     // setup routes
     InitSelect(Arc<cove_tap_card::TapSigner>),
     InitAdvanced(Arc<cove_tap_card::TapSigner>),
-    StartingPin {
-        tap_signer: Arc<cove_tap_card::TapSigner>,
-        chain_code: Option<String>,
-    },
+    StartingPin { tap_signer: Arc<cove_tap_card::TapSigner>, chain_code: Option<String> },
     NewPin(TapSignerNewPinArgs),
     ConfirmPin(TapSignerConfirmPinArgs),
     SetupSuccess(Arc<cove_tap_card::TapSigner>, TapSignerSetupComplete),
@@ -145,10 +129,7 @@ pub enum TapSignerRoute {
     ImportRetry(Arc<cove_tap_card::TapSigner>),
 
     // shared routes
-    EnterPin {
-        tap_signer: Arc<cove_tap_card::TapSigner>,
-        action: AfterPinAction,
-    },
+    EnterPin { tap_signer: Arc<cove_tap_card::TapSigner>, action: AfterPinAction },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -191,11 +172,7 @@ impl Router {
             default_route = Route::SelectedWallet(selected_wallet);
         };
 
-        Self {
-            app: FfiApp::global(),
-            default: default_route,
-            routes: vec![],
-        }
+        Self { app: FfiApp::global(), default: default_route, routes: vec![] }
     }
 
     pub fn reset_routes_to(&mut self, route: Route) {
@@ -251,10 +228,7 @@ impl Route {
     }
 
     pub fn load_and_reset_after(self, time: u32) -> Self {
-        Self::LoadAndReset {
-            reset_to: vec![BoxedRoute::new(self).into()],
-            after_millis: time,
-        }
+        Self::LoadAndReset { reset_to: vec![BoxedRoute::new(self).into()], after_millis: time }
     }
 }
 
@@ -325,10 +299,7 @@ impl RouteFactory {
         routes.push(BoxedRoute::new(default_route).into());
         routes.extend(boxed_nested_routes);
 
-        Route::LoadAndReset {
-            reset_to: routes,
-            after_millis: 500,
-        }
+        Route::LoadAndReset { reset_to: routes, after_millis: 500 }
     }
 
     pub fn load_and_reset_to(&self, reset_to: Route) -> Route {
@@ -346,11 +317,7 @@ impl RouteFactory {
         address: Option<Arc<Address>>,
         amount: Option<Arc<Amount>>,
     ) -> Route {
-        let send = SendRoute::SetAmount {
-            id,
-            address,
-            amount,
-        };
+        let send = SendRoute::SetAmount { id, address, amount };
 
         Route::Send(send)
     }
@@ -363,12 +330,7 @@ impl RouteFactory {
         signed_transaction: Option<Arc<BitcoinTransaction>>,
         signed_psbt: Option<Arc<Psbt>>,
     ) -> Route {
-        let args = SendRouteConfirmArgs {
-            id,
-            details,
-            signed_transaction,
-            signed_psbt,
-        };
+        let args = SendRouteConfirmArgs { id, details, signed_transaction, signed_psbt };
 
         let send = SendRoute::Confirm(args);
         Route::Send(send)
@@ -388,10 +350,7 @@ impl RouteFactory {
     }
 
     pub fn nested_wallet_settings(&self, id: WalletId) -> Vec<Route> {
-        vec![
-            Route::Settings(SettingsRoute::Main),
-            self.main_wallet_settings(id),
-        ]
+        vec![Route::Settings(SettingsRoute::Main), self.main_wallet_settings(id)]
     }
 
     pub fn main_wallet_settings(&self, id: WalletId) -> Route {

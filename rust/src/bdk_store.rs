@@ -26,11 +26,7 @@ impl BdkStore {
         let conn = bdk_wallet::rusqlite::Connection::open(&sqlite_data_path)
             .context("unable to open rusqlite connection")?;
 
-        let mut me = Self {
-            id: id.clone(),
-            network: network.into(),
-            conn,
-        };
+        let mut me = Self { id: id.clone(), network: network.into(), conn };
 
         if let Err(e) = me.check_and_migrate_from_file_store() {
             tracing::error!("{id} failed to migrate from file store: {e:?}");
@@ -86,9 +82,7 @@ impl BdkStore {
                 .create_wallet(&mut self.conn)
                 .context("failed to create wallet")?;
 
-        persisted_wallet
-            .persist(&mut self.conn)
-            .context("failed to persist wallet")?;
+        persisted_wallet.persist(&mut self.conn).context("failed to persist wallet")?;
 
         // reset metadata scanning state to default so we force a full scan
         metadata.internal.last_scan_finished = None;

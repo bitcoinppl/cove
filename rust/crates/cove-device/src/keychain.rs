@@ -90,9 +90,7 @@ impl Keychain {
             return Ok(None);
         };
 
-        let Some(encryption_key) = self
-            .0
-            .get(wallet_mnemonic_encryption_and_nonce_key_name(id))
+        let Some(encryption_key) = self.0.get(wallet_mnemonic_encryption_and_nonce_key_name(id))
         else {
             return Ok(None);
         };

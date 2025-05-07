@@ -5,11 +5,9 @@
 //  Created by Praveen Perera  on 6/17/24.
 //
 
-import CoveCore
+@_exported import CoveCore
 import MijickPopupView
 import SwiftUI
-
-@_exported import CoveCore
 
 struct NavigateKey: EnvironmentKey {
     static let defaultValue: (Route) -> Void = { _ in }
@@ -83,7 +81,7 @@ struct CoveApp: App {
             case let .addressWrongNetwork(
                 address: address, network: network, currentNetwork: currentNetwork
             ):
-                "The address \(address) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
+                "The address \(address.toString()) is on the wrong network. You are on \(currentNetwork), and the address was for \(network)."
             case let .noWalletSelected(address),
                  let .foundAddress(address, _):
                 address.unformatted()

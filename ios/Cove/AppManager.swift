@@ -58,6 +58,10 @@ import SwiftUI
         self.rust = rust
         database = Database()
 
+        // set the cached prices and fees
+        prices = try? rust.prices()
+        fees = try? rust.fees()
+
         self.rust.listenForUpdates(updater: self)
     }
 
@@ -185,6 +189,9 @@ import SwiftUI
                 switch message {
                 case let .routeUpdated(routes: routes):
                     self.router.routes = routes
+
+                case let .pushedRoute(route):
+                    self.router.routes.append(route)
 
                 case .databaseUpdated:
                     self.database = Database()

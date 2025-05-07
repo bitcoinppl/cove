@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crossbeam::channel::Sender;
+use flume::Sender;
 use once_cell::sync::OnceCell;
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
     wallet::metadata::WalletMode,
 };
 
-#[derive(uniffi::Enum)]
+#[derive(Debug, uniffi::Enum)]
 #[allow(clippy::enum_variant_names)]
 pub enum AppStateReconcileMessage {
     DefaultRouteChanged(Route, Vec<Route>),
@@ -28,6 +28,7 @@ pub enum AppStateReconcileMessage {
     FeesChanged(FeeResponse),
     FiatCurrencyChanged(FiatCurrency),
     WalletModeChanged(WalletMode),
+    PushedRoute(Route),
 }
 
 // alias for easier imports on the rust side
@@ -45,7 +46,7 @@ impl Updater {
     pub fn global() -> &'static Self {
         #[cfg(test)]
         {
-            let (sender, receiver) = crossbeam::channel::bounded(1000);
+            let (sender, receiver) = flume::bounded(1000);
             Box::leak(Box::new(receiver));
             Self::init(sender);
         }
@@ -54,10 +55,7 @@ impl Updater {
     }
 
     pub fn send_update(message: AppStateReconcileMessage) {
-        Self::global()
-            .0
-            .send(message)
-            .expect("failed to send update");
+        Self::global().0.send(message).expect("failed to send update");
     }
 }
 

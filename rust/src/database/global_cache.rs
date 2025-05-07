@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use redb::TableDefinition;
+use tracing::debug;
 
 use crate::{
     app::reconcile::{Update, Updater},
@@ -67,14 +68,11 @@ impl GlobalCacheTable {
 
 impl GlobalCacheTable {
     pub fn get(&self, key: GlobalCacheKey) -> Result<Option<GlobalCacheData>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn =
+            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
-        let table = read_txn
-            .open_table(TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table =
+            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
 
         let key: &'static str = key.into();
         let value = table
@@ -86,10 +84,9 @@ impl GlobalCacheTable {
     }
 
     pub fn set(&self, key: GlobalCacheKey, value: GlobalCacheData) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        debug!("set global cache: {key:?} -> {value:?}");
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -102,9 +99,7 @@ impl GlobalCacheTable {
                 .map_err(|error| GlobalCacheTableError::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Updater::send_update(Update::DatabaseUpdated);
 

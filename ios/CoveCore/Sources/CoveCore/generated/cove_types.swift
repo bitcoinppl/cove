@@ -1054,6 +1054,8 @@ public protocol AmountProtocol: AnyObject, Sendable {
     
     func btcStringWithUnit()  -> String
     
+    func fmtString(unit: Unit)  -> String
+    
     func fmtStringWithUnit(unit: Unit)  -> String
     
     func satsString()  -> String
@@ -1159,6 +1161,14 @@ open func btcString() -> String  {
 open func btcStringWithUnit() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_amount_btc_string_with_unit(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func fmtString(unit: Unit) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_amount_fmt_string(self.uniffiClonePointer(),
+        FfiConverterTypeUnit_lower(unit),$0
     )
 })
 }
@@ -3738,7 +3748,7 @@ public enum AddressError: Swift.Error {
     )
     case InvalidAddress
     case UnsupportedNetwork
-    case WrongNetwork(current: Network
+    case WrongNetwork(current: Network, validFor: Network
     )
     case EmptyAddress
 }
@@ -3764,7 +3774,8 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
         case 3: return .InvalidAddress
         case 4: return .UnsupportedNetwork
         case 5: return .WrongNetwork(
-            current: try FfiConverterTypeNetwork.read(from: &buf)
+            current: try FfiConverterTypeNetwork.read(from: &buf), 
+            validFor: try FfiConverterTypeNetwork.read(from: &buf)
             )
         case 6: return .EmptyAddress
 
@@ -3796,9 +3807,10 @@ public struct FfiConverterTypeAddressError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
         
         
-        case let .WrongNetwork(current):
+        case let .WrongNetwork(current,validFor):
             writeInt(&buf, Int32(5))
             FfiConverterTypeNetwork.write(current, into: &buf)
+            FfiConverterTypeNetwork.write(validFor, into: &buf)
             
         
         case .EmptyAddress:
@@ -5101,6 +5113,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 14319) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_amount_fmt_string() != 40458) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 13588) {

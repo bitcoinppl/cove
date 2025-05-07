@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bip39::{Language, Mnemonic};
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 
 use crate::{
@@ -73,7 +73,7 @@ pub type Error = ImportWalletError;
 impl RustImportWalletManager {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(1000);
+        let (sender, receiver) = flume::bounded(1000);
 
         Self {
             state: Arc::new(RwLock::new(ImportWalletManagerState::new())),
@@ -97,11 +97,7 @@ impl RustImportWalletManager {
     /// Import wallet view from entered words
     #[uniffi::method]
     pub fn import_wallet(&self, entered_words: Vec<Vec<String>>) -> Result<WalletMetadata, Error> {
-        let words = entered_words
-            .into_iter()
-            .flatten()
-            .collect::<Vec<String>>()
-            .join(" ");
+        let words = entered_words.into_iter().flatten().collect::<Vec<String>>().join(" ");
 
         let mnemonic = Mnemonic::parse_in_normalized(Language::English, &words)
             .map_err(|e| ImportWalletError::InvalidWordGroup(e.to_string()))?;
@@ -125,10 +121,7 @@ impl RustImportWalletManager {
             })
             .unwrap_or_default();
 
-        if let Some((id, _)) = all_fingerprints
-            .into_iter()
-            .find(|(_, f)| f == &fingerprint)
-        {
+        if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f == &fingerprint) {
             return Err(ImportWalletError::WalletAlreadyExists(id));
         }
 

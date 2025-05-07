@@ -7,7 +7,7 @@ use arc_swap::ArcSwap;
 use eyre::{Context as _, Result};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::{debug, error, trace, warn};
 
 use crate::{database::Database, fiat::FiatCurrency, transaction::Amount};
 use cove_macros::impl_default_for;
@@ -33,12 +33,15 @@ pub struct FiatClient {
 }
 
 #[derive(
-    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, uniffi::Object,
+    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Object,
 )]
 #[serde(rename_all = "UPPERCASE")]
 pub struct PriceResponse {
     #[serde(rename = "time")]
     pub time: u64,
+
+    #[serde(default = "fetched_at")]
+    pub fetched_at: u64,
     pub usd: u64,
     pub eur: u64,
     pub gbp: u64,
@@ -51,10 +54,7 @@ pub struct PriceResponse {
 #[uniffi::export]
 impl PriceResponse {
     pub fn get(&self) -> u64 {
-        let currency = Database::global()
-            .global_config
-            .fiat_currency()
-            .unwrap_or_default();
+        let currency = Database::global().global_config.fiat_currency().unwrap_or_default();
 
         self.get_for_currency(currency)
     }
@@ -85,11 +85,7 @@ impl FiatClient {
 
     #[allow(dead_code)]
     fn new_with_url(url: String) -> Self {
-        Self {
-            url,
-            client: reqwest::Client::new(),
-            wait_before_new_prices: ONE_MIN,
-        }
+        Self { url, client: reqwest::Client::new(), wait_before_new_prices: ONE_MIN }
     }
 
     /// Get historical price and exchange rates for a specific timestamp
@@ -106,17 +102,41 @@ impl FiatClient {
         Ok(historical_prices)
     }
 
-    /// Get the current price for a currency
-    pub async fn prices(&self) -> Result<PriceResponse, reqwest::Error> {
+    /// Get the cached prices, will fetch and update the prices in the background if needed
+    /// Returns None if the prices are not cached
+    pub fn prices(&self) -> Option<PriceResponse> {
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
-            if now_secs - prices.time < self.wait_before_new_prices {
+            if (now_secs - prices.time) > self.wait_before_new_prices {
+                crate::task::spawn(async move { fetch_and_update_prices_if_needed().await });
+            }
+
+            return Some(*prices);
+        }
+
+        None
+    }
+
+    /// Always returns the latest prcies, will also update the prices cache
+    pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, reqwest::Error> {
+        trace!("get_or_fetch_prices");
+        if let Some(prices) = PRICES.load().as_ref() {
+            let now_secs = Timestamp::now().as_second() as u64;
+            if now_secs - prices.fetched_at < self.wait_before_new_prices {
                 return Ok(*prices);
             }
         }
 
+        debug!("fetching prices");
         let response = self.client.get(&self.url).send().await?;
         let prices: PriceResponse = response.json().await?;
+
+        // saved prices are the same as the new ones don't need to update
+        if let Some(saved_prices) = *PRICES.load().as_ref() {
+            if prices == saved_prices {
+                return Ok(saved_prices);
+            }
+        }
 
         // update global prices
         if let Err(error) = update_prices(prices) {
@@ -128,7 +148,7 @@ impl FiatClient {
 
     /// Get the current price for a currency
     async fn price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
-        let prices = self.prices().await?;
+        let prices = self.get_or_fetch_prices().await?;
 
         let price = match currency {
             FiatCurrency::Usd => prices.usd,
@@ -159,9 +179,10 @@ impl FiatClient {
 
 /// Get prices from the server, and save them in the database and cache in memory
 pub async fn init_prices() -> Result<()> {
+    debug!("init_prices");
     let fiat_client = &FIAT_CLIENT;
 
-    let prices = tryhard::retry_fn(|| fiat_client.prices())
+    let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
         .retries(20)
         .exponential_backoff(Duration::from_millis(10))
         .max_delay(Duration::from_secs(5))
@@ -172,9 +193,7 @@ pub async fn init_prices() -> Result<()> {
             PRICES.swap(Arc::new(Some(prices)));
 
             let db = Database::global();
-            db.global_cache
-                .set_prices(prices)
-                .context("unable to set prices")?;
+            db.global_cache.set_prices(prices).context("unable to set prices")?;
         }
 
         Err(error) => {
@@ -192,31 +211,39 @@ pub async fn init_prices() -> Result<()> {
 
 /// update price in database and cache
 fn update_prices(prices: PriceResponse) -> Result<()> {
-    PRICES.swap(Arc::new(Some(prices)));
+    debug!("update_prices");
 
+    PRICES.swap(Arc::new(Some(prices)));
     let db = Database::global();
-    db.global_cache
-        .set_prices(prices)
-        .context("unable to save prices to the database")?;
+    db.global_cache.set_prices(prices).context("unable to save prices to the database")?;
 
     Ok(())
 }
 
 /// Update prices if needed
-pub async fn update_prices_if_needed() -> Result<()> {
+pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
+    trace!("fetch_and_update_prices_if_needed");
     if let Some(prices) = PRICES.load().as_ref() {
         let now_secs = Timestamp::now().as_second() as u64;
-        if now_secs - prices.time < ONE_MIN {
+        if now_secs - prices.fetched_at < ONE_MIN {
             return Ok(());
         }
     }
 
+    debug!("fetching prices");
     let fiat_client = &FIAT_CLIENT;
-    let prices = tryhard::retry_fn(|| fiat_client.prices())
+    let prices = tryhard::retry_fn(|| fiat_client.get_or_fetch_prices())
         .retries(5)
         .exponential_backoff(Duration::from_millis(10))
         .max_delay(Duration::from_secs(1))
         .await?;
+
+    // saved prices are the same as the new ones don't need to update
+    if let Some(saved_prices) = *PRICES.load().as_ref() {
+        if prices == saved_prices {
+            return Ok(());
+        }
+    }
 
     update_prices(prices)?;
 
@@ -228,7 +255,7 @@ mod ffi {
 
     #[uniffi::export]
     async fn update_prices_if_needed() {
-        if let Err(error) = crate::fiat::client::update_prices_if_needed().await {
+        if let Err(error) = crate::fiat::client::fetch_and_update_prices_if_needed().await {
             error!("unable to update prices: {error:?}");
         }
     }
@@ -252,7 +279,7 @@ mod tests {
     async fn test_get_prices() {
         crate::database::delete_database();
         let fiat_client = &FIAT_CLIENT;
-        let fiat = fiat_client.prices().await.unwrap();
+        let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
         assert!(fiat.usd > 0);
     }
 
@@ -266,7 +293,7 @@ mod tests {
     async fn test_get_value_in_usd() {
         crate::database::delete_database();
         let fiat_client = &FIAT_CLIENT;
-        let fiat = fiat_client.prices().await.unwrap();
+        let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
         let value_in_usd = fiat_client
             .current_value_in_currency(Amount::one_btc(), FiatCurrency::Usd)
             .await
@@ -278,13 +305,11 @@ mod tests {
     async fn test_get_value_in_usd_with_currency() {
         crate::database::delete_database();
         let fiat_client = &FIAT_CLIENT;
-        let fiat = fiat_client.prices().await.unwrap();
+        let fiat = fiat_client.get_or_fetch_prices().await.unwrap();
 
         let half_a_btc = Amount::from_sat(50_000_000);
-        let value_in_usd = fiat_client
-            .current_value_in_currency(half_a_btc, FiatCurrency::Usd)
-            .await
-            .unwrap();
+        let value_in_usd =
+            fiat_client.current_value_in_currency(half_a_btc, FiatCurrency::Usd).await.unwrap();
 
         assert_eq!(value_in_usd, (fiat.usd as f64) / 2.0);
     }
@@ -335,4 +360,8 @@ mod tests {
 #[uniffi::export]
 fn prices_are_equal(lhs: Arc<PriceResponse>, rhs: Arc<PriceResponse>) -> bool {
     lhs == rhs
+}
+
+fn fetched_at() -> u64 {
+    Timestamp::now().as_second() as u64
 }

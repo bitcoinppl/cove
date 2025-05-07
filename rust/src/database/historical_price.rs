@@ -35,9 +35,7 @@ pub enum HistoricalPriceTableError {
 impl HistoricalPriceTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // Create table if it doesn't exist
-        write_txn
-            .open_table(TABLE)
-            .expect("failed to create historical prices table");
+        write_txn.open_table(TABLE).expect("failed to create historical prices table");
 
         Self { db }
     }
@@ -50,14 +48,11 @@ impl HistoricalPriceTable {
     ) -> Result<Option<HistoricalPriceRecord>, Error> {
         let key = NetworkBlockHeight::new(network, block_height);
 
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn =
+            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
-        let table = read_txn
-            .open_table(TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table =
+            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
 
         let value = table
             .get(key)
@@ -79,10 +74,8 @@ impl HistoricalPriceTable {
         // convert to the more compact record format
         let price_record: HistoricalPriceRecord = price.into();
 
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -94,9 +87,7 @@ impl HistoricalPriceTable {
                 .map_err(|error| HistoricalPriceTableError::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
@@ -108,14 +99,11 @@ impl HistoricalPriceTable {
         network: Network,
         block_heights: &[u32],
     ) -> Result<HashMap<u32, Option<HistoricalPrice>>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn =
+            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
-        let table = read_txn
-            .open_table(TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table =
+            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
 
         let mut prices = HashMap::with_capacity(block_heights.len());
 
@@ -136,10 +124,8 @@ impl HistoricalPriceTable {
     /// DANGEROUS: Deletes all prices from the table.
     #[allow(dead_code)]
     fn clear(&self) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -147,14 +133,10 @@ impl HistoricalPriceTable {
                 .map_err(|error| Error::TableAccess(error.to_string()))?;
 
             // delete all the records
-            table
-                .retain(|_, _| false)
-                .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+            table.retain(|_, _| false).map_err(|error| Error::DatabaseAccess(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
         Ok(())
     }
 }

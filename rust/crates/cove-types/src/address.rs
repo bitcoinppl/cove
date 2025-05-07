@@ -10,6 +10,7 @@ use bitcoin::{
     params::Params,
 };
 use serde::Deserialize;
+use strum::IntoEnumIterator as _;
 
 use crate::{Network, amount::Amount, transaction::TransactionDirection};
 
@@ -66,7 +67,7 @@ pub enum AddressError {
     UnsupportedNetwork,
 
     #[error("address for wrong network, current network is {current}")]
-    WrongNetwork { current: Network },
+    WrongNetwork { current: Network, valid_for: Network },
 
     #[error("empty address")]
     EmptyAddress,
@@ -141,32 +142,35 @@ impl AddressWithNetwork {
 
         let network = Network::Bitcoin;
         if let Ok(address) = address.clone().require_network(network.into()) {
-            return Ok(Self {
-                address: address.into(),
-                network,
-                amount,
-            });
+            return Ok(Self { address: address.into(), network, amount });
         }
 
         let network = Network::Testnet;
         if let Ok(address) = address.clone().require_network(network.into()) {
-            return Ok(Self {
-                address: address.into(),
-                network,
-                amount,
-            });
+            return Ok(Self { address: address.into(), network, amount });
         }
 
         let network = Network::Signet;
         if let Ok(address) = address.require_network(network.into()) {
-            return Ok(Self {
-                address: address.into(),
-                network,
-                amount,
-            });
+            return Ok(Self { address: address.into(), network, amount });
         }
 
         Err(Error::UnsupportedNetwork)
+    }
+
+    pub fn is_valid_for_network(&self, network: Network) -> bool {
+        match (self.network, network) {
+            // same network valid
+            (Network::Bitcoin, Network::Bitcoin) => true,
+            (Network::Testnet, Network::Testnet) => true,
+            (Network::Signet, Network::Signet) => true,
+
+            // testnet valid for signet and visa versa
+            (Network::Testnet, Network::Signet) => true,
+            (Network::Signet, Network::Testnet) => true,
+
+            _ => false,
+        }
     }
 }
 
@@ -220,13 +224,25 @@ impl AddressWithNetwork {
 #[uniffi::export]
 impl Address {
     #[uniffi::constructor]
-    pub fn from_string(address: String, network: Network) -> Result<Self> {
-        let bdk_address = BdkAddress::from_str(&address)
-            .map_err(|_| Error::InvalidAddress)?
-            .require_network(network.into())
-            .map_err(|_| Error::WrongNetwork { current: network })?;
+    pub fn from_string(address: &str, network: Network) -> Result<Self> {
+        let address = address.trim();
+        let bdk_address = BdkAddress::from_str(address).map_err(|_| Error::InvalidAddress)?;
 
-        Ok(Self(bdk_address))
+        let network_to_check = network.into();
+        if bdk_address.is_valid_for_network(network_to_check) {
+            return Ok(Self(bdk_address.require_network(network_to_check).expect("just checked")));
+        }
+
+        for network in Network::iter() {
+            if bdk_address.is_valid_for_network(network.into()) {
+                return Err(Error::WrongNetwork {
+                    current: network_to_check.into(),
+                    valid_for: network,
+                });
+            }
+        }
+
+        Err(Error::UnsupportedNetwork)
     }
 
     #[uniffi::constructor(name = "preview_new")]
@@ -297,13 +313,7 @@ fn address_is_valid(address: String, network: Network) -> Result<(), Error> {
 
 #[uniffi::export]
 fn address_is_valid_for_network(address: String, network: Network) -> Result<(), Error> {
-    let address = address.trim();
-    let address = BdkAddress::from_str(address).map_err(|_| Error::InvalidAddress)?;
-
-    address
-        .require_network(network.into())
-        .map_err(|_| Error::WrongNetwork { current: network })?;
-
+    Address::from_string(&address, network)?;
     Ok(())
 }
 
@@ -313,9 +323,8 @@ impl<'de> Deserialize<'de> for Address {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let bdk_address = BdkAddress::from_str(&s)
-            .map_err(serde::de::Error::custom)?
-            .assume_checked();
+        let bdk_address =
+            BdkAddress::from_str(&s).map_err(serde::de::Error::custom)?.assume_checked();
 
         Ok(Address(bdk_address))
     }
@@ -385,29 +394,20 @@ mod tests {
             AddressWithNetwork::try_new("bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001");
 
         assert!(address_with_network.is_ok());
-        assert(
-            address_with_network.unwrap(),
-            Some(Amount::from_btc(0.001).unwrap()),
-        );
+        assert(address_with_network.unwrap(), Some(Amount::from_btc(0.001).unwrap()));
 
         let address_with_network = AddressWithNetwork::try_new(
             "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.001",
         );
 
         assert!(address_with_network.is_ok());
-        assert(
-            address_with_network.unwrap(),
-            Some(Amount::from_btc(0.001).unwrap()),
-        );
+        assert(address_with_network.unwrap(), Some(Amount::from_btc(0.001).unwrap()));
 
         let address_with_network = AddressWithNetwork::try_new(
             "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.002&foo=bar",
         );
 
         assert!(address_with_network.is_ok());
-        assert(
-            address_with_network.unwrap(),
-            Some(Amount::from_btc(0.002).unwrap()),
-        );
+        assert(address_with_network.unwrap(), Some(Amount::from_btc(0.002).unwrap()));
     }
 }

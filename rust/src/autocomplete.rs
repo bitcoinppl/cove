@@ -24,9 +24,7 @@ pub enum Bip39WordSpecificAutocomplete {
 impl Bip39AutoComplete {
     #[uniffi::constructor]
     pub fn new() -> Self {
-        Self {
-            max_auto_complete: 3,
-        }
+        Self { max_auto_complete: 3 }
     }
 }
 
@@ -111,11 +109,7 @@ impl Bip39WordSpecificAutocomplete {
                 }
 
                 let word = word.to_ascii_lowercase();
-                possible
-                    .into_iter()
-                    .filter(|w| w.starts_with(&word))
-                    .take(4)
-                    .collect()
+                possible.into_iter().filter(|w| w.starts_with(&word)).take(4).collect()
             }
         }
     }
@@ -159,7 +153,5 @@ impl Bip39WordSpecificAutocomplete {
 
 fn is_bip39_word(word: &str) -> bool {
     let word = word.to_ascii_lowercase();
-    bip39::Language::English
-        .word_list()
-        .contains(&word.as_str())
+    bip39::Language::English.word_list().contains(&word.as_str())
 }

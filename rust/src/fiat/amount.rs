@@ -20,7 +20,7 @@ impl FiatAmount {
     pub fn try_new(sent_and_received: &SentAndReceived, currency: FiatCurrency) -> Result<Self> {
         let prices = PRICES.load().as_ref().ok_or_else(|| {
             crate::task::spawn(async {
-                let _ = crate::fiat::client::update_prices_if_needed().await;
+                let _ = crate::fiat::client::fetch_and_update_prices_if_needed().await;
             });
 
             FiatAmountError::PricesUnavailable("prices not available".to_string())
@@ -29,10 +29,7 @@ impl FiatAmount {
         let amount = sent_and_received.amount();
         let fiat = amount.as_btc() * prices.get_for_currency(currency) as f64;
 
-        Ok(Self {
-            amount: fiat,
-            currency,
-        })
+        Ok(Self { amount: fiat, currency })
     }
 }
 
@@ -40,10 +37,7 @@ impl FiatAmount {
 //
 impl FiatAmount {
     pub fn preview_new() -> Self {
-        Self {
-            amount: 120.38,
-            currency: FiatCurrency::Usd,
-        }
+        Self { amount: 120.38, currency: FiatCurrency::Usd }
     }
 }
 

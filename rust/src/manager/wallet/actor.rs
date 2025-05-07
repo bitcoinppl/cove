@@ -22,9 +22,12 @@ use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_common::consts::GAP_LIMIT;
-use cove_types::confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput};
-use crossbeam::channel::Sender;
+use cove_types::{
+    confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
+    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+};
 use eyre::Result;
+use flume::Sender;
 use std::{
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
@@ -108,9 +111,7 @@ impl Actor for WalletActor {
 
         match error {
             Error::NodeConnectionFailed(error_string) => {
-                self.send(WalletManagerReconcileMessage::NodeConnectionFailed(
-                    error_string,
-                ));
+                self.send(WalletManagerReconcileMessage::NodeConnectionFailed(error_string));
             }
 
             Error::SignAndBroadcastError(_) => {
@@ -157,23 +158,21 @@ impl WalletActor {
     }
 
     // Build a transaction but don't advance the change address index
+    #[into_actor_result]
     pub async fn build_ephemeral_drain_tx(
         &mut self,
         address: Address,
         fee: FeeRate,
-    ) -> ActorResult<Psbt> {
+    ) -> Result<Psbt, Error> {
+        debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
         let mut tx_builder = self.wallet.bdk.build_tx();
 
-        tx_builder
-            .drain_wallet()
-            .drain_to(script_pubkey)
-            .fee_rate(fee.into());
-
-        let psbt = tx_builder.finish()?;
+        tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
+        let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
 
-        Produces::ok(psbt)
+        Ok(psbt)
     }
 
     #[into_actor_result]
@@ -190,23 +189,22 @@ impl WalletActor {
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder
-            .finish()
-            .map_err(|err| Error::BuildTxError(err.to_string()))?;
+        let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
 
         Ok(psbt)
     }
 
     // Build a transaction but don't advance the change address index
+    #[into_actor_result]
     pub async fn build_ephemeral_tx(
         &mut self,
         amount: Amount,
         address: Address,
         fee: BdkFeeRate,
-    ) -> ActorResult<Psbt> {
+    ) -> Result<Psbt, Error> {
         let psbt = self.do_build_tx(amount, address, fee).await?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
-        Produces::ok(psbt)
+        Ok(psbt)
     }
 
     // cancel a transaction, reset the address & change address index
@@ -259,6 +257,82 @@ impl WalletActor {
     }
 
     #[into_actor_result]
+    pub async fn fee_rate_options_with_total_fee(
+        &mut self,
+        fee_rate_options: FeeRateOptions,
+        amount: Amount,
+        address: Address,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
+        let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
+        let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
+
+        let fast_psbt = self.do_build_ephemeral_tx(amount, address.clone(), fast_fee_rate).await?;
+
+        let medium_psbt =
+            self.do_build_ephemeral_tx(amount, address.clone(), medium_fee_rate).await?;
+
+        let slow_psbt = self.do_build_ephemeral_tx(amount, address.clone(), slow_fee_rate).await?;
+
+        let options = FeeRateOptionsWithTotalFee {
+            fast: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.fast,
+                fast_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            medium: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.medium,
+                medium_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            slow: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.slow,
+                slow_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            custom: None,
+        };
+
+        Ok(options)
+    }
+
+    #[into_actor_result]
+    pub async fn fee_rate_options_with_total_fee_for_drain(
+        &mut self,
+        fee_rate_options: FeeRateOptions,
+        address: Address,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let options = fee_rate_options;
+
+        let fast_fee_rate = options.fast.fee_rate;
+        let fast_psbt: Psbt =
+            self.do_build_ephemeral_drain_tx(address.clone(), fast_fee_rate).await?;
+
+        let medium_fee_rate = options.medium.fee_rate;
+        let medium_psbt: Psbt =
+            self.do_build_ephemeral_drain_tx(address.clone(), medium_fee_rate).await?;
+
+        let slow_fee_rate = options.slow.fee_rate;
+        let slow_psbt: Psbt =
+            self.do_build_ephemeral_drain_tx(address.clone(), slow_fee_rate).await?;
+
+        let options_with_fee = FeeRateOptionsWithTotalFee {
+            fast: FeeRateOptionWithTotalFee::new(
+                options.fast,
+                fast_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            medium: FeeRateOptionWithTotalFee::new(
+                options.medium,
+                medium_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            slow: FeeRateOptionWithTotalFee::new(
+                options.slow,
+                slow_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            custom: None,
+        };
+
+        Ok(options_with_fee)
+    }
+
+    #[into_actor_result]
     pub async fn get_confirm_details(
         &mut self,
         psbt: Psbt,
@@ -283,9 +357,7 @@ impl WalletActor {
             .collect::<Vec<&bitcoin::TxOut>>();
 
         if external_outputs.len() > 1 {
-            return Err(error(
-                "multiple address to send to found, not currently supported",
-            ));
+            return Err(error("multiple address to send to found, not currently supported"));
         }
 
         // if there is an external output, use that
@@ -301,9 +373,7 @@ impl WalletActor {
             .map_err(|err| err_fmt("unable to get address from script", err))?;
 
         let sending_amount = output.value;
-        let fee = psbt
-            .fee()
-            .map_err(|err| err_fmt("unable to get fee", err))?;
+        let fee = psbt.fee().map_err(|err| err_fmt("unable to get fee", err))?;
 
         let spending_amount = sending_amount
             .checked_add(fee)
@@ -412,9 +482,7 @@ impl WalletActor {
             .map_err(|e| Error::PsbtFinalizeError(e.to_string()))?;
 
         if !finalized {
-            return Err(Error::PsbtFinalizeError(
-                "Failed to finalize PSBT".to_string(),
-            ));
+            return Err(Error::PsbtFinalizeError("Failed to finalize PSBT".to_string()));
         }
 
         let tx = psbt.extract_tx().map_err(|e| {
@@ -492,13 +560,7 @@ impl WalletActor {
 
         // perform that scanning in a background task
         let addr = self.addr.clone();
-        if self
-            .wallet
-            .metadata
-            .internal
-            .performed_full_scan_at
-            .is_some()
-        {
+        if self.wallet.metadata.internal.performed_full_scan_at.is_some() {
             send!(addr.perform_incremental_scan());
         } else {
             send!(addr.perform_full_scan());
@@ -533,8 +595,7 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("actor switch mnemonic wallet");
 
-        self.wallet
-            .switch_mnemonic_to_new_address_type(address_type)?;
+        self.wallet.switch_mnemonic_to_new_address_type(address_type)?;
 
         Produces::ok(())
     }
@@ -546,8 +607,7 @@ impl WalletActor {
     ) -> ActorResult<()> {
         debug!("actor switch pubkey descriptor wallet");
 
-        self.wallet
-            .switch_descriptor_to_new_address_type(descriptors, address_type)?;
+        self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
 
         Produces::ok(())
     }
@@ -556,10 +616,7 @@ impl WalletActor {
         debug!("actor update_height");
         self.check_node_connection().await?;
         let node_client = self.node_client().await?;
-        let block_height = node_client
-            .get_height()
-            .await
-            .map_err(|_| Error::GetHeightError)?;
+        let block_height = node_client.get_height().await.map_err(|_| Error::GetHeightError)?;
 
         self.save_last_height_fetched(block_height);
         Produces::ok(block_height)
@@ -568,10 +625,7 @@ impl WalletActor {
     #[into_actor_result]
     pub async fn txns_with_prices(&mut self) -> Result<Vec<(ConfirmedTransaction, Option<f32>)>> {
         let network = self.wallet.network;
-        let fiat_currency = Database::global()
-            .global_config
-            .fiat_currency()
-            .unwrap_or_default();
+        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
 
         let confirmed_transactions = self
             .do_transactions()
@@ -598,9 +652,7 @@ impl WalletActor {
             .wallet
             .bdk
             .get_tx(tx_id.0)
-            .ok_or(Error::TransactionDetailsError(
-                "transaction not found".to_string(),
-            ))?;
+            .ok_or(Error::TransactionDetailsError("transaction not found".to_string()))?;
 
         let labels = self.db.labels.all_labels_for_txn(tx.tx_node.txid)?;
         let details = TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into())
@@ -688,18 +740,13 @@ impl WalletActor {
     // so we do a full scan of only the first 20 addresses, initially
     async fn maybe_perform_initial_full_scan(&mut self) -> ActorResult<()> {
         if self.state != ActorState::Initial {
-            debug!(
-                "already performing scanning or scanned skipping ({:?})",
-                self.state
-            );
+            debug!("already performing scanning or scanned skipping ({:?})", self.state);
 
             return Produces::ok(());
         }
 
         debug!("starting initial full scan");
-        self.reconciler
-            .send(WalletManagerReconcileMessage::StartedInitialFullScan)
-            .unwrap();
+        self.reconciler.send(WalletManagerReconcileMessage::StartedInitialFullScan).unwrap();
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Initial);
@@ -715,19 +762,14 @@ impl WalletActor {
         if self.state == ActorState::FullScanComplete(FullScanType::Expanded)
             || self.state == ActorState::IncrementalScanComplete
         {
-            debug!(
-                "already scanned skipping expanded full scan ({:?})",
-                self.state
-            );
+            debug!("already scanned skipping expanded full scan ({:?})", self.state);
             return Produces::ok(());
         }
 
         debug!("starting expanded full scan");
         let txns = self.transactions().await?.await?;
 
-        self.reconciler
-            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns))
-            .unwrap();
+        self.reconciler.send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns)).unwrap();
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Expanded);
@@ -811,9 +853,8 @@ impl WalletActor {
 
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
-            let scan_result = node_client
-                .start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize)
-                .await;
+            let scan_result =
+                node_client.start_wallet_scan(&graph, full_scan_request, GAP_LIMIT as usize).await;
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
             debug!("done incremental scan in {}s", now - start);
@@ -847,9 +888,7 @@ impl WalletActor {
         if full_scan_type == FullScanType::Expanded {
             let now = jiff::Timestamp::now().as_second() as u64;
             self.wallet.metadata.internal.performed_full_scan_at = Some(now);
-            Database::global()
-                .wallets
-                .update_internal_metadata(&self.wallet.metadata)?;
+            Database::global().wallets.update_internal_metadata(&self.wallet.metadata)?;
         }
 
         // always update the last scan finished time
@@ -894,9 +933,7 @@ impl WalletActor {
 
         // get and send transactions
         let transactions = self.transactions().await?.await?;
-        self.send(WalletManagerReconcileMessage::UpdatedTransactions(
-            transactions,
-        ));
+        self.send(WalletManagerReconcileMessage::UpdatedTransactions(transactions));
 
         self.state = ActorState::SyncScanComplete;
 
@@ -951,11 +988,7 @@ impl WalletActor {
 
         let metadata = Database::global()
             .wallets()
-            .get(
-                &self.wallet.id,
-                self.wallet.network,
-                self.wallet.metadata.wallet_mode,
-            )
+            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
             .ok()??;
 
         let last_scan_finished = metadata.internal.last_scan_finished;
@@ -971,11 +1004,7 @@ impl WalletActor {
         let wallets = Database::global().wallets();
 
         let mut metadata = wallets
-            .get(
-                &self.wallet.id,
-                self.wallet.network,
-                self.wallet.metadata.wallet_mode,
-            )
+            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
             .ok()??;
 
         metadata.internal.last_scan_finished = Some(now);
@@ -992,17 +1021,10 @@ impl WalletActor {
 
         let metadata = Database::global()
             .wallets()
-            .get(
-                &self.wallet.id,
-                self.wallet.network,
-                self.wallet.metadata.wallet_mode,
-            )
+            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
             .ok()??;
 
-        let BlockSizeLast {
-            block_height,
-            last_seen,
-        } = &metadata.internal.last_height_fetched?;
+        let BlockSizeLast { block_height, last_seen } = &metadata.internal.last_height_fetched?;
 
         let last_height_fetched = Some((*last_seen, *(block_height) as usize));
         self.last_height_fetched = last_height_fetched;
@@ -1017,17 +1039,11 @@ impl WalletActor {
 
         let wallets = Database::global().wallets();
         let mut metadata = wallets
-            .get(
-                &self.wallet.id,
-                self.wallet.network,
-                self.wallet.metadata.wallet_mode,
-            )
+            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
             .ok()??;
 
-        metadata.internal.last_height_fetched = Some(BlockSizeLast {
-            block_height: block_height as u64,
-            last_seen: now,
-        });
+        metadata.internal.last_height_fetched =
+            Some(BlockSizeLast { block_height: block_height as u64, last_seen: now });
 
         wallets.update_internal_metadata(&metadata).ok();
         self.wallet.metadata = metadata.clone();

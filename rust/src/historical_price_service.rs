@@ -28,9 +28,7 @@ impl HistoricalPriceService {
     pub fn new() -> Self {
         let db = Database::global();
 
-        Self {
-            db: db.historical_prices(),
-        }
+        Self { db: db.historical_prices() }
     }
 
     pub async fn get_prices_for_transactions(
@@ -44,16 +42,11 @@ impl HistoricalPriceService {
         type BlockHeight = u32;
         type Timestamp = u64;
 
-        let block_number_timestamp: HashMap<BlockHeight, Timestamp> = txns
-            .iter()
-            .map(|txn| (txn.block_height(), txn.confirmed_at()))
-            .collect();
+        let block_number_timestamp: HashMap<BlockHeight, Timestamp> =
+            txns.iter().map(|txn| (txn.block_height(), txn.confirmed_at())).collect();
 
         let block_heights = {
-            let mut block_heights = txns
-                .iter()
-                .map(|txn| txn.block_height())
-                .collect::<Vec<u32>>();
+            let mut block_heights = txns.iter().map(|txn| txn.block_height()).collect::<Vec<u32>>();
 
             block_heights.sort_unstable();
             block_heights.dedup();
@@ -66,10 +59,7 @@ impl HistoricalPriceService {
                 Ok(prices) => prices,
                 Err(error) => {
                     tracing::error!("failed to get historical prices from the database: {error}");
-                    block_heights
-                        .iter()
-                        .map(|block_height| (*block_height, None))
-                        .collect()
+                    block_heights.iter().map(|block_height| (*block_height, None)).collect()
                 }
             };
 
@@ -154,10 +144,7 @@ impl HistoricalPriceService {
     ) -> Result<HistoricalPrice, Error> {
         let historical_prices_response = FIAT_CLIENT.historical_prices(timestamp).await?;
         let price = historical_prices_response.prices.first().ok_or_else(|| {
-            Error::EmptyHistoricalPrices {
-                block_number,
-                timestamp: block_number as u64,
-            }
+            Error::EmptyHistoricalPrices { block_number, timestamp: block_number as u64 }
         })?;
 
         if let Err(error) = self.db.set_price_for_block(network, block_number, *price) {

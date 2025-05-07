@@ -42,11 +42,7 @@ impl WordValidator {
 
         let mut combined: Vec<String> = Vec::with_capacity(12);
         combined.push(correct_word.to_string());
-        combined.extend(
-            five_existing_words
-                .chain(six_new_words)
-                .map(ToString::to_string),
-        );
+        combined.extend(five_existing_words.chain(six_new_words).map(ToString::to_string));
 
         // remove last word from the list
         if word_index > 0 {

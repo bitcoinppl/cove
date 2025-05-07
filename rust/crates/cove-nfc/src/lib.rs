@@ -79,9 +79,7 @@ impl Default for NfcReader {
 
 impl NfcReader {
     pub fn new() -> NfcReader {
-        NfcReader {
-            state: ParserState::default(),
-        }
+        NfcReader { state: ParserState::default() }
     }
 
     /// Parse the entire message if possible, if not return the unused data and the message info
@@ -157,9 +155,9 @@ impl NfcReader {
                 Ok(result)
             }
 
-            Err(error) => Err(NfcReaderError::ParsingError(format!(
-                "error parsing message: {error}"
-            ))),
+            Err(error) => {
+                Err(NfcReaderError::ParsingError(format!("error parsing message: {error}")))
+            }
         }
     }
 
@@ -239,14 +237,11 @@ mod tests {
     use super::*;
 
     fn export_bytes() -> Vec<u8> {
-        let file_contents = include_bytes!("../../../../test/data/export_bytes.txt");
+        let file_contents = include_bytes!("../test/data/export_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
-        let bytes: Vec<u8> = file_string
-            .split(',')
-            .map(|s| s.trim())
-            .map(|s| s.parse::<u8>().unwrap())
-            .collect();
+        let bytes: Vec<u8> =
+            file_string.split(',').map(|s| s.trim()).map(|s| s.parse::<u8>().unwrap()).collect();
 
         bytes
     }

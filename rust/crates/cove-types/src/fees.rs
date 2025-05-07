@@ -105,10 +105,7 @@ pub struct FeeRateOption {
 impl FeeRateOption {
     #[uniffi::constructor]
     pub fn new(fee_speed: FeeSpeed, fee_rate: f32) -> Self {
-        Self {
-            fee_speed,
-            fee_rate: FeeRate::from_sat_per_vb(fee_rate),
-        }
+        Self { fee_speed, fee_rate: FeeRate::from_sat_per_vb(fee_rate) }
     }
 
     pub fn sat_per_vb(&self) -> f32 {
@@ -227,11 +224,7 @@ pub struct FeeRateOptionWithTotalFee {
 
 impl FeeRateOptionWithTotalFee {
     pub fn new(option: FeeRateOption, total_fee: impl Into<Amount>) -> Self {
-        Self {
-            fee_speed: option.fee_speed,
-            fee_rate: option.fee_rate,
-            total_fee: total_fee.into(),
-        }
+        Self { fee_speed: option.fee_speed, fee_rate: option.fee_rate, total_fee: total_fee.into() }
     }
 }
 
@@ -261,23 +254,12 @@ impl FeeRateOptionsWithTotalFee {
             total_fee: Amount::from_sat(total_fee as u64),
         };
 
-        Self {
-            fast: self.fast,
-            medium: self.medium,
-            slow: self.slow,
-            custom: Some(custom),
-        }
-        .into()
+        Self { fast: self.fast, medium: self.medium, slow: self.slow, custom: Some(custom) }.into()
     }
 
     #[uniffi::method]
     pub fn remove_custom_fee(self: Arc<Self>) -> Self {
-        Self {
-            fast: self.fast,
-            medium: self.medium,
-            slow: self.slow,
-            custom: None,
-        }
+        Self { fast: self.fast, medium: self.medium, slow: self.slow, custom: None }
     }
 
     #[uniffi::method]
@@ -308,12 +290,7 @@ impl FeeRateOptionsWithTotalFee {
     pub fn add_custom_fee_rate(&self, fee_rate: Arc<FeeRateOptionWithTotalFee>) -> Self {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
 
-        Self {
-            fast: self.fast,
-            medium: self.medium,
-            slow: self.slow,
-            custom: Some(fee_rate),
-        }
+        Self { fast: self.fast, medium: self.medium, slow: self.slow, custom: Some(fee_rate) }
     }
 
     #[uniffi::method]
@@ -362,9 +339,7 @@ impl FeeRateOptionsWithTotalFee {
             _ => unreachable!(),
         };
 
-        FeeSpeed::Custom {
-            duration_mins: mins,
-        }
+        FeeSpeed::Custom { duration_mins: mins }
     }
 }
 
@@ -378,11 +353,7 @@ mod fee_rate_option_with_total_fee_ffi {
             let fee_rate = Arc::unwrap_or_clone(fee_rate);
             let total_fee = Arc::unwrap_or_clone(total_fee);
 
-            Self {
-                fee_speed,
-                fee_rate,
-                total_fee,
-            }
+            Self { fee_speed, fee_rate, total_fee }
         }
 
         pub fn fee_speed(&self) -> FeeSpeed {
@@ -450,10 +421,7 @@ mod fee_rate_option_with_total_fee_ffi {
 
 impl From<FeeRateOptionWithTotalFee> for FeeRateOption {
     fn from(fee_rate: FeeRateOptionWithTotalFee) -> Self {
-        FeeRateOption {
-            fee_speed: fee_rate.fee_speed,
-            fee_rate: fee_rate.fee_rate,
-        }
+        FeeRateOption { fee_speed: fee_rate.fee_speed, fee_rate: fee_rate.fee_rate }
     }
 }
 

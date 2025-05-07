@@ -1,1 +1,2 @@
 --exclude ios/CoveCore/Sources/CoveCore/generated
+--disable redundantSelf

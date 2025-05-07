@@ -13,10 +13,9 @@ impl From<BdkChainPosition<&ConfirmationBlockTime>> for ChainPosition {
             BdkChainPosition::Unconfirmed { last_seen } => {
                 Self::Unconfirmed(last_seen.unwrap_or_default())
             }
-            BdkChainPosition::Confirmed {
-                anchor: confirmation_blocktime,
-                ..
-            } => Self::Confirmed(*confirmation_blocktime),
+            BdkChainPosition::Confirmed { anchor: confirmation_blocktime, .. } => {
+                Self::Confirmed(*confirmation_blocktime)
+            }
         }
     }
 }

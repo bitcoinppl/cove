@@ -68,19 +68,12 @@ impl Transaction {
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
     ) -> Self {
         let txid = tx.tx_node.txid.into();
-        let fiat_currency = Database::global()
-            .global_config
-            .fiat_currency()
-            .unwrap_or_default();
+        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
 
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
         let label_db = WalletDataDb::new_or_existing(wallet_id.clone());
-        let labels = label_db
-            .labels
-            .all_labels_for_txn(tx.tx_node.txid)
-            .unwrap_or_default()
-            .into();
+        let labels = label_db.labels.all_labels_for_txn(tx.tx_node.txid).unwrap_or_default().into();
 
         match tx.chain_position {
             BdkChainPosition::Unconfirmed { last_seen } => {
@@ -94,9 +87,7 @@ impl Transaction {
 
                 Self::Unconfirmed(Arc::new(unconfirmed))
             }
-            BdkChainPosition::Confirmed {
-                anchor: block_time, ..
-            } => {
+            BdkChainPosition::Confirmed { anchor: block_time, .. } => {
                 let confirmed_at =
                     jiff::Timestamp::from_second(block_time.confirmation_time as i64)
                         .expect("all blocktimes after unix epoch");
@@ -158,11 +149,7 @@ impl Ord for Transaction {
             (Self::Unconfirmed(_), Self::Confirmed(_)) => Ordering::Greater,
         };
 
-        if sort == Ordering::Equal {
-            self.id().cmp(&other.id())
-        } else {
-            sort
-        }
+        if sort == Ordering::Equal { self.id().cmp(&other.id()) } else { sort }
     }
 }
 

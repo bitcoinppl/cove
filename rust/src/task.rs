@@ -34,10 +34,7 @@ where
     T: Future + Send + 'static,
     T::Output: Send + 'static,
 {
-    TOKIO
-        .get()
-        .expect("tokio runtime not initalized")
-        .spawn(task)
+    TOKIO.get().expect("tokio runtime not initalized").spawn(task)
 }
 
 #[allow(dead_code)]

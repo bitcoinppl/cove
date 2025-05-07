@@ -7,7 +7,7 @@ use std::{
 
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
@@ -45,7 +45,9 @@ use crate::{
 };
 
 use cove_types::confirm::{AddressAndAmount, ConfirmDetails, SplitOutput};
-use cove_types::fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee};
+use cove_types::fees::FeeRateOptions;
+
+use super::send_flow_manager::RustSendFlowManager;
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
@@ -210,7 +212,7 @@ pub enum WalletManagerError {
 impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
@@ -227,9 +229,8 @@ impl RustWalletManager {
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
 
         // only creates the scanner if its not already complet
-        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone())
-            .ok()
-            .map(spawn_actor);
+        let scanner =
+            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
 
         let label_manager = LabelManager::new(id.clone()).into();
 
@@ -250,29 +251,36 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
+    pub fn new_send_flow_manager(self: Arc<Self>) -> Arc<RustSendFlowManager> {
+        let me = self.clone();
+        let metadata = self.metadata.read().clone();
+
+        RustSendFlowManager::new(metadata, me)
+    }
+
+    #[uniffi::method]
     pub fn convert_from_fiat_string(
         &self,
         fiat_amount: &str,
         prices: Arc<PriceResponse>,
     ) -> Amount {
-        Converter::global().convert_from_fiat_string(
+        Converter::new().convert_from_fiat_string(
             fiat_amount,
             self.selected_fiat_currency(),
-            prices,
+            *prices.as_ref(),
         )
     }
 
     #[uniffi::constructor]
     pub fn try_new_from_xpub(xpub: String) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let wallet = Wallet::try_new_persisted_from_xpub(xpub)?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
 
-        let scanner = WalletScanner::try_new(metadata.clone(), sender.clone())
-            .ok()
-            .map(spawn_actor);
+        let scanner =
+            WalletScanner::try_new(metadata.clone(), sender.clone()).ok().map(spawn_actor);
 
         let actor = task::spawn_actor(WalletActor::new(wallet, sender.clone()));
         let label_manager = LabelManager::new(id.clone()).into();
@@ -294,7 +302,7 @@ impl RustWalletManager {
         derive_info: DeriveInfo,
         backup: Option<Vec<u8>>,
     ) -> Result<Self, Error> {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let wallet =
             Wallet::try_new_persisted_from_tap_signer(tap_signer.clone(), derive_info, backup)?;
@@ -317,17 +325,14 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn selected_fiat_currency(&self) -> FiatCurrency {
-        Database::global()
-            .global_config
-            .fiat_currency()
-            .unwrap_or_default()
+        Database::global().global_config.fiat_currency().unwrap_or_default()
     }
 
     #[uniffi::method]
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client
-            .get_fees()
+            .fetch_and_get_fees()
             .await
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
@@ -336,19 +341,23 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn create_transactions_with_fiat_export(&self) -> Result<String, Error> {
-        let fiat_currency = Database::global()
-            .global_config
-            .fiat_currency()
-            .unwrap_or_default();
+        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
 
         let txns_with_prices = call!(self.actor.txns_with_prices()).await.unwrap().unwrap();
 
         let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
-        let csv = report
-            .create_csv()
-            .map_err(|e| Error::CsvCreationError(e.to_string()))?;
+        let csv = report.create_csv().map_err(|e| Error::CsvCreationError(e.to_string()))?;
 
         Ok(csv.into_string())
+    }
+
+    #[uniffi::method]
+    pub async fn first_address(&self) -> Result<AddressInfo, Error> {
+        let address_info = call!(self.actor.address_at(0))
+            .await
+            .map_err(|_| Error::UnknownError("failed to get first address".to_string()))?;
+
+        Ok(address_info)
     }
 
     #[uniffi::method]
@@ -412,8 +421,8 @@ impl RustWalletManager {
         Ok(txns)
     }
 
-    #[uniffi::method]
     /// gets the transactions for the wallet that are currently available
+    #[uniffi::method]
     pub async fn get_transactions(&self) {
         let Ok(txns) = call!(self.actor.transactions()).await else { return };
 
@@ -428,10 +437,7 @@ impl RustWalletManager {
         let db = Database::global();
 
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
-        send!(
-            self.actor
-                .cancel_txn(txn.confirm_details.psbt.0.unsigned_tx)
-        );
+        send!(self.actor.cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
         self.reconciler
             .send(WalletManagerReconcileMessage::UnsignedTransactionsChanged)
@@ -448,9 +454,7 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn sign_and_broadcast_transaction(&self, psbt: Arc<Psbt>) -> Result<(), Error> {
         let psbt = Arc::unwrap_or_clone(psbt);
-        call!(self.actor.sign_and_broadcast_transaction(psbt.into()))
-            .await
-            .unwrap()?;
+        call!(self.actor.sign_and_broadcast_transaction(psbt.into())).await.unwrap()?;
 
         self.force_wallet_scan().await;
 
@@ -465,9 +469,7 @@ impl RustWalletManager {
         let txn = Arc::unwrap_or_clone(signed_transaction);
         let tx_id = txn.tx_id();
 
-        call!(self.actor.broadcast_transaction(txn.into()))
-            .await
-            .unwrap()?;
+        call!(self.actor.broadcast_transaction(txn.into())).await.unwrap()?;
 
         if let Err(error) = self.delete_unsigned_transaction(tx_id.into()) {
             error!("unable to delete unsigned transaction record: {error}");
@@ -491,12 +493,9 @@ impl RustWalletManager {
     pub async fn amount_in_fiat(&self, amount: Arc<Amount>) -> Result<f64, Error> {
         let currency = self.selected_fiat_currency();
 
-        FIAT_CLIENT
-            .current_value_in_currency(*amount, currency)
-            .await
-            .map_err(|error| {
-                Error::FiatError(format!("unable to get fiat value for amount: {error}"))
-            })
+        FIAT_CLIENT.current_value_in_currency(*amount, currency).await.map_err(|error| {
+            Error::FiatError(format!("unable to get fiat value for amount: {error}"))
+        })
     }
 
     #[uniffi::method]
@@ -576,10 +575,8 @@ impl RustWalletManager {
         let amount = sent_and_received.amount();
         let currency = self.selected_fiat_currency();
 
-        let fiat = FIAT_CLIENT
-            .current_value_in_currency(amount, currency)
-            .await
-            .map_err(|error| {
+        let fiat =
+            FIAT_CLIENT.current_value_in_currency(amount, currency).await.map_err(|error| {
                 Error::FiatError(format!("unable to get fiat value for amount: {error}"))
             })?;
 
@@ -588,18 +585,15 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn current_block_height(&self) -> Result<u32, Error> {
-        let height = call!(self.actor.get_height(false))
-            .await
-            .map_err(|_| Error::GetHeightError)?;
+        let height =
+            call!(self.actor.get_height(false)).await.map_err(|_| Error::GetHeightError)?;
 
         Ok(height as u32)
     }
 
     #[uniffi::method]
     pub async fn force_update_height(&self) -> Result<u32, Error> {
-        let height = call!(self.actor.get_height(true))
-            .await
-            .map_err(|_| Error::GetHeightError)?;
+        let height = call!(self.actor.get_height(true)).await.map_err(|_| Error::GetHeightError)?;
 
         Ok(height as u32)
     }
@@ -645,9 +639,8 @@ impl RustWalletManager {
     /// Get address at the given index
     #[uniffi::method]
     pub async fn address_at(&self, index: u32) -> Result<AddressInfo, Error> {
-        let address = call!(self.actor.address_at(index))
-            .await
-            .map_err(|_| Error::ActorNotFound)?;
+        let address =
+            call!(self.actor.address_at(index)).await.map_err(|_| Error::ActorNotFound)?;
 
         Ok(address)
     }
@@ -674,12 +667,9 @@ impl RustWalletManager {
         // unselect the wallet in the database
         match database.global_config.selected_wallet() {
             Some(selected_wallet_id) if selected_wallet_id == wallet_id => {
-                let _ = database
-                    .global_config
-                    .clear_selected_wallet()
-                    .tap_err(|error| {
-                        error!("Unable to clear selected wallet: {error}");
-                    });
+                let _ = database.global_config.clear_selected_wallet().tap_err(|error| {
+                    error!("Unable to clear selected wallet: {error}");
+                });
             }
             _ => (),
         }
@@ -734,19 +724,14 @@ impl RustWalletManager {
             wallet_metadata.verified = true;
 
             self.reconciler
-                .send(WalletManagerReconcileMessage::WalletMetadataChanged(
-                    wallet_metadata.clone(),
-                ))
+                .send(WalletManagerReconcileMessage::WalletMetadataChanged(wallet_metadata.clone()))
                 .expect("failed to send update");
         }
 
         let id = self.metadata.read().id.clone();
         let database = Database::global();
 
-        database
-            .wallets
-            .mark_wallet_as_verified(&id)
-            .map_err(Error::MarkWalletAsVerifiedError)?;
+        database.wallets.mark_wallet_as_verified(&id).map_err(Error::MarkWalletAsVerifiedError)?;
 
         Ok(())
     }
@@ -811,143 +796,11 @@ impl RustWalletManager {
     pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
         let fees = fee_client
-            .get_fees()
+            .fetch_and_get_fees()
             .await
             .map_err(|error| Error::FeesError(error.to_string()))?;
 
         Ok(fees.into())
-    }
-
-    pub async fn fee_rate_options_with_total_fee_for_drain(
-        &self,
-        fee_rate_options: Arc<FeeRateOptionsWithTotalFee>,
-        address: Arc<Address>,
-    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
-        let address = Arc::unwrap_or_clone(address);
-        let mut options = Arc::unwrap_or_clone(fee_rate_options);
-
-        let fast_fee_rate = options.fast.fee_rate;
-        let fast_psbt: Psbt = call!(
-            self.actor
-                .build_ephemeral_drain_tx(address.clone(), fast_fee_rate)
-        )
-        .await
-        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-        .into();
-
-        let medium_fee_rate = options.medium.fee_rate;
-        let medium_psbt: Psbt = call!(
-            self.actor
-                .build_ephemeral_drain_tx(address.clone(), medium_fee_rate)
-        )
-        .await
-        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-        .into();
-
-        let slow_fee_rate = options.slow.fee_rate;
-        let slow_psbt: Psbt = call!(
-            self.actor
-                .build_ephemeral_drain_tx(address.clone(), slow_fee_rate)
-        )
-        .await
-        .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-        .into();
-
-        options.fast.total_fee = fast_psbt
-            .fee()
-            .map_err(|e| Error::FeesError(e.to_string()))?;
-
-        options.medium.total_fee = medium_psbt
-            .fee()
-            .map_err(|e| Error::FeesError(e.to_string()))?;
-
-        options.slow.total_fee = slow_psbt
-            .fee()
-            .map_err(|e| Error::FeesError(e.to_string()))?;
-
-        if let Some(mut custom) = options.custom {
-            let custom_fee_rate = custom.fee_rate;
-            let custom_psbt: Psbt = call!(
-                self.actor
-                    .build_ephemeral_drain_tx(address, custom_fee_rate)
-            )
-            .await
-            .map_err(|_| Error::UnknownError("failed to get max send amount".to_string()))?
-            .into();
-
-            custom.total_fee = custom_psbt
-                .fee()
-                .map_err(|e| Error::FeesError(e.to_string()))?;
-        }
-
-        Ok(options)
-    }
-
-    pub async fn fee_rate_options_with_total_fee(
-        &self,
-        fee_rate_options: Option<Arc<FeeRateOptions>>,
-        amount: Arc<Amount>,
-        address: Arc<Address>,
-    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
-        let fee_rate_options = match fee_rate_options {
-            Some(fee_rate_options) => Arc::unwrap_or_clone(fee_rate_options),
-            None => self.fee_rate_options().await?,
-        };
-
-        let amount = Arc::unwrap_or_clone(amount).into();
-        let address: Address = Arc::unwrap_or_clone(address);
-
-        let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
-        let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
-        let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
-
-        let fast_psbt = call!(self.actor.build_ephemeral_tx(
-            amount,
-            address.clone(),
-            fast_fee_rate
-        ))
-        .await
-        .map_err(|error| Error::BuildTxError(error.to_string()))?;
-
-        let medium_psbt = call!(self.actor.build_ephemeral_tx(
-            amount,
-            address.clone(),
-            medium_fee_rate
-        ))
-        .await
-        .map_err(|error| Error::BuildTxError(error.to_string()))?;
-
-        let slow_psbt = call!(self.actor.build_ephemeral_tx(
-            amount,
-            address.clone(),
-            slow_fee_rate
-        ))
-        .await
-        .map_err(|error| Error::BuildTxError(error.to_string()))?;
-
-        let options = FeeRateOptionsWithTotalFee {
-            fast: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.fast,
-                fast_psbt
-                    .fee()
-                    .map_err(|e| Error::FeesError(e.to_string()))?,
-            ),
-            medium: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.medium,
-                medium_psbt
-                    .fee()
-                    .map_err(|e| Error::FeesError(e.to_string()))?,
-            ),
-            slow: FeeRateOptionWithTotalFee::new(
-                fee_rate_options.slow,
-                slow_psbt
-                    .fee()
-                    .map_err(|e| Error::FeesError(e.to_string()))?,
-            ),
-            custom: None,
-        };
-
-        Ok(options)
     }
 
     pub async fn build_drain_transaction(
@@ -958,10 +811,8 @@ impl RustWalletManager {
         let address = Arc::unwrap_or_clone(address);
         let fee = Arc::unwrap_or_clone(fee);
 
-        let psbt: Psbt = call!(self.actor.build_ephemeral_drain_tx(address, fee))
-            .await
-            .map_err(|_| Error::UnknownError("failed to get max send psbt".to_string()))?
-            .into();
+        let psbt: Psbt =
+            call!(self.actor.build_ephemeral_drain_tx(address, fee)).await.unwrap()?.into();
 
         Ok(psbt)
     }
@@ -976,8 +827,7 @@ impl RustWalletManager {
             .map(|fees| FeeRateOptions::from(fees).medium.fee_rate)
             .unwrap_or_else(|| FeeRate::from_sat_per_vb(10.0));
 
-        self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee))
-            .await
+        self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee)).await
     }
 
     pub async fn build_transaction_with_fee_rate(
@@ -992,34 +842,9 @@ impl RustWalletManager {
         let address = Arc::unwrap_or_clone(address);
         let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
 
-        let psbt = call!(actor.build_ephemeral_tx(amount, address, fee_rate))
-            .await
-            .map_err(|error| Error::BuildTxError(error.to_string()))?;
+        let psbt = call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()?;
 
         Ok(psbt.into())
-    }
-
-    pub async fn confirm_txn(
-        &self,
-        amount: Arc<Amount>,
-        address: Arc<Address>,
-        fee_rate: Arc<FeeRate>,
-    ) -> Result<ConfirmDetails, Error> {
-        let actor = self.actor.clone();
-
-        let amount = Arc::unwrap_or_clone(amount).into();
-        let address = Arc::unwrap_or_clone(address);
-        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
-
-        let psbt = call!(actor.build_tx(amount, address, fee_rate))
-            .await
-            .unwrap()?;
-
-        let details = call!(self.actor.get_confirm_details(psbt, fee_rate))
-            .await
-            .unwrap()?;
-
-        Ok(details)
     }
 
     #[uniffi::method]
@@ -1151,10 +976,8 @@ impl RustWalletManager {
                     (FiatOrBtc::Fiat, Unit::Sat),
                 ];
 
-                let current = (
-                    self.metadata.read().fiat_or_btc,
-                    self.metadata.read().selected_unit,
-                );
+                let current =
+                    (self.metadata.read().fiat_or_btc, self.metadata.read().selected_unit);
 
                 let current_index = order
                     .iter()
@@ -1197,12 +1020,31 @@ impl RustWalletManager {
         self.reconciler.send(metdata_changed_msg).unwrap();
 
         // update wallet_metadata in the database
-        if let Err(error) = Database::global()
-            .wallets
-            .update_wallet_metadata(self.metadata.read().clone())
+        if let Err(error) =
+            Database::global().wallets.update_wallet_metadata(self.metadata.read().clone())
         {
             error!("Unable to update wallet metadata: {error:?}")
         }
+    }
+}
+
+impl RustWalletManager {
+    pub async fn confirm_txn(
+        &self,
+        amount: Amount,
+        address: Arc<Address>,
+        fee_rate: FeeRate,
+    ) -> Result<ConfirmDetails, Error> {
+        let actor = self.actor.clone();
+
+        let amount = amount.into();
+        let address = Arc::unwrap_or_clone(address);
+        let fee_rate = fee_rate.into();
+
+        let psbt = call!(actor.build_tx(amount, address, fee_rate)).await.unwrap()?;
+        let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
+
+        Ok(details)
     }
 }
 
@@ -1216,7 +1058,7 @@ impl RustWalletManager {
 
     #[uniffi::constructor]
     pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
-        let (sender, receiver) = crossbeam::channel::bounded(100);
+        let (sender, receiver) = flume::bounded(100);
 
         let wallet = Wallet::preview_new_wallet();
         let label_manager = LabelManager::new(wallet.metadata.id.clone()).into();

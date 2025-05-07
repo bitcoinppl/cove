@@ -73,13 +73,7 @@ impl Psbt {
 
     /// Get total sending amount of all outputs
     pub fn output_total_amount(&self) -> Amount {
-        let amount: BdkAmount = self
-            .0
-            .unsigned_tx
-            .output
-            .iter()
-            .map(|output| output.value)
-            .sum();
+        let amount: BdkAmount = self.0.unsigned_tx.output.iter().map(|output| output.value).sum();
 
         amount.into()
     }
@@ -89,9 +83,7 @@ impl Psbt {
     /// Get all UTXOs
     pub fn utxos(&self) -> Option<Vec<TxOut>> {
         let tx = &self.unsigned_tx;
-        (0..tx.input.len())
-            .map(|i| self.0.get_utxo_for(i))
-            .collect()
+        (0..tx.input.len()).map(|i| self.0.get_utxo_for(i)).collect()
     }
 }
 

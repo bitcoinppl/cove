@@ -51,19 +51,11 @@ pub struct TxnWithHistoricalPrice {
 
 impl HistoricalFiatPriceReport {
     pub fn new(currency: FiatCurrency, txns: Vec<(ConfirmedTransaction, Option<f32>)>) -> Self {
-        Self {
-            currency,
-            txns,
-            timezone: Device::global().timezone(),
-        }
+        Self { currency, txns, timezone: Device::global().timezone() }
     }
 
     pub fn create_csv(self) -> Result<Csv, CsvCreationError> {
-        let fiat_header = format!(
-            "Amount ({}{})",
-            self.currency.symbol(),
-            self.currency.suffix()
-        );
+        let fiat_header = format!("Amount ({}{})", self.currency.symbol(), self.currency.suffix());
 
         let confirmed_at_local_header = format!("Confirmed At ({})", self.timezone);
 
@@ -91,9 +83,7 @@ impl HistoricalFiatPriceReport {
             csv.serialize(row)?;
         }
 
-        let csv = csv
-            .into_inner()
-            .map_err(|e| CsvCreationError::FinalizeCsv(e.to_string()))?;
+        let csv = csv.into_inner().map_err(|e| CsvCreationError::FinalizeCsv(e.to_string()))?;
 
         Ok(Csv(csv))
     }
@@ -107,9 +97,7 @@ impl HistoricalFiatPriceReport {
             Ok(local) => local,
             Err(error) => {
                 tracing::warn!("unable to convert timestamp: {error}");
-                txn.confirmed_at
-                    .in_tz("UTC")
-                    .expect("all timestamps after unix epoch")
+                txn.confirmed_at.in_tz("UTC").expect("all timestamps after unix epoch")
             }
         };
 

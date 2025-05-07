@@ -11,10 +11,7 @@ pub const BITCOIN_ESPLORA: [(&str, &str); 2] = [
 ];
 
 pub const BITCOIN_ELECTRUM: [(&str, &str); 3] = [
-    (
-        "electrum.blockstream.info",
-        "ssl://electrum.blockstream.info:50002",
-    ),
+    ("electrum.blockstream.info", "ssl://electrum.blockstream.info:50002"),
     ("mempool.space electrum", "ssl://mempool.space:50002"),
     ("electrum.diynodes.com", "ssl://electrum.diynodes.com:50022"),
 ];
@@ -71,19 +68,14 @@ impl NodeSelector {
         let node_selection_list = if node_list.contains(&selected_node) {
             node_list.into_iter().map(NodeSelection::Preset).collect()
         } else {
-            let mut node_selection_list = node_list
-                .into_iter()
-                .map(NodeSelection::Preset)
-                .collect::<Vec<NodeSelection>>();
+            let mut node_selection_list =
+                node_list.into_iter().map(NodeSelection::Preset).collect::<Vec<NodeSelection>>();
 
             node_selection_list.push(NodeSelection::Custom(selected_node.clone()));
             node_selection_list
         };
 
-        Self {
-            network,
-            node_list: node_selection_list,
-        }
+        Self { network, node_list: node_selection_list }
     }
 
     #[uniffi::method]
@@ -109,11 +101,7 @@ impl NodeSelector {
             .find(|node| node.name == name)
             .or_else(|| {
                 let selected_node = Database::global().global_config.selected_node();
-                if selected_node.name == name {
-                    Some(selected_node)
-                } else {
-                    None
-                }
+                if selected_node.name == name { Some(selected_node) } else { None }
             })
             .ok_or_else(|| {
                 error!("node with name {name} not found");
@@ -130,9 +118,7 @@ impl NodeSelector {
 
     #[uniffi::method]
     pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url()
-            .await
-            .map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
+        node.check_url().await.map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
 
         Ok(())
     }
@@ -151,9 +137,7 @@ impl NodeSelector {
             parse_node_url(&url).map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
 
         if !url.domain().unwrap_or_default().contains('.') {
-            return Err(Error::ParseNodeUrlError(
-                "invalid url, no domain".to_string(),
-            ));
+            return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
         }
 
         let url_string = url.to_string();
@@ -264,15 +248,10 @@ fn parse_node_url(url: &str) -> eyre::Result<Url> {
     // set the port to if not set, default to 50002 for ssl and 50001 for tcp
     match (url.port(), url.scheme()) {
         (Some(_), _) => {}
-        (None, "ssl") => url
-            .set_port(Some(50002))
-            .map_err(|_| eyre!("can't set port"))?,
-        (None, "tcp") => url
-            .set_port(Some(50001))
-            .map_err(|_| eyre!("can't set port"))?,
+        (None, "ssl") => url.set_port(Some(50002)).map_err(|_| eyre!("can't set port"))?,
+        (None, "tcp") => url.set_port(Some(50001)).map_err(|_| eyre!("can't set port"))?,
         (None, _) => {
-            url.set_port(Some(50002))
-                .map_err(|_| eyre!("can't set port"))?;
+            url.set_port(Some(50002)).map_err(|_| eyre!("can't set port"))?;
         }
     };
 
@@ -294,9 +273,5 @@ fn default_node_selection() -> NodeSelection {
         Network::Signet => SIGNET_ESPLORA[0],
     };
 
-    NodeSelection::Preset(Node::new_esplora(
-        name.to_string(),
-        url.to_string(),
-        network,
-    ))
+    NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
 }

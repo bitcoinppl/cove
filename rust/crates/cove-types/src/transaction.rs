@@ -16,10 +16,6 @@ pub enum TransactionDirection {
 
 impl From<(Amount, Amount)> for TransactionDirection {
     fn from((sent, received): (Amount, Amount)) -> Self {
-        if sent > received {
-            Self::Outgoing
-        } else {
-            Self::Incoming
-        }
+        if sent > received { Self::Outgoing } else { Self::Incoming }
     }
 }

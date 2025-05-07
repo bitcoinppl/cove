@@ -143,9 +143,7 @@ impl Wallet {
             keychain.save_public_descriptor(&me.id, external_descriptor, internal_descriptor)?;
 
             // save wallet_metadata to database
-            database
-                .wallets
-                .save_new_wallet_metadata(me.metadata.clone())?;
+            database.wallets.save_new_wallet_metadata(me.metadata.clone())?;
 
             // set this wallet as the selected wallet
             database.global_config.select_wallet(me.id.clone())?;
@@ -211,21 +209,14 @@ impl Wallet {
 
             metadata.origin = origin;
 
-            if let Err(error) = Database::global()
-                .wallets
-                .save_new_wallet_metadata(metadata.clone())
+            if let Err(error) =
+                Database::global().wallets.save_new_wallet_metadata(metadata.clone())
             {
                 warn!("failed to save wallet origin into metadata: {error}");
             }
         }
 
-        Ok(Self {
-            id,
-            network,
-            metadata,
-            bdk: wallet,
-            db: Mutex::new(store.conn),
-        })
+        Ok(Self { id, network, metadata, bdk: wallet, db: Mutex::new(store.conn) })
     }
 
     /// Create a new watch-only wallet from the given xpub
@@ -288,10 +279,8 @@ impl Wallet {
         }
 
         let fingerprint = fingerprint.map(|s| s.to_string());
-        let xpub = pubport_descriptors
-            .xpub()
-            .map_err(Into::into)
-            .map_err(WalletError::ParseXpubError)?;
+        let xpub =
+            pubport_descriptors.xpub().map_err(Into::into).map_err(WalletError::ParseXpubError)?;
 
         let descriptors: Descriptors = pubport_descriptors.into();
 
@@ -330,17 +319,9 @@ impl Wallet {
             descriptors.internal.extended_descriptor,
         )?;
 
-        database
-            .wallets
-            .save_new_wallet_metadata(metadata.clone())?;
+        database.wallets.save_new_wallet_metadata(metadata.clone())?;
 
-        Ok(Self {
-            id,
-            metadata,
-            network,
-            bdk: wallet,
-            db: Mutex::new(store.conn),
-        })
+        Ok(Self { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
     }
 
     pub fn try_new_persisted_from_tap_signer(
@@ -376,10 +357,8 @@ impl Wallet {
         // make sure its not already imported
         check_for_duplicate_wallet(network, mode, fingerprint)?;
 
-        let xpub = descriptors
-            .external
-            .xpub()
-            .expect("tap_signer descriptor always made with xpub");
+        let xpub =
+            descriptors.external.xpub().expect("tap_signer descriptor always made with xpub");
 
         let wallet = descriptors
             .clone()
@@ -403,17 +382,9 @@ impl Wallet {
             keychain.save_tap_signer_backup(&id, backup.as_slice())?;
         }
 
-        database
-            .wallets
-            .save_new_wallet_metadata(metadata.clone())?;
+        database.wallets.save_new_wallet_metadata(metadata.clone())?;
 
-        Ok(Self {
-            id,
-            metadata,
-            network,
-            bdk: wallet,
-            db: Mutex::new(store.conn),
-        })
+        Ok(Self { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
     }
 
     /// The user imported a hww and wants to switch from native segwit to a different address type
@@ -432,9 +403,7 @@ impl Wallet {
         })?;
 
         let store = BdkStore::try_new(&id, self.network);
-        let mut db = store
-            .map_err(|e| WalletError::LoadError(e.to_string()))?
-            .conn;
+        let mut db = store.map_err(|e| WalletError::LoadError(e.to_string()))?.conn;
 
         let descriptors: Descriptors = descriptors.into();
         let wallet = descriptors
@@ -521,13 +490,7 @@ impl Wallet {
             .create_wallet(&mut store.conn)
             .map_err(|error| WalletError::BdkError(error.to_string()))?;
 
-        Ok(Self {
-            id,
-            metadata,
-            network,
-            bdk: wallet,
-            db: Mutex::new(store.conn),
-        })
+        Ok(Self { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
     }
 
     pub fn balance(&self) -> Balance {
@@ -608,13 +571,9 @@ impl Wallet {
             };
 
         let address_info = addresses[index_to_use].clone();
-        self.metadata
-            .internal
-            .set_last_seen_address_index(&addresses, index_to_use);
+        self.metadata.internal.set_last_seen_address_index(&addresses, index_to_use);
 
-        Database::global()
-            .wallets
-            .update_internal_metadata(&self.metadata)?;
+        Database::global().wallets.update_internal_metadata(&self.metadata)?;
 
         Ok(address_info)
     }
@@ -647,10 +606,7 @@ fn check_for_duplicate_wallet(
         })
         .unwrap_or_default();
 
-    if let Some((id, _)) = all_fingerprints
-        .into_iter()
-        .find(|(_, f)| f.as_ref() == &fingerprint)
-    {
+    if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f.as_ref() == &fingerprint) {
         return Err(WalletError::WalletAlreadyExists(id));
     }
 
@@ -718,12 +674,7 @@ mod tests {
             Wallet::try_new_persisted_from_mnemonic_segwit(metadata.clone(), mnemonic, None)
                 .unwrap();
 
-        let fingerprint = wallet
-            .metadata
-            .master_fingerprint
-            .as_ref()
-            .unwrap()
-            .as_lowercase();
+        let fingerprint = wallet.metadata.master_fingerprint.as_ref().unwrap().as_lowercase();
 
         let _ = delete_wallet_specific_data(&metadata.id);
         assert_eq!("73c5da0a", fingerprint.as_str());

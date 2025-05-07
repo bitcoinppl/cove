@@ -75,18 +75,13 @@ impl Database {
             return;
         }
 
-        DATABASE
-            .get()
-            .expect("database not initialized")
-            .swap(Arc::new(Self::init()));
+        DATABASE.get().expect("database not initialized").swap(Arc::new(Self::init()));
     }
 }
 
 impl Database {
     pub fn global() -> Arc<Self> {
-        let db = DATABASE
-            .get_or_init(|| ArcSwap::new(Arc::new(Self::init())))
-            .load();
+        let db = DATABASE.get_or_init(|| ArcSwap::new(Arc::new(Self::init()))).load();
 
         Arc::clone(&db)
     }
@@ -95,9 +90,7 @@ impl Database {
         let main_db = get_or_create_main_database();
         let main_db_arc = Arc::new(main_db);
 
-        let write_txn = main_db_arc
-            .begin_write()
-            .expect("failed to begin write transaction");
+        let write_txn = main_db_arc.begin_write().expect("failed to begin write transaction");
 
         let wallets = WalletsTable::new(main_db_arc.clone(), &write_txn);
         let global_flag = GlobalFlagTable::new(main_db_arc.clone(), &write_txn);
@@ -106,9 +99,7 @@ impl Database {
         let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
         let historical_prices = HistoricalPriceTable::new(main_db_arc.clone(), &write_txn);
 
-        write_txn
-            .commit()
-            .expect("failed to commit write transaction");
+        write_txn.commit().expect("failed to commit write transaction");
 
         Database {
             wallets,
@@ -137,10 +128,7 @@ fn get_or_create_database_with_location(database_location: PathBuf) -> redb::Dat
         }
     };
 
-    info!(
-        "Creating a new database, at {}",
-        database_location.display()
-    );
+    info!("Creating a new database, at {}", database_location.display());
 
     redb::Database::create(&database_location).expect("failed to create database")
 }

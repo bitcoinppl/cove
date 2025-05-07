@@ -47,13 +47,9 @@ pub struct UnsignedTransactionRecord {
 impl UnsignedTransactionsTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create table if it doesn't exist
-        write_txn
-            .open_table(MAIN_TABLE)
-            .expect("failed to create table");
+        write_txn.open_table(MAIN_TABLE).expect("failed to create table");
 
-        write_txn
-            .open_table(BY_WALLET_TABLE)
-            .expect("failed to create table");
+        write_txn.open_table(BY_WALLET_TABLE).expect("failed to create table");
 
         Self { db }
     }
@@ -81,9 +77,7 @@ impl UnsignedTransactionsTable {
     }
 
     pub fn delete_tx(&self, tx_id: &TxId) -> Result<UnsignedTransactionRecord, Error> {
-        let record = self
-            .get(tx_id)?
-            .ok_or(UnsignedTransactionsTableError::NoRecordFound)?;
+        let record = self.get(tx_id)?.ok_or(UnsignedTransactionsTableError::NoRecordFound)?;
 
         // remove the tx id from the wallet
         {
@@ -119,10 +113,8 @@ impl UnsignedTransactionsTable {
     }
 
     fn delete_tx_id(&self, key: &TxId) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -134,18 +126,14 @@ impl UnsignedTransactionsTable {
                 .map_err(|error| UnsignedTransactionsTableError::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
 
     fn get(&self, key: &TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn =
+            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         let table = read_txn
             .open_table(MAIN_TABLE)
@@ -160,10 +148,8 @@ impl UnsignedTransactionsTable {
     }
 
     fn get_tx_ids_for_wallet_id(&self, key: &WalletId) -> Result<Vec<TxId>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn =
+            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         let table = read_txn
             .open_table(BY_WALLET_TABLE)
@@ -179,10 +165,8 @@ impl UnsignedTransactionsTable {
     }
 
     fn set(&self, key: TxId, value: UnsignedTransactionRecord) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -194,18 +178,14 @@ impl UnsignedTransactionsTable {
                 .map_err(|error| UnsignedTransactionsTableError::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
 
     fn set_by_wallet_id(&self, key: WalletId, value: Vec<TxId>) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -217,9 +197,7 @@ impl UnsignedTransactionsTable {
                 .map_err(|error| UnsignedTransactionsTableError::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }

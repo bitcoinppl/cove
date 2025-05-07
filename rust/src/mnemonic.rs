@@ -35,9 +35,7 @@ pub enum MnemonicError {
 impl Mnemonic {
     pub fn try_from_id(id: &WalletId) -> Result<Self, Error> {
         let keychain = Keychain::global();
-        let mnemonic = keychain
-            .get_wallet_key(id)?
-            .ok_or(Error::NotAvailable(id.clone()))?;
+        let mnemonic = keychain.get_wallet_key(id)?.ok_or(Error::NotAvailable(id.clone()))?;
 
         Ok(Self(mnemonic))
     }

@@ -85,10 +85,7 @@ impl AuthPin {
     }
 
     pub fn check(&self, pin: &str) -> bool {
-        let hashed_pin = Database::global()
-            .global_config
-            .hashed_pin_code()
-            .unwrap_or_default();
+        let hashed_pin = Database::global().global_config.hashed_pin_code().unwrap_or_default();
 
         self.verify(pin, &hashed_pin).is_ok()
     }

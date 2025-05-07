@@ -54,11 +54,8 @@ pub fn generate_possible_final_words(phrase: &str) -> Result<Vec<String>, Error>
 }
 
 fn split_and_encode_phrase(phrase: &str) -> (usize, BigUint) {
-    let words: Vec<&str> = if phrase.contains(' ') {
-        phrase.split_whitespace().collect()
-    } else {
-        vec![phrase]
-    };
+    let words: Vec<&str> =
+        if phrase.contains(' ') { phrase.split_whitespace().collect() } else { vec![phrase] };
 
     let word_count = words.len();
     let mut encoded_phrase = BigUint::from(0u32);
@@ -80,25 +77,21 @@ mod test {
     use num_bigint::BigUint;
     use rand::Rng as _;
 
-    use crate::bip39::split_and_encode_phrase;
-
     use super::generate_possible_final_words;
+    use crate::split_and_encode_phrase;
 
     #[test]
     fn test_encode_function_simple() {
         let words = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
-        let expected = vec![
-            "art", "diesel", "false", "kite", "organ", "ready", "surface", "trouble",
-        ]
-        .into_iter()
-        .map(ToString::to_string)
-        .collect::<Vec<String>>();
+        let expected =
+            vec!["art", "diesel", "false", "kite", "organ", "ready", "surface", "trouble"]
+                .into_iter()
+                .map(ToString::to_string)
+                .collect::<Vec<String>>();
 
         for word in expected.clone() {
-            let mut words: Vec<String> = words
-                .split_ascii_whitespace()
-                .map(ToString::to_string)
-                .collect();
+            let mut words: Vec<String> =
+                words.split_ascii_whitespace().map(ToString::to_string).collect();
 
             words.push(word.to_string());
 
@@ -147,18 +140,15 @@ mod test {
         ]
         .join(" ");
 
-        let expected = vec![
-            "among", "depart", "estate", "join", "oppose", "penalty", "symbol", "wasp",
-        ]
-        .into_iter()
-        .map(ToString::to_string)
-        .collect::<Vec<String>>();
+        let expected =
+            vec!["among", "depart", "estate", "join", "oppose", "penalty", "symbol", "wasp"]
+                .into_iter()
+                .map(ToString::to_string)
+                .collect::<Vec<String>>();
 
         for word in expected.clone() {
-            let mut words: Vec<String> = words
-                .split_ascii_whitespace()
-                .map(ToString::to_string)
-                .collect();
+            let mut words: Vec<String> =
+                words.split_ascii_whitespace().map(ToString::to_string).collect();
 
             words.push(word.to_string());
 

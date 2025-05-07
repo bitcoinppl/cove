@@ -101,9 +101,7 @@ impl ElectrumClient {
         let batch_size = self.options.batch_size;
 
         let result = crate::unblock::run_blocking(move || {
-            client
-                .full_scan(request, stop_gap, batch_size, false)
-                .map_err(Error::ElectrumScan)
+            client.full_scan(request, stop_gap, batch_size, false).map_err(Error::ElectrumScan)
         })
         .await?;
 
@@ -151,10 +149,7 @@ impl ElectrumClient {
     pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
         let client = self.client.clone();
         let tx_id = crate::unblock::run_blocking(move || {
-            client
-                .inner
-                .transaction_broadcast(&txn)
-                .map_err(Error::ElectrumBroadcast)
+            client.inner.transaction_broadcast(&txn).map_err(Error::ElectrumBroadcast)
         })
         .await?;
 
@@ -162,16 +157,12 @@ impl ElectrumClient {
     }
 
     fn default_options() -> NodeClientOptions {
-        NodeClientOptions {
-            batch_size: ELECTRUM_BATCH_SIZE,
-        }
+        NodeClientOptions { batch_size: ELECTRUM_BATCH_SIZE }
     }
 }
 
 impl std::fmt::Debug for ElectrumClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ElectrumClient")
-            .field("options", &self.options)
-            .finish()
+        f.debug_struct("ElectrumClient").field("options", &self.options).finish()
     }
 }

@@ -41,21 +41,13 @@ pub struct LabelsTable {
 impl LabelsTable {
     pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create tables  if it doesn't exist
-        write_txn
-            .open_table(TXN_TABLE)
-            .expect("failed to transactions create table");
+        write_txn.open_table(TXN_TABLE).expect("failed to transactions create table");
 
-        write_txn
-            .open_table(ADDRESS_TABLE)
-            .expect("failed to create address table");
+        write_txn.open_table(ADDRESS_TABLE).expect("failed to create address table");
 
-        write_txn
-            .open_table(INPUT_TABLE)
-            .expect("failed to create input table");
+        write_txn.open_table(INPUT_TABLE).expect("failed to create input table");
 
-        write_txn
-            .open_table(OUTPUT_TABLE)
-            .expect("failed to create output table");
+        write_txn.open_table(OUTPUT_TABLE).expect("failed to create output table");
 
         Self { db }
     }
@@ -106,12 +98,7 @@ impl LabelsTable {
             .map(|(_key, record)| record.value().item)
             .map(Label::Address);
 
-        let labels = txns
-            .chain(inputs)
-            .chain(outputs)
-            .chain(addresses)
-            .collect::<Vec<_>>()
-            .into();
+        let labels = txns.chain(inputs).chain(outputs).chain(addresses).collect::<Vec<_>>().into();
 
         Ok(labels)
     }
@@ -153,10 +140,7 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = Record<InputRecord>>, Error> {
         let table = self.read_table(INPUT_TABLE)?;
 
-        let start_inout_id = OutPointKey {
-            id: *txid.as_ref(),
-            index: 0,
-        };
+        let start_inout_id = OutPointKey { id: *txid.as_ref(), index: 0 };
 
         let inputs = table
             .range(start_inout_id..)?
@@ -172,10 +156,7 @@ impl LabelsTable {
     ) -> Result<impl Iterator<Item = Record<OutputRecord>>, Error> {
         let table = self.read_table(OUTPUT_TABLE)?;
 
-        let start_inout_id = OutPointKey {
-            id: *txid.as_ref(),
-            index: 0,
-        };
+        let start_inout_id = OutPointKey { id: *txid.as_ref(), index: 0 };
 
         let outputs = table
             .range(start_inout_id..)?
@@ -196,9 +177,7 @@ impl LabelsTable {
         &self,
         txid: impl AsRef<[u8; 32]>,
     ) -> Result<impl Iterator<Item = OutputRecord>, Error> {
-        Ok(self
-            .txn_output_records_iter(txid)?
-            .map(|record| record.item))
+        Ok(self.txn_output_records_iter(txid)?.map(|record| record.item))
     }
 
     // MARK: GET
@@ -234,9 +213,9 @@ impl LabelsTable {
             }
 
             // unsupported label types
-            Label::ExtendedPublicKey(_) => Err(Error::UnsupportedLabelType(
-                "extended public key".to_string(),
-            )),
+            Label::ExtendedPublicKey(_) => {
+                Err(Error::UnsupportedLabelType("extended public key".to_string()))
+            }
 
             Label::PublicKey(_) => Err(Error::UnsupportedLabelType("public key".to_string())),
         }
@@ -284,9 +263,7 @@ impl LabelsTable {
             .into_iter()
             .try_for_each(|l| self.insert_label_with_write_txn(l, timestamp, &write_txn))?;
 
-        write_txn
-            .commit()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
@@ -324,9 +301,7 @@ impl LabelsTable {
 
         self.insert_label_with_write_txn(label, timestamps, &write_txn)?;
 
-        write_txn
-            .commit()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
@@ -344,9 +319,7 @@ impl LabelsTable {
             self.insert_label_with_write_txn(record.item, record.timestamps, &write_txn)
         })?;
 
-        write_txn
-            .commit()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
@@ -401,13 +374,9 @@ impl LabelsTable {
             .begin_write()
             .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
-        labels
-            .into_iter()
-            .try_for_each(|l| self.delete_label_with_write_txn(l, &write_txn))?;
+        labels.into_iter().try_for_each(|l| self.delete_label_with_write_txn(l, &write_txn))?;
 
-        write_txn
-            .commit()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
 
         Ok(())
     }
@@ -509,9 +478,7 @@ mod tests {
         let txn = db.all_txns().expect("failed to get all txns");
         assert_eq!(txn.len(), 1);
 
-        let labels = db
-            .all_labels_for_txn(txn[0].ref_)
-            .expect("failed to get labels");
+        let labels = db.all_labels_for_txn(txn[0].ref_).expect("failed to get labels");
 
         assert_eq!(labels.len(), 5);
     }

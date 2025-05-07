@@ -4,8 +4,8 @@ use act_zero::*;
 use bdk_chain::bitcoin::{Address, Network};
 use bdk_wallet::{KeychainKind, Wallet as BdkWallet};
 use bip39::Mnemonic;
-use crossbeam::channel::Sender;
 use eyre::Context;
+use flume::Sender;
 use pubport::formats::Json;
 use tracing::{debug, error, info, warn};
 
@@ -124,20 +124,16 @@ impl WalletScanner {
         metadata: WalletMetadata,
         reconciler: Sender<WalletManagerReconcileMessage>,
     ) -> Result<Self, WalletScannerError> {
-        debug!(
-            "starting wallet scanner for {}, metadata: {metadata:?}",
-            metadata.id
-        );
+        debug!("starting wallet scanner for {}, metadata: {metadata:?}", metadata.id);
 
         let db = Database::global();
         let network = db.global_config().selected_network().into();
 
         let id = metadata.id.clone();
         let (wallets, scan_source) = match metadata.discovery_state {
-            DiscoveryState::StartedJson(json) => (
-                Wallets::try_from_json(&json, network)?,
-                ScanSource::Json(json),
-            ),
+            DiscoveryState::StartedJson(json) => {
+                (Wallets::try_from_json(&json, network)?, ScanSource::Json(json))
+            }
             DiscoveryState::StartedMnemonic => {
                 let mnemonic = Keychain::global()
                     .get_wallet_key(&id)
@@ -145,10 +141,7 @@ impl WalletScanner {
                     .flatten()
                     .ok_or_else(|| WalletScannerError::NoMnemonicAvailable(id.clone()))?;
 
-                (
-                    Wallets::try_from_mnemonic(&mnemonic, network)?,
-                    ScanSource::Mnemonic,
-                )
+                (Wallets::try_from_mnemonic(&mnemonic, network)?, ScanSource::Mnemonic)
             }
             DiscoveryState::Single
             | DiscoveryState::NoneFound
@@ -167,13 +160,7 @@ impl WalletScanner {
         let options = NodeClientOptions { batch_size: 1 };
 
         let client_builder = NodeClientBuilder { node, options };
-        Ok(Self::new(
-            metadata.id,
-            client_builder,
-            wallets,
-            scan_source,
-            reconciler,
-        ))
+        Ok(Self::new(metadata.id, client_builder, wallets, scan_source, reconciler))
     }
 
     pub fn new(
@@ -232,26 +219,21 @@ impl WalletScanner {
         info!("marked worker {wallet_type:?} as found");
 
         //  mark as found and stop the worker
-        let worker = self.workers[index(wallet_type)]
-            .as_mut()
-            .expect("worker started");
+        let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
 
         let address = call!(worker.addr.first_address()).await?;
         worker.state = WorkerState::FoundAddress(address);
         worker.addr = Default::default();
 
         let any_still_running = self.workers.iter().any(|worker| {
-            worker
-                .as_ref()
-                .is_some_and(|worker| worker.state == WorkerState::Started)
+            worker.as_ref().is_some_and(|worker| worker.state == WorkerState::Started)
         });
 
         // all workers are done, send the response
         if !any_still_running {
             let found_addresses = self.found_addresses();
 
-            self.responder
-                .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
+            self.responder.send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
 
             // update wallet metadata
             self.set_metadata_address_found()?;
@@ -265,17 +247,13 @@ impl WalletScanner {
     pub async fn mark_limit_reached(&mut self, wallet_type: WalletAddressType) -> ActorResult<()> {
         info!("marked worker {wallet_type:?} limit reached");
 
-        let worker = self.workers[index(wallet_type)]
-            .as_mut()
-            .expect("worker started");
+        let worker = self.workers[index(wallet_type)].as_mut().expect("worker started");
 
         worker.state = WorkerState::NoneFound;
         worker.addr = Default::default();
 
         let any_still_running = self.workers.iter().any(|worker| {
-            worker
-                .as_ref()
-                .is_some_and(|worker| worker.state == WorkerState::Started)
+            worker.as_ref().is_some_and(|worker| worker.state == WorkerState::Started)
         });
 
         // all workers are done, send the response
@@ -310,10 +288,7 @@ impl WalletScanner {
                             panic!("impossible")
                         };
 
-                        FoundAddress {
-                            type_: worker.wallet_type,
-                            first_address,
-                        }
+                        FoundAddress { type_: worker.wallet_type, first_address }
                     })
             })
             .collect::<Vec<FoundAddress>>()
@@ -352,10 +327,7 @@ impl WalletScanner {
         metadata.discovery_state = discovery_state;
         db.update_metadata_discovery_state(&metadata)?;
 
-        self.responder
-            .send(WalletManagerReconcileMessage::WalletMetadataChanged(
-                metadata,
-            ))?;
+        self.responder.send(WalletManagerReconcileMessage::WalletMetadataChanged(metadata))?;
 
         Produces::ok(())
     }
@@ -475,10 +447,8 @@ impl WalletScanWorker {
 
                     // every 5 addresses, save the scan state
                     if current_address % 5 == 0 {
-                        let scan_state = ScanningInfo {
-                            address_type: wallet_type,
-                            count: current_address,
-                        };
+                        let scan_state =
+                            ScanningInfo { address_type: wallet_type, count: current_address };
 
                         if let Err(error) = db.set_scan_state(wallet_type, scan_state) {
                             error!("unable to update scan state: {error}");
@@ -515,10 +485,7 @@ impl WalletScanWorker {
     }
 
     async fn address_at(&self, index: u32) -> ActorResult<Address> {
-        let address = self
-            .wallet
-            .peek_address(KeychainKind::External, index)
-            .address;
+        let address = self.wallet.peek_address(KeychainKind::External, index).address;
 
         Produces::ok(address)
     }

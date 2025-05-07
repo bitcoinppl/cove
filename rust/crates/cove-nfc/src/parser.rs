@@ -50,12 +50,7 @@ pub fn parse_ndef_record(input: &mut Stream<'_>) -> ModalResult<NdefRecord> {
     let id = parse_id(input, header.id_length)?;
     let payload = parse_payload(input, header.payload_length, &type_)?;
 
-    Ok(NdefRecord {
-        header,
-        type_,
-        id,
-        payload,
-    })
+    Ok(NdefRecord { header, type_, id, payload })
 }
 
 pub fn parse_message_info(input: &mut Stream<'_>) -> ModalResult<MessageInfo> {
@@ -63,11 +58,8 @@ pub fn parse_message_info(input: &mut Stream<'_>) -> ModalResult<MessageInfo> {
 
     let length_indicator = be_u8.parse_next(input)?;
 
-    let total_payload_length = if length_indicator == 255 {
-        be_u16.parse_next(input)?
-    } else {
-        length_indicator as u16
-    };
+    let total_payload_length =
+        if length_indicator == 255 { be_u16.parse_next(input)? } else { length_indicator as u16 };
 
     Ok(MessageInfo::new(total_payload_length))
 }
@@ -109,11 +101,7 @@ fn parse_header(input: &mut Stream<'_>) -> ModalResult<NdefHeader> {
         winnow::binary::u32(Endianness::Big).parse_next(input)?
     };
 
-    let id_length = if has_id_length {
-        Some(any.parse_next(input)?)
-    } else {
-        None
-    };
+    let id_length = if has_id_length { Some(any.parse_next(input)?) } else { None };
 
     Ok(NdefHeader {
         message_begin,
@@ -129,16 +117,12 @@ fn parse_header(input: &mut Stream<'_>) -> ModalResult<NdefHeader> {
 }
 
 fn parse_type(input: &mut Stream<'_>, type_length: u8) -> ModalResult<Vec<u8>> {
-    take(type_length as usize)
-        .map(|s: &[u8]| s.to_vec())
-        .parse_next(input)
+    take(type_length as usize).map(|s: &[u8]| s.to_vec()).parse_next(input)
 }
 
 fn parse_id(input: &mut Stream<'_>, id_length: Option<u8>) -> ModalResult<Option<Vec<u8>>> {
     if let Some(id_len) = id_length {
-        take(id_len as usize)
-            .map(|s: &[u8]| Some(s.to_vec()))
-            .parse_next(input)
+        take(id_len as usize).map(|s: &[u8]| Some(s.to_vec())).parse_next(input)
     } else {
         Ok(None)
     }
@@ -171,11 +155,7 @@ fn parse_payload(
         };
 
         let parsed_text = TextPayload {
-            format: if is_utf16 {
-                TextPayloadFormat::Utf16
-            } else {
-                TextPayloadFormat::Utf8
-            },
+            format: if is_utf16 { TextPayloadFormat::Utf16 } else { TextPayloadFormat::Utf8 },
             language: String::from_utf8_lossy(language_code).to_string(),
             text: parsed_text,
         };
@@ -212,40 +192,31 @@ mod tests {
     }
 
     static EXPORT: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../../../../test/data/export_bytes.txt");
+        let file_contents = include_bytes!("../test/data/export_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
-        let bytes: Vec<u8> = file_string
-            .split(',')
-            .map(|s| s.trim())
-            .map(|s| s.parse::<u8>().unwrap())
-            .collect();
+        let bytes: Vec<u8> =
+            file_string.split(',').map(|s| s.trim()).map(|s| s.parse::<u8>().unwrap()).collect();
 
         owned_stream(bytes)
     });
 
     static DESCRIPTOR: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../../../../test/data/descriptor_bytes.txt");
+        let file_contents = include_bytes!("../test/data/descriptor_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
-        let bytes: Vec<u8> = file_string
-            .split(',')
-            .map(|s| s.trim())
-            .map(|s| s.parse::<u8>().unwrap())
-            .collect();
+        let bytes: Vec<u8> =
+            file_string.split(',').map(|s| s.trim()).map(|s| s.parse::<u8>().unwrap()).collect();
 
         owned_stream(bytes)
     });
 
     static SEED_WORDS_BYTES: LazyLock<Stream<'static>> = LazyLock::new(|| {
-        let file_contents = include_bytes!("../../../../test/data/seed_words_bytes.txt");
+        let file_contents = include_bytes!("../test/data/seed_words_bytes.txt");
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
-        let bytes: Vec<u8> = file_string
-            .split(',')
-            .map(|s| s.trim())
-            .map(|s| s.parse::<u8>().unwrap())
-            .collect();
+        let bytes: Vec<u8> =
+            file_string.split(',').map(|s| s.trim()).map(|s| s.parse::<u8>().unwrap()).collect();
 
         owned_stream(bytes)
     });
@@ -363,14 +334,10 @@ mod tests {
         assert_eq!(type_string, "T".to_string());
         assert_eq!(id, None);
 
-        let NdefPayload::Text(payload_string) = payload else {
-            panic!("payload is not text")
-        };
+        let NdefPayload::Text(payload_string) = payload else { panic!("payload is not text") };
 
-        let descriptor_string = std::fs::read_to_string("../../../../test/data/descriptor.txt")
-            .unwrap()
-            .trim()
-            .to_string();
+        let descriptor_string =
+            std::fs::read_to_string("test/data/descriptor.txt").unwrap().trim().to_string();
 
         assert_eq!(payload_string.text, descriptor_string);
     }
@@ -388,7 +355,7 @@ mod tests {
         let NdefPayload::Data(payload) = payload else { panic!("payload is not data") };
 
         let payload_string = String::from_utf8(payload).unwrap();
-        let export_string = std::fs::read_to_string("../../../../test/data/export.json").unwrap();
+        let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
 
         let payload_json = serde_json::from_str::<serde_json::Value>(&payload_string).unwrap();
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
@@ -415,17 +382,12 @@ mod tests {
         let record = &message[0];
         assert_eq!(record.type_, b"application/json");
 
-        let NdefPayload::Data(payload) = &record.payload else {
-            panic!("payload is not data")
-        };
+        let NdefPayload::Data(payload) = &record.payload else { panic!("payload is not data") };
 
-        let export_string = std::fs::read_to_string("../../../../test/data/export.json").unwrap();
+        let export_string = std::fs::read_to_string("test/data/export.json").unwrap();
         let export_json = serde_json::from_str::<serde_json::Value>(&export_string).unwrap();
 
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(payload).unwrap(),
-            export_json
-        );
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(payload).unwrap(), export_json);
     }
 
     #[test]
@@ -439,10 +401,7 @@ mod tests {
         assert_eq!(record.type_, b"T");
 
         let known_descriptor_string =
-            std::fs::read_to_string("../../../../test/data/descriptor.txt")
-                .unwrap()
-                .trim()
-                .to_string();
+            std::fs::read_to_string("test/data/descriptor.txt").unwrap().trim().to_string();
 
         let NdefPayload::Text(payload_string) = &record.payload else {
             panic!("payload is not text")

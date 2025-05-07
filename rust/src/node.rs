@@ -77,21 +77,11 @@ impl Node {
     }
 
     pub fn new_electrum(name: String, url: String, network: Network) -> Self {
-        Self {
-            name,
-            network,
-            api_type: ApiType::Electrum,
-            url,
-        }
+        Self { name, network, api_type: ApiType::Electrum, url }
     }
 
     pub fn new_esplora(name: String, url: String, network: Network) -> Self {
-        Self {
-            name,
-            network,
-            api_type: ApiType::Esplora,
-            url,
-        }
+        Self { name, network, api_type: ApiType::Esplora, url }
     }
 
     pub async fn check_url(&self) -> Result<(), Error> {

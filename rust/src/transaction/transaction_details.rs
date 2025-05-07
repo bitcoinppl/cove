@@ -169,16 +169,15 @@ pub struct ConfirmedDetails {
 impl PendingOrConfirmed {
     pub fn new(chain_position: &BdkChainPosition<ConfirmationBlockTime>) -> Self {
         match chain_position {
-            BdkChainPosition::Unconfirmed { last_seen } => Self::Pending(PendingDetails {
-                last_seen: (*last_seen).unwrap_or_default(),
-            }),
-            BdkChainPosition::Confirmed {
-                anchor: confirmation_blocktime,
-                ..
-            } => Self::Confirmed(ConfirmedDetails {
-                block_number: confirmation_blocktime.block_id.height,
-                confirmation_time: confirmation_blocktime.confirmation_time,
-            }),
+            BdkChainPosition::Unconfirmed { last_seen } => {
+                Self::Pending(PendingDetails { last_seen: (*last_seen).unwrap_or_default() })
+            }
+            BdkChainPosition::Confirmed { anchor: confirmation_blocktime, .. } => {
+                Self::Confirmed(ConfirmedDetails {
+                    block_number: confirmation_blocktime.block_id.height,
+                    confirmation_time: confirmation_blocktime.confirmation_time,
+                })
+            }
         }
     }
 
@@ -268,9 +267,7 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub async fn sent_sans_fee_fiat_fmt(&self) -> Result<String, Error> {
-        let amount = self
-            .sent_sans_fee()
-            .ok_or(Error::Fee("No fee".to_string()))?;
+        let amount = self.sent_sans_fee().ok_or(Error::Fee("No fee".to_string()))?;
 
         let fiat = task::spawn(async move {
             FIAT_CLIENT
@@ -342,10 +339,7 @@ impl TransactionDetails {
     pub fn block_number_fmt(&self) -> Option<String> {
         let block_number = self.block_number()?;
 
-        let mut f = Formatter::new()
-            .separator(',')
-            .unwrap()
-            .precision(Precision::Decimals(0));
+        let mut f = Formatter::new().separator(',').unwrap().precision(Precision::Decimals(0));
 
         Some(f.fmt(block_number).to_string())
     }
@@ -394,9 +388,8 @@ impl TransactionDetails {
     pub fn preview_pending_received() -> Self {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_incoming();
-        me.pending_or_confirmed = PendingOrConfirmed::Pending(PendingDetails {
-            last_seen: 1677721600,
-        });
+        me.pending_or_confirmed =
+            PendingOrConfirmed::Pending(PendingDetails { last_seen: 1677721600 });
 
         me
     }
@@ -405,9 +398,8 @@ impl TransactionDetails {
     pub fn preview_pending_sent() -> Self {
         let mut me = Self::preview_new_confirmed();
         me.sent_and_received = SentAndReceived::preview_outgoing();
-        me.pending_or_confirmed = PendingOrConfirmed::Pending(PendingDetails {
-            last_seen: 1677721600,
-        });
+        me.pending_or_confirmed =
+            PendingOrConfirmed::Pending(PendingDetails { last_seen: 1677721600 });
 
         me
     }
@@ -428,10 +420,7 @@ impl TransactionDetails {
 
 /// MARK: local helpers
 fn currency() -> FiatCurrency {
-    Database::global()
-        .global_config
-        .fiat_currency()
-        .unwrap_or_default()
+    Database::global().global_config.fiat_currency().unwrap_or_default()
 }
 
 fn fiat_amount_fmt(amount: f64) -> String {

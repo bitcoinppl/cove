@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Features
+
+- Support for importing hardware wallets with [Key Expressions](https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki#key-expressions)
+  - This adds support for using Cove with [Krux](https://github.com/selfcustody/krux)
+- Create a CSV file of your transactions with fiat values for each transaction at the time of the transaction
+  - This is useful for tax reporting
+- Send flow improvements and bug fixes
+  - Show proper formatting as you type
+  - Default to entering the amount in before the address
+  - Small UI bug fixes
+
+### Internal (non-user facing)
+
+- Extracted out multiple modules into their own crates
+- Updated build script to work with multiple crates and to create a SPM package for iOS
+- Complete refactor of send flow, moved logic over to rust
+
 ## [0.3.0] - 2025-04-07
 
 ### TAPSIGNER Support

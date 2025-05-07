@@ -8,18 +8,12 @@ pub struct OutPoint {
 
 impl From<bitcoin::OutPoint> for OutPoint {
     fn from(out_point: bitcoin::OutPoint) -> Self {
-        Self {
-            txid: out_point.txid.into(),
-            vout: out_point.vout,
-        }
+        Self { txid: out_point.txid.into(), vout: out_point.vout }
     }
 }
 
 impl From<&bitcoin::OutPoint> for OutPoint {
     fn from(out_point: &bitcoin::OutPoint) -> Self {
-        Self {
-            txid: out_point.txid.into(),
-            vout: out_point.vout,
-        }
+        Self { txid: out_point.txid.into(), vout: out_point.vout }
     }
 }

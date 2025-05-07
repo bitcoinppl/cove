@@ -20,7 +20,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
 };
 use cove_macros::impl_default_for;
-use crossbeam::channel::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
@@ -29,7 +29,7 @@ use tracing::{debug, error, warn};
 
 pub static APP: OnceCell<App> = OnceCell::new();
 
-#[derive(Clone, uniffi::Record)]
+#[derive(Clone, Debug, uniffi::Record)]
 pub struct AppState {
     router: Router,
 }
@@ -37,13 +37,11 @@ pub struct AppState {
 impl_default_for!(AppState);
 impl AppState {
     pub fn new() -> Self {
-        Self {
-            router: Router::new(),
-        }
+        Self { router: Router::new() }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct App {
     state: Arc<RwLock<AppState>>,
     update_receiver: Arc<Receiver<AppMessage>>,
@@ -52,6 +50,7 @@ pub struct App {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum AppAction {
     UpdateRoute { routes: Vec<Route> },
+    PushRoute(Route),
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
     ChangeFiatCurrency(FiatCurrency),
@@ -80,8 +79,7 @@ impl App {
         crate::logging::init();
 
         // Set up the updater channel
-        let (sender, receiver): (Sender<AppMessage>, Receiver<AppMessage>) =
-            crossbeam::channel::bounded(1000);
+        let (sender, receiver): (Sender<AppMessage>, Receiver<AppMessage>) = flume::bounded(1000);
 
         Updater::init(sender);
         let state = Arc::new(RwLock::new(AppState::new()));
@@ -109,15 +107,22 @@ impl App {
             });
         }
 
-        Self {
-            update_receiver: Arc::new(receiver),
-            state,
-        }
+        Self { update_receiver: Arc::new(receiver), state }
     }
 
     /// Fetch global instance of the app, or create one if it doesn't exist
     pub fn global() -> &'static App {
         APP.get_or_init(App::new)
+    }
+
+    /// Return the current prices and check if an update is needed
+    pub fn prices(&self) -> Option<PriceResponse> {
+        FIAT_CLIENT.prices()
+    }
+
+    /// Return the current fees and check if an update is needed
+    pub fn fees(&self) -> Option<FeeResponse> {
+        FEE_CLIENT.fees()
     }
 
     /// Handle event received from frontend
@@ -126,11 +131,7 @@ impl App {
         let state = self.state.clone();
         match event {
             AppAction::UpdateRoute { routes } => {
-                debug!(
-                    "route change old: {:?}, new: {:?}",
-                    state.read().router.routes,
-                    routes
-                );
+                debug!("route change old: {:?}, new: {:?}", state.read().router.routes, routes);
 
                 state.write().router.routes = routes;
             }
@@ -168,7 +169,7 @@ impl App {
                 debug!("updating fiat prices");
 
                 crate::task::spawn(async move {
-                    match FIAT_CLIENT.prices().await {
+                    match FIAT_CLIENT.get_or_fetch_prices().await {
                         Ok(prices) => {
                             Updater::send_update(AppMessage::FiatPricesChanged(prices.into()))
                         }
@@ -183,7 +184,7 @@ impl App {
                 debug!("updating fees");
 
                 crate::task::spawn(async move {
-                    match FEE_CLIENT.get_fees().await {
+                    match FEE_CLIENT.fetch_and_get_fees().await {
                         Ok(fees) => {
                             Updater::send_update(AppMessage::FeesChanged(fees));
                         }
@@ -195,12 +196,17 @@ impl App {
             }
 
             AppAction::ChangeFiatCurrency(fiat_currency) => {
-                if let Err(error) = Database::global()
-                    .global_config
-                    .set_fiat_currency(fiat_currency)
+                if let Err(error) =
+                    Database::global().global_config.set_fiat_currency(fiat_currency)
                 {
                     error!("unable to set fiat currency: {error}");
                 }
+            }
+
+            AppAction::PushRoute(route) => {
+                self.state.write().router.routes.push(route);
+                let routes = self.state.read().router.routes.clone();
+                Updater::send_update(AppMessage::RouteUpdated(routes));
             }
         }
     }
@@ -266,20 +272,14 @@ impl FfiApp {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        Database::global()
-            .wallets()
-            .find_by_tap_signer_ident(ident, network, mode)
-            .unwrap_or(None)
+        Database::global().wallets().find_by_tap_signer_ident(ident, network, mode).unwrap_or(None)
     }
 
     /// Get the backup for the tap signer
     #[uniffi::method]
     pub fn get_tap_signer_backup(&self, tap_signer: &cove_tap_card::TapSigner) -> Option<Vec<u8>> {
         let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
-            debug!(
-                "Unable to find wallet with card ident {}",
-                tap_signer.card_ident
-            )
+            debug!("Unable to find wallet with card ident {}", tap_signer.card_ident)
         })?;
 
         let keychain = Keychain::global();
@@ -295,10 +295,7 @@ impl FfiApp {
     ) -> bool {
         let run = || {
             let metadata = self.find_tap_signer_wallet(tap_signer).tap_none(|| {
-                debug!(
-                    "Unable to find wallet with card ident {}",
-                    tap_signer.card_ident
-                )
+                debug!("Unable to find wallet with card ident {}", tap_signer.card_ident)
             })?;
 
             let keychain = Keychain::global();
@@ -405,10 +402,7 @@ impl FfiApp {
             .router
             .reset_nested_routes_to(default_route.clone(), nested_routes.clone());
 
-        Updater::send_update(AppMessage::DefaultRouteChanged(
-            default_route,
-            nested_routes,
-        ));
+        Updater::send_update(AppMessage::DefaultRouteChanged(default_route, nested_routes));
     }
 
     /// Change the default route, and reset the routes
@@ -421,11 +415,7 @@ impl FfiApp {
             return;
         }
 
-        self.inner()
-            .state
-            .write()
-            .router
-            .reset_routes_to(route.clone());
+        self.inner().state.write().router.reset_routes_to(route.clone());
 
         Updater::send_update(AppMessage::DefaultRouteChanged(route, vec![]));
     }
@@ -439,23 +429,13 @@ impl FfiApp {
     }
 
     #[uniffi::method]
-    pub async fn prices(&self) -> Result<PriceResponse, Error> {
-        let prices = FIAT_CLIENT
-            .prices()
-            .await
-            .map_err(|e| Error::PricesError(e.to_string()))?;
-
-        Ok(prices)
+    pub fn prices(&self) -> Result<PriceResponse, Error> {
+        App::global().prices().ok_or_else(|| Error::PricesError("no prices saved".to_string()))
     }
 
     #[uniffi::method]
-    pub async fn fees(&self) -> Result<FeeResponse, Error> {
-        let fees = FEE_CLIENT
-            .get_fees()
-            .await
-            .map_err(|error| Error::FeesError(error.to_string()))?;
-
-        Ok(fees)
+    pub fn fees(&self) -> Result<FeeResponse, Error> {
+        App::global().fees().ok_or_else(|| Error::FeesError("no fees saved".to_string()))
     }
 
     /// DANGER: This will wipe all wallet data on this device
@@ -503,7 +483,7 @@ impl FfiApp {
         crate::task::spawn(async move {
             // init prices and update the client state
             if crate::fiat::client::init_prices().await.is_ok() {
-                let prices = FIAT_CLIENT.prices().await;
+                let prices = FIAT_CLIENT.get_or_fetch_prices().await;
                 if let Ok(prices) = prices {
                     Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
@@ -528,7 +508,7 @@ impl FfiApp {
                     }
                 }
 
-                let prices = FIAT_CLIENT.prices().await;
+                let prices = FIAT_CLIENT.get_or_fetch_prices().await;
                 if let Ok(prices) = prices {
                     Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
                 }
@@ -539,7 +519,7 @@ impl FfiApp {
         crate::task::spawn(async move {
             crate::fee_client::init_fees().await;
 
-            let fees = FEE_CLIENT.get_fees().await;
+            let fees = FEE_CLIENT.fetch_and_get_fees().await;
             if let Ok(fees) = fees {
                 Updater::send_update(AppMessage::FeesChanged(fees));
             }
