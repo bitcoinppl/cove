@@ -6938,6 +6938,8 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func displayFiatAmount(amount: Double, withSuffix: Bool)  -> String
     
+    func enteringFiatAmount()  -> String
+    
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
     func sanitizeBtcEnteringAmount(oldValue: String, newValue: String)  -> String?
@@ -7042,6 +7044,13 @@ open func displayFiatAmount(amount: Double, withSuffix: Bool = true) -> String  
     uniffi_cove_fn_method_rustsendflowmanager_display_fiat_amount(self.uniffiClonePointer(),
         FfiConverterDouble.lower(amount),
         FfiConverterBool.lower(withSuffix),$0
+    )
+})
+}
+    
+open func enteringFiatAmount() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_entering_fiat_amount(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -25522,6 +25531,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_display_fiat_amount() != 57843) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_entering_fiat_amount() != 65483) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26026,9 +26038,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()

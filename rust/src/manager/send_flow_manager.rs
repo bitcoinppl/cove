@@ -168,6 +168,11 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
+    pub fn entering_fiat_amount(&self) -> String {
+        self.state.lock().entering_fiat_amount.clone()
+    }
+
+    #[uniffi::method]
     pub async fn wait_for_init(&self) {
         let mut times = 0;
         while !self.state.lock().init_complete {
@@ -530,7 +535,7 @@ impl RustSendFlowManager {
     }
 
     fn fiat_field_changed(&self, old_value: String, new_value: String) -> Option<()> {
-        trace!("fiat_field_changed {old_value} --> {new_value}");
+        debug!("fiat_field_changed {old_value} --> {new_value}");
         if old_value == new_value {
             return None;
         }
@@ -549,8 +554,7 @@ impl RustSendFlowManager {
             return None;
         };
 
-        trace!("result: {result:?}, old_value: {old_value}, new_value: {new_value}");
-
+        debug!("result: {result:?}, old_value: {old_value}, new_value: {new_value}");
         let fiat_on_change::Changeset {
             entering_fiat_amount,
             fiat_value,
@@ -611,10 +615,10 @@ impl RustSendFlowManager {
         let currency = self.state.lock().selected_fiat_currency;
         let mut state = self.state.lock();
 
-        state.amount_sats = Some(0);
+        state.amount_sats = None;
         self.send(Message::UpdateAmountSats(0));
 
-        state.amount_fiat = Some(0.0);
+        state.amount_fiat = None;
         self.send(Message::UpdateAmountFiat(0.0));
 
         // fiat

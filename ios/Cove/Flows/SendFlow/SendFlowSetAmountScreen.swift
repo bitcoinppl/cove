@@ -160,10 +160,10 @@ struct SendFlowSetAmountScreen: View {
         .padding(.top, 0)
         .onChange(of: presenter.focusField, initial: true, focusFieldChanged)
         .onChange(of: scannedCode, initial: true, scannedCodeChanged)
-        .onChange(of: metadata.selectedUnit, initial: true) { oldUnit, newUnit in
+        .onChange(of: metadata.selectedUnit, initial: false) { oldUnit, newUnit in
             sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
         }
-        .onChange(of: metadata.fiatOrBtc, initial: true) { old, new in
+        .onChange(of: metadata.fiatOrBtc, initial: false) { old, new in
             sendFlowManager.dispatch(.notifyBtcOrFiatChanged(old: old, new: new))
         }
         .onChange(of: app.prices, initial: true) { _, newPrices in

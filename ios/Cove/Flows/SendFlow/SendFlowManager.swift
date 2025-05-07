@@ -46,7 +46,8 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     public init(_ rust: RustSendFlowManager, presenter: SendFlowPresenter) {
         self.rust = rust
         self.presenter = presenter
-
+        
+        self.enteringFiatAmount = rust.enteringFiatAmount()
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
     
