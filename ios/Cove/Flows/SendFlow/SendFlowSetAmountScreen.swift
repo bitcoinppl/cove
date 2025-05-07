@@ -551,12 +551,8 @@ struct SendFlowSetAmountScreen: View {
             SendFlowSelectFeeRateView(
                 manager: manager,
                 feeOptions: Binding(
-                    get: {
-                        guard let feeRateOptions = sendFlowManager.feeRateOptions else {
-                            return FeeRateOptionsWithTotalFee.previewNew()
-                        }
-                        return feeRateOptions
-                    }, set: { _ in /* No-op, handled by SendFlowManager */ }
+                    get: { sendFlowManager.feeRateOptions! },
+                    set: { sendFlowManager.dispatch(action: .changeFeeRateOptions($0)) }
                 ),
                 selectedOption: Binding(
                     get: {

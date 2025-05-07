@@ -18034,6 +18034,8 @@ public enum SendFlowManagerAction {
     )
     case notifyAmountChanged(Amount
     )
+    case changeFeeRateOptions(FeeRateOptionsWithTotalFee
+    )
     case finalizeAndGoToNextScreen
 }
 
@@ -18092,7 +18094,10 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 14: return .notifyAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
         
-        case 15: return .finalizeAndGoToNextScreen
+        case 15: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
+        )
+        
+        case 16: return .finalizeAndGoToNextScreen
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18174,8 +18179,13 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterTypeAmount.write(v1, into: &buf)
             
         
-        case .finalizeAndGoToNextScreen:
+        case let .changeFeeRateOptions(v1):
             writeInt(&buf, Int32(15))
+            FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
+            
+        
+        case .finalizeAndGoToNextScreen:
+            writeInt(&buf, Int32(16))
         
         }
     }
@@ -26039,9 +26049,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

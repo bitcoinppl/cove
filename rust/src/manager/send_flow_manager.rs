@@ -119,6 +119,9 @@ pub enum SendFlowManagerAction {
     NotifyAddressChanged(Arc<Address>),
     NotifyAmountChanged(Arc<Amount>),
 
+    // custom fee selection
+    ChangeFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
+
     FinalizeAndGoToNextScreen,
 }
 
@@ -462,6 +465,11 @@ impl RustSendFlowManager {
 
             Action::NotifyFocusFieldChanged { old, new } => {
                 self.handle_focus_field_changed(old, new);
+            }
+
+            Action::ChangeFeeRateOptions(fee_options) => {
+                self.state.lock().fee_rate_options = Some(fee_options.clone());
+                self.send(Message::UpdateFeeRateOptions(fee_options));
             }
         }
     }
