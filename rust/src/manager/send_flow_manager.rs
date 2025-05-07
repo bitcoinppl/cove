@@ -661,9 +661,12 @@ impl RustSendFlowManager {
         match fiat_or_btc {
             FiatOrBtc::Fiat => {
                 if let Some(price) = btc_price_in_fiat {
+                    let currency = self.state.lock().selected_fiat_currency;
                     let amount_fiat = amount.as_btc() * (price as f64);
 
-                    let enterting_amount_fiat = amount_fiat.thousands_fiat();
+                    let enterting_amount_fiat =
+                        format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
+
                     self.state.lock().entering_fiat_amount = enterting_amount_fiat.clone();
                     self.send(Message::UpdateEnteringFiatAmount(enterting_amount_fiat));
                 }
@@ -878,12 +881,8 @@ impl RustSendFlowManager {
             FiatOrBtc::Fiat => {
                 let currency = self.state.lock().selected_fiat_currency;
                 let fiat_amount = self.state.lock().amount_fiat.unwrap_or_default();
-                let fiat_amount_fmt = format!(
-                    "{}{}{}",
-                    currency.symbol(),
-                    fiat_amount.thousands_fiat(),
-                    currency.suffix()
-                );
+                let fiat_amount_fmt =
+                    format!("{}{}", currency.symbol(), fiat_amount.thousands_fiat(),);
 
                 self.state.lock().entering_fiat_amount = fiat_amount_fmt.clone();
                 self.send(Message::UpdateEnteringFiatAmount(fiat_amount_fmt));
