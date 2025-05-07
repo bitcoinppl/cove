@@ -873,15 +873,11 @@ impl RustSendFlowManager {
         // if its already empty clear everything
         {
             let state = self.state.lock();
+            let amount_is_empty = state.amount_sats.is_none();
             let entering_btc_amount_is_empty = state.entering_btc_amount.is_empty();
-            let entering_fiat_amount_is_empty = state.entering_fiat_amount.is_empty();
             drop(state);
 
-            if old == Unit::Btc && entering_btc_amount_is_empty {
-                return self.clear_send_amount();
-            }
-
-            if old == Unit::Sat && entering_fiat_amount_is_empty {
+            if entering_btc_amount_is_empty || amount_is_empty {
                 return self.clear_send_amount();
             }
         }
@@ -891,7 +887,10 @@ impl RustSendFlowManager {
             return;
         }
 
-        let amount_sats = self.state.lock().amount_sats.unwrap_or(0);
+        let Some(amount_sats) = self.state.lock().amount_sats else {
+            return;
+        };
+
         match new {
             Unit::Btc => {
                 let amount_string = Amount::from_sat(amount_sats).btc_string();
@@ -909,9 +908,12 @@ impl RustSendFlowManager {
     fn handle_btc_or_fiat_changed(&self, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
         self.state.lock().metadata.fiat_or_btc = new_value;
 
+        let Some(amount_sats) = self.state.lock().amount_sats else {
+            return;
+        };
+
         match new_value {
             FiatOrBtc::Btc => {
-                let amount_sats = self.state.lock().amount_sats.unwrap_or_default();
                 let amount = Amount::from_sat(amount_sats);
 
                 let amount_fmt = match self.state.lock().metadata.selected_unit {
