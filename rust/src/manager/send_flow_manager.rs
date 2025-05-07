@@ -85,7 +85,6 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateAmountFiat(f64),
 
     UpdateFocusField(Option<SetAmountFocusField>),
-    UpdateFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
     UpdateSelectedFeeRate(Arc<FeeRateOptionWithTotalFee>),
     UpdateFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
@@ -646,7 +645,7 @@ impl RustSendFlowManager {
 
     fn selected_fee_rate_changed(self: &Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
         self.state.lock().selected_fee_rate = Some(fee_rate.clone());
-        self.send(Message::UpdateFeeRate(fee_rate.clone()));
+        self.send(Message::UpdateSelectedFeeRate(fee_rate.clone()));
 
         // max was selected before, so we need to update it to match the new fee rate
         let max_selected = self.state.lock().max_selected.clone();
@@ -1230,13 +1229,13 @@ impl RustSendFlowManager {
 
                 if new_selected_fee_rate != selected_fee_rate {
                     self.state.lock().selected_fee_rate = Some(new_selected_fee_rate.clone());
-                    self.send(Message::UpdateFeeRate(new_selected_fee_rate));
+                    self.send(Message::UpdateSelectedFeeRate(new_selected_fee_rate));
                 }
             }
             None => {
                 let medium = Arc::new(fee_rate_options_with_total_fee.clone().medium);
                 self.state.lock().selected_fee_rate = Some(medium.clone());
-                self.send(Message::UpdateFeeRate(medium));
+                self.send(Message::UpdateSelectedFeeRate(medium));
             }
         }
 

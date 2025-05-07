@@ -61,19 +61,11 @@ struct EnterAmountView: View {
     }
 
     var sendAmountFiat: String {
-        let _ = sendFlowManager.address
-        let _ = sendFlowManager.feeRateOptions
-        let _ = sendFlowManager.selectedFeeRate
-        let _ = sendFlowManager.amount
-        return sendFlowManager.rust.sendAmountFiat()
+        sendFlowManager.sendAmountFiat
     }
 
     var sendAmountBtc: String {
-        let _ = sendFlowManager.address
-        let _ = sendFlowManager.feeRateOptions
-        let _ = sendFlowManager.selectedFeeRate
-        let _ = sendFlowManager.amount
-        return sendFlowManager.rust.sendAmountBtc()
+        sendFlowManager.sendAmountBtc
     }
 
     var body: some View {

@@ -18250,8 +18250,6 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateFocusField(SetAmountFocusField?
     )
-    case updateFeeRate(FeeRateOptionWithTotalFee
-    )
     case updateSelectedFeeRate(FeeRateOptionWithTotalFee
     )
     case updateFeeRateOptions(FeeRateOptionsWithTotalFee
@@ -18302,19 +18300,16 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 9: return .updateFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
         
-        case 10: return .updateFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        case 10: return .updateSelectedFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
         )
         
-        case 11: return .updateSelectedFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        case 11: return .updateFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
         
-        case 12: return .updateFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
+        case 12: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
         )
         
-        case 13: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
-        )
-        
-        case 14: return .clearAlert
+        case 13: return .clearAlert
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18368,28 +18363,23 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterOptionTypeSetAmountFocusField.write(v1, into: &buf)
             
         
-        case let .updateFeeRate(v1):
+        case let .updateSelectedFeeRate(v1):
             writeInt(&buf, Int32(10))
             FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
             
         
-        case let .updateSelectedFeeRate(v1):
-            writeInt(&buf, Int32(11))
-            FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
-            
-        
         case let .updateFeeRateOptions(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
             
         
         case let .setAlert(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeSendFlowAlertState.write(v1, into: &buf)
             
         
         case .clearAlert:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
         
         }
     }
@@ -26065,9 +26055,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
