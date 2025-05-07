@@ -1160,8 +1160,6 @@ impl RustSendFlowManager {
                 let _ = self.get_first_address().await;
             }
 
-            
-
             match (address, first_address) {
                 (Some(address), _) => address,
                 (None, Some(first_address)) => first_address,
@@ -1201,12 +1199,7 @@ impl RustSendFlowManager {
         // if user had a custom speed selected, re-apply it
         let selected_fee_rate = state.lock().selected_fee_rate.clone();
         if let Some(updated_options) = self
-            .updated_custom_fee_option(
-                address.clone(),
-                amount,
-                fee_rate_options,
-                selected_fee_rate,
-            )
+            .updated_custom_fee_option(address.clone(), amount, fee_rate_options, selected_fee_rate)
             .await
         {
             fee_rate_options = updated_options;
@@ -1221,7 +1214,9 @@ impl RustSendFlowManager {
         match selected_fee_rate {
             Some(selected_fee_rate) => {
                 let new_selected_fee_rate = match selected_fee_rate.fee_speed {
-                    FeeSpeed::Custom { .. } => fee_rate_options.custom().expect("checked above"),
+                    FeeSpeed::Custom { .. } => {
+                        fee_rate_options.custom().unwrap_or_else(|| fee_rate_options.medium.into())
+                    }
                     FeeSpeed::Fast => fee_rate_options.fast.into(),
                     FeeSpeed::Medium => fee_rate_options.medium.into(),
                     FeeSpeed::Slow => fee_rate_options.slow.into(),
