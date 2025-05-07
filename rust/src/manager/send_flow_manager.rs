@@ -103,6 +103,7 @@ pub enum SendFlowManagerAction {
 
     SelectMaxSend,
     ClearSendAmount,
+    ClearAddress,
 
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
@@ -436,6 +437,7 @@ impl RustSendFlowManager {
             }
 
             Action::ClearSendAmount => self.clear_send_amount(),
+            Action::ClearAddress => self.clear_address(),
 
             Action::NotifySelectedUnitedChanged { old, new } => {
                 self.handle_selected_unit_changed(old, new)
@@ -644,6 +646,14 @@ impl RustSendFlowManager {
         self.send(Message::UpdateEnteringBtcAmount(String::new()));
 
         drop(state);
+    }
+
+    fn clear_address(self: &Arc<Self>) {
+        self.state.lock().address = None;
+        self.send(Message::UpdateAddress(None));
+
+        self.state.lock().entering_address = String::new();
+        self.send(Message::UpdateEnteringAddress(String::new()));
     }
 
     fn selected_fee_rate_changed(self: &Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
