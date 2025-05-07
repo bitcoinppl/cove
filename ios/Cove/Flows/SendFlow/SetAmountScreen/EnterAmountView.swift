@@ -142,6 +142,17 @@ struct EnterAmountView: View {
                         presenter.focusField = new
                     }
                 }
+                .onChange(of: auth.lockState, initial: true) { _, new in
+                    if new == .unlocked {
+                        if !sendFlowManager.rust.validateAmount() {
+                            return sendFlowManager.dispatch(.changeSetAmountFocusField(.amount))
+                        }
+
+                        if !sendFlowManager.rust.validateAddress() {
+                            return sendFlowManager.dispatch(.changeSetAmountFocusField(.address))
+                        }
+                    }
+                }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {
                         Button(action: {
