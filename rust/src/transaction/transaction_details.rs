@@ -5,6 +5,7 @@ use bdk_wallet::Wallet as BdkWallet;
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bip329::{Label, Labels, TransactionRecord};
 use bitcoin::params::Params;
+use cove_types::Network;
 use jiff::Timestamp;
 use numfmt::{Formatter, Precision};
 
@@ -53,6 +54,7 @@ pub struct TransactionDetails {
     pub labels: Labels,
     pub input_indexes: Vec<u32>,
     pub output_indexes: Vec<u32>,
+    pub network: Network,
     // for outgoing transactions we might have a change address
     pub change_address: Option<Address>,
 }
@@ -73,6 +75,7 @@ impl TransactionDetails {
         let sent_and_received: SentAndReceived = wallet.sent_and_received(&tx.tx_node.tx).into();
         let chain_postition = &tx.chain_position;
         let tx_details = wallet.get_tx(txid).expect("transaction").tx_node.tx;
+        let network = Network::from(wallet.network());
 
         let fee = wallet.calculate_fee(&tx_details).ok().map(Into::into);
         let fee_rate = wallet.calculate_fee_rate(&tx_details).ok().map(Into::into);
@@ -127,6 +130,7 @@ impl TransactionDetails {
 
         let me = Self {
             tx_id: txid.into(),
+            network,
             address,
             sent_and_received,
             fee,
@@ -314,7 +318,12 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub fn transaction_url(&self) -> String {
-        format!("https://mempool.guide/tx/{}", self.tx_id.0)
+        match self.network {
+            Network::Bitcoin => format!("https://mempool.space/tx/{}", self.tx_id.0),
+            Network::Testnet => format!("https://mempool.space/testnet/tx/{}", self.tx_id.0),
+            Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{}", self.tx_id.0),
+            Network::Signet => format!("https://https://mutinynet.com/tx/{}", self.tx_id.0),
+        }
     }
 
     #[uniffi::method]
@@ -338,9 +347,7 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn block_number_fmt(&self) -> Option<String> {
         let block_number = self.block_number()?;
-
         let mut f = Formatter::new().separator(',').unwrap().precision(Precision::Decimals(0));
-
         Some(f.fmt(block_number).to_string())
     }
     #[uniffi::method]
@@ -363,6 +370,7 @@ impl TransactionDetails {
                 block_number: 840_000,
                 confirmation_time: 1677721600,
             }),
+            network: Network::Bitcoin,
             labels: Default::default(),
             input_indexes: vec![],
             output_indexes: vec![],
