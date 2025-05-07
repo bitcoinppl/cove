@@ -46,6 +46,7 @@ impl From<GlobalConfigKey> for &'static str {
             GlobalConfigKey::SelectedFiatCurrency => "selected_fiat_currency",
             GlobalConfigKey::SelectedNode(Network::Bitcoin) => "selected_node_bitcoin",
             GlobalConfigKey::SelectedNode(Network::Testnet) => "selected_node_testnet",
+            GlobalConfigKey::SelectedNode(Network::Testnet4) => "selected_node_testnet4",
             GlobalConfigKey::SelectedNode(Network::Signet) => "selected_node_signet",
             GlobalConfigKey::ColorScheme => "color_scheme",
             GlobalConfigKey::AuthType => "auth_type",
