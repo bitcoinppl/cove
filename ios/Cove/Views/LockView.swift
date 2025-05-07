@@ -113,10 +113,8 @@ struct LockView<Content: View>: View {
         GeometryReader {
             let size = $0.size
 
-            if lockState.wrappedValue != .locked {
-                content
-                    .frame(width: size.width, height: size.height)
-            }
+            content
+                .frame(width: size.width, height: size.height)
 
             if lockState.wrappedValue == .locked {
                 ZStack {
@@ -138,7 +136,7 @@ struct LockView<Content: View>: View {
                     case (.pin, .both, _):
                         numberPadPinView
                     case (_, .none, _):
-                        let _ = Log.error("invalid lock type none for screen")
+                        let _ = Log.error("inalid lock type none for screen")
                         EmptyView()
                     }
                 }
