@@ -804,10 +804,13 @@ impl RustSendFlowManager {
         // access the mutex once
         let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
             let state = self.state.lock();
+
+            let address = state.address.clone();
             let address_string = &state.entering_address;
 
-            let address = Address::from_string(address_string, state.metadata.network)
-                .ok()
+            let address = address
+                .map(Arc::unwrap_or_clone)
+                .or_else(|| Address::from_string(address_string, state.metadata.network).ok())
                 .or_else(|| state.first_address.clone().map(Arc::unwrap_or_clone));
 
             let selected_fee_rate_base = state.fee_rate_options_base.clone();
