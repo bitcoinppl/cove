@@ -117,14 +117,8 @@ impl RustPendingWalletManager {
         let number_of_wallets = Database::global().wallets.len(network, mode).unwrap_or(0);
 
         let name = format!("Wallet {}", number_of_wallets + 1);
-        let fingerprint: Fingerprint = self
-            .state
-            .read()
-            .wallet
-            .mnemonic
-            .xpub(network.into())
-            .fingerprint()
-            .into();
+        let fingerprint: Fingerprint =
+            self.state.read().wallet.mnemonic.xpub(network.into()).fingerprint().into();
 
         let wallet_metadata = WalletMetadata::new(name, Some(fingerprint));
 
@@ -177,10 +171,7 @@ impl RustPendingWalletManager {
 
 impl PendingWalletManagerState {
     pub fn new(number_of_words: NumberOfBip39Words) -> Self {
-        Self {
-            number_of_words,
-            wallet: PendingWallet::new(number_of_words, None).into(),
-        }
+        Self { number_of_words, wallet: PendingWallet::new(number_of_words, None).into() }
     }
 }
 

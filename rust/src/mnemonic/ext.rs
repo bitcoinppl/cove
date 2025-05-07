@@ -24,11 +24,8 @@ impl MnemonicExt for bip39::Mnemonic {
             WalletAddressType::Legacy => Descriptor::new_bip44,
         };
 
-        let descriptor = new_descriptor(
-            &descriptor_secret_key,
-            bdk_wallet::KeychainKind::External,
-            network,
-        );
+        let descriptor =
+            new_descriptor(&descriptor_secret_key, bdk_wallet::KeychainKind::External, network);
 
         let change_descriptor = Descriptor::new_bip84(
             &descriptor_secret_key,
@@ -36,17 +33,12 @@ impl MnemonicExt for bip39::Mnemonic {
             network,
         );
 
-        Descriptors {
-            external: descriptor,
-            internal: change_descriptor,
-        }
+        Descriptors { external: descriptor, internal: change_descriptor }
     }
 
     fn xpub(&self, network: Network) -> Xpub {
         let seed = self.to_seed("");
-        let xkey: ExtendedKey = seed
-            .into_extended_key()
-            .expect("never fail proper mnemonic");
+        let xkey: ExtendedKey = seed.into_extended_key().expect("never fail proper mnemonic");
 
         xkey.into_xpub(network, &Secp256k1::new())
     }

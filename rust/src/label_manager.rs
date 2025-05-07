@@ -72,11 +72,7 @@ impl AddressArgs {
         let address = Arc::unwrap_or_clone(address);
         let change_address = change_address.map(Arc::unwrap_or_clone);
 
-        Self {
-            address,
-            change_address,
-            direction,
-        }
+        Self { address, change_address, direction }
     }
 }
 
@@ -102,11 +98,7 @@ impl LabelManager {
     }
 
     pub fn transaction_label(&self, tx_id: Arc<TxId>) -> Option<String> {
-        let label = self
-            .db
-            .labels
-            .get_txn_label_record(tx_id.0)
-            .unwrap_or(None)?;
+        let label = self.db.labels.get_txn_label_record(tx_id.0).unwrap_or(None)?;
 
         let label_str = label.item.label.as_ref()?;
         Some(label_str.to_string())
@@ -247,15 +239,10 @@ impl LabelManager {
     }
 
     pub fn export(&self) -> Result<String, LabelManagerError> {
-        let labels = self
-            .db
-            .labels
-            .all_labels()
-            .map_err(|e| LabelManagerError::Get(e.to_string()))?;
+        let labels =
+            self.db.labels.all_labels().map_err(|e| LabelManagerError::Get(e.to_string()))?;
 
-        let labels = labels
-            .export()
-            .map_err(|e| LabelManagerError::Export(e.to_string()))?;
+        let labels = labels.export().map_err(|e| LabelManagerError::Export(e.to_string()))?;
 
         Ok(labels)
     }
@@ -265,10 +252,7 @@ impl LabelManager {
     pub fn import_labels(&self, labels: impl Into<Labels>) -> Result<(), LabelManagerError> {
         let labels = labels.into();
 
-        self.db
-            .labels
-            .insert_labels(labels)
-            .map_err(|e| LabelManagerError::Save(e.to_string()))?;
+        self.db.labels.insert_labels(labels).map_err(|e| LabelManagerError::Save(e.to_string()))?;
 
         Ok(())
     }
@@ -342,19 +326,13 @@ impl LabelManager {
         args: AddressArgs,
     ) -> Result<Option<()>> {
         let now = jiff::Timestamp::now().as_second() as u64;
-        let timestamps = Timestamps {
-            created_at: now,
-            updated_at: now,
-        };
+        let timestamps = Timestamps { created_at: now, updated_at: now };
 
         // incoming use address
         let address_record = match args.direction {
             TransactionDirection::Incoming => {
                 let address = args.address.into_unchecked();
-                Some(AddressRecord {
-                    ref_: address.clone(),
-                    label: Some(label.to_string()),
-                })
+                Some(AddressRecord { ref_: address.clone(), label: Some(label.to_string()) })
             }
             TransactionDirection::Outgoing => {
                 let Some(address) = args.change_address else { return Ok(None) };
@@ -367,15 +345,9 @@ impl LabelManager {
 
         let Some(address_record) = address_record else { return Ok(None) };
 
-        let current = self
-            .db
-            .labels
-            .get_address_record(&address_record.ref_)
-            .unwrap_or(None);
+        let current = self.db.labels.get_address_record(&address_record.ref_).unwrap_or(None);
 
-        let mut timestamps = current
-            .map(|current| current.timestamps)
-            .unwrap_or(timestamps);
+        let mut timestamps = current.map(|current| current.timestamps).unwrap_or(timestamps);
 
         timestamps.updated_at = now;
 
@@ -415,11 +387,7 @@ impl LabelManager {
 
         // new label,insert new record
         let now = jiff::Timestamp::now().as_second() as u64;
-        let label = TransactionRecord {
-            ref_: tx_id.0,
-            label: Some(label),
-            origin,
-        };
+        let label = TransactionRecord { ref_: tx_id.0, label: Some(label), origin };
 
         self.db
             .labels
@@ -449,10 +417,7 @@ impl LabelManager {
         vouts
             .iter()
             .map(|vout| InputRecord {
-                ref_: bitcoin::OutPoint {
-                    txid: tx_id.0,
-                    vout: *vout,
-                },
+                ref_: bitcoin::OutPoint { txid: tx_id.0, vout: *vout },
                 label: Some(input_label.clone()),
             })
             .collect()
@@ -478,10 +443,7 @@ impl LabelManager {
         vouts
             .iter()
             .map(|vout| OutputRecord {
-                ref_: bitcoin::OutPoint {
-                    txid: tx_id.0,
-                    vout: *vout,
-                },
+                ref_: bitcoin::OutPoint { txid: tx_id.0, vout: *vout },
                 label: Some(output_label.clone()),
                 spendable: true,
             })

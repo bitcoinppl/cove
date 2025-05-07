@@ -25,12 +25,7 @@ pub struct EsploraClient {
 
 impl EsploraClient {
     pub fn new(client: Arc<AsyncClient>) -> Self {
-        Self {
-            client,
-            options: NodeClientOptions {
-                batch_size: ESPLORA_BATCH_SIZE,
-            },
-        }
+        Self { client, options: NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE } }
     }
 
     pub fn new_from_node(node: &Node) -> Result<Self, Error> {
@@ -81,42 +76,26 @@ impl EsploraClient {
         &self,
         request: SyncRequest<(KeychainKind, u32)>,
     ) -> Result<SyncResponse, Error> {
-        debug!(
-            "starting esplora sync, batch size: {}",
-            self.options.batch_size
-        );
+        debug!("starting esplora sync, batch size: {}", self.options.batch_size);
 
-        self.client
-            .sync(request, self.options.batch_size)
-            .await
-            .map_err(Error::EsploraScan)
+        self.client.sync(request, self.options.batch_size).await.map_err(Error::EsploraScan)
     }
 
     pub async fn get_transaction(
         &self,
         txid: &Txid,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
-        self.client
-            .get_tx(txid)
-            .await
-            .map_err(Error::EsploraGetTransaction)
+        self.client.get_tx(txid).await.map_err(Error::EsploraGetTransaction)
     }
 
     pub async fn broadcast_transaction(&self, txn: bitcoin::Transaction) -> Result<Txid, Error> {
-        self.client
-            .broadcast(&txn)
-            .await
-            .map_err(Error::EsploraBroadcast)?;
+        self.client.broadcast(&txn).await.map_err(Error::EsploraBroadcast)?;
 
         Ok(txn.compute_txid())
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
-        let stats = self
-            .client
-            .get_address_stats(&address)
-            .await
-            .map_err(Error::EsploraAddress)?;
+        let stats = self.client.get_address_stats(&address).await.map_err(Error::EsploraAddress)?;
 
         Ok(stats.chain_stats.tx_count > 0)
     }

@@ -16,13 +16,7 @@ pub struct Timestamps {
 impl<T> Record<T> {
     pub fn new(item: T) -> Self {
         let now = jiff::Timestamp::now().as_second() as u64;
-        Self {
-            item,
-            timestamps: Timestamps {
-                created_at: now,
-                updated_at: now,
-            },
-        }
+        Self { item, timestamps: Timestamps { created_at: now, updated_at: now } }
     }
 
     pub fn with_timestamps(item: T, timestamps: Timestamps) -> Self {
@@ -43,19 +37,13 @@ impl<T> Record<T> {
     where
         T: Into<U>,
     {
-        Record {
-            item: self.item.into(),
-            timestamps: self.timestamps,
-        }
+        Record { item: self.item.into(), timestamps: self.timestamps }
     }
 }
 
 impl Timestamps {
     pub fn new(created_at: u64, updated_at: u64) -> Self {
-        Self {
-            created_at,
-            updated_at,
-        }
+        Self { created_at, updated_at }
     }
 
     pub fn now() -> Self {

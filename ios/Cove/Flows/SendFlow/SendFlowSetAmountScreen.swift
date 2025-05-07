@@ -71,7 +71,7 @@ struct SendFlowSetAmountScreen: View {
     private func next() {
         sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen)
     }
-    
+
     private func dismissIfValid() {
         if validate(true) {
             presenter.focusField = .none
@@ -119,7 +119,7 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if sendFlowManager.feeRateOptions != nil,
-                            sendFlowManager.address != nil
+                           sendFlowManager.address != nil
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -240,7 +240,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func validate(_ displayAlert: Bool = false) -> Bool {
-        return validateAmount(displayAlert: displayAlert)
+        validateAmount(displayAlert: displayAlert)
             && validateAddress(displayAlert: displayAlert)
     }
 

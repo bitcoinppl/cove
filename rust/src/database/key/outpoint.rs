@@ -23,10 +23,7 @@ impl From<bitcoin::OutPoint> for OutPointKey {
 
 impl OutPointKey {
     pub fn new(id: impl AsRef<[u8; 32]>, index: u32) -> Self {
-        Self {
-            id: *id.as_ref(),
-            index,
-        }
+        Self { id: *id.as_ref(), index }
     }
 
     #[allow(dead_code)]

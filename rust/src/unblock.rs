@@ -3,7 +3,5 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
-    tokio::task::spawn_blocking(f)
-        .await
-        .expect("blocking task failed")
+    tokio::task::spawn_blocking(f).await.expect("blocking task failed")
 }

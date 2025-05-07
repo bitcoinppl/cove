@@ -97,11 +97,7 @@ impl RustImportWalletManager {
     /// Import wallet view from entered words
     #[uniffi::method]
     pub fn import_wallet(&self, entered_words: Vec<Vec<String>>) -> Result<WalletMetadata, Error> {
-        let words = entered_words
-            .into_iter()
-            .flatten()
-            .collect::<Vec<String>>()
-            .join(" ");
+        let words = entered_words.into_iter().flatten().collect::<Vec<String>>().join(" ");
 
         let mnemonic = Mnemonic::parse_in_normalized(Language::English, &words)
             .map_err(|e| ImportWalletError::InvalidWordGroup(e.to_string()))?;
@@ -125,10 +121,7 @@ impl RustImportWalletManager {
             })
             .unwrap_or_default();
 
-        if let Some((id, _)) = all_fingerprints
-            .into_iter()
-            .find(|(_, f)| f == &fingerprint)
-        {
+        if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f == &fingerprint) {
             return Err(ImportWalletError::WalletAlreadyExists(id));
         }
 

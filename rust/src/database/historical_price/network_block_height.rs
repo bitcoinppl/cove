@@ -13,10 +13,7 @@ pub struct NetworkBlockHeight {
 
 impl NetworkBlockHeight {
     pub fn new(network: impl Into<Network>, block_number: u32) -> Self {
-        Self {
-            network: network.into(),
-            block_height: block_number,
-        }
+        Self { network: network.into(), block_height: block_number }
     }
 }
 

@@ -119,16 +119,7 @@ impl HistoricalPriceRecord {
         let aud = get_opt(CurrencyFlag::AUD)?;
         let jpy = get_opt(CurrencyFlag::JPY)?;
 
-        Ok(HistoricalPriceRecord {
-            time,
-            usd,
-            eur,
-            gbp,
-            cad,
-            chf,
-            aud,
-            jpy,
-        })
+        Ok(HistoricalPriceRecord { time, usd, eur, gbp, cad, chf, aud, jpy })
     }
 
     /// Convert to bytes
@@ -274,36 +265,12 @@ mod tests {
         HistoricalPriceRecord {
             time: 1745268220,
             usd: rng.random_range(0.0..500_000.0),
-            eur: if rng.random_bool(0.5) {
-                Some(rng.random())
-            } else {
-                None
-            },
-            gbp: if rng.random_bool(0.5) {
-                Some(rng.random())
-            } else {
-                None
-            },
-            cad: if rng.random_bool(0.5) {
-                Some(rng.random())
-            } else {
-                None
-            },
-            chf: if rng.random_bool(0.5) {
-                Some(rng.random())
-            } else {
-                None
-            },
-            aud: if rng.random_bool(0.5) {
-                Some(rng.random())
-            } else {
-                None
-            },
-            jpy: if rng.random_bool(0.5) {
-                Some(rng.random())
-            } else {
-                None
-            },
+            eur: if rng.random_bool(0.5) { Some(rng.random()) } else { None },
+            gbp: if rng.random_bool(0.5) { Some(rng.random()) } else { None },
+            cad: if rng.random_bool(0.5) { Some(rng.random()) } else { None },
+            chf: if rng.random_bool(0.5) { Some(rng.random()) } else { None },
+            aud: if rng.random_bool(0.5) { Some(rng.random()) } else { None },
+            jpy: if rng.random_bool(0.5) { Some(rng.random()) } else { None },
         }
     }
 

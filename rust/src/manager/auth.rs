@@ -157,10 +157,7 @@ impl RustAuthManager {
 
     /// Check if decoy pin is enabled, not if the user is in decoy mode
     pub fn is_decoy_pin_enabled(&self) -> bool {
-        let pin = Database::global()
-            .global_config
-            .decoy_pin()
-            .unwrap_or_default();
+        let pin = Database::global().global_config.decoy_pin().unwrap_or_default();
 
         !pin.is_empty()
     }
@@ -189,8 +186,7 @@ impl RustAuthManager {
 
     /// Set the decoy pin
     pub fn set_decoy_pin(&self, pin: String) -> Result<()> {
-        self.validate_pin_settings(&pin)
-            .map_err(AuthManagerError::DecoySet)?;
+        self.validate_pin_settings(&pin).map_err(AuthManagerError::DecoySet)?;
 
         // set the pin
         Database::global().global_config.set_decoy_pin(pin)?;
@@ -201,44 +197,30 @@ impl RustAuthManager {
 
     /// Switch from main mode to decoy mode
     pub fn switch_to_decoy_mode(&self) {
-        Database::global()
-            .global_config
-            .set_decoy_mode()
-            .expect("failed to set decoy mode");
+        Database::global().global_config.set_decoy_mode().expect("failed to set decoy mode");
 
-        Updater::send_update(AppStateReconcileMessage::WalletModeChanged(
-            WalletMode::Decoy,
-        ));
+        Updater::send_update(AppStateReconcileMessage::WalletModeChanged(WalletMode::Decoy));
     }
 
     /// Switch from decoy mode to main mode
     pub fn switch_to_main_mode(&self) {
-        Database::global()
-            .global_config
-            .set_main_mode()
-            .expect("failed to set main mode");
+        Database::global().global_config.set_main_mode().expect("failed to set main mode");
 
-        Updater::send_update(AppStateReconcileMessage::WalletModeChanged(
-            WalletMode::Main,
-        ));
+        Updater::send_update(AppStateReconcileMessage::WalletModeChanged(WalletMode::Main));
     }
 
     // MARK: WIPE DATA PIN
 
     /// Check if the wipe data pin is enabled
     pub fn is_wipe_data_pin_enabled(&self) -> bool {
-        let pin = Database::global()
-            .global_config
-            .wipe_data_pin()
-            .unwrap_or_default();
+        let pin = Database::global().global_config.wipe_data_pin().unwrap_or_default();
 
         !pin.is_empty()
     }
 
     /// Set the wipe data pin
     pub fn set_wipe_data_pin(&self, pin: String) -> Result<()> {
-        self.validate_pin_settings(&pin)
-            .map_err(AuthManagerError::WipeDataSet)?;
+        self.validate_pin_settings(&pin).map_err(AuthManagerError::WipeDataSet)?;
 
         // set the pin
         Database::global().global_config.set_wipe_data_pin(pin)?;
@@ -375,10 +357,7 @@ impl RustAuthManager {
             return false;
         }
 
-        let wipe_data_pin = Database::global()
-            .global_config
-            .wipe_data_pin()
-            .unwrap_or_default();
+        let wipe_data_pin = Database::global().global_config.wipe_data_pin().unwrap_or_default();
 
         pin == wipe_data_pin
     }
@@ -388,10 +367,7 @@ impl RustAuthManager {
             return false;
         }
 
-        let decoy_pin = Database::global()
-            .global_config
-            .decoy_pin()
-            .unwrap_or_default();
+        let decoy_pin = Database::global().global_config.decoy_pin().unwrap_or_default();
 
         pin == decoy_pin
     }

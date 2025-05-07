@@ -136,11 +136,7 @@ impl GlobalConfigTable {
         }
 
         // get the selected wallet id for decoy mode if it exists and select it
-        if let Some(id) = self
-            .get(GlobalConfigKey::DecoySelectedWalletId)
-            .ok()
-            .flatten()
-        {
+        if let Some(id) = self.get(GlobalConfigKey::DecoySelectedWalletId).ok().flatten() {
             let _ = self
                 .select_wallet(id.clone().into())
                 .tap_err(|error| error!("unable to select wallet for decoy {id}: {error}"));
@@ -167,11 +163,7 @@ impl GlobalConfigTable {
         }
 
         // set the selected wallet id to the one saved if there is one
-        if let Some(id) = self
-            .get(GlobalConfigKey::MainSelectedWalletId)
-            .ok()
-            .flatten()
-        {
+        if let Some(id) = self.get(GlobalConfigKey::MainSelectedWalletId).ok().flatten() {
             let _ = self
                 .select_wallet(id.clone().into())
                 .tap_err(|error| error!("unable to select wallet for main {id}: {error}"));
@@ -193,9 +185,7 @@ impl GlobalConfigTable {
     }
 
     pub fn selected_wallet(&self) -> Option<WalletId> {
-        let id = self
-            .get(GlobalConfigKey::SelectedWalletId)
-            .unwrap_or(None)?;
+        let id = self.get(GlobalConfigKey::SelectedWalletId).unwrap_or(None)?;
 
         let wallet_id = WalletId::from(id);
 
@@ -239,17 +229,11 @@ impl GlobalConfigTable {
     }
 
     pub fn wallet_mode(&self) -> WalletMode {
-        if self.is_in_decoy_mode() {
-            WalletMode::Decoy
-        } else {
-            WalletMode::Main
-        }
+        if self.is_in_decoy_mode() { WalletMode::Decoy } else { WalletMode::Main }
     }
 
     pub fn is_in_decoy_mode(&self) -> bool {
-        self.get(GlobalConfigKey::InDecoyMode)
-            .unwrap_or(None)
-            .unwrap_or("false".to_string())
+        self.get(GlobalConfigKey::InDecoyMode).unwrap_or(None).unwrap_or("false".to_string())
             == "true"
     }
 
@@ -257,10 +241,7 @@ impl GlobalConfigTable {
         let network = self.selected_network();
         let selected_node_key = GlobalConfigKey::SelectedNode(network);
 
-        let node_json = self
-            .get(selected_node_key)
-            .unwrap_or(None)
-            .unwrap_or("".to_string());
+        let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or("".to_string());
 
         serde_json::from_str(&node_json).unwrap_or_else(|_| Node::default(network))
     }
@@ -319,14 +300,11 @@ impl GlobalConfigTable {
     }
 
     fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn =
+            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
-        let table = read_txn
-            .open_table(TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table =
+            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
 
         let key: &'static str = key.into();
         let value = table
@@ -338,10 +316,8 @@ impl GlobalConfigTable {
     }
 
     fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -354,9 +330,7 @@ impl GlobalConfigTable {
                 .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Updater::send_update(Update::DatabaseUpdated);
 
@@ -364,10 +338,8 @@ impl GlobalConfigTable {
     }
 
     pub fn delete(&self, key: GlobalConfigKey) -> Result<()> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn =
+            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         {
             let mut table = write_txn
@@ -375,14 +347,10 @@ impl GlobalConfigTable {
                 .map_err(|error| Error::TableAccess(error.to_string()))?;
 
             let key: &'static str = key.into();
-            table
-                .remove(key)
-                .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
+            table.remove(key).map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
         Updater::send_update(Update::DatabaseUpdated);
 

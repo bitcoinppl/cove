@@ -16,11 +16,7 @@ impl PendingWallet {
 
         let mnemonic = number_of_words.generate_mnemonic().clone();
 
-        Self {
-            mnemonic,
-            network,
-            passphrase,
-        }
+        Self { mnemonic, network, passphrase }
     }
 
     pub fn words(&self) -> Vec<String> {

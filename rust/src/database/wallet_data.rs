@@ -104,9 +104,7 @@ impl WalletDataDb {
         let labels = LabelsTable::new(db.clone(), &write_txn);
 
         // commit the write transaction
-        write_txn
-            .commit()
-            .expect("failed to commit write transaction");
+        write_txn.commit().expect("failed to commit write transaction");
 
         Self { id, db, labels }
     }
@@ -148,25 +146,18 @@ impl WalletDataDb {
     }
 
     fn set(&self, key: WalletDataKey, value: WalletData) -> Result<()> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| Error::DatabaseAccess {
+        let write_txn = self.db.begin_write().map_err(|error| Error::DatabaseAccess {
+            id: self.id.clone(),
+            error: error.to_string(),
+        })?;
+
+        {
+            let mut table = write_txn.open_table(TABLE).map_err(|error| Error::TableAccess {
                 id: self.id.clone(),
                 error: error.to_string(),
             })?;
 
-        {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess {
-                    id: self.id.clone(),
-                    error: error.to_string(),
-                })?;
-
-            table
-                .insert(key.as_str(), value)
-                .map_err(|error| Error::Save(error.to_string()))?;
+            table.insert(key.as_str(), value).map_err(|error| Error::Save(error.to_string()))?;
         }
 
         write_txn.commit().map_err(|error| Error::DatabaseAccess {
@@ -178,20 +169,15 @@ impl WalletDataDb {
     }
 
     fn read_table<'a>(&self) -> Result<ReadOnlyTable<&'a str, Json<WalletData>>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess {
-                id: self.id.clone(),
-                error: error.to_string(),
-            })?;
+        let read_txn = self.db.begin_read().map_err(|error| Error::DatabaseAccess {
+            id: self.id.clone(),
+            error: error.to_string(),
+        })?;
 
-        let table = read_txn
-            .open_table(TABLE)
-            .map_err(|error| Error::TableAccess {
-                id: self.id.clone(),
-                error: error.to_string(),
-            })?;
+        let table = read_txn.open_table(TABLE).map_err(|error| Error::TableAccess {
+            id: self.id.clone(),
+            error: error.to_string(),
+        })?;
 
         Ok(table)
     }
@@ -225,10 +211,7 @@ pub fn get_or_create_database(id: &WalletId, location: &Path) -> Arc<redb::Datab
         }
     };
 
-    info!(
-        "Creating a new database for wallet {id}, at {}",
-        database_location.display()
-    );
+    info!("Creating a new database for wallet {id}, at {}", database_location.display());
 
     let db = redb::Database::create(&database_location).expect("failed to create database");
     let mut db_connections = DATABASE_CONNECTIONS.write();
@@ -265,10 +248,7 @@ impl WalletDataKey {
 
 impl ScanningInfo {
     pub fn new(address_type: WalletAddressType) -> Self {
-        Self {
-            address_type,
-            count: 0,
-        }
+        Self { address_type, count: 0 }
     }
 }
 

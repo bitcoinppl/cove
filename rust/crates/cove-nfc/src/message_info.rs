@@ -10,10 +10,7 @@ pub struct MessageInfo {
 
 impl MessageInfo {
     pub fn new(payload_length: u16) -> Self {
-        Self {
-            payload_length,
-            full_message_length: total_with_info(payload_length),
-        }
+        Self { payload_length, full_message_length: total_with_info(payload_length) }
     }
 }
 

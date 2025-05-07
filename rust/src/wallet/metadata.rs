@@ -191,12 +191,7 @@ impl WalletMetadata {
     ) -> Self {
         let me = Self::new(name, fingerprint);
 
-        Self {
-            id,
-            verified: true,
-            wallet_type: WalletType::Cold,
-            ..me
-        }
+        Self { id, verified: true, wallet_type: WalletType::Cold, ..me }
     }
 
     pub fn new_imported_from_mnemonic(
@@ -207,11 +202,7 @@ impl WalletMetadata {
         let mut me = Self::new(name, Some(fingerprint));
         me.discovery_state = DiscoveryState::StartedMnemonic;
 
-        Self {
-            network,
-            verified: true,
-            ..me
-        }
+        Self { network, verified: true, ..me }
     }
 
     pub fn preview_new() -> Self {
@@ -254,10 +245,8 @@ impl InternalOnlyMetadata {
     pub fn set_last_seen_address_index(&mut self, addreses: &[AddressInfo], index: usize) {
         let address_list_hash = cove_util::calculate_hash(addreses);
 
-        self.address_index = Some(cove_types::AddressIndex {
-            last_seen_index: index as u8,
-            address_list_hash,
-        });
+        self.address_index =
+            Some(cove_types::AddressIndex { last_seen_index: index as u8, address_list_hash });
     }
 }
 

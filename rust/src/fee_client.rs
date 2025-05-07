@@ -29,10 +29,7 @@ impl FeeClient {
     }
 
     pub fn new_with_url(url: String) -> Self {
-        Self {
-            url,
-            client: reqwest::Client::new(),
-        }
+        Self { url, client: reqwest::Client::new() }
     }
 
     /// Always returns the cached fees, will also update the fees cache in the background if needed
@@ -126,10 +123,7 @@ impl From<FeeResponse> for FeeRateOptions {
         let fast = {
             let rate = fees.fastest_fee.max(medium_rate + 1.1);
 
-            FeeRateOption {
-                fee_speed: FeeSpeed::Fast,
-                fee_rate: FeeRate::from_sat_per_vb(rate),
-            }
+            FeeRateOption { fee_speed: FeeSpeed::Fast, fee_rate: FeeRate::from_sat_per_vb(rate) }
         };
 
         Self { fast, medium, slow }
@@ -145,10 +139,7 @@ pub async fn get_and_update_fees() -> Result<(), reqwest::Error> {
 
 /// update price in cache
 fn update_fees(fees: FeeResponse) {
-    let cached = CachedFeeResponse {
-        fees,
-        last_fetched: Instant::now(),
-    };
+    let cached = CachedFeeResponse { fees, last_fetched: Instant::now() };
 
     FEES.swap(Arc::new(Some(cached)));
 }

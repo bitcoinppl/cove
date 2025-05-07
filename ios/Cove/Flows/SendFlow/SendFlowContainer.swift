@@ -23,7 +23,6 @@ public struct SendFlowContainer: View {
     func initOnAppear() {
         let id = sendRoute.id()
         if manager != nil { return }
-        
 
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
@@ -34,7 +33,7 @@ public struct SendFlowContainer: View {
             switch sendRoute {
             case let .setAmount(id: _, address: address, amount: amount):
                 self.initCompleted = false
-                if let address {sendFlowManager.setAddress(address) }
+                if let address { sendFlowManager.setAddress(address) }
                 if let amount { sendFlowManager.setAmount(amount) }
                 waitForInit()
             default:
@@ -49,9 +48,8 @@ public struct SendFlowContainer: View {
             navigate(Route.listWallets)
         }
     }
-    
-    
-    func waitForInit(){
+
+    func waitForInit() {
         Task {
             await sendFlowManager?.rust.waitForInit()
             await MainActor.run { initCompleted = true }
@@ -59,7 +57,7 @@ public struct SendFlowContainer: View {
     }
 
     @ViewBuilder
-    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager, sendFlowManager: SendFlowManager) -> some View {
+    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager, sendFlowManager _: SendFlowManager) -> some View {
         switch sendRoute {
         case let .setAmount(id: id, address: _, amount: amount):
             SendFlowSetAmountScreen(id: id, amount: amount)

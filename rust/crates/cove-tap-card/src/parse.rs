@@ -101,61 +101,36 @@ pub fn parse_card(url_encoded: &str) -> Result<TapCard> {
     // Parse URL-encoded string into a HashMap
     let params: HashMap<&str, &str> = serde_urlencoded::from_str(url_encoded)?;
 
-    let nonce = params
-        .get("n")
-        .ok_or(Error::MissingField(Field::Nonce))?
-        .to_string();
+    let nonce = params.get("n").ok_or(Error::MissingField(Field::Nonce))?.to_string();
 
-    let signature = params
-        .get("s")
-        .ok_or(Error::MissingField(Field::Signature))?
-        .to_string();
+    let signature = params.get("s").ok_or(Error::MissingField(Field::Signature))?.to_string();
 
     let state_field = params.get("u").ok_or(Error::MissingField(Field::State))?;
 
     // Check if it's a TapSigner (has t=1)
     if is_tap_signer(&params) {
-        let card_ident = params
-            .get("c")
-            .ok_or(Error::MissingField(Field::Ident))?
-            .to_string();
+        let card_ident = params.get("c").ok_or(Error::MissingField(Field::Ident))?.to_string();
 
         let state = parse_tap_signer_state(state_field)?;
 
         let url_message_digest = full_message_digest(url_encoded);
         let pubkey = message_and_signature_to_pubkey(url_message_digest, &card_ident, &signature)?;
 
-        let tap_signer = TapSigner {
-            state,
-            card_ident,
-            nonce,
-            signature,
-            pubkey: Arc::new(pubkey),
-        };
+        let tap_signer =
+            TapSigner { state, card_ident, nonce, signature, pubkey: Arc::new(pubkey) };
 
         return Ok(TapCard::TapSigner(tap_signer.into()));
     }
 
     // It's a SatsCard
-    let slot_number = params
-        .get("o")
-        .ok_or(Error::MissingField(Field::SlotNumber))?
-        .parse::<u32>()?;
+    let slot_number =
+        params.get("o").ok_or(Error::MissingField(Field::SlotNumber))?.parse::<u32>()?;
 
-    let address_suffix = params
-        .get("r")
-        .ok_or(Error::MissingField(Field::Address))?
-        .to_string();
+    let address_suffix = params.get("r").ok_or(Error::MissingField(Field::Address))?.to_string();
 
     let state = parse_sats_card_state(state_field)?;
 
-    Ok(TapCard::SatsCard(SatsCard {
-        state,
-        slot_number,
-        address_suffix,
-        nonce,
-        signature,
-    }))
+    Ok(TapCard::SatsCard(SatsCard { state, slot_number, address_suffix, nonce, signature }))
 }
 
 // Helper function to parse state
@@ -165,9 +140,7 @@ fn parse_tap_signer_state(state_str: &str) -> Result<TapSignerState> {
         "u" | "U" => Ok(TapSignerState::Unused),
         "e" | "E" => Ok(TapSignerState::Error),
         "" => Err(Error::EmptyCardState),
-        unknown => Err(Error::UnknownCardState(
-            unknown.chars().next().expect("just checked"),
-        )),
+        unknown => Err(Error::UnknownCardState(unknown.chars().next().expect("just checked"))),
     }
 }
 
@@ -177,9 +150,7 @@ fn parse_sats_card_state(state_str: &str) -> Result<SatsCardState> {
         "u" | "U" => Ok(SatsCardState::Unsealed),
         "e" | "E" => Ok(SatsCardState::Error),
         "" => Err(Error::EmptyCardState),
-        unknown => Err(Error::UnknownCardState(
-            unknown.chars().next().expect("just checked"),
-        )),
+        unknown => Err(Error::UnknownCardState(unknown.chars().next().expect("just checked"))),
     }
 }
 
@@ -263,21 +234,14 @@ pub fn card_pubkey_to_full_ident(card_pubkey: &[u8]) -> Result<String, Signature
     use data_encoding::BASE32;
 
     if card_pubkey.len() != 33 {
-        return Err(SignatureParseError::InvalidPubkeyLength(
-            card_pubkey.len() as u32
-        ));
+        return Err(SignatureParseError::InvalidPubkeyLength(card_pubkey.len() as u32));
     }
 
     let pubkey_hash = Hash::hash(card_pubkey);
     let encoded = BASE32.encode(&pubkey_hash[8..]);
 
-    let full_ident = format!(
-        "{}-{}-{}-{}",
-        &encoded[0..5],
-        &encoded[5..10],
-        &encoded[10..15],
-        &encoded[15..20]
-    );
+    let full_ident =
+        format!("{}-{}-{}-{}", &encoded[0..5], &encoded[5..10], &encoded[10..15], &encoded[15..20]);
 
     Ok(full_ident)
 }
@@ -299,9 +263,7 @@ mod tests {
         assert!(tap_card.is_ok());
 
         assert!(matches!(tap_card.clone().unwrap(), TapCard::TapSigner(_)));
-        let TapCard::TapSigner(tap_signer) = tap_card.unwrap() else {
-            panic!("not a tap signer")
-        };
+        let TapCard::TapSigner(tap_signer) = tap_card.unwrap() else { panic!("not a tap signer") };
 
         assert_eq!(tap_signer.state, TapSignerState::Sealed);
         assert_eq!(tap_signer.card_ident, "04d74fb1dfee7a4d");
@@ -316,9 +278,7 @@ mod tests {
         assert!(tap_card.is_ok());
         assert!(matches!(tap_card.clone().unwrap(), TapCard::SatsCard(_)));
 
-        let TapCard::SatsCard(sats_card) = tap_card.unwrap() else {
-            panic!("not a tap signer")
-        };
+        let TapCard::SatsCard(sats_card) = tap_card.unwrap() else { panic!("not a tap signer") };
 
         assert_eq!(sats_card.state, SatsCardState::Sealed);
         assert_eq!(sats_card.nonce, "ab78fd50637f8f5a");

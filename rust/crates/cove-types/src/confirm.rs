@@ -132,10 +132,7 @@ impl ConfirmDetails {
 impl AddressAndAmount {
     pub fn try_new(tx_out: &TxOut, network: Network) -> eyre::Result<Self> {
         let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
-        Ok(Self {
-            address: Arc::new(address.into()),
-            amount: Arc::new(tx_out.value.into()),
-        })
+        Ok(Self { address: Arc::new(address.into()), amount: Arc::new(tx_out.value.into()) })
     }
 }
 
@@ -190,8 +187,6 @@ mod ffi_preview {
         let psbt_hex = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000";
         let psbt_bytes = hex::decode(psbt_hex).expect("unable to decode psbt hex");
 
-        BdkPsbt::deserialize(&psbt_bytes)
-            .expect("unable to deserialize psbt")
-            .into()
+        BdkPsbt::deserialize(&psbt_bytes).expect("unable to deserialize psbt").into()
     }
 }

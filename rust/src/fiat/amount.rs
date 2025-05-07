@@ -29,10 +29,7 @@ impl FiatAmount {
         let amount = sent_and_received.amount();
         let fiat = amount.as_btc() * prices.get_for_currency(currency) as f64;
 
-        Ok(Self {
-            amount: fiat,
-            currency,
-        })
+        Ok(Self { amount: fiat, currency })
     }
 }
 
@@ -40,10 +37,7 @@ impl FiatAmount {
 //
 impl FiatAmount {
     pub fn preview_new() -> Self {
-        Self {
-            amount: 120.38,
-            currency: FiatCurrency::Usd,
-        }
+        Self { amount: 120.38, currency: FiatCurrency::Usd }
     }
 }
 

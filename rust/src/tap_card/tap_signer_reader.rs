@@ -71,20 +71,10 @@ pub struct TapSignerReader {
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum TapSignerCmd {
     Setup(Arc<SetupCmd>),
-    Backup {
-        pin: String,
-    },
-    Derive {
-        pin: String,
-    },
-    Change {
-        current_pin: String,
-        new_pin: String,
-    },
-    Sign {
-        psbt: Arc<Psbt>,
-        pin: String,
-    },
+    Backup { pin: String },
+    Derive { pin: String },
+    Change { current_pin: String, new_pin: String },
+    Sign { psbt: Arc<Psbt>, pin: String },
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Object)]
@@ -155,22 +145,18 @@ impl TapSignerReader {
         cmd: Option<TapSignerCmd>,
     ) -> Result<Self> {
         let transport = TapcardTransport(Arc::new(transport));
-        let card = transport
-            .clone()
-            .to_cktap()
-            .await
-            .map_err(TransportError::from)?;
+        let card = transport.clone().to_cktap().await.map_err(TransportError::from)?;
 
         debug!("tap_card_from_status: {:?}", card);
 
         let card = match card {
             CkTapCard::TapSigner(card) => Ok(card),
-            CkTapCard::SatsCard(_) => Err(TapSignerReaderError::UnknownCardType(
-                "SatsCard".to_string(),
-            )),
-            CkTapCard::SatsChip(_) => Err(TapSignerReaderError::UnknownCardType(
-                "SatsChip".to_string(),
-            )),
+            CkTapCard::SatsCard(_) => {
+                Err(TapSignerReaderError::UnknownCardType("SatsCard".to_string()))
+            }
+            CkTapCard::SatsChip(_) => {
+                Err(TapSignerReaderError::UnknownCardType("SatsChip".to_string()))
+            }
         }?;
 
         let id: Nanoid = Nanoid::new();
@@ -193,11 +179,7 @@ impl TapSignerReader {
 
     #[uniffi::method]
     pub async fn run(&self) -> Result<TapSignerResponse> {
-        let cmd = self
-            .cmd
-            .write()
-            .take()
-            .ok_or(TapSignerReaderError::NoCommand)?;
+        let cmd = self.cmd.write().take().ok_or(TapSignerReaderError::NoCommand)?;
 
         match cmd {
             TapSignerCmd::Setup(cmd) => {
@@ -215,10 +197,7 @@ impl TapSignerReader {
                 Ok(TapSignerResponse::Import(response))
             }
 
-            TapSignerCmd::Change {
-                current_pin,
-                new_pin,
-            } => {
+            TapSignerCmd::Change { current_pin, new_pin } => {
                 self.change(&new_pin, &current_pin).await?;
                 Ok(TapSignerResponse::Change)
             }
@@ -258,9 +237,7 @@ impl TapSignerReader {
             }
 
             SetupCmdResponse::ContinueFromDerive(c) => {
-                let response = self
-                    .setup_change_pin(c.continue_cmd, c.backup, c.derive_info)
-                    .await;
+                let response = self.setup_change_pin(c.continue_cmd, c.backup, c.derive_info).await;
                 Ok(response)
             }
 
@@ -299,12 +276,7 @@ impl TapSignerReader {
         while let Some(delay) = auth_delay {
             let message = format!("Too many PIN attempts, waiting for {} seconds...", delay);
 
-            self.reader
-                .lock()
-                .await
-                .wait(None)
-                .await
-                .map_err(TransportError::from)?;
+            self.reader.lock().await.wait(None).await.map_err(TransportError::from)?;
 
             self.transport.set_message(message);
             auth_delay = self.reader.lock().await.auth_delay;
@@ -384,23 +356,15 @@ impl TapSignerReader {
             return response;
         }
 
-        let complete = TapSignerSetupComplete {
-            backup,
-            derive_info,
-        };
+        let complete = TapSignerSetupComplete { backup, derive_info };
 
         *self.last_response.lock() = Some(SetupCmdResponse::Complete(complete.clone()).into());
         SetupCmdResponse::Complete(complete)
     }
 
     async fn backup(&self, pin: &str) -> Result<Vec<u8>, Error> {
-        let backup_response = self
-            .reader
-            .lock()
-            .await
-            .backup(pin)
-            .await
-            .map_err(TransportError::from)?;
+        let backup_response =
+            self.reader.lock().await.backup(pin).await.map_err(TransportError::from)?;
 
         Ok(backup_response.data)
     }
@@ -444,18 +408,12 @@ impl SetupCmd {
         let chain_code = match chain_code {
             Some(chain_code) => {
                 let chain_code_len = chain_code.len() as u32;
-                chain_code
-                    .try_into()
-                    .map_err(|_| Error::InvalidChainCodeLength(chain_code_len))?
+                chain_code.try_into().map_err(|_| Error::InvalidChainCodeLength(chain_code_len))?
             }
             None => rust_cktap::rand_chaincode(&mut secp256k1::rand::thread_rng()),
         };
 
-        Ok(Self {
-            factory_pin,
-            new_pin,
-            chain_code,
-        })
+        Ok(Self { factory_pin, new_pin, chain_code })
     }
 }
 
@@ -487,9 +445,7 @@ impl DeriveInfo {
     ) -> Self {
         let master_pubkey = derive_response.master_pubkey;
         let chain_code = derive_response.chain_code;
-        let pubkey = derive_response
-            .pubkey
-            .expect("has pubkey because path was given");
+        let pubkey = derive_response.pubkey.expect("has pubkey because path was given");
 
         Self {
             master_pubkey: master_pubkey.to_vec(),
@@ -666,9 +622,6 @@ mod ffi {
         assert!(preview);
 
         let backup = vec![0u8; 32];
-        TapSignerSetupComplete {
-            backup,
-            derive_info: derive_info(),
-        }
+        TapSignerSetupComplete { backup, derive_info: derive_info() }
     }
 }

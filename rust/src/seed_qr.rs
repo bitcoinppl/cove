@@ -50,11 +50,8 @@ impl SeedQr {
     pub fn try_from_str(qr: &str) -> Result<Self, Error> {
         let word_list = Language::English.word_list();
         let indexes = parse_str_into_word_indexes(qr)?;
-        let words: String = indexes
-            .iter()
-            .map(|index| word_list[*index as usize])
-            .collect::<Vec<&str>>()
-            .join(" ");
+        let words: String =
+            indexes.iter().map(|index| word_list[*index as usize]).collect::<Vec<&str>>().join(" ");
 
         let mnemonic = Mnemonic::parse_in(Language::English, &words)?;
         Ok(Self::Standard(mnemonic))
@@ -126,9 +123,8 @@ fn parse_str_into_word_indexes(qr: &str) -> Result<Vec<u16>, SeedQrError> {
         let starting_index = current_starting_index;
         let ending_index = end_index(starting_index);
 
-        let word_index: u16 = qr[starting_index..ending_index]
-            .parse()
-            .expect("already checked all numeric");
+        let word_index: u16 =
+            qr[starting_index..ending_index].parse().expect("already checked all numeric");
 
         if word_index > 2047 {
             return Err(SeedQrError::IndexOutOfBounds(word_index));
@@ -176,9 +172,7 @@ pub mod tests {
     #[test]
     fn test_parse_str_into_word_indexes() {
         let qr = "192402220235174306311124037817700641198012901210";
-        let expected = vec![
-            1924, 222, 235, 1743, 631, 1124, 378, 1770, 641, 1980, 1290, 1210,
-        ];
+        let expected = vec![1924, 222, 235, 1743, 631, 1124, 378, 1770, 641, 1980, 1290, 1210];
 
         assert_eq!(parse_str_into_word_indexes(qr).unwrap(), expected);
     }

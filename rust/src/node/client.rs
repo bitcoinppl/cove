@@ -171,9 +171,7 @@ impl NodeClient {
 
             NodeClient::Electrum(client) => {
                 debug!("starting electrum full scan");
-                client
-                    .full_scan(full_scan_request, tx_graph, stop_gap)
-                    .await?
+                client.full_scan(full_scan_request, tx_graph, stop_gap).await?
             }
         };
 

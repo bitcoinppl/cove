@@ -32,9 +32,8 @@ impl PushTx {
         let mut string = string.trim();
         let base64 = extract_tx(&mut string).map_err(|_| PushTxError::InvalidPushTx)?;
 
-        let txn_bytes: Vec<u8> = BASE64_URL_SAFE
-            .decode(base64.as_bytes())
-            .map_err(|_| PushTxError::InvalidBase64)?;
+        let txn_bytes: Vec<u8> =
+            BASE64_URL_SAFE.decode(base64.as_bytes()).map_err(|_| PushTxError::InvalidBase64)?;
 
         let txn = BitcoinTransaction::try_from_data(&txn_bytes)
             .map_err(|_| PushTxError::InvalidTransaction)?;

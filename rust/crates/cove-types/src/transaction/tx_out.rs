@@ -10,9 +10,6 @@ pub struct TxOut {
 
 impl From<BdkTxOut> for TxOut {
     fn from(tx_out: BdkTxOut) -> Self {
-        Self {
-            value: Amount::from(tx_out.value),
-            script_pubkey: tx_out.script_pubkey,
-        }
+        Self { value: Amount::from(tx_out.value), script_pubkey: tx_out.script_pubkey }
     }
 }

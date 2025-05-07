@@ -48,10 +48,10 @@ struct EnterAmountView: View {
     }
 
     var sendAmountBtc: String {
-            let _ = sendFlowManager.address
-            let _ = sendFlowManager.feeRateOptions
-            let _ = sendFlowManager.selectedFeeRate
-            let _ = sendFlowManager.amount
+        let _ = sendFlowManager.address
+        let _ = sendFlowManager.feeRateOptions
+        let _ = sendFlowManager.selectedFeeRate
+        let _ = sendFlowManager.amount
         return sendFlowManager.rust.sendAmountBtc()
     }
 
@@ -72,7 +72,8 @@ struct EnterAmountView: View {
                         Log.debug("onChangeBTC \(oldValue) -> \(newValue) (\(sendFlowManager.enteringBtcAmount))")
                         if oldValue == newValue { return }
                         if let newEnteringAmount = sendFlowManager.rust.sanitizeBtcEnteringAmount(
-                            oldValue: oldValue, newValue: newValue),
+                            oldValue: oldValue, newValue: newValue
+                        ),
                             newValue != newEnteringAmount
                         {
                             Log.debug(
@@ -80,7 +81,7 @@ struct EnterAmountView: View {
                             enteringBtcAmount = newEnteringAmount
                             return
                         }
-                        
+
                         if sendFlowManager.enteringBtcAmount == newValue { return }
                         sendFlowManager.dispatch(action: .changeEnteringBtcAmount(newValue))
                     }
@@ -89,7 +90,8 @@ struct EnterAmountView: View {
                         if oldValue == newValue { return }
                         if let newEnteringAmount =
                             sendFlowManager.rust.sanitizeFiatEnteringAmount(
-                                oldValue: oldValue, newValue: newValue),
+                                oldValue: oldValue, newValue: newValue
+                            ),
                             newValue != newEnteringAmount
                         {
                             Log.debug(

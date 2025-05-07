@@ -15,11 +15,7 @@ impl From<(BdkAmount, BdkAmount)> for SentAndReceived {
         let (sent, received) = sent_and_received;
         let direction = sent_and_received.into();
 
-        Self {
-            direction,
-            sent: sent.into(),
-            received: received.into(),
-        }
+        Self { direction, sent: sent.into(), received: received.into() }
     }
 }
 
@@ -85,11 +81,8 @@ impl SentAndReceived {
     pub fn preview_new() -> Self {
         let rand = rand::rng().random_range(0..3);
 
-        let direction = if rand == 0 {
-            TransactionDirection::Outgoing
-        } else {
-            TransactionDirection::Incoming
-        };
+        let direction =
+            if rand == 0 { TransactionDirection::Outgoing } else { TransactionDirection::Incoming };
 
         Self {
             direction,

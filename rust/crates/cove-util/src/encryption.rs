@@ -48,26 +48,20 @@ impl Cryptor {
     }
 
     pub fn try_from_string(string: String) -> Result<Self, Error> {
-        let (key_string, nonce_string) = string
-            .split_once(SPLITTER)
-            .ok_or(Error::KeyAndNonceNotFound)?;
+        let (key_string, nonce_string) =
+            string.split_once(SPLITTER).ok_or(Error::KeyAndNonceNotFound)?;
 
-        let key_bytes = BASE64_STANDARD
-            .decode(key_string.as_bytes())
-            .map_err(Error::KeyInvalidFormat)?;
+        let key_bytes =
+            BASE64_STANDARD.decode(key_string.as_bytes()).map_err(Error::KeyInvalidFormat)?;
 
         let key = Key::from_slice(&key_bytes);
 
-        let nonce_bytes = BASE64_STANDARD
-            .decode(nonce_string.as_bytes())
-            .map_err(Error::NonceInvalidFormat)?;
+        let nonce_bytes =
+            BASE64_STANDARD.decode(nonce_string.as_bytes()).map_err(Error::NonceInvalidFormat)?;
 
         let nonce = Nonce::from_slice(&nonce_bytes);
 
-        Ok(Self {
-            key: *key,
-            nonce: *nonce,
-        })
+        Ok(Self { key: *key, nonce: *nonce })
     }
 
     pub fn cipher(&self) -> ChaCha20Poly1305 {
@@ -85,10 +79,8 @@ impl Cryptor {
     }
 
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, Error> {
-        let encrypted = self
-            .cipher()
-            .encrypt(&self.nonce, plaintext)
-            .map_err(Error::UnableToEncrypt)?;
+        let encrypted =
+            self.cipher().encrypt(&self.nonce, plaintext).map_err(Error::UnableToEncrypt)?;
 
         Ok(encrypted)
     }
@@ -102,9 +94,8 @@ impl Cryptor {
     }
 
     pub fn decrypt_from_string(&self, ciphertext: &str) -> Result<String, Error> {
-        let ciphertext_bytes = BASE64_STANDARD
-            .decode(ciphertext.as_bytes())
-            .map_err(Error::Base64Decode)?;
+        let ciphertext_bytes =
+            BASE64_STANDARD.decode(ciphertext.as_bytes()).map_err(Error::Base64Decode)?;
 
         let decrypted = self.decrypt(&ciphertext_bytes)?;
 
@@ -113,10 +104,8 @@ impl Cryptor {
     }
 
     pub fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
-        let decrypted = self
-            .cipher()
-            .decrypt(&self.nonce, ciphertext)
-            .map_err(Error::UnableToDecrypt)?;
+        let decrypted =
+            self.cipher().decrypt(&self.nonce, ciphertext).map_err(Error::UnableToDecrypt)?;
 
         Ok(decrypted)
     }

@@ -148,8 +148,7 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn label(&self) -> String {
-        self.label_opt()
-            .unwrap_or_else(|| self.sent_and_received.label())
+        self.label_opt().unwrap_or_else(|| self.sent_and_received.label())
     }
 
     #[uniffi::method]
@@ -164,20 +163,15 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn block_height_fmt(&self) -> String {
-        let mut fmt = Formatter::new()
-            .separator(',')
-            .unwrap()
-            .precision(numfmt::Precision::Decimals(0));
+        let mut fmt =
+            Formatter::new().separator(',').unwrap().precision(numfmt::Precision::Decimals(0));
 
         fmt.fmt(self.block_height).to_string()
     }
 
     #[uniffi::method]
     pub fn confirmed_at(&self) -> u64 {
-        self.confirmed_at
-            .as_second()
-            .try_into()
-            .expect("all blocktimes after unix epoch")
+        self.confirmed_at.as_second().try_into().expect("all blocktimes after unix epoch")
     }
 
     #[uniffi::method]
@@ -187,9 +181,7 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn confirmed_at_fmt_with_time(&self) -> String {
-        self.confirmed_at
-            .strftime("%B %e, %Y at %-I:%M %p")
-            .to_string()
+        self.confirmed_at.strftime("%B %e, %Y at %-I:%M %p").to_string()
     }
 
     #[uniffi::method]

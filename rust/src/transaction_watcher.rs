@@ -47,12 +47,7 @@ impl TransactionWatcher {
         client_builder: NodeClientBuilder,
     ) -> Self {
         debug!("creating transaction watcher for {tx_id}");
-        Self {
-            wallet_actor,
-            addr: Default::default(),
-            tx_id: Arc::new(tx_id),
-            client_builder,
-        }
+        Self { wallet_actor, addr: Default::default(), tx_id: Arc::new(tx_id), client_builder }
     }
 
     pub async fn start_watching(&mut self) -> ActorResult<()> {

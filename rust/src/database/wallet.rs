@@ -72,9 +72,7 @@ impl WalletsTable {
     }
 
     pub fn len(&self, network: Network, mode: WalletMode) -> Result<u16, Error> {
-        let count = self
-            .get_all(network, mode)
-            .map(|wallets| wallets.len() as u16)?;
+        let count = self.get_all(network, mode).map(|wallets| wallets.len() as u16)?;
 
         Ok(count)
     }
@@ -262,9 +260,7 @@ impl WalletsTable {
                 .map_err(|error| WalletTableError::SaveError(error.to_string()))?;
         }
 
-        write_txn
-            .commit()
-            .map_err(|error| WalletTableError::SaveError(error.to_string()))?;
+        write_txn.commit().map_err(|error| WalletTableError::SaveError(error.to_string()))?;
 
         Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
@@ -293,14 +289,11 @@ impl WalletsTable {
     }
 
     fn read_table<'a>(&self) -> Result<ReadOnlyTable<&'a str, Json<Vec<WalletMetadata>>>, Error> {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn =
+            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
 
-        let table = read_txn
-            .open_table(TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table =
+            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
 
         Ok(table)
     }

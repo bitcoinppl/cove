@@ -97,11 +97,8 @@ impl Descriptors {
         let public_key =
             PublicKey::from_slice(&derive.pubkey).map_err(|_| Error::InvalidPublicKey)?;
 
-        let chain_code_bytes: [u8; 32] = derive
-            .chain_code
-            .clone()
-            .try_into()
-            .map_err(|_| Error::InvalidChainCode)?;
+        let chain_code_bytes: [u8; 32] =
+            derive.chain_code.clone().try_into().map_err(|_| Error::InvalidChainCode)?;
 
         let chain_code = ChainCode::from(chain_code_bytes);
 
@@ -155,10 +152,7 @@ impl Descriptors {
 
 impl Descriptor {
     pub fn new_from_public(extended_descriptor: ExtendedDescriptor) -> Self {
-        Self {
-            extended_descriptor,
-            key_map: KeyMap::new(),
-        }
+        Self { extended_descriptor, key_map: KeyMap::new() }
     }
 
     /// Parse a descriptor string into a `Descriptor` struct.
@@ -169,10 +163,7 @@ impl Descriptor {
                 secp, descriptor,
             )?;
 
-        Ok(Self {
-            extended_descriptor: descriptor,
-            key_map,
-        })
+        Ok(Self { extended_descriptor: descriptor, key_map })
     }
 
     pub fn descriptor_public_key(&self) -> Result<&BdkDescriptorPublicKey, Error> {
@@ -251,14 +242,10 @@ impl Descriptor {
         match derivable_key {
             BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
                 let derivable_key = descriptor_x_key.xkey;
-                let (extended_descriptor, key_map, _) = Bip84(derivable_key, keychain_kind)
-                    .build(network.into())
-                    .unwrap();
+                let (extended_descriptor, key_map, _) =
+                    Bip84(derivable_key, keychain_kind).build(network.into()).unwrap();
 
-                Self {
-                    extended_descriptor,
-                    key_map,
-                }
+                Self { extended_descriptor, key_map }
             }
 
             BdkDescriptorSecretKey::MultiXPrv(_) => {
@@ -290,10 +277,7 @@ impl Descriptor {
                         .build(network.into())
                         .unwrap();
 
-                Self {
-                    extended_descriptor,
-                    key_map,
-                }
+                Self { extended_descriptor, key_map }
             }
             BdkDescriptorPublicKey::MultiXPub(_) => {
                 unreachable!()
@@ -319,13 +303,9 @@ impl Descriptor {
             }
             BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
                 let derivable_key = descriptor_x_key.xkey;
-                let (extended_descriptor, key_map, _) = Bip49(derivable_key, keychain_kind)
-                    .build(network.into())
-                    .unwrap();
-                Self {
-                    extended_descriptor,
-                    key_map,
-                }
+                let (extended_descriptor, key_map, _) =
+                    Bip49(derivable_key, keychain_kind).build(network.into()).unwrap();
+                Self { extended_descriptor, key_map }
             }
             BdkDescriptorSecretKey::MultiXPrv(_) => {
                 unreachable!()
@@ -347,13 +327,9 @@ impl Descriptor {
             }
             BdkDescriptorSecretKey::XPrv(descriptor_x_key) => {
                 let derivable_key = descriptor_x_key.xkey;
-                let (extended_descriptor, key_map, _) = Bip44(derivable_key, keychain_kind)
-                    .build(network.into())
-                    .unwrap();
-                Self {
-                    extended_descriptor,
-                    key_map,
-                }
+                let (extended_descriptor, key_map, _) =
+                    Bip44(derivable_key, keychain_kind).build(network.into()).unwrap();
+                Self { extended_descriptor, key_map }
             }
             BdkDescriptorSecretKey::MultiXPrv(_) => {
                 unreachable!()
@@ -384,10 +360,7 @@ impl DescriptorSecretKey {
 
 impl From<ExtendedDescriptor> for Descriptor {
     fn from(descriptor: ExtendedDescriptor) -> Self {
-        Self {
-            extended_descriptor: descriptor,
-            key_map: KeyMap::new(),
-        }
+        Self { extended_descriptor: descriptor, key_map: KeyMap::new() }
     }
 }
 
@@ -467,21 +440,15 @@ mod tests {
     #[test]
     fn test_from_tap_signer_creates_same_address() {
         let original_descriptor: Descriptors =
-            pubport::descriptor::Descriptors::try_from_line(desc())
-                .unwrap()
-                .into();
+            pubport::descriptor::Descriptors::try_from_line(desc()).unwrap().into();
 
         let parsed_descriptors = Descriptors::new_from_tap_signer(&derive_info()).unwrap();
 
-        let mut original_wallet = original_descriptor
-            .into_create_params()
-            .create_wallet_no_persist()
-            .unwrap();
+        let mut original_wallet =
+            original_descriptor.into_create_params().create_wallet_no_persist().unwrap();
 
-        let mut parsed_wallet = parsed_descriptors
-            .into_create_params()
-            .create_wallet_no_persist()
-            .unwrap();
+        let mut parsed_wallet =
+            parsed_descriptors.into_create_params().create_wallet_no_persist().unwrap();
 
         // verify  external addresses are same
         let original_address = original_wallet.next_unused_address(KeychainKind::External);

@@ -26,9 +26,7 @@ pub enum FileHandlerError {
 impl FileHandler {
     #[uniffi::constructor]
     pub fn new(file_path: String) -> Self {
-        Self {
-            file_path: PathBuf::from(file_path),
-        }
+        Self { file_path: PathBuf::from(file_path) }
     }
 
     #[uniffi::method]

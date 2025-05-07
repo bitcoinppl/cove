@@ -85,9 +85,7 @@ impl MultiQr {
         // try to parse bbqr
         if let Ok(header) = bbqr::header::Header::try_from_str(&qr) {
             let mut continuous_joiner = bbqr::continuous_join::ContinuousJoiner::new();
-            continuous_joiner
-                .add_part(qr)
-                .expect("already checked that header is valid");
+            continuous_joiner.add_part(qr).expect("already checked that header is valid");
 
             let continuous_joiner = Arc::new(Mutex::new(continuous_joiner));
             return Self::Bbqr(header, continuous_joiner);
@@ -250,19 +248,15 @@ impl BbqrJoinResult {
 impl BbqrJoined {
     pub fn get_seed_words(&self) -> Result<Vec<String>, Error> {
         let words_str = str::from_utf8(&self.0.data).map_err(|_| MultiQrError::InvalidUtf8)?;
-        let mnemonic = words_str
-            .parse_mnemonic()
-            .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+        let mnemonic =
+            words_str.parse_mnemonic().map_err(|e| MultiQrError::ParseError(e.to_string()))?;
 
         Ok(mnemonic.words().map(ToString::to_string).collect())
     }
 
     pub fn get_grouped_words(&self, chunks: u8) -> Result<Vec<Vec<String>>, Error> {
         let words = self.get_seed_words()?;
-        let grouped = words
-            .chunks(chunks as usize)
-            .map(|chunk| chunk.to_vec())
-            .collect();
+        let grouped = words.chunks(chunks as usize).map(|chunk| chunk.to_vec()).collect();
 
         Ok(grouped)
     }

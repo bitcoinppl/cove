@@ -56,17 +56,9 @@ mod tests {
         assert_eq!(NumberOfBip39Words::Twelve.to_entropy_bits(), 128);
         assert_eq!(NumberOfBip39Words::TwentyFour.to_entropy_bits(), 256);
 
-        assert_eq!(
-            NumberOfBip39Words::Twelve.generate_mnemonic().word_count(),
-            12
-        );
+        assert_eq!(NumberOfBip39Words::Twelve.generate_mnemonic().word_count(), 12);
 
-        assert_eq!(
-            NumberOfBip39Words::TwentyFour
-                .generate_mnemonic()
-                .word_count(),
-            24
-        );
+        assert_eq!(NumberOfBip39Words::TwentyFour.generate_mnemonic().word_count(), 24);
 
         assert_eq!(
             NumberOfBip39Words::Twelve.to_word_count(),
@@ -75,9 +67,7 @@ mod tests {
 
         assert_eq!(
             NumberOfBip39Words::TwentyFour.to_word_count(),
-            NumberOfBip39Words::TwentyFour
-                .generate_mnemonic()
-                .word_count()
+            NumberOfBip39Words::TwentyFour.generate_mnemonic().word_count()
         );
     }
 }

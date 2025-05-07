@@ -46,17 +46,17 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     public init(_ rust: RustSendFlowManager, presenter: SendFlowPresenter) {
         self.rust = rust
         self.presenter = presenter
-        
+
         self.enteringFiatAmount = rust.enteringFiatAmount()
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
-    
+
     public func setAddress(_ address: Address) {
         self._enteringAddress = address.string()
         self.address = address
         self.dispatch(action: .notifyAddressChanged(address))
     }
-    
+
     public func setAmount(_ amount: Amount) {
         self.amount = amount
         self.dispatch(action: .notifyAmountChanged(amount))
