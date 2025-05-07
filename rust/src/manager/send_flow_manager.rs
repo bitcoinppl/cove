@@ -754,13 +754,13 @@ impl RustSendFlowManager {
             let unit = self.state.lock().metadata.selected_unit;
             match (amount, unit) {
                 (Some(amount), Unit::Sat) => {
-                    let entering_btc_amount = format!("{}", amount.as_sats().thousands_int());
+                    let entering_btc_amount = amount.as_sats().thousands_int().to_string();
 
                     self.state.lock().entering_btc_amount = entering_btc_amount.clone();
                     self.send(Message::UpdateEnteringBtcAmount(entering_btc_amount));
                 }
                 (Some(amount_sats), Unit::Btc) => {
-                    let entering_btc_amount = format!("{}", amount_sats.as_btc().thousands());
+                    let entering_btc_amount = amount_sats.as_btc().thousands().to_string();
 
                     self.state.lock().entering_btc_amount = entering_btc_amount.clone();
                     self.send(Message::UpdateEnteringBtcAmount(entering_btc_amount));
@@ -1160,13 +1160,13 @@ impl RustSendFlowManager {
                 let _ = self.get_first_address().await;
             }
 
-            let address = match (address, first_address) {
+            
+
+            match (address, first_address) {
                 (Some(address), _) => address,
                 (None, Some(first_address)) => first_address,
                 _ => return,
-            };
-
-            address
+            }
         };
 
         let address = Arc::unwrap_or_clone(address);
@@ -1203,8 +1203,8 @@ impl RustSendFlowManager {
         if let Some(updated_options) = self
             .updated_custom_fee_option(
                 address.clone(),
-                amount.clone(),
-                fee_rate_options.clone(),
+                amount,
+                fee_rate_options,
                 selected_fee_rate,
             )
             .await
@@ -1251,9 +1251,7 @@ impl RustSendFlowManager {
         selected_fee_rate: Option<Arc<FeeRateOptionWithTotalFee>>,
     ) -> Option<FeeRateOptionsWithTotalFee> {
         // nothing to update
-        if fee_rate_options.custom().is_none() {
-            return None;
-        }
+        fee_rate_options.custom()?;
 
         let selected_fee_rate = selected_fee_rate?;
         let wallet_actor = self.wallet_actor();
