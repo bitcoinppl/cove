@@ -30,6 +30,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     // presenting
     var sendAmountFiat: String = ""
     var sendAmountBtc: String = ""
+    var totalSpentInFiat: String = ""
 
     var enteringAddress: Binding<String> {
         Binding<String>(
@@ -48,6 +49,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.enteringFiatAmount = rust.enteringFiatAmount()
         self.sendAmountFiat = rust.sendAmountFiat()
         self.sendAmountBtc = rust.sendAmountBtc()
+        self.totalSpentInFiat = rust.totalSpentFiat()
 
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
@@ -74,10 +76,12 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             await MainActor.run {
                 switch message {
                 case let .updateAmountFiat(fiat):
+                    self.totalSpentInFiat = self.rust.totalSpentFiat()
                     self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.fiatAmount = fiat
 
                 case let .updateAmountSats(sats):
+                    self.totalSpentInFiat = self.rust.totalSpentFiat()
                     self.sendAmountBtc = self.rust.sendAmountBtc()
                     self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.amount = Amount.fromSat(sats: sats)
@@ -98,6 +102,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
                     self.enteringFiatAmount = amount
 
                 case let .updateSelectedFeeRate(rate):
+                    self.totalSpentInFiat = self.rust.totalSpentFiat()
                     self.sendAmountBtc = self.rust.sendAmountBtc()
                     self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.selectedFeeRate = rate

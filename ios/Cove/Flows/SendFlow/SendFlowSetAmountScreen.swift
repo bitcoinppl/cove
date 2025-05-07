@@ -48,10 +48,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSpentInFiat: String {
-        let _ = sendFlowManager.feeRateOptions
-        let _ = sendFlowManager.selectedFeeRate
-        let _ = sendFlowManager.amount
-        return sendFlowManager.rust.totalSpentFiat()
+        sendFlowManager.totalSpentInFiat
     }
 
     private var address: Binding<String> {
@@ -59,10 +56,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalSending: String {
-        let _ = sendFlowManager.feeRateOptions
-        let _ = sendFlowManager.selectedFeeRate
-        let _ = sendFlowManager.amount
-        return sendFlowManager.rust.sendAmountBtc()
+        sendFlowManager.sendAmountBtc
     }
 
     // MARK: Actions
