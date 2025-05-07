@@ -1245,10 +1245,12 @@ impl RustSendFlowManager {
         fee_rate_options: FeeRateOptionsWithTotalFee,
         selected_fee_rate: Option<Arc<FeeRateOptionWithTotalFee>>,
     ) -> Option<FeeRateOptionsWithTotalFee> {
-        // nothing to update
-        fee_rate_options.custom()?;
-
+        // only update if the selected fee rate is custom
         let selected_fee_rate = selected_fee_rate?;
+        if !matches!(selected_fee_rate.fee_speed, FeeSpeed::Custom { .. }) {
+            return None;
+        }
+
         let wallet_actor = self.wallet_actor();
         let old_fee_rate = selected_fee_rate.fee_rate;
         let max_selected = self.state.lock().max_selected.clone();
