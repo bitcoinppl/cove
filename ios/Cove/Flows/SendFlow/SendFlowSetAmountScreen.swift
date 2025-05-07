@@ -259,6 +259,7 @@ struct SendFlowSetAmountScreen: View {
     // MARK: OnChange Functions
 
     private func selectedUnitChanged(oldUnit: Unit, newUnit: Unit) {
+        Log.debug("selectedUnitChanged \(oldUnit) -> \(newUnit)")
         sendFlowManager.dispatch(action: .notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
     }
 

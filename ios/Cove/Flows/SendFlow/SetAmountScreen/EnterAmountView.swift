@@ -103,12 +103,12 @@ struct EnterAmountView: View {
                     }
                     .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) {
                         oldValue, newValue in
-                        Log.debug("enteringBtcAmount \(oldValue) -> \(newValue)")
+                        Log.debug("enteringBtcAmount \(oldValue) -> \(newValue) (\(enteringBtcAmount)")
                         enteringBtcAmount = newValue
                     }
                     .onChange(of: sendFlowManager.enteringFiatAmount, initial: true) {
                         oldValue, newValue in
-                        Log.debug("enteringFiatAmount \(oldValue) -> \(newValue)")
+                        Log.debug("enteringFiatAmount \(oldValue) -> \(newValue) (\(enteringFiatAmount))")
                         enteringFiatAmount = newValue
                     }
 

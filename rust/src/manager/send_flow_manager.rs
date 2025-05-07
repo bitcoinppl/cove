@@ -393,6 +393,8 @@ impl RustSendFlowManager {
     /// action from the frontend to change the state of the view model
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
+        debug!("dispatch: {action:?}");
+
         match action {
             Action::NotifyEnteringBtcAmountChanged(string) => {
                 let old_value = self.state.lock().entering_btc_amount.clone();
