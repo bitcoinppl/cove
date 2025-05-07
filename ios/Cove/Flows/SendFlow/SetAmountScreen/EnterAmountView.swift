@@ -20,13 +20,6 @@ struct EnterAmountView: View {
         self.sendFlowManager = sendFlowManager
     }
 
-    private var enteringAmount: Binding<String> {
-        switch metadata.fiatOrBtc {
-        case .btc: enteringBtcBinding
-        case .fiat: enteringFiatBinding
-        }
-    }
-
     private var enteringFiatBinding: Binding<String> {
         Binding(
             get: { sendFlowManager.enteringFiatAmount },
@@ -86,16 +79,31 @@ struct EnterAmountView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
-                TextField("", text: enteringAmount)
-                    .font(.system(size: 48, weight: .bold))
-                    .multilineTextAlignment(.center)
-                    .keyboardType(.decimalPad)
-                    .minimumScaleFactor(0.01)
-                    .lineLimit(1)
-                    .scrollDisabled(true)
-                    .offset(x: offset)
-                    .padding(.horizontal, 30)
-                    .focused($focusField, equals: .amount)
+                switch metadata.fiatOrBtc {
+                case .btc:
+                    TextField("", text: enteringBtcBinding)
+                        .font(.system(size: 48, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .keyboardType(.decimalPad)
+                        .minimumScaleFactor(0.01)
+                        .lineLimit(1)
+                        .scrollDisabled(true)
+                        .offset(x: offset)
+                        .padding(.horizontal, 30)
+                        .focused($focusField, equals: .amount)
+
+                case .fiat:
+                    TextField("", text: enteringFiatBinding)
+                        .font(.system(size: 48, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .keyboardType(.decimalPad)
+                        .minimumScaleFactor(0.01)
+                        .lineLimit(1)
+                        .scrollDisabled(true)
+                        .offset(x: offset)
+                        .padding(.horizontal, 30)
+                        .focused($focusField, equals: .amount)
+                }
 
                 HStack(spacing: 0) {
                     if metadata.fiatOrBtc == .btc {
