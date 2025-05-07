@@ -131,8 +131,11 @@ struct EnterAmountView: View {
                     _, new in focusField = new
                 }
                 .onChange(of: focusField, initial: true) { _, new in
-                    // focusField should always be whatever presenter.focusField says it is
-                    focusField = presenter.focusField
+                    if new == .none {
+                        focusField = presenter.focusField
+                    } else {
+                        presenter.focusField = new
+                    }
                 }
                 .popover(isPresented: $showingMenu) {
                     VStack(alignment: .center, spacing: 0) {

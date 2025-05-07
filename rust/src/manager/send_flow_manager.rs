@@ -729,6 +729,38 @@ impl RustSendFlowManager {
             }
         }
 
+        // format on blur
+        if old == Some(SetAmountFocusField::Amount) {
+            let amount = self.state.lock().amount_sats.map(Amount::from_sat);
+            let amount_fiat = self.state.lock().amount_fiat;
+
+            if let Some(amount_fiat) = amount_fiat {
+                let currency = self.state.lock().selected_fiat_currency;
+                let entering_fiat_amount =
+                    format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
+
+                self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
+                self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
+            }
+
+            let unit = self.state.lock().metadata.selected_unit;
+            match (amount, unit) {
+                (Some(amount), Unit::Sat) => {
+                    let entering_btc_amount = format!("{}", amount.as_sats().thousands_int());
+
+                    self.state.lock().entering_btc_amount = entering_btc_amount.clone();
+                    self.send(Message::UpdateEnteringBtcAmount(entering_btc_amount));
+                }
+                (Some(amount_sats), Unit::Btc) => {
+                    let entering_btc_amount = format!("{}", amount_sats.as_btc().thousands());
+
+                    self.state.lock().entering_btc_amount = entering_btc_amount.clone();
+                    self.send(Message::UpdateEnteringBtcAmount(entering_btc_amount));
+                }
+                _ => {}
+            }
+        };
+
         self.state.lock().focus_field = new;
         self.send(Message::UpdateFocusField(new));
     }
