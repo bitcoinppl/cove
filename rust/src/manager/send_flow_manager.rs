@@ -970,13 +970,16 @@ impl RustSendFlowManager {
         self.state.lock().entering_address = address.to_string();
         self.send(Message::UpdateEnteringAddress(address.to_string()));
 
+        let mut should_show_amount_error = false;
+
         // set amount if its valid
         if let Some(amount) = address_with_network.amount {
+            should_show_amount_error = true;
             self.handle_amount_changed(amount);
         }
 
         // if amount is invalid, go to amount field
-        if !self.validate_amount(false) {
+        if !self.validate_amount(should_show_amount_error) {
             let focus_field = SetAmountFocusField::Amount;
             self.state.lock().focus_field = Some(focus_field);
             self.send(Message::UpdateFocusField(Some(focus_field)));
