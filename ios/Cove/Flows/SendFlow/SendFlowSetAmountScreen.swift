@@ -113,7 +113,7 @@ struct SendFlowSetAmountScreen: View {
                         AccountSection
 
                         if sendFlowManager.feeRateOptions != nil,
-                           sendFlowManager.address != nil
+                            sendFlowManager.address != nil
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -218,19 +218,11 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private var totalFeeString: String {
-        let _ = sendFlowManager.address
-        let _ = sendFlowManager.feeRateOptions
-        let _ = sendFlowManager.selectedFeeRate
-        let _ = sendFlowManager.amount
-        return sendFlowManager.rust.totalFeeString()
+        return sendFlowManager.totalFeeString
     }
 
     private var totalSpentBtc: String {
-        let _ = sendFlowManager.address
-        let _ = sendFlowManager.feeRateOptions
-        let _ = sendFlowManager.selectedFeeRate
-        let _ = sendFlowManager.amount
-        return sendFlowManager.rust.totalSpentBtcString()
+        return sendFlowManager.totalSpentInBtc
     }
 
     private func validate(_ displayAlert: Bool = false) -> Bool {

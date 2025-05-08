@@ -120,10 +120,12 @@ struct EnterAmountView: View {
                 }
                 .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { oldValue, newValue in
                     Log.debug("enteringBtcAmount \(oldValue) -> \(newValue) (\(enteringBtcAmount)")
+                    guard enteringBtcAmount != newValue else { return }
                     enteringBtcAmount = newValue
                 }
                 .onChange(of: sendFlowManager.enteringFiatAmount, initial: true) { oldValue, newValue in
                     Log.debug("enteringFiatAmount \(oldValue) -> \(newValue) (\(enteringFiatAmount))")
+                    guard enteringFiatAmount != newValue else { return }
                     enteringFiatAmount = newValue
                 }
                 .onChange(of: presenter.focusField, initial: true) {
