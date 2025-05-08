@@ -161,6 +161,7 @@ impl RustSendFlowManager {
 
         task::spawn(async move {
             while let Ok(field) = reconcile_receiver.recv_async().await {
+                trace!("reconcile_receiver: {field:?}");
                 // call the reconcile method on the frontend
                 reconciler.reconcile(field);
             }
