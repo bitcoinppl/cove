@@ -14,6 +14,10 @@
   - Small UI bug fixes
 - Testnet4 support
 
+### Fixes
+
+- Fix bug where the total fees the user sees changes between screens
+
 ### Internal (non-user facing)
 
 - Extracted out multiple modules into their own crates
