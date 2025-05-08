@@ -628,7 +628,7 @@ struct CoveApp: App {
                 .forEach { window in
                     window.rootViewController?.dismiss(animated: false)
                 }
-            
+
             // dismiss all keyboard
             UIApplication.shared.endEditing()
         }

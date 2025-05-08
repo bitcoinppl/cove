@@ -110,7 +110,6 @@ impl From<FeeResponse> for FeeRateOptions {
 
         let (medium_rate, medium) = {
             let rate = fees.half_hour_fee.max(slow_rate + 1.1);
-
             (
                 rate,
                 FeeRateOption {
@@ -122,7 +121,6 @@ impl From<FeeResponse> for FeeRateOptions {
 
         let fast = {
             let rate = fees.fastest_fee.max(medium_rate + 1.1);
-
             FeeRateOption { fee_speed: FeeSpeed::Fast, fee_rate: FeeRate::from_sat_per_vb(rate) }
         };
 
