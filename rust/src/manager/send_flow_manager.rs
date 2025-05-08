@@ -350,6 +350,12 @@ impl RustSendFlowManager {
             .to_sat();
 
         if spendable_balance < amount {
+            if self.state.lock().max_selected.is_some() {
+                let me = self.clone();
+                task::spawn(async move { me.select_max_send_report_error().await });
+                return false;
+            }
+
             let msg = Message::SetAlert(SendFlowError::InsufficientFunds.into());
             if display_alert {
                 self.send(msg);
