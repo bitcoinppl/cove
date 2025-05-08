@@ -523,8 +523,10 @@ impl RustSendFlowManager {
                     self.send(Message::SetMaxSelected(max));
                 }
                 Some(None) => {
-                    state.max_selected = None;
-                    self.send(Message::UnsetMaxSelected);
+                    let was_max_selected = state.max_selected.take().is_some();
+                    if was_max_selected {
+                        self.send(Message::UnsetMaxSelected);
+                    }
                 }
                 None => {}
             }
@@ -598,8 +600,10 @@ impl RustSendFlowManager {
         }
 
         if let Some(None) = max_selected {
-            self.state.lock().max_selected = None;
-            self.send(Message::UnsetMaxSelected);
+            let was_max_selected = self.state.lock().max_selected.take().is_some();
+            if was_max_selected {
+                self.send(Message::UnsetMaxSelected);
+            }
         }
 
         Some(())
@@ -647,6 +651,11 @@ impl RustSendFlowManager {
 
         // btc
         self.set_and_send_entering_btc_amount(String::new());
+
+        let was_max_selected = self.state.lock().max_selected.take().is_some();
+        if was_max_selected {
+            self.send(Message::UnsetMaxSelected);
+        }
     }
 
     fn clear_address(self: &Arc<Self>) {
