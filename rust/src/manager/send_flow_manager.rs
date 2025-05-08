@@ -639,6 +639,7 @@ impl RustSendFlowManager {
 
         state.amount_fiat = None;
         self.send(Message::UpdateAmountFiat(0.0));
+        drop(state);
 
         // fiat
         let entering_fiat_amount = currency.symbol().to_string();
@@ -646,8 +647,6 @@ impl RustSendFlowManager {
 
         // btc
         self.set_and_send_entering_btc_amount(String::new());
-
-        drop(state);
     }
 
     fn clear_address(self: &Arc<Self>) {
@@ -876,9 +875,7 @@ impl RustSendFlowManager {
     async fn get_and_update_base_fee_rate_options(self: &Arc<Self>) -> Option<Arc<FeeRateOptions>> {
         let fee_response = FEE_CLIENT.fetch_and_get_fees().await.ok()?;
         let fees = Arc::new(FeeRateOptions::from(fee_response));
-
         self.state.lock().fee_rate_options_base = Some(fees.clone());
-
         Some(fees)
     }
 
