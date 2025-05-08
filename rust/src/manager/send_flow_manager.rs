@@ -314,10 +314,11 @@ impl RustSendFlowManager {
 
     #[uniffi::method(default(display_alert = false))]
     pub fn validate_amount(self: &Arc<Self>, display_alert: bool) -> bool {
+        let mut sender = DeferredSender::new(self.clone());
         let Some(amount) = self.state.lock().amount_sats else {
             let msg = Message::SetAlert(SendFlowError::InvalidNumber.into());
             if display_alert {
-                self.send(msg);
+                sender.send(msg);
             } else {
                 debug!("validate_amount_failed: {msg:?}");
             }
@@ -328,7 +329,7 @@ impl RustSendFlowManager {
         if amount == 0 {
             let msg = Message::SetAlert(SendFlowError::ZeroAmount.into());
             if display_alert {
-                self.send(msg);
+                sender.send(msg);
             } else {
                 debug!("validate_amount_failed: {msg:?}");
             };
@@ -338,7 +339,7 @@ impl RustSendFlowManager {
         if amount < 5000 {
             let msg = Message::SetAlert(SendFlowError::SendAmountToLow.into());
             if display_alert {
-                self.send(msg);
+                sender.send(msg);
             } else {
                 debug!("validate_amount_failed: {msg:?}");
             }
@@ -368,7 +369,7 @@ impl RustSendFlowManager {
 
             let msg = Message::SetAlert(SendFlowError::InsufficientFunds.into());
             if display_alert {
-                self.send(msg);
+                sender.send(msg);
             } else {
                 debug!("validate_amount_failed: {msg:?}");
             }
@@ -474,8 +475,9 @@ impl RustSendFlowManager {
             }
 
             Action::NotifyAddressChanged(address) => {
-                self.state.lock().address = Some(address.clone());
-                self.state.lock().entering_address = address.to_string();
+                let mut state = self.state.lock();
+                state.address = Some(address.clone());
+                state.entering_address = address.to_string();
             }
 
             Action::NotifyAmountChanged(amount) => {
@@ -508,23 +510,19 @@ impl RustSendFlowManager {
         }
 
         // update the state
+        let mut sender = DeferredSender::new(self.clone());
         self.state.lock().entering_btc_amount = new.clone();
 
         let state: State = self.state.clone().into();
         let me = self.clone();
 
-        let needs_fee_rate_options_base = {
-            let state_lock = state.lock();
-            state_lock.fee_rate_options_base.is_none()
-        };
-
+        let needs_fee_rate_options_base = self.state.lock().fee_rate_options_base.is_none();
         if needs_fee_rate_options_base {
             crate::task::spawn(async move {
                 me.get_and_update_base_fee_rate_options().await;
             });
         }
 
-        let state: State = self.state.clone().into();
         let handler = BtcOnChangeHandler::new(state.clone());
         let changes = handler.on_change(&old, &new);
         debug!("btc_on_change_handler changes: {changes:?}");
@@ -536,31 +534,35 @@ impl RustSendFlowManager {
             Some(Some(max)) => {
                 let max = Arc::new(max);
                 self.state.lock().max_selected = Some(max.clone());
-                self.send(Message::SetMaxSelected(max));
+                sender.send(Message::SetMaxSelected(max));
             }
             Some(None) => {
                 let was_max_selected = self.state.lock().max_selected.take().is_some();
                 if was_max_selected {
-                    self.send(Message::UnsetMaxSelected);
+                    sender.send(Message::UnsetMaxSelected);
                 }
             }
             None => {}
         }
 
         if let Some(amount) = amount_btc {
+            let current_amount_sats = self.state.lock().amount_sats;
             let amount_sats = amount.to_sat();
             self.state.lock().amount_sats = Some(amount_sats);
-            self.send(Message::UpdateAmountSats(amount_sats));
-            self.sync_wrap_get_or_update_fee_rate_options();
+
+            if current_amount_sats != Some(amount_sats) {
+                sender.send(Message::UpdateAmountSats(amount_sats));
+                self.sync_wrap_get_or_update_fee_rate_options();
+            }
         }
 
         if let Some(amount) = amount_fiat {
             self.state.lock().amount_fiat = Some(amount);
-            self.send(Message::UpdateAmountFiat(amount));
+            sender.send(Message::UpdateAmountFiat(amount));
         }
 
         if let Some(entering_amount) = entering_amount_btc {
-            self.set_and_send_entering_btc_amount(entering_amount);
+            self.set_and_send_entering_btc_amount(entering_amount, &mut sender);
         }
 
         Some(())
@@ -575,6 +577,8 @@ impl RustSendFlowManager {
         if old_value == new_value {
             return None;
         }
+
+        let mut sender = DeferredSender::new(self.clone());
 
         // update the state
         self.state.lock().entering_fiat_amount = new_value.clone();
@@ -599,25 +603,25 @@ impl RustSendFlowManager {
 
         if let Some(entering_fiat_amount) = entering_fiat_amount {
             self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
-            self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
+            sender.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
         }
 
         if let Some(amount_fiat) = fiat_value {
             self.state.lock().amount_fiat = Some(amount_fiat);
-            self.send(Message::UpdateAmountFiat(amount_fiat));
+            sender.send(Message::UpdateAmountFiat(amount_fiat));
         }
 
         if let Some(btc_amount) = btc_amount {
             let btc_amount = btc_amount.as_sats();
             self.state.lock().amount_sats = Some(btc_amount);
-            self.send(Message::UpdateAmountSats(btc_amount));
+            sender.send(Message::UpdateAmountSats(btc_amount));
             self.sync_wrap_get_or_update_fee_rate_options();
         }
 
         if let Some(None) = max_selected {
             let was_max_selected = self.state.lock().max_selected.take().is_some();
             if was_max_selected {
-                self.send(Message::UnsetMaxSelected);
+                sender.send(Message::UnsetMaxSelected);
             }
         }
 
@@ -627,6 +631,8 @@ impl RustSendFlowManager {
     fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
         debug!("handle_entering_address_changed: {address}");
 
+        let mut sender = DeferredSender::new(self.clone());
+
         // update the state
         self.state.lock().entering_address = address.clone();
 
@@ -634,7 +640,7 @@ impl RustSendFlowManager {
         let address = Address::from_string(&address, self.state.lock().metadata.network).ok();
         let address = address.map(Arc::new);
         self.state.lock().address = address.clone();
-        self.send(Message::UpdateAddress(address.clone()));
+        sender.send(Message::UpdateAddress(address.clone()));
 
         // when we have a valid address, use that to get the fee rate options
         let me = self.clone();
@@ -655,35 +661,38 @@ impl RustSendFlowManager {
             state.amount_fiat = None;
         }
 
-        self.send(Message::UpdateAmountFiat(0.0));
-        self.send(Message::UpdateAmountSats(0));
+        let mut sender = DeferredSender::new(self.clone());
+        sender.send(Message::UpdateAmountFiat(0.0));
+        sender.send(Message::UpdateAmountSats(0));
         self.sync_wrap_get_or_update_fee_rate_options();
 
         // fiat
         let currency = self.state.lock().selected_fiat_currency;
         let entering_fiat_amount = currency.symbol().to_string();
-        self.set_and_send_entering_fiat_amount(entering_fiat_amount);
+        self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
 
         // btc
-        self.set_and_send_entering_btc_amount(String::new());
+        self.set_and_send_entering_btc_amount(String::new(), &mut sender);
 
         let was_max_selected = self.state.lock().max_selected.take().is_some();
         if was_max_selected {
-            self.send(Message::UnsetMaxSelected);
+            sender.send(Message::UnsetMaxSelected);
         }
     }
 
     fn clear_address(self: &Arc<Self>) {
+        let mut sender = DeferredSender::new(self.clone());
         self.state.lock().address = None;
-        self.send(Message::UpdateAddress(None));
+        sender.send(Message::UpdateAddress(None));
 
         self.state.lock().entering_address = String::new();
-        self.send(Message::UpdateEnteringAddress(String::new()));
+        sender.send(Message::UpdateEnteringAddress(String::new()));
     }
 
     fn selected_fee_rate_changed(self: &Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
+        let mut sender = DeferredSender::new(self.clone());
         self.state.lock().selected_fee_rate = Some(fee_rate.clone());
-        self.send(Message::UpdateSelectedFeeRate(fee_rate.clone()));
+        sender.send(Message::UpdateSelectedFeeRate(fee_rate.clone()));
 
         // max was selected before, so we need to update it to match the new fee rate
         let max_selected = self.state.lock().max_selected.clone();
@@ -693,7 +702,7 @@ impl RustSendFlowManager {
 
         if self.validate_amount(false) && self.validate_address(false) {
             self.state.lock().focus_field = None;
-            self.send(Message::UpdateFocusField(None));
+            sender.send(Message::UpdateFocusField(None));
         }
     }
 
@@ -701,6 +710,7 @@ impl RustSendFlowManager {
     fn handle_amount_changed(self: &Arc<Self>, amount: Amount) {
         debug!("handle_amount_changed: {amount:?}");
 
+        let mut sender = DeferredSender::new(self.clone());
         let (unit, fiat_or_btc, btc_price_in_fiat) = {
             let state = self.state.lock();
 
@@ -720,7 +730,7 @@ impl RustSendFlowManager {
                     let enterting_amount_fiat =
                         format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
 
-                    self.set_and_send_entering_fiat_amount(enterting_amount_fiat);
+                    self.set_and_send_entering_fiat_amount(enterting_amount_fiat, &mut sender);
                 }
             }
 
@@ -730,7 +740,7 @@ impl RustSendFlowManager {
                     Unit::Sat => amount.as_sats().thousands_int(),
                 };
 
-                self.set_and_send_entering_btc_amount(amount_string);
+                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
             }
         }
 
@@ -739,14 +749,14 @@ impl RustSendFlowManager {
         self.state.lock().amount_sats = Some(amount_sats);
 
         if old_amount_sats != Some(amount_sats) {
-            self.send(Message::UpdateAmountSats(amount_sats));
+            sender.send(Message::UpdateAmountSats(amount_sats));
             self.sync_wrap_get_or_update_fee_rate_options();
         }
 
         if let Some(price) = btc_price_in_fiat {
             let amount_fiat = amount.as_btc() * (price as f64);
             self.state.lock().amount_fiat = Some(amount_fiat);
-            self.send(Message::UpdateAmountFiat(amount_fiat));
+            sender.send(Message::UpdateAmountFiat(amount_fiat));
         }
     }
 
@@ -756,6 +766,8 @@ impl RustSendFlowManager {
         new: Option<SetAmountFocusField>,
     ) {
         debug!("handle_focus_field_changed: {old:?} --> {new:?}");
+
+        let mut sender = DeferredSender::new(self.clone());
 
         // most likely the first load, so ignore for now let front end handle it
         if old.is_none() && new.is_some() && self.state.lock().focus_field.is_none() {
@@ -774,13 +786,13 @@ impl RustSendFlowManager {
 
             if !self.validate_amount(should_show_error) {
                 self.state.lock().focus_field = Some(SetAmountFocusField::Amount);
-                self.send(Message::UpdateFocusField(Some(SetAmountFocusField::Amount)));
+                sender.send(Message::UpdateFocusField(Some(SetAmountFocusField::Amount)));
                 return;
             }
 
             if !self.validate_address(should_show_error) {
                 self.state.lock().focus_field = Some(SetAmountFocusField::Address);
-                self.send(Message::UpdateFocusField(Some(SetAmountFocusField::Address)));
+                sender.send(Message::UpdateFocusField(Some(SetAmountFocusField::Address)));
                 return;
             }
         }
@@ -796,25 +808,25 @@ impl RustSendFlowManager {
                     format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
 
                 self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
-                self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
+                sender.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
             }
 
             let unit = self.state.lock().metadata.selected_unit;
             match (amount, unit) {
                 (Some(amount), Unit::Sat) => {
                     let entering_btc_amount = amount.as_sats().thousands_int().to_string();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount);
+                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
                 }
                 (Some(amount_sats), Unit::Btc) => {
                     let entering_btc_amount = amount_sats.as_btc().thousands().to_string();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount);
+                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
                 }
                 _ => {}
             }
         };
 
         self.state.lock().focus_field = new;
-        self.send(Message::UpdateFocusField(new));
+        sender.send(Message::UpdateFocusField(new));
     }
 
     async fn select_max_send_report_error(self: &Arc<Self>) {
@@ -829,6 +841,8 @@ impl RustSendFlowManager {
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
         debug!("select_max_send");
+
+        let mut sender = DeferredSender::new(self.clone());
 
         // access the mutex once
         let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
@@ -878,18 +892,18 @@ impl RustSendFlowManager {
         trace!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");
 
         self.state.lock().max_selected = Some(total.clone());
-        self.send(Message::SetMaxSelected(total.clone()));
+        sender.send(Message::SetMaxSelected(total.clone()));
         self.handle_amount_changed(*total);
 
         let address_is_valid = self.state.lock().address.is_some();
         match address_is_valid {
             true => {
                 self.state.lock().focus_field = None;
-                self.send(Message::UpdateFocusField(None))
+                sender.send(Message::UpdateFocusField(None))
             }
             false => {
                 self.state.lock().focus_field = Some(SetAmountFocusField::Address);
-                self.send(Message::UpdateFocusField(Some(SetAmountFocusField::Address)))
+                sender.send(Message::UpdateFocusField(Some(SetAmountFocusField::Address)))
             }
         }
 
@@ -904,6 +918,7 @@ impl RustSendFlowManager {
     }
 
     fn handle_selected_unit_changed(self: &Arc<Self>, old: Unit, new: Unit) {
+        let mut sender = DeferredSender::new(self.clone());
         self.state.lock().metadata.selected_unit = new;
 
         if old == new {
@@ -934,16 +949,17 @@ impl RustSendFlowManager {
         match new {
             Unit::Btc => {
                 let amount_string = Amount::from_sat(amount_sats).btc_string();
-                self.set_and_send_entering_btc_amount(amount_string);
+                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
             }
             Unit::Sat => {
                 let amount_string = amount_sats.thousands_int();
-                self.set_and_send_entering_btc_amount(amount_string);
+                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
             }
         }
     }
 
     fn handle_btc_or_fiat_changed(self: &Arc<Self>, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
+        let mut sender = DeferredSender::new(self.clone());
         self.state.lock().metadata.fiat_or_btc = new_value;
 
         let Some(amount_sats) = self.state.lock().amount_sats else {
@@ -959,7 +975,7 @@ impl RustSendFlowManager {
                     Unit::Sat => amount.sats_string(),
                 };
 
-                self.set_and_send_entering_btc_amount(amount_fmt.clone());
+                self.set_and_send_entering_btc_amount(amount_fmt.clone(), &mut sender);
             }
 
             FiatOrBtc::Fiat => {
@@ -968,7 +984,7 @@ impl RustSendFlowManager {
                 let fiat_amount_fmt =
                     format!("{}{}", currency.symbol(), fiat_amount.thousands_fiat(),);
 
-                self.set_and_send_entering_fiat_amount(fiat_amount_fmt.clone());
+                self.set_and_send_entering_fiat_amount(fiat_amount_fmt.clone(), &mut sender);
             }
         }
     }
@@ -990,6 +1006,7 @@ impl RustSendFlowManager {
 
     fn handle_scan_code_changed(self: &Arc<Self>, _old_value: String, new_value: String) {
         debug!("handle_scan_code_changed {new_value}");
+        let mut sender = DeferredSender::new(self.clone());
 
         let network = self.state.lock().metadata.network;
         let address_with_network = {
@@ -1016,10 +1033,10 @@ impl RustSendFlowManager {
         let address = Arc::new(address_with_network.address);
 
         self.state.lock().address = Some(address.clone());
-        self.send(Message::UpdateAddress(Some(address.clone())));
+        sender.send(Message::UpdateAddress(Some(address.clone())));
 
         self.state.lock().entering_address = address.to_string();
-        self.send(Message::UpdateEnteringAddress(address.to_string()));
+        sender.send(Message::UpdateEnteringAddress(address.to_string()));
 
         let mut should_show_amount_error = false;
 
@@ -1027,7 +1044,7 @@ impl RustSendFlowManager {
         if let Some(amount) = address_with_network.amount {
             let max_was_selected = self.state.lock().max_selected.take().is_some();
             if max_was_selected {
-                self.send(Message::UnsetMaxSelected)
+                sender.send(Message::UnsetMaxSelected)
             }
 
             should_show_amount_error = true;
@@ -1038,13 +1055,13 @@ impl RustSendFlowManager {
         if !self.validate_amount(should_show_amount_error) {
             let focus_field = SetAmountFocusField::Amount;
             self.state.lock().focus_field = Some(focus_field);
-            self.send(Message::UpdateFocusField(Some(focus_field)));
+            sender.send(Message::UpdateFocusField(Some(focus_field)));
         }
 
         // if both address and amount are valid, then clear the focus field
         if self.validate_amount(false) && self.validate_address(false) {
             self.state.lock().focus_field = None;
-            self.send(Message::UpdateFocusField(None));
+            sender.send(Message::UpdateFocusField(None));
         }
 
         // the address or amount might have changed
@@ -1150,7 +1167,11 @@ impl RustSendFlowManager {
         }
     }
 
-    fn set_and_send_entering_btc_amount(self: &Arc<Self>, new_entering_btc_amount: String) {
+    fn set_and_send_entering_btc_amount(
+        self: &Arc<Self>,
+        new_entering_btc_amount: String,
+        deffered_sender: &mut DeferredSender,
+    ) {
         let is_changed = {
             let mut state = self.state.lock();
             let current = std::mem::take(&mut state.entering_btc_amount);
@@ -1159,11 +1180,15 @@ impl RustSendFlowManager {
         };
 
         if is_changed {
-            self.send(Message::UpdateEnteringBtcAmount(new_entering_btc_amount));
+            deffered_sender.send(Message::UpdateEnteringBtcAmount(new_entering_btc_amount));
         }
     }
 
-    fn set_and_send_entering_fiat_amount(self: &Arc<Self>, new_entering_fiat_amount: String) {
+    fn set_and_send_entering_fiat_amount(
+        self: &Arc<Self>,
+        new_entering_fiat_amount: String,
+        deferred_sender: &mut DeferredSender,
+    ) {
         let is_changed = {
             let mut state = self.state.lock();
             let current = std::mem::take(&mut state.entering_fiat_amount);
@@ -1172,7 +1197,7 @@ impl RustSendFlowManager {
         };
 
         if is_changed {
-            self.send(Message::UpdateEnteringFiatAmount(new_entering_fiat_amount));
+            deferred_sender.send(Message::UpdateEnteringFiatAmount(new_entering_fiat_amount));
         }
     }
 
@@ -1235,6 +1260,9 @@ impl RustSendFlowManager {
 
     async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
         debug!("get_or_update_fee_rate_options");
+
+        let mut sender = DeferredSender::new(self.clone());
+
         let (address, amount_sats) = {
             let state = self.state.lock();
             let address = state.address.clone();
@@ -1329,17 +1357,17 @@ impl RustSendFlowManager {
 
                 if new_selected_fee_rate != selected_fee_rate {
                     self.state.lock().selected_fee_rate = Some(new_selected_fee_rate.clone());
-                    self.send(Message::UpdateSelectedFeeRate(new_selected_fee_rate));
+                    sender.send(Message::UpdateSelectedFeeRate(new_selected_fee_rate));
                 }
             }
             None => {
                 let medium = Arc::new(fee_rate_options_with_total_fee.clone().medium);
                 self.state.lock().selected_fee_rate = Some(medium.clone());
-                self.send(Message::UpdateSelectedFeeRate(medium));
+                sender.send(Message::UpdateSelectedFeeRate(medium));
             }
         }
 
-        self.send_async(Message::UpdateFeeRateOptions(fee_rate_options_with_total_fee)).await
+        sender.send(Message::UpdateFeeRateOptions(fee_rate_options_with_total_fee));
     }
 
     /// Returns the fee rate options with the updated custom fee
@@ -1395,5 +1423,38 @@ impl RustSendFlowManager {
         let balance = self.wallet_manager.balance().await;
         let wallet_balance = Arc::new(balance);
         self.state.lock().wallet_balance = Some(wallet_balance.clone());
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DeferredSender {
+    manager: Arc<RustSendFlowManager>,
+    messages: Vec<Message>,
+}
+
+impl DeferredSender {
+    fn new(manager: Arc<RustSendFlowManager>) -> Self {
+        Self { manager, messages: vec![] }
+    }
+
+    fn send(&mut self, message: Message) {
+        self.messages.push(message);
+    }
+}
+
+impl Drop for DeferredSender {
+    fn drop(&mut self) {
+        let messages = std::mem::take(&mut self.messages);
+        let manager = self.manager.clone();
+
+        if messages.is_empty() {
+            return;
+        }
+
+        task::spawn(async move {
+            for message in messages {
+                manager.send_async(message).await
+            }
+        });
     }
 }
