@@ -203,7 +203,10 @@ private struct FeeOptionView: View {
             SendFlowSelectFeeRateView(
                 manager: WalletManager(preview: "preview_only"),
                 feeOptions: Binding.constant(
-                    FeeRateOptionsWithTotalFee.previewNew().addCustomFee(feeRate: 13.77)),
+                    FeeRateOptionsWithTotalFee.previewNew().addCustomFeeRate(
+                        feeRate: FeeRateOptionWithTotalFee(
+                            feeSpeed: FeeSpeed.custom(durationMins: 10), feeRate: FeeRate.fromSatPerVb(satPerVb: 143.00), totalFee: Amount.fromSat(sats: 3000)
+                        ))),
                 selectedOption: Binding.constant(
                     FeeRateOptionsWithTotalFee.previewNew().medium()
                 ),

@@ -21,6 +21,7 @@ use bdk_core::spk_client::{FullScanRequest, SyncResponse};
 use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
+use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::GAP_LIMIT;
 use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
@@ -28,6 +29,7 @@ use cove_types::{
 };
 use eyre::Result;
 use flume::Sender;
+use rand::Rng as _;
 use std::{
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
@@ -49,6 +51,7 @@ pub struct WalletActor {
     pub db: WalletDataDb,
     pub state: ActorState,
 
+    seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
@@ -138,10 +141,12 @@ impl Actor for WalletActor {
 impl WalletActor {
     pub fn new(wallet: Wallet, reconciler: Sender<WalletManagerReconcileMessage>) -> Self {
         let db = WalletDataDb::new_or_existing(wallet.id.clone());
+        let seed = rand::rng().random();
 
         Self {
             addr: Default::default(),
             reconciler,
+            seed,
             wallet,
             node_client: None,
             last_scan_finished: None,
@@ -184,7 +189,9 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         let script_pubkey = address.script_pubkey();
 
-        let mut tx_builder = self.wallet.bdk.build_tx();
+        let coin_selection = CoveDefaultCoinSelection::new(self.seed);
+        let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
+
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);

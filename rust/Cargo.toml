@@ -105,6 +105,7 @@ cove-types = { path = "./crates/cove-types" }
 cove-common = { path = "./crates/cove-common" }
 cove-bip39 = { path = "./crates/cove-bip39" }
 cove-device = { path = "./crates/cove-device" }
+cove-bdk = { path = "./crates/cove-bdk" }
 
 # bitcoin
 bitcoin = { workspace = true }

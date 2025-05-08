@@ -1,0 +1,15 @@
+[package]
+name = "cove-bdk"
+version = "0.1.0"
+edition = "2024"
+description = "Extensions to BDK"
+
+[dependencies]
+# from parent crate
+cove-util = { path = "../cove-util" }
+
+# bdk
+bdk_wallet = { workspace = true }
+
+# rand
+rand = { workspace = true }

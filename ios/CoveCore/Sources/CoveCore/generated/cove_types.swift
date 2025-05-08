@@ -2256,8 +2256,6 @@ public func FfiConverterTypeFeeRateOptions_lower(_ value: FeeRateOptions) -> Uns
 
 public protocol FeeRateOptionsWithTotalFeeProtocol: AnyObject, Sendable {
     
-    func addCustomFee(feeRate: Float)  -> FeeRateOptionsWithTotalFee
-    
     func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee)  -> FeeRateOptionsWithTotalFee
     
     func calculateCustomFeeSpeed(feeRate: Float)  -> FeeSpeed
@@ -2337,14 +2335,6 @@ public static func previewNew() -> FeeRateOptionsWithTotalFee  {
 }
     
 
-    
-open func addCustomFee(feeRate: Float) -> FeeRateOptionsWithTotalFee  {
-    return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
-    uniffi_cove_types_fn_method_feerateoptionswithtotalfee_add_custom_fee(self.uniffiClonePointer(),
-        FfiConverterFloat.lower(feeRate),$0
-    )
-})
-}
     
 open func addCustomFeeRate(feeRate: FeeRateOptionWithTotalFee) -> FeeRateOptionsWithTotalFee  {
     return try!  FfiConverterTypeFeeRateOptionsWithTotalFee_lift(try! rustCall() {
@@ -5225,9 +5215,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptions_slow() != 25223) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee() != 49234) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_add_custom_fee_rate() != 8985) {
