@@ -539,10 +539,14 @@ impl RustSendFlowManager {
             }
 
             if let Some(amount) = amount_btc {
+                let current_amount_sats = state.amount_sats;
                 let amount_sats = amount.to_sat();
                 state.amount_sats = Some(amount_sats);
-                self.send(Message::UpdateAmountSats(amount_sats));
-                self.sync_wrap_get_or_update_fee_rate_options();
+
+                if current_amount_sats != Some(amount_sats) {
+                    self.send(Message::UpdateAmountSats(amount_sats));
+                    self.sync_wrap_get_or_update_fee_rate_options();
+                }
             }
 
             if let Some(amount) = amount_fiat {

@@ -62,7 +62,6 @@ impl BtcOnChangeHandler {
 
         if new.is_empty() {
             return Changeset {
-                entering_amount_btc: Some("".into()),
                 amount_btc: Some(Amount::from_sat(0)),
                 amount_fiat: Some(0.0),
                 ..Default::default()
