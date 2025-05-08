@@ -87,6 +87,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
                     self.amount = Amount.fromSat(sats: sats)
 
                 case let .updateFeeRateOptions(options):
+                    self.totalSpentInFiat = self.rust.totalSpentFiat()
+                    self.sendAmountBtc = self.rust.sendAmountBtc()
+                    self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.feeRateOptions = options
 
                 case let .updateAddress(address):
