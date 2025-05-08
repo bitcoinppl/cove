@@ -670,7 +670,7 @@ impl RustSendFlowManager {
     }
 
     /// When amount is changed, we will need to update the entering and fiat amounts
-    fn handle_amount_changed(&self, amount: Amount) {
+    fn handle_amount_changed(self: &Arc<Self>, amount: Amount) {
         debug!("handle_amount_changed: {amount:?}");
 
         let (unit, fiat_or_btc, btc_price_in_fiat) = {
@@ -711,6 +711,7 @@ impl RustSendFlowManager {
         let amount_sats = amount.to_sat();
         self.state.lock().amount_sats = Some(amount_sats);
         self.send(Message::UpdateAmountSats(amount_sats));
+        self.sync_wrap_get_or_update_fee_rate_options();
 
         if let Some(price) = btc_price_in_fiat {
             let amount_fiat = amount.as_btc() * (price as f64);
