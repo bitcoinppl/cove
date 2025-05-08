@@ -244,20 +244,6 @@ impl FeeRateOptionsWithTotalFee {
     }
 
     #[uniffi::method]
-    pub fn add_custom_fee(self: Arc<Self>, fee_rate: f32) -> Arc<Self> {
-        let tx_size = self.transaction_size();
-        let total_fee = tx_size as f32 * fee_rate;
-
-        let custom = FeeRateOptionWithTotalFee {
-            fee_speed: self.calculate_custom_fee_speed(fee_rate),
-            fee_rate: FeeRate::from_sat_per_vb(fee_rate),
-            total_fee: Amount::from_sat(total_fee as u64),
-        };
-
-        Self { fast: self.fast, medium: self.medium, slow: self.slow, custom: Some(custom) }.into()
-    }
-
-    #[uniffi::method]
     pub fn remove_custom_fee(self: Arc<Self>) -> Self {
         Self { fast: self.fast, medium: self.medium, slow: self.slow, custom: None }
     }
@@ -289,7 +275,6 @@ impl FeeRateOptionsWithTotalFee {
     #[uniffi::method]
     pub fn add_custom_fee_rate(&self, fee_rate: Arc<FeeRateOptionWithTotalFee>) -> Self {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
-
         Self { fast: self.fast, medium: self.medium, slow: self.slow, custom: Some(fee_rate) }
     }
 

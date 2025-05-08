@@ -85,6 +85,16 @@ struct SendFlowCustomFeeRateView: View {
                 let totalFee = try psbt.fee()
                 let totalFeeSats = totalFee.asSats()
                 totalSats = Int(totalFeeSats)
+
+                let feeRateOption = FeeRateOptionWithTotalFee(
+                    feeSpeed: feeSpeed, feeRate: feeRate, totalFee: totalFee
+                )
+
+                await MainActor.run {
+                    let feeOptions = feeOptions.addCustomFeeRate(feeRate: feeRateOption)
+                    self.feeOptions = feeOptions
+                }
+
             } catch {
                 Log.error("Unable to get accurate total sats \(error)")
             }
@@ -106,9 +116,6 @@ struct SendFlowCustomFeeRateView: View {
             selectedOption = newSelectedOption
             return
         }
-
-        let feeOptions = feeOptions.addCustomFee(feeRate: Float(feeRate))
-        self.feeOptions = feeOptions
 
         if let customOption = feeOptions.custom() {
             selectedPresentationDetent = .height(550)
