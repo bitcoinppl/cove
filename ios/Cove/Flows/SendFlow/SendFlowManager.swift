@@ -70,6 +70,14 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.dispatch(action: .notifyAmountChanged(amount))
     }
 
+    public func refreshPresenters() {
+        self.totalSpentInFiat = self.rust.totalSpentInFiat()
+        self.totalSpentInBtc = self.rust.totalSpentInBtc()
+        self.totalFeeString = self.rust.totalFeeString()
+        self.sendAmountBtc = self.rust.sendAmountBtc()
+        self.sendAmountFiat = self.rust.sendAmountFiat()
+    }
+
     func reconcile(message: SendFlowManagerReconcileMessage) {
         Task { [weak self] in
             guard let self else {
@@ -81,26 +89,14 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             await MainActor.run {
                 switch message {
                 case let .updateAmountFiat(fiat):
-                    self.totalSpentInFiat = self.rust.totalSpentInFiat()
-                    self.totalSpentInBtc = self.rust.totalSpentInBtc()
-                    self.totalFeeString = self.rust.totalFeeString()
-                    self.sendAmountFiat = self.rust.sendAmountFiat()
                     self.fiatAmount = fiat
 
                 case let .updateAmountSats(sats):
-                    self.totalSpentInFiat = self.rust.totalSpentInFiat()
-                    self.totalSpentInBtc = self.rust.totalSpentInBtc()
-                    self.totalFeeString = self.rust.totalFeeString()
-                    self.sendAmountBtc = self.rust.sendAmountBtc()
-                    self.sendAmountFiat = self.rust.sendAmountFiat()
+                    self.refreshPresenters()
                     self.amount = Amount.fromSat(sats: sats)
 
                 case let .updateFeeRateOptions(options):
-                    self.totalSpentInFiat = self.rust.totalSpentInFiat()
-                    self.totalSpentInBtc = self.rust.totalSpentInBtc()
-                    self.totalFeeString = self.rust.totalFeeString()
-                    self.sendAmountBtc = self.rust.sendAmountBtc()
-                    self.sendAmountFiat = self.rust.sendAmountFiat()
+                    self.refreshPresenters()
                     self.feeRateOptions = options
 
                 case let .updateAddress(address):
@@ -116,11 +112,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
                     self.enteringFiatAmount = amount
 
                 case let .updateSelectedFeeRate(rate):
-                    self.totalSpentInFiat = self.rust.totalSpentInFiat()
-                    self.totalSpentInBtc = self.rust.totalSpentInBtc()
-                    self.totalFeeString = self.rust.totalFeeString()
-                    self.sendAmountBtc = self.rust.sendAmountBtc()
-                    self.sendAmountFiat = self.rust.sendAmountFiat()
+                    self.refreshPresenters()
                     self.selectedFeeRate = rate
 
                 case let .updateFocusField(field):
@@ -137,6 +129,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
                 case .unsetMaxSelected:
                     self.maxSelected = nil
+
+                case .refreshPresenters:
+                    self.refreshPresenters()
                 }
             }
         }

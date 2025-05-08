@@ -18254,6 +18254,7 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateFeeRateOptions(FeeRateOptionsWithTotalFee
     )
+    case refreshPresenters
     case setAlert(SendFlowAlertState
     )
     case clearAlert
@@ -18306,10 +18307,12 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 11: return .updateFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
         
-        case 12: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        case 12: return .refreshPresenters
+        
+        case 13: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
         )
         
-        case 13: return .clearAlert
+        case 14: return .clearAlert
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -18373,13 +18376,17 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
             
         
-        case let .setAlert(v1):
+        case .refreshPresenters:
             writeInt(&buf, Int32(12))
+        
+        
+        case let .setAlert(v1):
+            writeInt(&buf, Int32(13))
             FfiConverterTypeSendFlowAlertState.write(v1, into: &buf)
             
         
         case .clearAlert:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
         
         }
     }
@@ -26055,10 +26062,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

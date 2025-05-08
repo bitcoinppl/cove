@@ -89,6 +89,8 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateSelectedFeeRate(Arc<FeeRateOptionWithTotalFee>),
     UpdateFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
 
+    RefreshPresenters,
+
     // side effects
     SetAlert(SendFlowAlertState),
     ClearAlert,
@@ -917,6 +919,8 @@ impl RustSendFlowManager {
         let mut sender = DeferredSender::new(self.clone());
         self.state.lock().metadata.selected_unit = new;
 
+        sender.queue(Message::RefreshPresenters);
+
         if old == new {
             return;
         }
@@ -957,6 +961,8 @@ impl RustSendFlowManager {
     fn handle_btc_or_fiat_changed(self: &Arc<Self>, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
         let mut sender = DeferredSender::new(self.clone());
         self.state.lock().metadata.fiat_or_btc = new_value;
+
+        sender.queue(Message::RefreshPresenters);
 
         let Some(amount_sats) = self.state.lock().amount_sats else {
             return;
