@@ -542,8 +542,7 @@ impl RustSendFlowManager {
             }
 
             if let Some(entering_amount) = entering_amount_btc {
-                state.entering_btc_amount = entering_amount.clone();
-                self.send(Message::UpdateEnteringBtcAmount(entering_amount));
+                self.set_and_send_entering_btc_amount(entering_amount);
             }
         };
 
@@ -607,7 +606,7 @@ impl RustSendFlowManager {
     }
 
     fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
-        debug!("entering_address_changed: {address}");
+        debug!("handle_entering_address_changed: {address}");
 
         // update the state
         self.state.lock().entering_address = address.clone();
@@ -643,12 +642,10 @@ impl RustSendFlowManager {
 
         // fiat
         let entering_fiat_amount = currency.symbol().to_string();
-        state.entering_fiat_amount = entering_fiat_amount.clone();
-        self.send(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
+        self.set_and_send_entering_fiat_amount(entering_fiat_amount);
 
         // btc
-        state.entering_btc_amount = String::new();
-        self.send(Message::UpdateEnteringBtcAmount(String::new()));
+        self.set_and_send_entering_btc_amount(String::new());
 
         drop(state);
     }
@@ -700,8 +697,7 @@ impl RustSendFlowManager {
                     let enterting_amount_fiat =
                         format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
 
-                    self.state.lock().entering_fiat_amount = enterting_amount_fiat.clone();
-                    self.send(Message::UpdateEnteringFiatAmount(enterting_amount_fiat));
+                    self.set_and_send_entering_fiat_amount(enterting_amount_fiat);
                 }
             }
 
@@ -711,8 +707,7 @@ impl RustSendFlowManager {
                     Unit::Sat => amount.as_sats().thousands_int(),
                 };
 
-                self.state.lock().entering_btc_amount = amount_string.clone();
-                self.send(Message::UpdateEnteringBtcAmount(amount_string));
+                self.set_and_send_entering_btc_amount(amount_string);
             }
         }
 
@@ -785,15 +780,11 @@ impl RustSendFlowManager {
             match (amount, unit) {
                 (Some(amount), Unit::Sat) => {
                     let entering_btc_amount = amount.as_sats().thousands_int().to_string();
-
-                    self.state.lock().entering_btc_amount = entering_btc_amount.clone();
-                    self.send(Message::UpdateEnteringBtcAmount(entering_btc_amount));
+                    self.set_and_send_entering_btc_amount(entering_btc_amount);
                 }
                 (Some(amount_sats), Unit::Btc) => {
                     let entering_btc_amount = amount_sats.as_btc().thousands().to_string();
-
-                    self.state.lock().entering_btc_amount = entering_btc_amount.clone();
-                    self.send(Message::UpdateEnteringBtcAmount(entering_btc_amount));
+                    self.set_and_send_entering_btc_amount(entering_btc_amount);
                 }
                 _ => {}
             }
@@ -922,13 +913,11 @@ impl RustSendFlowManager {
         match new {
             Unit::Btc => {
                 let amount_string = Amount::from_sat(amount_sats).btc_string();
-                self.state.lock().entering_btc_amount = amount_string.clone();
-                self.send(Message::UpdateEnteringBtcAmount(amount_string));
+                self.set_and_send_entering_btc_amount(amount_string);
             }
             Unit::Sat => {
                 let amount_string = amount_sats.thousands_int();
-                self.state.lock().entering_btc_amount = amount_string.clone();
-                self.send(Message::UpdateEnteringBtcAmount(amount_string));
+                self.set_and_send_entering_btc_amount(amount_string);
             }
         }
     }
@@ -949,8 +938,7 @@ impl RustSendFlowManager {
                     Unit::Sat => amount.sats_string(),
                 };
 
-                self.state.lock().entering_btc_amount = amount_fmt.clone();
-                self.send(Message::UpdateEnteringBtcAmount(amount_fmt));
+                self.set_and_send_entering_btc_amount(amount_fmt.clone());
             }
 
             FiatOrBtc::Fiat => {
@@ -959,8 +947,7 @@ impl RustSendFlowManager {
                 let fiat_amount_fmt =
                     format!("{}{}", currency.symbol(), fiat_amount.thousands_fiat(),);
 
-                self.state.lock().entering_fiat_amount = fiat_amount_fmt.clone();
-                self.send(Message::UpdateEnteringFiatAmount(fiat_amount_fmt));
+                self.set_and_send_entering_fiat_amount(fiat_amount_fmt.clone());
             }
         }
     }
@@ -1134,6 +1121,26 @@ impl RustSendFlowManager {
             Err(e) => {
                 error!("unable to send message to send flow manager: {e:?}");
             }
+        }
+    }
+
+    fn set_and_send_entering_btc_amount(self: &Arc<Self>, new_entering_btc_amount: String) {
+        let current_entering_btc_amount =
+            std::mem::take(&mut self.state.lock().entering_btc_amount);
+
+        self.state.lock().entering_btc_amount = new_entering_btc_amount.clone();
+        if new_entering_btc_amount != current_entering_btc_amount {
+            self.send(Message::UpdateEnteringBtcAmount(new_entering_btc_amount));
+        }
+    }
+
+    fn set_and_send_entering_fiat_amount(self: &Arc<Self>, new_entering_fiat_amount: String) {
+        let current_entering_fiat_amount =
+            std::mem::take(&mut self.state.lock().entering_fiat_amount);
+
+        self.state.lock().entering_fiat_amount = new_entering_fiat_amount.clone();
+        if new_entering_fiat_amount != current_entering_fiat_amount {
+            self.send(Message::UpdateEnteringFiatAmount(new_entering_fiat_amount));
         }
     }
 
