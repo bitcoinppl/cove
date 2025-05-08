@@ -525,6 +525,7 @@ impl RustSendFlowManager {
                 let amount_sats = amount.to_sat();
                 state.amount_sats = Some(amount_sats);
                 self.send(Message::UpdateAmountSats(amount_sats));
+                self.sync_wrap_get_or_update_fee_rate_options();
             }
 
             if let Some(amount) = amount_fiat {
@@ -541,7 +542,11 @@ impl RustSendFlowManager {
         Some(())
     }
 
-    fn handle_fiat_field_changed(&self, old_value: String, new_value: String) -> Option<()> {
+    fn handle_fiat_field_changed(
+        self: &Arc<Self>,
+        old_value: String,
+        new_value: String,
+    ) -> Option<()> {
         debug!("fiat_field_changed {old_value} --> {new_value}");
         if old_value == new_value {
             return None;
@@ -582,6 +587,7 @@ impl RustSendFlowManager {
             let btc_amount = btc_amount.as_sats();
             self.state.lock().amount_sats = Some(btc_amount);
             self.send(Message::UpdateAmountSats(btc_amount));
+            self.sync_wrap_get_or_update_fee_rate_options();
         }
 
         if let Some(None) = max_selected {
@@ -616,12 +622,13 @@ impl RustSendFlowManager {
         });
     }
 
-    fn clear_send_amount(&self) {
+    fn clear_send_amount(self: &Arc<Self>) {
         let currency = self.state.lock().selected_fiat_currency;
         let mut state = self.state.lock();
 
         state.amount_sats = None;
         self.send(Message::UpdateAmountSats(0));
+        self.sync_wrap_get_or_update_fee_rate_options();
 
         state.amount_fiat = None;
         self.send(Message::UpdateAmountFiat(0.0));
@@ -871,7 +878,7 @@ impl RustSendFlowManager {
         Some(fees)
     }
 
-    fn handle_selected_unit_changed(&self, old: Unit, new: Unit) {
+    fn handle_selected_unit_changed(self: &Arc<Self>, old: Unit, new: Unit) {
         self.state.lock().metadata.selected_unit = new;
 
         if old == new {
@@ -1140,6 +1147,13 @@ impl RustSendFlowManager {
             let address = first_address.address.clone().into();
             self.state.lock().first_address = Some(Arc::new(address));
         }
+    }
+
+    fn sync_wrap_get_or_update_fee_rate_options(self: &Arc<Self>) {
+        let me = self.clone();
+        task::spawn(async move {
+            me.get_or_update_fee_rate_options().await;
+        });
     }
 
     async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
