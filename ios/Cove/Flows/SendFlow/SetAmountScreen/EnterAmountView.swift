@@ -119,7 +119,7 @@ struct EnterAmountView: View {
                     }
                 }
                 .onChange(of: sendFlowManager.enteringBtcAmount, initial: true) { oldValue, newValue in
-                    Log.debug("enteringBtcAmount \(oldValue) -> \(newValue) (\(enteringBtcAmount)")
+                    Log.debug("enteringBtcAmount \(oldValue) -> \(newValue) (\(enteringBtcAmount))")
                     guard enteringBtcAmount != newValue else { return }
                     enteringBtcAmount = newValue
                 }
