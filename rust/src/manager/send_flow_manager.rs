@@ -1138,21 +1138,27 @@ impl RustSendFlowManager {
     }
 
     fn set_and_send_entering_btc_amount(self: &Arc<Self>, new_entering_btc_amount: String) {
-        let current_entering_btc_amount =
-            std::mem::take(&mut self.state.lock().entering_btc_amount);
+        let is_changed = {
+            let mut state = self.state.lock();
+            let current = std::mem::take(&mut state.entering_btc_amount);
+            state.entering_btc_amount = new_entering_btc_amount.clone();
+            current != new_entering_btc_amount
+        };
 
-        self.state.lock().entering_btc_amount = new_entering_btc_amount.clone();
-        if new_entering_btc_amount != current_entering_btc_amount {
+        if is_changed {
             self.send(Message::UpdateEnteringBtcAmount(new_entering_btc_amount));
         }
     }
 
     fn set_and_send_entering_fiat_amount(self: &Arc<Self>, new_entering_fiat_amount: String) {
-        let current_entering_fiat_amount =
-            std::mem::take(&mut self.state.lock().entering_fiat_amount);
+        let is_changed = {
+            let mut state = self.state.lock();
+            let current = std::mem::take(&mut state.entering_fiat_amount);
+            state.entering_fiat_amount = new_entering_fiat_amount.clone();
+            current != new_entering_fiat_amount
+        };
 
-        self.state.lock().entering_fiat_amount = new_entering_fiat_amount.clone();
-        if new_entering_fiat_amount != current_entering_fiat_amount {
+        if is_changed {
             self.send(Message::UpdateEnteringFiatAmount(new_entering_fiat_amount));
         }
     }
