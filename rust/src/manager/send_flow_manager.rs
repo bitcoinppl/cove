@@ -630,18 +630,18 @@ impl RustSendFlowManager {
     }
 
     fn clear_send_amount(self: &Arc<Self>) {
-        let currency = self.state.lock().selected_fiat_currency;
-        let mut state = self.state.lock();
+        {
+            let mut state = self.state.lock();
+            state.amount_sats = None;
+            self.send(Message::UpdateAmountSats(0));
+            self.sync_wrap_get_or_update_fee_rate_options();
 
-        state.amount_sats = None;
-        self.send(Message::UpdateAmountSats(0));
-        self.sync_wrap_get_or_update_fee_rate_options();
-
-        state.amount_fiat = None;
-        self.send(Message::UpdateAmountFiat(0.0));
-        drop(state);
+            state.amount_fiat = None;
+            self.send(Message::UpdateAmountFiat(0.0));
+        }
 
         // fiat
+        let currency = self.state.lock().selected_fiat_currency;
         let entering_fiat_amount = currency.symbol().to_string();
         self.set_and_send_entering_fiat_amount(entering_fiat_amount);
 
