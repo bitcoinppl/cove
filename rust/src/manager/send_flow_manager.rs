@@ -269,8 +269,8 @@ impl RustSendFlowManager {
 
         let total_fee = selected_fee_rate.total_fee();
         match self.state.lock().metadata.selected_unit {
-            Unit::Btc => format!("{} BTC", total_fee.as_btc()),
-            Unit::Sat => format!("{} sats", total_fee.as_sats()),
+            Unit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
+            Unit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
         }
     }
 
@@ -1153,7 +1153,7 @@ impl RustSendFlowManager {
     fn send(self: &Arc<Self>, message: SendFlowManagerReconcileMessage) {
         debug!("send: {message:?}");
         let cloned_message = message.clone();
-        match self.reconciler.send_timeout(cloned_message, Duration::from_millis(20)) {
+        match self.reconciler.send_timeout(cloned_message, Duration::from_millis(6)) {
             Ok(_) => {}
             Err(SendTimeoutError::Timeout(err)) => {
                 warn!("reached timeout for message: {err:?}, attempting to send async");
@@ -1445,16 +1445,13 @@ impl DeferredSender {
 impl Drop for DeferredSender {
     fn drop(&mut self) {
         let messages = std::mem::take(&mut self.messages);
-        let manager = self.manager.clone();
 
-        if messages.is_empty() {
-            return;
-        }
+        if !messages.is_empty() {
+            let manager = self.manager.clone();
 
-        task::spawn(async move {
             for message in messages {
-                manager.send_async(message).await
+                manager.send(message);
             }
-        });
+        }
     }
 }
