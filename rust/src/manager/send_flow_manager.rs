@@ -1095,7 +1095,6 @@ impl RustSendFlowManager {
 
         self.send(Message::UpdateFocusField(None));
 
-        // Get wallet_type and wallet_id without holding the lock during task spawning
         let (wallet_type, wallet_id) = {
             let state = self.state.lock();
             (state.metadata.wallet_type, state.metadata.id.clone())
@@ -1148,8 +1147,7 @@ impl RustSendFlowManager {
 impl RustSendFlowManager {
     fn send(self: &Arc<Self>, message: SendFlowManagerReconcileMessage) {
         debug!("send: {message:?}");
-        let cloned_message = message.clone();
-        match self.reconciler.try_send(cloned_message) {
+        match self.reconciler.try_send(message.clone()) {
             Ok(_) => {}
             Err(TrySendError::Full(err)) => {
                 warn!("[WARN] unable to send, queue is full: {err:?}, sending async");
