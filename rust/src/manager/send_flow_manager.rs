@@ -5,7 +5,7 @@ pub mod fiat_on_change;
 mod sanitize;
 pub mod state;
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crate::{
     app::{App, AppAction, FfiApp},
@@ -32,7 +32,7 @@ use cove_types::{
 use cove_util::format::NumberFormatter as _;
 use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
-use flume::{Receiver, SendTimeoutError, Sender};
+use flume::{Receiver, Sender, TrySendError};
 use parking_lot::Mutex;
 use state::{SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
@@ -356,11 +356,7 @@ impl RustSendFlowManager {
             .to_sat();
 
         if spendable_balance < amount {
-            let is_max_selected = {
-                let state = self.state.lock();
-                state.max_selected.is_some()
-            };
-
+            let is_max_selected = self.state.lock().max_selected.is_some();
             if is_max_selected {
                 let me = self.clone();
                 task::spawn(async move { me.select_max_send_report_error().await });
@@ -1153,10 +1149,10 @@ impl RustSendFlowManager {
     fn send(self: &Arc<Self>, message: SendFlowManagerReconcileMessage) {
         debug!("send: {message:?}");
         let cloned_message = message.clone();
-        match self.reconciler.send_timeout(cloned_message, Duration::from_millis(6)) {
+        match self.reconciler.try_send(cloned_message) {
             Ok(_) => {}
-            Err(SendTimeoutError::Timeout(err)) => {
-                warn!("reached timeout for message: {err:?}, attempting to send async");
+            Err(TrySendError::Full(err)) => {
+                warn!("[WARN] unable to send, queue is full: {err:?}, sending async");
 
                 let me = self.clone();
                 task::spawn(async move { me.send_async(message).await });
