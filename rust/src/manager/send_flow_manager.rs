@@ -182,7 +182,11 @@ impl RustSendFlowManager {
     #[uniffi::method]
     pub async fn wait_for_init(&self) {
         let mut times = 0;
-        while !self.state.lock().init_complete {
+        loop {
+            if self.state.lock().init_complete {
+                break;
+            }
+
             debug!("waiting for init {times}");
             let wait_time = (33 + times * 10).min(200);
             tokio::time::sleep(std::time::Duration::from_millis(wait_time)).await;
@@ -351,7 +355,12 @@ impl RustSendFlowManager {
             .to_sat();
 
         if spendable_balance < amount {
-            if self.state.lock().max_selected.is_some() {
+            let is_max_selected = {
+                let state = self.state.lock();
+                state.max_selected.is_some()
+            };
+
+            if is_max_selected {
                 let me = self.clone();
                 task::spawn(async move { me.select_max_send_report_error().await });
                 return false;
@@ -504,8 +513,12 @@ impl RustSendFlowManager {
         let state: State = self.state.clone().into();
         let me = self.clone();
 
-        let fee_rate_options_base = state.lock().fee_rate_options_base.clone();
-        if fee_rate_options_base.is_none() {
+        let needs_fee_rate_options_base = {
+            let state_lock = state.lock();
+            state_lock.fee_rate_options_base.is_none()
+        };
+
+        if needs_fee_rate_options_base {
             crate::task::spawn(async move {
                 me.get_and_update_base_fee_rate_options().await;
             });
@@ -519,41 +532,36 @@ impl RustSendFlowManager {
         let btc_on_change::Changeset { entering_amount_btc, max_selected, amount_btc, amount_fiat } =
             changes;
 
-        // mutate the state
-        {
-            let mut state = state.lock();
-
-            match max_selected {
-                Some(Some(max)) => {
-                    let max = Arc::new(max);
-                    state.max_selected = Some(max.clone());
-                    self.send(Message::SetMaxSelected(max));
+        match max_selected {
+            Some(Some(max)) => {
+                let max = Arc::new(max);
+                self.state.lock().max_selected = Some(max.clone());
+                self.send(Message::SetMaxSelected(max));
+            }
+            Some(None) => {
+                let was_max_selected = self.state.lock().max_selected.take().is_some();
+                if was_max_selected {
+                    self.send(Message::UnsetMaxSelected);
                 }
-                Some(None) => {
-                    let was_max_selected = state.max_selected.take().is_some();
-                    if was_max_selected {
-                        self.send(Message::UnsetMaxSelected);
-                    }
-                }
-                None => {}
             }
+            None => {}
+        }
 
-            if let Some(amount) = amount_btc {
-                let amount_sats = amount.to_sat();
-                state.amount_sats = Some(amount_sats);
-                self.send(Message::UpdateAmountSats(amount_sats));
-                self.sync_wrap_get_or_update_fee_rate_options();
-            }
+        if let Some(amount) = amount_btc {
+            let amount_sats = amount.to_sat();
+            self.state.lock().amount_sats = Some(amount_sats);
+            self.send(Message::UpdateAmountSats(amount_sats));
+            self.sync_wrap_get_or_update_fee_rate_options();
+        }
 
-            if let Some(amount) = amount_fiat {
-                state.amount_fiat = Some(amount);
-                self.send(Message::UpdateAmountFiat(amount));
-            }
+        if let Some(amount) = amount_fiat {
+            self.state.lock().amount_fiat = Some(amount);
+            self.send(Message::UpdateAmountFiat(amount));
+        }
 
-            if let Some(entering_amount) = entering_amount_btc {
-                self.set_and_send_entering_btc_amount(entering_amount);
-            }
-        };
+        if let Some(entering_amount) = entering_amount_btc {
+            self.set_and_send_entering_btc_amount(entering_amount);
+        }
 
         Some(())
     }
@@ -644,12 +652,12 @@ impl RustSendFlowManager {
         {
             let mut state = self.state.lock();
             state.amount_sats = None;
-            self.send(Message::UpdateAmountSats(0));
-            self.sync_wrap_get_or_update_fee_rate_options();
-
             state.amount_fiat = None;
-            self.send(Message::UpdateAmountFiat(0.0));
         }
+
+        self.send(Message::UpdateAmountFiat(0.0));
+        self.send(Message::UpdateAmountSats(0));
+        self.sync_wrap_get_or_update_fee_rate_options();
 
         // fiat
         let currency = self.state.lock().selected_fiat_currency;
@@ -1074,10 +1082,14 @@ impl RustSendFlowManager {
 
         self.send(Message::UpdateFocusField(None));
 
+        // Get wallet_type and wallet_id without holding the lock during task spawning
+        let (wallet_type, wallet_id) = {
+            let state = self.state.lock();
+            (state.metadata.wallet_type, state.metadata.id.clone())
+        };
+
         let me = self.clone();
         let manager = self.wallet_manager.clone();
-        let wallet_type = self.state.lock().metadata.wallet_type;
-        let wallet_id = self.state.lock().metadata.id.clone();
 
         task::spawn(async move {
             let confirm_details =
@@ -1123,7 +1135,8 @@ impl RustSendFlowManager {
 impl RustSendFlowManager {
     fn send(self: &Arc<Self>, message: SendFlowManagerReconcileMessage) {
         debug!("send: {message:?}");
-        match self.reconciler.send_timeout(message.clone(), Duration::from_millis(20)) {
+        let cloned_message = message.clone();
+        match self.reconciler.send_timeout(cloned_message, Duration::from_millis(20)) {
             Ok(_) => {}
             Err(SendTimeoutError::Timeout(err)) => {
                 warn!("reached timeout for message: {err:?}, attempting to send async");
