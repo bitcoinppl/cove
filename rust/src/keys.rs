@@ -16,6 +16,7 @@ use bdk_wallet::{
 };
 use bitcoin::bip32::Xpub;
 use bitcoin::secp256k1;
+use cove_bdk::descriptor_ext::DescriptorExt as _;
 
 use crate::tap_card::tap_signer_reader::DeriveInfo;
 use cove_types::Network;
@@ -167,78 +168,23 @@ impl Descriptor {
     }
 
     pub fn descriptor_public_key(&self) -> Result<&BdkDescriptorPublicKey, Error> {
-        use bdk_wallet::miniscript::Descriptor as D;
-        use bdk_wallet::miniscript::descriptor::ShInner;
-
-        let key = match &self.extended_descriptor {
-            D::Pkh(pk) => pk.as_inner(),
-            D::Wpkh(pk) => pk.as_inner(),
-            D::Tr(pk) => pk.internal_key(),
-            D::Sh(pk) => match pk.as_inner() {
-                ShInner::Wpkh(pk) => pk.as_inner(),
-                _ => {
-                    return Err(Error::UnsupportedDescriptor(
-                        "unsupported wallet bare descriptor not wpkh".to_string(),
-                    ));
-                }
-            },
-
-            // not sure
-            D::Bare(_pk) => {
-                return Err(Error::UnsupportedDescriptor(
-                    "unsupported wallet bare descriptor not wpkh".to_string(),
-                ));
-            }
-
-            // multi-sig
-            D::Wsh(_pk) => {
-                return Err(Error::UnsupportedDescriptor(
-                    "unsupported wallet, multisig".to_string(),
-                ));
-            }
-        };
-
-        Ok(key)
+        self.extended_descriptor.descriptor_public_key().map_err(Into::into)
     }
 
     pub fn xpub(&self) -> Option<Xpub> {
-        match self.descriptor_public_key() {
-            Ok(BdkDescriptorPublicKey::XPub(xpub)) => Some(xpub.xkey),
-            _ => None,
-        }
+        self.extended_descriptor.xpub()
     }
 
     pub fn full_origin(&self) -> Result<String, Error> {
-        let desc_type = self.extended_descriptor.desc_type();
-        let desc_type_str = match desc_type {
-            DescriptorType::Pkh => "pkh",
-            DescriptorType::Wpkh => "wpkh",
-            DescriptorType::Tr => "tr",
-            DescriptorType::Sh => "sh",
-            other => Err(Error::UnsupportedDescriptorType(other))?,
-        };
-
-        let origin = self.origin()?;
-        let (fingerprint, path) = origin;
-        let origin = format!("{}([{}/{}])", desc_type_str, fingerprint, path);
-        Ok(origin)
+        self.extended_descriptor.full_origin().map_err(Into::into)
     }
 
     pub fn origin(&self) -> Result<&(Fingerprint, DerivationPath), Error> {
-        let public_key = self.descriptor_public_key()?;
-
-        let origin = match &public_key {
-            BdkDescriptorPublicKey::Single(pk) => &pk.origin,
-            BdkDescriptorPublicKey::XPub(pk) => &pk.origin,
-            BdkDescriptorPublicKey::MultiXPub(pk) => &pk.origin,
-        };
-
-        origin.as_ref().ok_or(Error::NoOrigin)
+        self.extended_descriptor.origin().map_err(Into::into)
     }
 
     pub fn derivation_path(&self) -> Result<DerivationPath, Error> {
-        let origin = self.origin()?;
-        Ok(origin.1.clone())
+        self.extended_descriptor.derivation_path().map_err(Into::into)
     }
 
     /// BIP84 for P2WPKH (Segwit)
@@ -380,6 +326,17 @@ impl From<pubport::descriptor::Descriptors> for Descriptors {
         let internal = descriptors.internal.into();
 
         Self { external, internal }
+    }
+}
+
+impl From<cove_bdk::descriptor_ext::Error> for DescriptorKeyParseError {
+    fn from(error: cove_bdk::descriptor_ext::Error) -> Self {
+        use cove_bdk::descriptor_ext::Error as E;
+        match error {
+            E::NoOrigin => Self::NoOrigin,
+            E::UnsupportedDescriptor(s) => Self::UnsupportedDescriptor(s),
+            E::UnsupportedDescriptorType(s) => Self::UnsupportedDescriptorType(s),
+        }
     }
 }
 

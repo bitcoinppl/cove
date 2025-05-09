@@ -1,5 +1,5 @@
 use bdk_wallet::{
-    bitcoin::bip32::{DerivationPath, Fingerprint},
+    bitcoin::bip32::{DerivationPath, Fingerprint, Xpub},
     keys::DescriptorPublicKey,
     miniscript::{Descriptor, descriptor::DescriptorType},
 };
@@ -20,12 +20,34 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub trait DescriptorExt {
     fn descriptor_public_key(&self) -> Result<&DescriptorPublicKey, Error>;
-    fn origin(&self) -> Result<&(Fingerprint, DerivationPath)>;
     fn full_origin(&self) -> Result<String>;
-    fn derivation_path(&self) -> Result<DerivationPath>;
+
+    fn origin(&self) -> Result<&(Fingerprint, DerivationPath)> {
+        let public_key = self.descriptor_public_key()?;
+
+        let origin = match &public_key {
+            DescriptorPublicKey::Single(pk) => &pk.origin,
+            DescriptorPublicKey::XPub(pk) => &pk.origin,
+            DescriptorPublicKey::MultiXPub(pk) => &pk.origin,
+        };
+
+        origin.as_ref().ok_or(Error::NoOrigin)
+    }
+
+    fn derivation_path(&self) -> Result<DerivationPath> {
+        let origin = self.origin()?;
+        Ok(origin.1.clone())
+    }
+
+    fn xpub(&self) -> Option<Xpub> {
+        match self.descriptor_public_key() {
+            Ok(DescriptorPublicKey::XPub(xpub)) => Some(xpub.xkey),
+            _ => None,
+        }
+    }
 }
 
-impl DescriptorExt for &Descriptor<DescriptorPublicKey> {
+impl DescriptorExt for Descriptor<DescriptorPublicKey> {
     fn descriptor_public_key(&self) -> Result<&DescriptorPublicKey, Error> {
         use bdk_wallet::miniscript::Descriptor as D;
         use bdk_wallet::miniscript::descriptor::ShInner;
@@ -75,22 +97,5 @@ impl DescriptorExt for &Descriptor<DescriptorPublicKey> {
         let (fingerprint, path) = origin;
         let origin = format!("{}([{}/{}])", desc_type_str, fingerprint, path);
         Ok(origin)
-    }
-
-    fn origin(&self) -> Result<&(Fingerprint, DerivationPath)> {
-        let public_key = self.descriptor_public_key()?;
-
-        let origin = match &public_key {
-            DescriptorPublicKey::Single(pk) => &pk.origin,
-            DescriptorPublicKey::XPub(pk) => &pk.origin,
-            DescriptorPublicKey::MultiXPub(pk) => &pk.origin,
-        };
-
-        origin.as_ref().ok_or(Error::NoOrigin)
-    }
-
-    fn derivation_path(&self) -> Result<DerivationPath> {
-        let origin = self.origin()?;
-        Ok(origin.1.clone())
     }
 }
