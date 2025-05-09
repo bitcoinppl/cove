@@ -137,13 +137,12 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
+    private let dispatchQueue = DispatchQueue(label: "cove.sendflow.dispatch")
+    public func dispatch(action: SendFlowManagerAction) { dispatch(action) }
     public func dispatch(_ action: SendFlowManagerAction) {
-        logger.debug("dispatch: \(action)")
-        rust.dispatch(action: action)
-    }
-
-    public func dispatch(action: SendFlowManagerAction) {
-        logger.debug("dispatch: \(action)")
-        rust.dispatch(action: action)
+        dispatchQueue.async {
+            self.logger.debug("dispatch: \(action)")
+            self.rust.dispatch(action: action)
+        }
     }
 }
