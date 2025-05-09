@@ -11,6 +11,7 @@ import SwiftUI
 struct ReceiveView: View {
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     let manager: WalletManager
 
@@ -81,7 +82,7 @@ struct ReceiveView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)
-                .background(.duskBlue)
+                .background(colorScheme == .light ? .duskBlue : .duskBlue.opacity(0.4))
 
                 // Bottom strip – Address text
                 VStack(alignment: .leading, spacing: 8) {
@@ -98,7 +99,8 @@ struct ReceiveView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.midnightBlue).opacity(0.95))
+                .background(
+                    colorScheme == .light ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4))
             }
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .padding(.horizontal)
@@ -112,7 +114,7 @@ struct ReceiveView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .foregroundStyle(.white)
-                    .background(Color.midnightBlue)
+                    .background(Color.midnightBtn)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .padding(.horizontal)
