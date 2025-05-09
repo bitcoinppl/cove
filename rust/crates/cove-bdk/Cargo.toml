@@ -8,6 +8,9 @@ description = "Extensions to BDK"
 # from parent crate
 cove-util = { path = "../cove-util" }
 
+# error handling
+thiserror = { workspace = true }
+
 # bdk
 bdk_wallet = { workspace = true }
 

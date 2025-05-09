@@ -7,13 +7,11 @@ use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
     bdk_store::BdkStore,
-    // moved to cove-common
     database::{self, Database},
     keychain::{Keychain, KeychainError},
-    keys::{self, Descriptor, Descriptors},
+    keys::{Descriptor, Descriptors},
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
-    // moved to cove-types
     tap_card::tap_signer_reader::DeriveInfo,
     xpub::{self, XpubError},
 };
@@ -554,11 +552,11 @@ impl Wallet {
             let address_info =
                 AddressInfo::from(self.bdk.reveal_next_address(KeychainKind::External));
 
-            let origin = self.metadata.origin.clone();
-
             self.persist()?;
 
-            let info = AddressInfoWithDerivation::new(address_info, origin);
+            let derivation_path =
+                self.bdk.public_descriptor(KeychainKind::External).derivation_path().ok();
+            let info = AddressInfoWithDerivation::new(address_info, derivation_path);
             return Ok(info);
         }
 
@@ -581,8 +579,9 @@ impl Wallet {
         Database::global().wallets.update_internal_metadata(&self.metadata)?;
 
         let public_descriptor = self.bdk.public_descriptor(KeychainKind::External);
-        let origin = public_descriptor.origin();
-        let address_info_with_derivation = AddressInfoWithDerivation::new(address_info, origin);
+        let derivation_path = public_descriptor.derivation_path().ok();
+        let address_info_with_derivation =
+            AddressInfoWithDerivation::new(address_info, derivation_path);
 
         Ok(address_info_with_derivation)
     }

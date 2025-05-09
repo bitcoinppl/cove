@@ -4,6 +4,7 @@ use std::{hash::Hasher, sync::Arc};
 
 use bdk_chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx};
 use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bitcoin::bip32::DerivationPath;
 use bitcoin::{
     Transaction,
     address::{NetworkChecked, NetworkUnchecked},
@@ -320,8 +321,9 @@ impl AddressInfoWithDerivation {
 }
 
 impl AddressInfoWithDerivation {
-    pub fn new(address_info: AddressInfo, origin: Option<String>) -> Self {
-        Self { info: address_info, derivation_path: origin }
+    pub fn new(info: AddressInfo, derivation_path_prefix: Option<DerivationPath>) -> Self {
+        let derivation_path = derivation_path_prefix.map(|p| format!("{p}/{}", info.index));
+        Self { info, derivation_path }
     }
 }
 

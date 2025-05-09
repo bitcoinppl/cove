@@ -4,14 +4,29 @@ use bdk_wallet::{
     miniscript::{Descriptor, descriptor::DescriptorType},
 };
 
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("no origin found")]
+    NoOrigin,
+
+    #[error("unsupported descriptor: {0}")]
+    UnsupportedDescriptor(String),
+
+    #[error("unsupported descriptor type: {0:?}")]
+    UnsupportedDescriptorType(DescriptorType),
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
+
 pub trait DescriptorExt {
-    fn origin(&self) -> Option<&(Fingerprint, DerivationPath)>;
-    fn full_origin(&self) -> Option<String>;
-    fn derivation_path(&self) -> Option<DerivationPath>;
+    fn descriptor_public_key(&self) -> Result<&DescriptorPublicKey, Error>;
+    fn origin(&self) -> Result<&(Fingerprint, DerivationPath)>;
+    fn full_origin(&self) -> Result<String>;
+    fn derivation_path(&self) -> Result<DerivationPath>;
 }
 
 impl DescriptorExt for &Descriptor<DescriptorPublicKey> {
-    pub fn descriptor_public_key(&self) -> Result<&DescriptorPublicKey, Error> {
+    fn descriptor_public_key(&self) -> Result<&DescriptorPublicKey, Error> {
         use bdk_wallet::miniscript::Descriptor as D;
         use bdk_wallet::miniscript::descriptor::ShInner;
 
@@ -46,23 +61,23 @@ impl DescriptorExt for &Descriptor<DescriptorPublicKey> {
         Ok(key)
     }
 
-    fn full_origin(&self) -> Option<String> {
-        let desc_type = self.extended_descriptor.desc_type();
+    fn full_origin(&self) -> Result<String> {
+        let desc_type = self.desc_type();
         let desc_type_str = match desc_type {
             DescriptorType::Pkh => "pkh",
             DescriptorType::Wpkh => "wpkh",
             DescriptorType::Tr => "tr",
             DescriptorType::Sh => "sh",
-            _other => return None,
+            other => Err(Error::UnsupportedDescriptorType(other))?,
         };
 
         let origin = self.origin()?;
         let (fingerprint, path) = origin;
         let origin = format!("{}([{}/{}])", desc_type_str, fingerprint, path);
-        Some(origin)
+        Ok(origin)
     }
 
-    fn origin(&self) -> Option<&(Fingerprint, DerivationPath)> {
+    fn origin(&self) -> Result<&(Fingerprint, DerivationPath)> {
         let public_key = self.descriptor_public_key()?;
 
         let origin = match &public_key {
@@ -71,10 +86,10 @@ impl DescriptorExt for &Descriptor<DescriptorPublicKey> {
             DescriptorPublicKey::MultiXPub(pk) => &pk.origin,
         };
 
-        Ok(origin.as_ref().ok_or(Error::NoOrigin)?)
+        origin.as_ref().ok_or(Error::NoOrigin)
     }
 
-    fn derivation_path(&self) -> Option<DerivationPath> {
+    fn derivation_path(&self) -> Result<DerivationPath> {
         let origin = self.origin()?;
         Ok(origin.1.clone())
     }

@@ -752,6 +752,7 @@ dependencies = [
  "bdk_wallet",
  "cove-util",
  "rand 0.9.1",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

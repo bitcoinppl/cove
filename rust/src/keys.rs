@@ -233,7 +233,7 @@ impl Descriptor {
             BdkDescriptorPublicKey::MultiXPub(pk) => &pk.origin,
         };
 
-        Ok(origin.as_ref().ok_or(Error::NoOrigin)?)
+        origin.as_ref().ok_or(Error::NoOrigin)
     }
 
     pub fn derivation_path(&self) -> Result<DerivationPath, Error> {
