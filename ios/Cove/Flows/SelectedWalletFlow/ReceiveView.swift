@@ -68,17 +68,15 @@ struct ReceiveView: View {
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
 
-                    AddressView(addressInfo: addressInfo)
-                        .frame(width: 220, height: 220)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-                        )
+                    VStack {
+                        AddressView(addressInfo: addressInfo)
 
-                    if let path = addressInfo?.derivationPath() {
-                        Text("Derivation: \(path)")
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
+                        if let path = addressInfo?.derivationPath() {
+                            Text("Derivation: \(path)")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .padding(.top, 6)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -123,8 +121,6 @@ struct ReceiveView: View {
             Button("Create New Address", action: nextAddressSync)
                 .font(.footnote.weight(.semibold))
                 .padding(.top, 8)
-
-            Spacer()
         }
         .background(Color(.systemBackground))
         .task {
@@ -137,16 +133,19 @@ private struct AddressView: View {
     let addressInfo: AddressInfoWithDerivation?
 
     func generateQRCode(from string: String) -> UIImage {
-        let context = CIContext()
+        let data = Data(string.utf8)
         let filter = CIFilter.qrCodeGenerator()
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
 
-        filter.message = Data(string.utf8)
-        filter.correctionLevel = "M"
+        let transform = CGAffineTransform(scaleX: 10, y: 10)
 
-        if let outputImage = filter.outputImage {
-            if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
-                return UIImage(cgImage: cgImage)
-            }
+        if let outputImage = filter.outputImage?.transformed(by: transform) {
+            // Crop to content to remove default padding
+            let context = CIContext()
+            let cgImage = context.createCGImage(outputImage, from: outputImage.extent)!
+
+            return UIImage(cgImage: cgImage)
         }
 
         return UIImage(systemName: "xmark.circle") ?? UIImage()
@@ -155,17 +154,20 @@ private struct AddressView: View {
     var body: some View {
         Group {
             if let addressInfo {
-                GroupBox {
-                    VStack {
-                        Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
-                            .interpolation(.none)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 250, height: 250)
-                            .padding()
-                    }
+                VStack {
+                    Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 250, height: 250)
+                        .padding(16)
                 }
-                .padding()
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                )
             } else {
                 ProgressView(label: {
                     Text("Loading")
