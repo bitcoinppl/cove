@@ -1,24 +1,56 @@
 import SwiftUI
 
-struct TxRowModel: Identifiable {
+private struct TxRowModel: Identifiable {
     let id = UUID()
-    let address: String
-    let amountBTC: String
+    let address: Address
+    let amount: String
 }
 
 struct SendFlowAdvancedDetailsView: View {
+    @Environment(AppManager.self) private var app
+    @Environment(SendFlowPresenter.self) private var presenter
     @Environment(\.dismiss) private var dismiss
 
-    let inputs: [TxRowModel]
-    let sentTo: TxRowModel
-    let change: [TxRowModel]
-    let fee: String
+    let manager: WalletManager
+    let details: ConfirmDetails
+
+    // private
+    @State private var splitOutput: SplitOutput? = nil
+
+    var metadata: WalletMetadata { manager.walletMetadata }
+
+    func fiatAmount(_ amount: Amount) -> String {
+        guard let prices = app.prices else {
+            app.dispatch(action: .updateFiatPrices)
+            return "---"
+        }
+
+        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+    }
+
+    func displayFiatOrBtcAmount(_ amount: Amount) -> String {
+        switch metadata.fiatOrBtc {
+        case .fiat:
+            return "≈ \(fiatAmount(amount))"
+        case .btc:
+            let units = manager.walletMetadata.selectedUnit == .sat ? "sats" : "btc"
+            return "\(manager.amountFmt(amount)) \(units)"
+        }
+    }
 
     @ViewBuilder
     private var divider: some View {
         Divider()
             .padding(.vertical, 28)
             .foregroundStyle(.red)
+    }
+
+    private func toTxRows(_ addressAndAmount: [AddressAndAmount]) -> [TxRowModel] {
+        addressAndAmount.map {
+            TxRowModel(
+                address: $0.address, amount: self.displayFiatOrBtcAmount($0.amount)
+            )
+        }
     }
 
     var body: some View {
@@ -52,14 +84,34 @@ struct SendFlowAdvancedDetailsView: View {
             // content sections
             ScrollView {
                 VStack(spacing: 0) {
-                    SectionCard(title: "UTXOs Used", rows: inputs)
-                    divider
+                    if let splitOutput {
+                        SectionCard(title: "UTXO Used", rows: toTxRows(details.inputs()))
+                        divider
 
-                    SectionCard(title: "Sent To Address", rows: [sentTo])
-                    divider
+                        if splitOutput.external.isEmpty {
+                            SectionCard(title: "Sent To Self", rows: toTxRows(splitOutput.internal))
+                            divider
+                        } else {
+                            SectionCard(title: "Sent To Address", rows: toTxRows(splitOutput.external))
+                            divider
+                        }
 
-                    SectionCard(title: "UTXO Change", rows: change)
-                    divider
+                        if !splitOutput.external.isEmpty, !splitOutput.internal.isEmpty {
+                            SectionCard(
+                                title: "UTXO Change", rows: toTxRows(splitOutput.internal)
+                            )
+                            divider
+                        }
+                    }
+
+                    // Loading...
+                    if splitOutput == nil {
+                        SectionCard(title: "UTXO Inputs", rows: toTxRows(details.inputs()))
+                        divider
+
+                        SectionCard(title: "UTXOs Ouputs", rows: toTxRows(details.outputs()))
+                        divider
+                    }
 
                     HStack {
                         Text("Fee")
@@ -67,7 +119,7 @@ struct SendFlowAdvancedDetailsView: View {
                             .foregroundStyle(.secondary.opacity(0.75))
 
                         Spacer()
-                        Text(fee)
+                        Text(displayFiatOrBtcAmount(details.feeTotal()))
                             .font(.footnote)
                             .fontWeight(.regular)
                     }
@@ -87,13 +139,22 @@ private struct TxRow: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            Text(model.address)
-                .font(.caption2.monospaced())
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
+            Menu {
+                Button("Copy", systemImage: "doc.on.doc") {
+                    UIPasteboard.general.string = model.address.unformatted()
+                }
+            } label: {
+                Text(model.address.spacedOut())
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+            }
+            .foregroundStyle(.primary)
+
             Spacer(minLength: 12)
-            Text(model.amountBTC)
+
+            Text(model.amount)
                 .font(.footnote)
         }
         .padding(.vertical, 12)
@@ -133,18 +194,17 @@ private struct SectionCard: View {
 }
 
 #Preview {
-    SendFlowAdvancedDetailsView(
-        inputs: Array(
-            repeating: TxRowModel(
-                address: "bc1q uuye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a",
-                amountBTC: "0.0135 BTC"), count: 3),
-        sentTo: TxRowModel(
-            address: "bc1q uuye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a",
-            amountBTC: "0.0135 BTC"),
-        change: Array(
-            repeating: TxRowModel(
-                address: "bc1q uuye 0qg5 vyd3 e63s 0vus eqod 7h3j 44y1 8h4s 183d x37a",
-                amountBTC: "0.0135 BTC"), count: 3),
-        fee: "0.0135 BTC"
-    )
+    AsyncPreview {
+        SendFlowAdvancedDetailsView(
+            manager: WalletManager(preview: "preview_only"),
+            details: ConfirmDetails.previewNew()
+        )
+        .environment(AppManager.shared)
+        .environment(
+            SendFlowPresenter(
+                app: AppManager.shared,
+                manager: WalletManager(preview: "preview_only"),
+            )
+        )
+    }
 }
