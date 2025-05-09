@@ -508,7 +508,6 @@ struct SendFlowHardwareScreen: View {
                     [.height(300), .height(400), .height(500), .large],
                     selection: $inputOutputDetailsPresentationSize
                 )
-                .padding(.horizontal)
         case let .exportQr(qrs):
             SendFlowBbqrExport(qrs: qrs.map { QrCodeView(text: $0) })
                 .presentationDetents([.height(425), .height(600), .large])
