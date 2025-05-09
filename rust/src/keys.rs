@@ -78,7 +78,7 @@ impl Descriptors {
     }
 
     pub fn origin(&self) -> Result<String, Error> {
-        self.external.origin()
+        self.external.full_origin()
     }
 
     pub fn new_from_tap_signer(derive: &DeriveInfo) -> Result<Self, Error> {
@@ -208,15 +208,7 @@ impl Descriptor {
         }
     }
 
-    pub fn origin(&self) -> Result<String, Error> {
-        let public_key = self.descriptor_public_key()?;
-
-        let origin = match &public_key {
-            BdkDescriptorPublicKey::Single(pk) => &pk.origin,
-            BdkDescriptorPublicKey::XPub(pk) => &pk.origin,
-            BdkDescriptorPublicKey::MultiXPub(pk) => &pk.origin,
-        };
-
+    pub fn full_origin(&self) -> Result<String, Error> {
         let desc_type = self.extended_descriptor.desc_type();
         let desc_type_str = match desc_type {
             DescriptorType::Pkh => "pkh",
@@ -226,9 +218,27 @@ impl Descriptor {
             other => Err(Error::UnsupportedDescriptorType(other))?,
         };
 
-        let (fingerprint, path) = origin.as_ref().ok_or(Error::NoOrigin)?;
+        let origin = self.origin()?;
+        let (fingerprint, path) = origin;
         let origin = format!("{}([{}/{}])", desc_type_str, fingerprint, path);
         Ok(origin)
+    }
+
+    pub fn origin(&self) -> Result<&(Fingerprint, DerivationPath), Error> {
+        let public_key = self.descriptor_public_key()?;
+
+        let origin = match &public_key {
+            BdkDescriptorPublicKey::Single(pk) => &pk.origin,
+            BdkDescriptorPublicKey::XPub(pk) => &pk.origin,
+            BdkDescriptorPublicKey::MultiXPub(pk) => &pk.origin,
+        };
+
+        Ok(origin.as_ref().ok_or(Error::NoOrigin)?)
+    }
+
+    pub fn derivation_path(&self) -> Result<DerivationPath, Error> {
+        let origin = self.origin()?;
+        Ok(origin.1.clone())
     }
 
     /// BIP84 for P2WPKH (Segwit)
@@ -423,7 +433,7 @@ mod tests {
         assert!(descriptor.is_ok());
         let descriptor = descriptor.unwrap();
 
-        let origin = descriptor.origin();
+        let origin = descriptor.full_origin();
         assert!(origin.is_ok());
 
         let origin = origin.unwrap();

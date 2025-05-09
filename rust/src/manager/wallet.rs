@@ -44,8 +44,11 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use cove_types::confirm::{AddressAndAmount, ConfirmDetails, SplitOutput};
 use cove_types::fees::FeeRateOptions;
+use cove_types::{
+    address::AddressInfoWithDerivation,
+    confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
+};
 
 use super::send_flow_manager::RustSendFlowManager;
 
@@ -628,7 +631,7 @@ impl RustWalletManager {
 
     /// Get the next address for the wallet
     #[uniffi::method]
-    pub async fn next_address(&self) -> Result<AddressInfo, Error> {
+    pub async fn next_address(&self) -> Result<AddressInfoWithDerivation, Error> {
         let address = call!(self.actor.next_address())
             .await
             .map_err(|error| Error::NextAddressError(error.to_string()))?;

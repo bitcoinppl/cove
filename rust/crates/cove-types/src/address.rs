@@ -43,6 +43,12 @@ pub struct Address(BdkAddress);
 pub struct AddressInfo(BdkAddressInfo);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+pub struct AddressInfoWithDerivation {
+    pub info: AddressInfo,
+    pub derivation_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct AddressWithNetwork {
     pub address: Address,
     pub network: Network,
@@ -287,6 +293,35 @@ impl AddressInfo {
 
     fn index(&self) -> u32 {
         self.index
+    }
+}
+
+#[uniffi::export]
+impl AddressInfoWithDerivation {
+    fn address_unformatted(&self) -> String {
+        self.info.address.to_string()
+    }
+
+    fn address_spaced_out(&self) -> String {
+        address_string_spaced_out(self.info.address.to_string())
+    }
+
+    fn address(&self) -> Address {
+        self.info.address.clone().into()
+    }
+
+    fn index(&self) -> u32 {
+        self.info.index
+    }
+
+    fn derivation_path(&self) -> Option<String> {
+        self.derivation_path.clone()
+    }
+}
+
+impl AddressInfoWithDerivation {
+    pub fn new(address_info: AddressInfo, origin: Option<String>) -> Self {
+        Self { info: address_info, derivation_path: origin }
     }
 }
 
