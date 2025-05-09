@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-05-08
+
 ### Features
 
 - Support for importing hardware wallets with [Key Expressions](https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki#key-expressions)
