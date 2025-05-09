@@ -503,7 +503,7 @@ struct SendFlowHardwareScreen: View {
                 .presentationDetents([.height(425), .height(600), .large])
                 .padding()
         case .inputOutputDetails:
-            SendFlowDetailsView.InputAndOutputDetailsView(manager: manager, details: details)
+            SendFlowAdvancedDetailsView(manager: manager, details: details)
                 .presentationDetents(
                     [.height(300), .height(400), .height(500), .large],
                     selection: $inputOutputDetailsPresentationSize

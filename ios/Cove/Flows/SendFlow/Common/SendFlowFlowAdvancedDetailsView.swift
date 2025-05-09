@@ -65,6 +65,8 @@ struct SendFlowAdvancedDetailsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                .padding(.top)
+
                 Spacer()
 
                 Button(action: { dismiss() }) {
@@ -92,7 +94,9 @@ struct SendFlowAdvancedDetailsView: View {
                             SectionCard(title: "Sent To Self", rows: toTxRows(splitOutput.internal))
                             divider
                         } else {
-                            SectionCard(title: "Sent To Address", rows: toTxRows(splitOutput.external))
+                            SectionCard(
+                                title: "Sent To Address", rows: toTxRows(splitOutput.external)
+                            )
                             divider
                         }
 
@@ -115,7 +119,7 @@ struct SendFlowAdvancedDetailsView: View {
 
                     HStack {
                         Text("Fee")
-                            .font(.caption)
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary.opacity(0.75))
 
                         Spacer()
@@ -126,11 +130,16 @@ struct SendFlowAdvancedDetailsView: View {
                     .padding(.horizontal, 12)
                 }
             }
+            .onTapGesture { manager.dispatch(action: .toggleFiatOrBtc) }
         }
-        .padding(.horizontal)
+        .padding()
         .background(Color(UIColor.secondarySystemBackground))
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .task {
+            splitOutput = try? await manager.rust.splitTransactionOutputs(
+                outputs: details.outputs())
+        }
     }
 }
 
@@ -170,7 +179,7 @@ private struct SectionCard: View {
         VStack(alignment: .leading, spacing: 8) {
             if let title {
                 Text(title)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary.opacity(0.75))
                     .padding(.leading, 12)
                     .padding(.bottom, 8)
