@@ -75,7 +75,7 @@ struct ReceiveView: View {
                         if let path = addressInfo?.derivationPath() {
                             Text("Derivation: \(path)")
                                 .font(.footnote)
-                                .foregroundStyle(.white.opacity(0.5))
+                                .foregroundStyle(.white.opacity(0.3))
                                 .padding(.top, 6)
                         }
                     }
