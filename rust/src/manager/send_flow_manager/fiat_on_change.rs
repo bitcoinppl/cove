@@ -1,4 +1,3 @@
-use cove_common::consts::MAX_SATS;
 use cove_util::format::NumberFormatter as _;
 
 use crate::{
@@ -121,7 +120,7 @@ impl FiatOnChangeHandler {
         );
 
         // if the amount is too large, don't allow it
-        if btc_amount >= Amount::from_sat(MAX_SATS) {
+        if btc_amount > Amount::MAX_MONEY {
             return Ok(Changeset {
                 entering_fiat_amount: Some(old_value.to_string()),
                 ..Default::default()

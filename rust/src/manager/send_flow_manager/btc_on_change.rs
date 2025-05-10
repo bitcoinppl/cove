@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
-use cove_common::consts::MAX_SATS;
 use cove_types::{amount::Amount, unit::Unit};
 use cove_util::format::{self, NumberFormatter as _};
 use tracing::debug;
@@ -120,7 +119,7 @@ impl BtcOnChangeHandler {
         };
 
         // check if its over the max
-        if amount.as_sats() > MAX_SATS {
+        if amount > Amount::MAX_MONEY {
             return Changeset { entering_amount_btc: Some(old.into()), ..Default::default() };
         }
 

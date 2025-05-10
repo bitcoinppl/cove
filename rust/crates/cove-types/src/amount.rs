@@ -27,6 +27,12 @@ pub struct Amount(pub BdkAmount);
 
 // rust only
 impl Amount {
+    pub const ZERO: Amount = Amount(BdkAmount::ZERO);
+    pub const ONE_SAT: Amount = Amount(BdkAmount::ONE_SAT);
+    pub const ONE_BTC: Amount = Amount(BdkAmount::ONE_BTC);
+    pub const MAX_MONEY: Amount = Amount(BdkAmount::MAX_MONEY);
+    pub const SIZE: usize = BdkAmount::SIZE; // Serialized length of a u64.
+
     pub fn from_btc(btc: f64) -> Result<Self, eyre::Report> {
         Ok(Self(bitcoin::Amount::from_btc(btc)?))
     }
@@ -35,17 +41,17 @@ impl Amount {
 #[uniffi::export]
 impl Amount {
     #[uniffi::constructor]
-    pub fn from_sat(sats: u64) -> Self {
+    pub const fn from_sat(sats: u64) -> Self {
         Self(bitcoin::Amount::from_sat(sats))
     }
 
     #[uniffi::constructor]
-    pub fn one_btc() -> Self {
+    pub const fn one_btc() -> Self {
         Self(bitcoin::Amount::ONE_BTC)
     }
 
     #[uniffi::constructor]
-    pub fn one_sat() -> Self {
+    pub const fn one_sat() -> Self {
         Self(bitcoin::Amount::ONE_SAT)
     }
 
