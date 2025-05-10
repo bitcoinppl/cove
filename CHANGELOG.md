@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-05-10
+
 ### Changes
 
 - Redesigned address QR receive sheet
 - Redesigned "Advanced More Details" sheet in the send flow
+
+## Fixes
+
+- Fixed a bug where entering a comically large fiat amount would crash the app
 
 ## [0.4.0] - 2025-05-08
 
