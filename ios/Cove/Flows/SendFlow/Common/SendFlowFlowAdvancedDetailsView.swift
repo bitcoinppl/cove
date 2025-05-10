@@ -113,7 +113,7 @@ struct SendFlowAdvancedDetailsView: View {
                         SectionCard(title: "UTXO Inputs", rows: toTxRows(details.inputs()))
                         divider
 
-                        SectionCard(title: "UTXO Ouputs", rows: toTxRows(details.outputs()))
+                        SectionCard(title: "UTXO Outputs", rows: toTxRows(details.outputs()))
                         divider
                     }
 
