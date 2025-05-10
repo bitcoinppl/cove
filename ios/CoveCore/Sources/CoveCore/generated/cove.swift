@@ -7290,7 +7290,7 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     /**
      * Get the next address for the wallet
      */
-    func nextAddress() async throws  -> AddressInfo
+    func nextAddress() async throws  -> AddressInfoWithDerivation
     
     func numberOfConfirmations(blockHeight: UInt32) async throws  -> UInt32
     
@@ -7842,7 +7842,7 @@ open func newSendFlowManager() -> RustSendFlowManager  {
     /**
      * Get the next address for the wallet
      */
-open func nextAddress()async throws  -> AddressInfo  {
+open func nextAddress()async throws  -> AddressInfoWithDerivation  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
@@ -7854,7 +7854,7 @@ open func nextAddress()async throws  -> AddressInfo  {
             pollFunc: ffi_cove_rust_future_poll_pointer,
             completeFunc: ffi_cove_rust_future_complete_pointer,
             freeFunc: ffi_cove_rust_future_free_pointer,
-            liftFunc: FfiConverterTypeAddressInfo_lift,
+            liftFunc: FfiConverterTypeAddressInfoWithDerivation_lift,
             errorHandler: FfiConverterTypeWalletManagerError_lift
         )
 }
@@ -25690,7 +25690,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 50164) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 53396) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_next_address() != 58685) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_number_of_confirmations() != 50545) {
@@ -26062,10 +26062,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 

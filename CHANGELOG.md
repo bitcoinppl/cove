@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changes
+
+- Redesigned address QR receive sheet
+- Redesigned "Advanced More Details" sheet in the send flow
+
 ## [0.4.0] - 2025-05-08
 
 ### Features

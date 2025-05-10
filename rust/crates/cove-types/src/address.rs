@@ -4,6 +4,7 @@ use std::{hash::Hasher, sync::Arc};
 
 use bdk_chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx};
 use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bitcoin::bip32::DerivationPath;
 use bitcoin::{
     Transaction,
     address::{NetworkChecked, NetworkUnchecked},
@@ -41,6 +42,12 @@ pub struct Address(BdkAddress);
     uniffi::Object,
 )]
 pub struct AddressInfo(BdkAddressInfo);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
+pub struct AddressInfoWithDerivation {
+    pub info: AddressInfo,
+    pub derivation_path: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub struct AddressWithNetwork {
@@ -287,6 +294,36 @@ impl AddressInfo {
 
     fn index(&self) -> u32 {
         self.index
+    }
+}
+
+#[uniffi::export]
+impl AddressInfoWithDerivation {
+    fn address_unformatted(&self) -> String {
+        self.info.address.to_string()
+    }
+
+    fn address_spaced_out(&self) -> String {
+        address_string_spaced_out(self.info.address.to_string())
+    }
+
+    fn address(&self) -> Address {
+        self.info.address.clone().into()
+    }
+
+    fn index(&self) -> u32 {
+        self.info.index
+    }
+
+    fn derivation_path(&self) -> Option<String> {
+        self.derivation_path.clone()
+    }
+}
+
+impl AddressInfoWithDerivation {
+    pub fn new(info: AddressInfo, derivation_path_prefix: Option<DerivationPath>) -> Self {
+        let derivation_path = derivation_path_prefix.map(|p| format!("{p}/{}", info.index));
+        Self { info, derivation_path }
     }
 }
 

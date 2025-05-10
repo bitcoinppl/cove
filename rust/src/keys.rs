@@ -16,6 +16,7 @@ use bdk_wallet::{
 };
 use bitcoin::bip32::Xpub;
 use bitcoin::secp256k1;
+use cove_bdk::descriptor_ext::DescriptorExt as _;
 
 use crate::tap_card::tap_signer_reader::DeriveInfo;
 use cove_types::Network;
@@ -78,7 +79,7 @@ impl Descriptors {
     }
 
     pub fn origin(&self) -> Result<String, Error> {
-        self.external.origin()
+        self.external.full_origin()
     }
 
     pub fn new_from_tap_signer(derive: &DeriveInfo) -> Result<Self, Error> {
@@ -167,68 +168,23 @@ impl Descriptor {
     }
 
     pub fn descriptor_public_key(&self) -> Result<&BdkDescriptorPublicKey, Error> {
-        use bdk_wallet::miniscript::Descriptor as D;
-        use bdk_wallet::miniscript::descriptor::ShInner;
-
-        let key = match &self.extended_descriptor {
-            D::Pkh(pk) => pk.as_inner(),
-            D::Wpkh(pk) => pk.as_inner(),
-            D::Tr(pk) => pk.internal_key(),
-            D::Sh(pk) => match pk.as_inner() {
-                ShInner::Wpkh(pk) => pk.as_inner(),
-                _ => {
-                    return Err(Error::UnsupportedDescriptor(
-                        "unsupported wallet bare descriptor not wpkh".to_string(),
-                    ));
-                }
-            },
-
-            // not sure
-            D::Bare(_pk) => {
-                return Err(Error::UnsupportedDescriptor(
-                    "unsupported wallet bare descriptor not wpkh".to_string(),
-                ));
-            }
-
-            // multi-sig
-            D::Wsh(_pk) => {
-                return Err(Error::UnsupportedDescriptor(
-                    "unsupported wallet, multisig".to_string(),
-                ));
-            }
-        };
-
-        Ok(key)
+        self.extended_descriptor.descriptor_public_key().map_err(Into::into)
     }
 
     pub fn xpub(&self) -> Option<Xpub> {
-        match self.descriptor_public_key() {
-            Ok(BdkDescriptorPublicKey::XPub(xpub)) => Some(xpub.xkey),
-            _ => None,
-        }
+        self.extended_descriptor.xpub()
     }
 
-    pub fn origin(&self) -> Result<String, Error> {
-        let public_key = self.descriptor_public_key()?;
+    pub fn full_origin(&self) -> Result<String, Error> {
+        self.extended_descriptor.full_origin().map_err(Into::into)
+    }
 
-        let origin = match &public_key {
-            BdkDescriptorPublicKey::Single(pk) => &pk.origin,
-            BdkDescriptorPublicKey::XPub(pk) => &pk.origin,
-            BdkDescriptorPublicKey::MultiXPub(pk) => &pk.origin,
-        };
+    pub fn origin(&self) -> Result<&(Fingerprint, DerivationPath), Error> {
+        self.extended_descriptor.origin().map_err(Into::into)
+    }
 
-        let desc_type = self.extended_descriptor.desc_type();
-        let desc_type_str = match desc_type {
-            DescriptorType::Pkh => "pkh",
-            DescriptorType::Wpkh => "wpkh",
-            DescriptorType::Tr => "tr",
-            DescriptorType::Sh => "sh",
-            other => Err(Error::UnsupportedDescriptorType(other))?,
-        };
-
-        let (fingerprint, path) = origin.as_ref().ok_or(Error::NoOrigin)?;
-        let origin = format!("{}([{}/{}])", desc_type_str, fingerprint, path);
-        Ok(origin)
+    pub fn derivation_path(&self) -> Result<DerivationPath, Error> {
+        self.extended_descriptor.derivation_path().map_err(Into::into)
     }
 
     /// BIP84 for P2WPKH (Segwit)
@@ -373,6 +329,17 @@ impl From<pubport::descriptor::Descriptors> for Descriptors {
     }
 }
 
+impl From<cove_bdk::descriptor_ext::Error> for DescriptorKeyParseError {
+    fn from(error: cove_bdk::descriptor_ext::Error) -> Self {
+        use cove_bdk::descriptor_ext::Error as E;
+        match error {
+            E::NoOrigin => Self::NoOrigin,
+            E::UnsupportedDescriptor(s) => Self::UnsupportedDescriptor(s),
+            E::UnsupportedDescriptorType(s) => Self::UnsupportedDescriptorType(s),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,7 +390,7 @@ mod tests {
         assert!(descriptor.is_ok());
         let descriptor = descriptor.unwrap();
 
-        let origin = descriptor.origin();
+        let origin = descriptor.full_origin();
         assert!(origin.is_ok());
 
         let origin = origin.unwrap();

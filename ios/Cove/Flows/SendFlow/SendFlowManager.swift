@@ -137,7 +137,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
-    private let dispatchQueue = DispatchQueue(label: "cove.sendflow.dispatch")
+    private let dispatchQueue = DispatchQueue(label: "cove.sendflowmanager.dispatch", qos: .userInitiated)
     public func dispatch(action: SendFlowManagerAction) { dispatch(action) }
     public func dispatch(_ action: SendFlowManagerAction) {
         dispatchQueue.async {

@@ -7,13 +7,11 @@ use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
     bdk_store::BdkStore,
-    // moved to cove-common
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     keys::{Descriptor, Descriptors},
     mnemonic::MnemonicExt as _,
     multi_format::MultiFormatError,
-    // moved to cove-types
     tap_card::tap_signer_reader::DeriveInfo,
     xpub::{self, XpubError},
 };
@@ -21,8 +19,9 @@ use balance::Balance;
 use bdk_chain::rusqlite::Connection;
 use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey};
 use bip39::Mnemonic;
+use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_common::consts::GAP_LIMIT;
-use cove_types::Network;
+use cove_types::{Network, address::AddressInfoWithDerivation};
 use eyre::Context as _;
 use fingerprint::Fingerprint;
 use metadata::{DiscoveryState, HardwareWalletMetadata, WalletId, WalletMetadata, WalletType};
@@ -205,7 +204,7 @@ impl Wallet {
             warn!("no origin found, setting using descriptor");
             let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
             let descriptor = Descriptor::from(extended_descriptor.clone());
-            let origin = descriptor.origin().ok();
+            let origin = descriptor.full_origin().ok();
 
             metadata.origin = origin;
 
@@ -538,7 +537,7 @@ impl Wallet {
         Ok(key)
     }
 
-    pub fn get_next_address(&mut self) -> Result<AddressInfo, WalletError> {
+    pub fn get_next_address(&mut self) -> Result<AddressInfoWithDerivation, WalletError> {
         const MAX_ADDRESSES: usize = (GAP_LIMIT - 5) as usize;
 
         let addresses: Vec<AddressInfo> = self
@@ -550,11 +549,15 @@ impl Wallet {
 
         // get up to 25 revealed but unused addresses
         if addresses.len() < MAX_ADDRESSES {
-            let address_info = self.bdk.reveal_next_address(KeychainKind::External).into();
+            let address_info =
+                AddressInfo::from(self.bdk.reveal_next_address(KeychainKind::External));
 
             self.persist()?;
 
-            return Ok(address_info);
+            let derivation_path =
+                self.bdk.public_descriptor(KeychainKind::External).derivation_path().ok();
+            let info = AddressInfoWithDerivation::new(address_info, derivation_path);
+            return Ok(info);
         }
 
         // if we have already revealed 25 addresses, we cycle back to the first one
@@ -575,7 +578,12 @@ impl Wallet {
 
         Database::global().wallets.update_internal_metadata(&self.metadata)?;
 
-        Ok(address_info)
+        let public_descriptor = self.bdk.public_descriptor(KeychainKind::External);
+        let derivation_path = public_descriptor.derivation_path().ok();
+        let address_info_with_derivation =
+            AddressInfoWithDerivation::new(address_info, derivation_path);
+
+        Ok(address_info_with_derivation)
     }
 
     pub fn persist(&mut self) -> Result<(), WalletError> {

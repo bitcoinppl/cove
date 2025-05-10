@@ -24,6 +24,7 @@ use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::GAP_LIMIT;
 use cove_types::{
+    address::AddressInfoWithDerivation,
     confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
 };
@@ -505,7 +506,7 @@ impl WalletActor {
         Produces::ok(address.into())
     }
 
-    pub async fn next_address(&mut self) -> ActorResult<AddressInfo> {
+    pub async fn next_address(&mut self) -> ActorResult<AddressInfoWithDerivation> {
         let address = self.wallet.get_next_address()?;
         Produces::ok(address)
     }
