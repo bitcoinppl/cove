@@ -86,5 +86,3 @@ cp -r bindings/*.swift $GENERATED_SWIFT_SOURCES
 
 ## extra: remove uniffi generated Package.swift file
 rm -rf $SPM_PACKAGE/Sources/CoveCore/Package.swift
-
-swiftformat ios/CoveCore/Sources/CoveCore/generated
