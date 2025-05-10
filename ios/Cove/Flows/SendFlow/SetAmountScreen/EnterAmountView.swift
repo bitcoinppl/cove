@@ -63,6 +63,7 @@ struct EnterAmountView: View {
                         .offset(x: offset)
                         .padding(.horizontal, 30)
                         .focused($focusField, equals: .amount)
+                        .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
 
                 case .fiat:
                     TextField("", text: $enteringFiatAmount)
@@ -75,6 +76,7 @@ struct EnterAmountView: View {
                         .offset(x: offset)
                         .padding(.horizontal, 30)
                         .focused($focusField, equals: .amount)
+                        .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
                 }
 
                 HStack(spacing: 0) {
