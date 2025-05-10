@@ -87,7 +87,7 @@ struct SendFlowAdvancedDetailsView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     if let splitOutput {
-                        SectionCard(title: "UTXO Used", rows: toTxRows(details.inputs()))
+                        SectionCard(title: "UTXOs Used", rows: toTxRows(details.inputs()))
                         divider
 
                         if splitOutput.external.isEmpty {
@@ -113,7 +113,7 @@ struct SendFlowAdvancedDetailsView: View {
                         SectionCard(title: "UTXO Inputs", rows: toTxRows(details.inputs()))
                         divider
 
-                        SectionCard(title: "UTXOs Ouputs", rows: toTxRows(details.outputs()))
+                        SectionCard(title: "UTXO Ouputs", rows: toTxRows(details.outputs()))
                         divider
                     }
 
