@@ -1,2 +1,2 @@
---exclude ios/CoveCore/Sources/CoveCore/generated
 --disable redundantSelf
+--swiftversion 6.0

@@ -8,10 +8,10 @@ import Foundation
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
 #if canImport(cove_nfcFFI)
-import cove_nfcFFI
+    import cove_nfcFFI
 #endif
 
-fileprivate extension RustBuffer {
+private extension RustBuffer {
     // Allocate a new buffer, copying the contents of a `UInt8` array.
     init(bytes: [UInt8]) {
         let rbuf = bytes.withUnsafeBufferPointer { ptr in
@@ -21,7 +21,7 @@ fileprivate extension RustBuffer {
     }
 
     static func empty() -> RustBuffer {
-        RustBuffer(capacity: 0, len:0, data: nil)
+        RustBuffer(capacity: 0, len: 0, data: nil)
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
@@ -35,7 +35,7 @@ fileprivate extension RustBuffer {
     }
 }
 
-fileprivate extension ForeignBytes {
+private extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
@@ -48,7 +48,7 @@ fileprivate extension ForeignBytes {
 // Helper classes/extensions that don't change.
 // Someday, this will be in a library of its own.
 
-fileprivate extension Data {
+private extension Data {
     init(rustBuffer: RustBuffer) {
         self.init(
             bytesNoCopy: rustBuffer.data!,
@@ -72,15 +72,15 @@ fileprivate extension Data {
 //
 // Instead, the read() method and these helper functions input a tuple of data
 
-fileprivate func createReader(data: Data) -> (data: Data, offset: Data.Index) {
+private func createReader(data: Data) -> (data: Data, offset: Data.Index) {
     (data: data, offset: 0)
 }
 
 // Reads an integer at the current offset, in big-endian order, and advances
 // the offset on success. Throws if reading the integer would move the
 // offset past the end of the buffer.
-fileprivate func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offset: Data.Index)) throws -> T {
-    let range = reader.offset..<reader.offset + MemoryLayout<T>.size
+private func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offset: Data.Index)) throws -> T {
+    let range = reader.offset ..< reader.offset + MemoryLayout<T>.size
     guard reader.data.count >= range.upperBound else {
         throw UniffiInternalError.bufferOverflow
     }
@@ -90,50 +90,50 @@ fileprivate func readInt<T: FixedWidthInteger>(_ reader: inout (data: Data, offs
         return value as! T
     }
     var value: T = 0
-    let _ = withUnsafeMutableBytes(of: &value, { reader.data.copyBytes(to: $0, from: range)})
+    let _ = withUnsafeMutableBytes(of: &value) { reader.data.copyBytes(to: $0, from: range) }
     reader.offset = range.upperBound
     return value.bigEndian
 }
 
 // Reads an arbitrary number of bytes, to be used to read
 // raw bytes, this is useful when lifting strings
-fileprivate func readBytes(_ reader: inout (data: Data, offset: Data.Index), count: Int) throws -> Array<UInt8> {
-    let range = reader.offset..<(reader.offset+count)
+private func readBytes(_ reader: inout (data: Data, offset: Data.Index), count: Int) throws -> [UInt8] {
+    let range = reader.offset ..< (reader.offset + count)
     guard reader.data.count >= range.upperBound else {
         throw UniffiInternalError.bufferOverflow
     }
     var value = [UInt8](repeating: 0, count: count)
-    value.withUnsafeMutableBufferPointer({ buffer in
+    value.withUnsafeMutableBufferPointer { buffer in
         reader.data.copyBytes(to: buffer, from: range)
-    })
+    }
     reader.offset = range.upperBound
     return value
 }
 
 // Reads a float at the current offset.
-fileprivate func readFloat(_ reader: inout (data: Data, offset: Data.Index)) throws -> Float {
-    return Float(bitPattern: try readInt(&reader))
+private func readFloat(_ reader: inout (data: Data, offset: Data.Index)) throws -> Float {
+    try Float(bitPattern: readInt(&reader))
 }
 
 // Reads a float at the current offset.
-fileprivate func readDouble(_ reader: inout (data: Data, offset: Data.Index)) throws -> Double {
-    return Double(bitPattern: try readInt(&reader))
+private func readDouble(_ reader: inout (data: Data, offset: Data.Index)) throws -> Double {
+    try Double(bitPattern: readInt(&reader))
 }
 
 // Indicates if the offset has reached the end of the buffer.
-fileprivate func hasRemaining(_ reader: (data: Data, offset: Data.Index)) -> Bool {
-    return reader.offset < reader.data.count
+private func hasRemaining(_ reader: (data: Data, offset: Data.Index)) -> Bool {
+    reader.offset < reader.data.count
 }
 
 // Define writer functionality.  Normally this would be defined in a class or
 // struct, but we use standalone functions instead in order to make external
 // types work.  See the above discussion on Readers for details.
 
-fileprivate func createWriter() -> [UInt8] {
-    return []
+private func createWriter() -> [UInt8] {
+    []
 }
 
-fileprivate func writeBytes<S>(_ writer: inout [UInt8], _ byteArr: S) where S: Sequence, S.Element == UInt8 {
+private func writeBytes(_ writer: inout [UInt8], _ byteArr: some Sequence<UInt8>) {
     writer.append(contentsOf: byteArr)
 }
 
@@ -141,22 +141,22 @@ fileprivate func writeBytes<S>(_ writer: inout [UInt8], _ byteArr: S) where S: S
 //
 // Warning: make sure what you are trying to write
 // is in the correct type!
-fileprivate func writeInt<T: FixedWidthInteger>(_ writer: inout [UInt8], _ value: T) {
+private func writeInt(_ writer: inout [UInt8], _ value: some FixedWidthInteger) {
     var value = value.bigEndian
     withUnsafeBytes(of: &value) { writer.append(contentsOf: $0) }
 }
 
-fileprivate func writeFloat(_ writer: inout [UInt8], _ value: Float) {
+private func writeFloat(_ writer: inout [UInt8], _ value: Float) {
     writeInt(&writer, value.bitPattern)
 }
 
-fileprivate func writeDouble(_ writer: inout [UInt8], _ value: Double) {
+private func writeDouble(_ writer: inout [UInt8], _ value: Double) {
     writeInt(&writer, value.bitPattern)
 }
 
 // Protocol for types that transfer other types across the FFI. This is
 // analogous to the Rust trait of the same name.
-fileprivate protocol FfiConverter {
+private protocol FfiConverter {
     associatedtype FfiType
     associatedtype SwiftType
 
@@ -167,32 +167,32 @@ fileprivate protocol FfiConverter {
 }
 
 // Types conforming to `Primitive` pass themselves directly over the FFI.
-fileprivate protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType { }
+private protocol FfiConverterPrimitive: FfiConverter where FfiType == SwiftType {}
 
 extension FfiConverterPrimitive {
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lift(_ value: FfiType) throws -> SwiftType {
-        return value
+        value
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lower(_ value: SwiftType) -> FfiType {
-        return value
+        value
     }
 }
 
 // Types conforming to `FfiConverterRustBuffer` lift and lower into a `RustBuffer`.
 // Used for complex types where it's hard to write a custom lift/lower.
-fileprivate protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
+private protocol FfiConverterRustBuffer: FfiConverter where FfiType == RustBuffer {}
 
 extension FfiConverterRustBuffer {
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lift(_ buf: RustBuffer) throws -> SwiftType {
         var reader = createReader(data: Data(rustBuffer: buf))
         let value = try read(from: &reader)
@@ -203,18 +203,19 @@ extension FfiConverterRustBuffer {
         return value
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public static func lower(_ value: SwiftType) -> RustBuffer {
-          var writer = createWriter()
-          write(value, into: &writer)
-          return RustBuffer(bytes: writer)
+        var writer = createWriter()
+        write(value, into: &writer)
+        return RustBuffer(bytes: writer)
     }
 }
+
 // An error type for FFI errors. These errors occur at the UniFFI level, not
 // the library level.
-fileprivate enum UniffiInternalError: LocalizedError {
+private enum UniffiInternalError: LocalizedError {
     case bufferOverflow
     case incompleteData
     case unexpectedOptionalTag
@@ -227,20 +228,20 @@ fileprivate enum UniffiInternalError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .bufferOverflow: return "Reading the requested value would read past the end of the buffer"
-        case .incompleteData: return "The buffer still has data after lifting its containing value"
-        case .unexpectedOptionalTag: return "Unexpected optional tag; should be 0 or 1"
-        case .unexpectedEnumCase: return "Raw enum value doesn't match any cases"
-        case .unexpectedNullPointer: return "Raw pointer value was null"
-        case .unexpectedRustCallStatusCode: return "Unexpected RustCallStatus code"
-        case .unexpectedRustCallError: return "CALL_ERROR but no errorClass specified"
-        case .unexpectedStaleHandle: return "The object in the handle map has been dropped already"
-        case let .rustPanic(message): return message
+        case .bufferOverflow: "Reading the requested value would read past the end of the buffer"
+        case .incompleteData: "The buffer still has data after lifting its containing value"
+        case .unexpectedOptionalTag: "Unexpected optional tag; should be 0 or 1"
+        case .unexpectedEnumCase: "Raw enum value doesn't match any cases"
+        case .unexpectedNullPointer: "Raw pointer value was null"
+        case .unexpectedRustCallStatusCode: "Unexpected RustCallStatus code"
+        case .unexpectedRustCallError: "CALL_ERROR but no errorClass specified"
+        case .unexpectedStaleHandle: "The object in the handle map has been dropped already"
+        case let .rustPanic(message): message
         }
     }
 }
 
-fileprivate extension NSLock {
+private extension NSLock {
     func withLock<T>(f: () throws -> T) rethrows -> T {
         self.lock()
         defer { self.unlock() }
@@ -248,16 +249,16 @@ fileprivate extension NSLock {
     }
 }
 
-fileprivate let CALL_SUCCESS: Int8 = 0
-fileprivate let CALL_ERROR: Int8 = 1
-fileprivate let CALL_UNEXPECTED_ERROR: Int8 = 2
-fileprivate let CALL_CANCELLED: Int8 = 3
+private let CALL_SUCCESS: Int8 = 0
+private let CALL_ERROR: Int8 = 1
+private let CALL_UNEXPECTED_ERROR: Int8 = 2
+private let CALL_CANCELLED: Int8 = 3
 
-fileprivate extension RustCallStatus {
+private extension RustCallStatus {
     init() {
         self.init(
             code: CALL_SUCCESS,
-            errorBuf: RustBuffer.init(
+            errorBuf: RustBuffer(
                 capacity: 0,
                 len: 0,
                 data: nil
@@ -271,66 +272,67 @@ private func rustCall<T>(_ callback: (UnsafeMutablePointer<RustCallStatus>) -> T
     return try makeRustCall(callback, errorHandler: neverThrow)
 }
 
-private func rustCallWithError<T, E: Swift.Error>(
-    _ errorHandler: @escaping (RustBuffer) throws -> E,
-    _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T) throws -> T {
+private func rustCallWithError<T>(
+    _ errorHandler: @escaping (RustBuffer) throws -> some Swift.Error,
+    _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T
+) throws -> T {
     try makeRustCall(callback, errorHandler: errorHandler)
 }
 
-private func makeRustCall<T, E: Swift.Error>(
+private func makeRustCall<T>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
-    errorHandler: ((RustBuffer) throws -> E)?
+    errorHandler: ((RustBuffer) throws -> some Swift.Error)?
 ) throws -> T {
     uniffiEnsureCoveNfcInitialized()
-    var callStatus = RustCallStatus.init()
+    var callStatus = RustCallStatus()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
     return returnedVal
 }
 
-private func uniffiCheckCallStatus<E: Swift.Error>(
+private func uniffiCheckCallStatus(
     callStatus: RustCallStatus,
-    errorHandler: ((RustBuffer) throws -> E)?
+    errorHandler: ((RustBuffer) throws -> some Swift.Error)?
 ) throws {
     switch callStatus.code {
-        case CALL_SUCCESS:
-            return
+    case CALL_SUCCESS:
+        return
 
-        case CALL_ERROR:
-            if let errorHandler = errorHandler {
-                throw try errorHandler(callStatus.errorBuf)
-            } else {
-                callStatus.errorBuf.deallocate()
-                throw UniffiInternalError.unexpectedRustCallError
-            }
+    case CALL_ERROR:
+        if let errorHandler {
+            throw try errorHandler(callStatus.errorBuf)
+        } else {
+            callStatus.errorBuf.deallocate()
+            throw UniffiInternalError.unexpectedRustCallError
+        }
 
-        case CALL_UNEXPECTED_ERROR:
-            // When the rust code sees a panic, it tries to construct a RustBuffer
-            // with the message.  But if that code panics, then it just sends back
-            // an empty buffer.
-            if callStatus.errorBuf.len > 0 {
-                throw UniffiInternalError.rustPanic(try FfiConverterString.lift(callStatus.errorBuf))
-            } else {
-                callStatus.errorBuf.deallocate()
-                throw UniffiInternalError.rustPanic("Rust panic")
-            }
+    case CALL_UNEXPECTED_ERROR:
+        // When the rust code sees a panic, it tries to construct a RustBuffer
+        // with the message.  But if that code panics, then it just sends back
+        // an empty buffer.
+        if callStatus.errorBuf.len > 0 {
+            throw try UniffiInternalError.rustPanic(FfiConverterString.lift(callStatus.errorBuf))
+        } else {
+            callStatus.errorBuf.deallocate()
+            throw UniffiInternalError.rustPanic("Rust panic")
+        }
 
-        case CALL_CANCELLED:
-            fatalError("Cancellation not supported yet")
+    case CALL_CANCELLED:
+        fatalError("Cancellation not supported yet")
 
-        default:
-            throw UniffiInternalError.unexpectedRustCallStatusCode
+    default:
+        throw UniffiInternalError.unexpectedRustCallStatusCode
     }
 }
 
 private func uniffiTraitInterfaceCall<T>(
     callStatus: UnsafeMutablePointer<RustCallStatus>,
     makeCall: () throws -> T,
-    writeReturn: (T) -> ()
+    writeReturn: (T) -> Void
 ) {
     do {
         try writeReturn(makeCall())
-    } catch let error {
+    } catch {
         callStatus.pointee.code = CALL_UNEXPECTED_ERROR
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
@@ -339,7 +341,7 @@ private func uniffiTraitInterfaceCall<T>(
 private func uniffiTraitInterfaceCallWithError<T, E>(
     callStatus: UnsafeMutablePointer<RustCallStatus>,
     makeCall: () throws -> T,
-    writeReturn: (T) -> (),
+    writeReturn: (T) -> Void,
     lowerError: (E) -> RustBuffer
 ) {
     do {
@@ -352,7 +354,8 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
+
+private final class UniffiHandleMap<T>: @unchecked Sendable {
     // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
     private let lock = NSLock()
     private var map: [UInt64: T] = [:]
@@ -367,7 +370,7 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
         }
     }
 
-     func get(handle: UInt64) throws -> T {
+    func get(handle: UInt64) throws -> T {
         try lock.withLock {
             guard let obj = map[handle] else {
                 throw UniffiInternalError.unexpectedStaleHandle
@@ -387,25 +390,21 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
     }
 
     var count: Int {
-        get {
-            map.count
-        }
+        map.count
     }
 }
 
-
 // Public interface members begin here.
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
+private struct FfiConverterUInt8: FfiConverterPrimitive {
     typealias FfiType = UInt8
     typealias SwiftType = UInt8
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
-        return try lift(readInt(&buf))
+        try lift(readInt(&buf))
     }
 
     public static func write(_ value: UInt8, into buf: inout [UInt8]) {
@@ -414,14 +413,14 @@ fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
+private struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
-        return try lift(readInt(&buf))
+        try lift(readInt(&buf))
     }
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
@@ -430,14 +429,14 @@ fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
+private struct FfiConverterUInt32: FfiConverterPrimitive {
     typealias FfiType = UInt32
     typealias SwiftType = UInt32
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt32 {
-        return try lift(readInt(&buf))
+        try lift(readInt(&buf))
     }
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
@@ -446,22 +445,22 @@ fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterBool : FfiConverter {
+private struct FfiConverterBool: FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
 
     public static func lift(_ value: Int8) throws -> Bool {
-        return value != 0
+        value != 0
     }
 
     public static func lower(_ value: Bool) -> Int8 {
-        return value ? 1 : 0
+        value ? 1 : 0
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bool {
-        return try lift(readInt(&buf))
+        try lift(readInt(&buf))
     }
 
     public static func write(_ value: Bool, into buf: inout [UInt8]) {
@@ -470,9 +469,9 @@ fileprivate struct FfiConverterBool : FfiConverter {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterString: FfiConverter {
+private struct FfiConverterString: FfiConverter {
     typealias SwiftType = String
     typealias FfiType = RustBuffer
 
@@ -488,7 +487,7 @@ fileprivate struct FfiConverterString: FfiConverter {
     }
 
     public static func lower(_ value: String) -> RustBuffer {
-        return value.utf8CString.withUnsafeBufferPointer { ptr in
+        value.utf8CString.withUnsafeBufferPointer { ptr in
             // The swift string gives us int8_t, we want uint8_t.
             ptr.withMemoryRebound(to: UInt8.self) { ptr in
                 // The swift string gives us a trailing null byte, we don't want it.
@@ -500,7 +499,7 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        return try String(bytes: readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -511,14 +510,14 @@ fileprivate struct FfiConverterString: FfiConverter {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+private struct FfiConverterData: FfiConverterRustBuffer {
     typealias SwiftType = Data
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
         let len: Int32 = try readInt(&buf)
-        return Data(try readBytes(&buf, count: Int(len)))
+        return try Data(readBytes(&buf, count: Int(len)))
     }
 
     public static func write(_ value: Data, into buf: inout [UInt8]) {
@@ -528,31 +527,27 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
     }
 }
 
-
-
-
 public protocol FfiNfcReaderProtocol: AnyObject, Sendable {
-    
-    func dataFromRecords(records: [NdefRecord])  -> Data
-    
-    func isResumeable(data: Data) throws 
-    
-    func isStarted()  -> Bool
-    
-    func messageInfo()  -> MessageInfo?
-    
-    func parse(data: Data) throws  -> ParseResult
-    
-    func stringFromRecord(record: NdefRecord)  -> String?
-    
+    func dataFromRecords(records: [NdefRecord]) -> Data
+
+    func isResumeable(data: Data) throws
+
+    func isStarted() -> Bool
+
+    func messageInfo() -> MessageInfo?
+
+    func parse(data: Data) throws -> ParseResult
+
+    func stringFromRecord(record: NdefRecord) -> String?
 }
+
 open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoPointer {
         public init() {}
     }
@@ -560,10 +555,10 @@ open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
 
@@ -572,102 +567,90 @@ open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
         self.pointer = nil
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_ffinfcreader(self.pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_clone_ffinfcreader(self.pointer, $0) }
     }
-public convenience init() {
-    let pointer =
-        try! rustCall() {
-    uniffi_cove_nfc_fn_constructor_ffinfcreader_new($0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_nfc_fn_constructor_ffinfcreader_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
 
     deinit {
-        guard let pointer = pointer else {
+        guard let pointer else {
             return
         }
 
         try! rustCall { uniffi_cove_nfc_fn_free_ffinfcreader(pointer, $0) }
     }
 
-    
+    open func dataFromRecords(records: [NdefRecord]) -> Data {
+        try! FfiConverterData.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(self.uniffiClonePointer(),
+                                                                     FfiConverterSequenceTypeNdefRecord.lower(records), $0)
+        })
+    }
 
-    
-open func dataFromRecords(records: [NdefRecord]) -> Data  {
-    return try!  FfiConverterData.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(self.uniffiClonePointer(),
-        FfiConverterSequenceTypeNdefRecord.lower(records),$0
-    )
-})
-}
-    
-open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTypeResumeError_lift) {
-    uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(self.uniffiClonePointer(),
-        FfiConverterData.lower(data),$0
-    )
-}
-}
-    
-open func isStarted() -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_is_started(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func messageInfo() -> MessageInfo?  {
-    return try!  FfiConverterOptionTypeMessageInfo.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_message_info(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func parse(data: Data)throws  -> ParseResult  {
-    return try  FfiConverterTypeParseResult_lift(try rustCallWithError(FfiConverterTypeNfcReaderError_lift) {
-    uniffi_cove_nfc_fn_method_ffinfcreader_parse(self.uniffiClonePointer(),
-        FfiConverterData.lower(data),$0
-    )
-})
-}
-    
-open func stringFromRecord(record: NdefRecord) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(self.uniffiClonePointer(),
-        FfiConverterTypeNdefRecord_lower(record),$0
-    )
-})
-}
-    
+    open func isResumeable(data: Data) throws { try rustCallWithError(FfiConverterTypeResumeError_lift) {
+        uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(self.uniffiClonePointer(),
+                                                             FfiConverterData.lower(data), $0)
+    }
+    }
 
-}
+    open func isStarted() -> Bool {
+        try! FfiConverterBool.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_ffinfcreader_is_started(self.uniffiClonePointer(), $0)
+        })
+    }
 
+    open func messageInfo() -> MessageInfo? {
+        try! FfiConverterOptionTypeMessageInfo.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_ffinfcreader_message_info(self.uniffiClonePointer(), $0)
+        })
+    }
+
+    open func parse(data: Data) throws -> ParseResult {
+        try FfiConverterTypeParseResult_lift(rustCallWithError(FfiConverterTypeNfcReaderError_lift) {
+            uniffi_cove_nfc_fn_method_ffinfcreader_parse(self.uniffiClonePointer(),
+                                                         FfiConverterData.lower(data), $0)
+        })
+    }
+
+    open func stringFromRecord(record: NdefRecord) -> String? {
+        try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(self.uniffiClonePointer(),
+                                                                      FfiConverterTypeNdefRecord_lower(record), $0)
+        })
+    }
+}
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeFfiNfcReader: FfiConverter {
-
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = FfiNfcReader
 
     public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FfiNfcReader {
-        return FfiNfcReader(unsafeFromRawPointer: pointer)
+        FfiNfcReader(unsafeFromRawPointer: pointer)
     }
 
     public static func lower(_ value: FfiNfcReader) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+        value.uniffiClonePointer()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiNfcReader {
@@ -675,7 +658,7 @@ public struct FfiConverterTypeFfiNfcReader: FfiConverter {
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
         let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
+        if ptr == nil {
             throw UniffiInternalError.unexpectedNullPointer
         }
         return try lift(ptr!)
@@ -688,40 +671,33 @@ public struct FfiConverterTypeFfiNfcReader: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeFfiNfcReader_lift(_ pointer: UnsafeMutableRawPointer) throws -> FfiNfcReader {
-    return try FfiConverterTypeFfiNfcReader.lift(pointer)
+    try FfiConverterTypeFfiNfcReader.lift(pointer)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeFfiNfcReader_lower(_ value: FfiNfcReader) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeFfiNfcReader.lower(value)
+    FfiConverterTypeFfiNfcReader.lower(value)
 }
-
-
-
-
-
 
 public protocol NdefRecordReaderProtocol: AnyObject, Sendable {
-    
-    func id()  -> String?
-    
-    func type()  -> String?
-    
+    func id() -> String?
+
+    func type() -> String?
 }
+
 open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoPointer {
         public init() {}
     }
@@ -729,10 +705,10 @@ open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
 
@@ -741,72 +717,64 @@ open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
         self.pointer = nil
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_ndefrecordreader(self.pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_clone_ndefrecordreader(self.pointer, $0) }
     }
-public convenience init(record: NdefRecord) {
-    let pointer =
-        try! rustCall() {
-    uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
-        FfiConverterTypeNdefRecord_lower(record),$0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
+
+    public convenience init(record: NdefRecord) {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
+                    FfiConverterTypeNdefRecord_lower(record), $0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
 
     deinit {
-        guard let pointer = pointer else {
+        guard let pointer else {
             return
         }
 
         try! rustCall { uniffi_cove_nfc_fn_free_ndefrecordreader(pointer, $0) }
     }
 
-    
+    open func id() -> String? {
+        try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_ndefrecordreader_id(self.uniffiClonePointer(), $0)
+        })
+    }
 
-    
-open func id() -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ndefrecordreader_id(self.uniffiClonePointer(),$0
-    )
-})
+    open func type() -> String? {
+        try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_ndefrecordreader_type_(self.uniffiClonePointer(), $0)
+        })
+    }
 }
-    
-open func type() -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ndefrecordreader_type_(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-
-}
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNdefRecordReader: FfiConverter {
-
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = NdefRecordReader
 
     public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NdefRecordReader {
-        return NdefRecordReader(unsafeFromRawPointer: pointer)
+        NdefRecordReader(unsafeFromRawPointer: pointer)
     }
 
     public static func lower(_ value: NdefRecordReader) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+        value.uniffiClonePointer()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecordReader {
@@ -814,7 +782,7 @@ public struct FfiConverterTypeNdefRecordReader: FfiConverter {
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
         let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
+        if ptr == nil {
             throw UniffiInternalError.unexpectedNullPointer
         }
         return try lift(ptr!)
@@ -827,42 +795,35 @@ public struct FfiConverterTypeNdefRecordReader: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefRecordReader_lift(_ pointer: UnsafeMutableRawPointer) throws -> NdefRecordReader {
-    return try FfiConverterTypeNdefRecordReader.lift(pointer)
+    try FfiConverterTypeNdefRecordReader.lift(pointer)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeNdefRecordReader.lower(value)
+    FfiConverterTypeNdefRecordReader.lower(value)
 }
-
-
-
-
-
 
 public protocol NfcConstProtocol: AnyObject, Sendable {
-    
-    func bytesPerBlock()  -> UInt16
-    
-    func numberOfBlocksPerChunk()  -> UInt16
-    
-    func totalBytesPerChunk()  -> UInt16
-    
+    func bytesPerBlock() -> UInt16
+
+    func numberOfBlocksPerChunk() -> UInt16
+
+    func totalBytesPerChunk() -> UInt16
 }
+
 open class NfcConst: NfcConstProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoPointer {
         public init() {}
     }
@@ -870,10 +831,10 @@ open class NfcConst: NfcConstProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
 
@@ -882,78 +843,69 @@ open class NfcConst: NfcConstProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
         self.pointer = nil
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_nfcconst(self.pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_clone_nfcconst(self.pointer, $0) }
     }
-public convenience init() {
-    let pointer =
-        try! rustCall() {
-    uniffi_cove_nfc_fn_constructor_nfcconst_new($0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
+
+    public convenience init() {
+        let pointer =
+            try! rustCall {
+                uniffi_cove_nfc_fn_constructor_nfcconst_new($0
+                )
+            }
+        self.init(unsafeFromRawPointer: pointer)
+    }
 
     deinit {
-        guard let pointer = pointer else {
+        guard let pointer else {
             return
         }
 
         try! rustCall { uniffi_cove_nfc_fn_free_nfcconst(pointer, $0) }
     }
 
-    
+    open func bytesPerBlock() -> UInt16 {
+        try! FfiConverterUInt16.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(self.uniffiClonePointer(), $0)
+        })
+    }
 
-    
-open func bytesPerBlock() -> UInt16  {
-    return try!  FfiConverterUInt16.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func numberOfBlocksPerChunk() -> UInt16  {
-    return try!  FfiConverterUInt16.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func totalBytesPerChunk() -> UInt16  {
-    return try!  FfiConverterUInt16.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
+    open func numberOfBlocksPerChunk() -> UInt16 {
+        try! FfiConverterUInt16.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(self.uniffiClonePointer(), $0)
+        })
+    }
 
+    open func totalBytesPerChunk() -> UInt16 {
+        try! FfiConverterUInt16.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(self.uniffiClonePointer(), $0)
+        })
+    }
 }
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNfcConst: FfiConverter {
-
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = NfcConst
 
     public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcConst {
-        return NfcConst(unsafeFromRawPointer: pointer)
+        NfcConst(unsafeFromRawPointer: pointer)
     }
 
     public static func lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+        value.uniffiClonePointer()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcConst {
@@ -961,7 +913,7 @@ public struct FfiConverterTypeNfcConst: FfiConverter {
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
         let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
+        if ptr == nil {
             throw UniffiInternalError.unexpectedNullPointer
         }
         return try lift(ptr!)
@@ -974,36 +926,29 @@ public struct FfiConverterTypeNfcConst: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcConst_lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcConst {
-    return try FfiConverterTypeNfcConst.lift(pointer)
+    try FfiConverterTypeNfcConst.lift(pointer)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeNfcConst.lower(value)
+    FfiConverterTypeNfcConst.lower(value)
 }
-
-
-
-
-
 
 /**
  * A NFC message, could contain a string, data (bytes) or both
  */
 public protocol NfcMessageProtocol: AnyObject, Sendable {
-    
-    func data()  -> Data?
-    
-    func string()  -> String?
-    
+    func data() -> Data?
+
+    func string() -> String?
 }
+
 /**
  * A NFC message, could contain a string, data (bytes) or both
  */
@@ -1011,9 +956,9 @@ open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public struct NoPointer {
         public init() {}
     }
@@ -1021,10 +966,10 @@ open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public required init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
         self.pointer = pointer
     }
 
@@ -1033,73 +978,65 @@ open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
     //
     // - Warning:
     //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
+    public init(noPointer _: NoPointer) {
         self.pointer = nil
     }
 
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
+    #if swift(>=5.8)
+        @_documentation(visibility: private)
+    #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_nfcmessage(self.pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_clone_nfcmessage(self.pointer, $0) }
     }
+
     // No primary constructor declared for this class.
 
     deinit {
-        guard let pointer = pointer else {
+        guard let pointer else {
             return
         }
 
         try! rustCall { uniffi_cove_nfc_fn_free_nfcmessage(pointer, $0) }
     }
 
-    
-public static func tryNew(string: String? = nil, data: Data? = nil)throws  -> NfcMessage  {
-    return try  FfiConverterTypeNfcMessage_lift(try rustCallWithError(FfiConverterTypeNfcMessageError_lift) {
-    uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
-        FfiConverterOptionString.lower(string),
-        FfiConverterOptionData.lower(data),$0
-    )
-})
-}
-    
+    public static func tryNew(string: String? = nil, data: Data? = nil) throws -> NfcMessage {
+        try FfiConverterTypeNfcMessage_lift(rustCallWithError(FfiConverterTypeNfcMessageError_lift) {
+            uniffi_cove_nfc_fn_constructor_nfcmessage_try_new(
+                FfiConverterOptionString.lower(string),
+                FfiConverterOptionData.lower(data), $0
+            )
+        })
+    }
 
-    
-open func data() -> Data?  {
-    return try!  FfiConverterOptionData.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcmessage_data(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func string() -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcmessage_string(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
+    open func data() -> Data? {
+        try! FfiConverterOptionData.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_nfcmessage_data(self.uniffiClonePointer(), $0)
+        })
+    }
 
+    open func string() -> String? {
+        try! FfiConverterOptionString.lift(try! rustCall {
+            uniffi_cove_nfc_fn_method_nfcmessage_string(self.uniffiClonePointer(), $0)
+        })
+    }
 }
-
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNfcMessage: FfiConverter {
-
     typealias FfiType = UnsafeMutableRawPointer
     typealias SwiftType = NfcMessage
 
     public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcMessage {
-        return NfcMessage(unsafeFromRawPointer: pointer)
+        NfcMessage(unsafeFromRawPointer: pointer)
     }
 
     public static func lower(_ value: NfcMessage) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+        value.uniffiClonePointer()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcMessage {
@@ -1107,7 +1044,7 @@ public struct FfiConverterTypeNfcMessage: FfiConverter {
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
         let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
+        if ptr == nil {
             throw UniffiInternalError.unexpectedNullPointer
         }
         return try lift(ptr!)
@@ -1120,23 +1057,19 @@ public struct FfiConverterTypeNfcMessage: FfiConverter {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcMessage_lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcMessage {
-    return try FfiConverterTypeNfcMessage.lift(pointer)
+    try FfiConverterTypeNfcMessage.lift(pointer)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcMessage_lower(_ value: NfcMessage) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeNfcMessage.lower(value)
+    FfiConverterTypeNfcMessage.lower(value)
 }
-
-
-
 
 public struct MessageInfo {
     /**
@@ -1154,23 +1087,23 @@ public struct MessageInfo {
     public init(
         /**
          * The payload length of the message, including the header info
-         */fullMessageLength: UInt16, 
+         */ fullMessageLength: UInt16,
         /**
-         * The payload length of the message, reported in the info header
-         * This is the length of the payload, without the header info
-         */payloadLength: UInt16) {
+            * The payload length of the message, reported in the info header
+            * This is the length of the payload, without the header info
+            */ payloadLength: UInt16
+    ) {
         self.fullMessageLength = fullMessageLength
         self.payloadLength = payloadLength
     }
 }
 
 #if compiler(>=6)
-extension MessageInfo: Sendable {}
+    extension MessageInfo: Sendable {}
 #endif
 
-
 extension MessageInfo: Equatable, Hashable {
-    public static func ==(lhs: MessageInfo, rhs: MessageInfo) -> Bool {
+    public static func == (lhs: MessageInfo, rhs: MessageInfo) -> Bool {
         if lhs.fullMessageLength != rhs.fullMessageLength {
             return false
         }
@@ -1186,17 +1119,14 @@ extension MessageInfo: Equatable, Hashable {
     }
 }
 
-
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeMessageInfo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageInfo {
-        return
-            try MessageInfo(
-                fullMessageLength: FfiConverterUInt16.read(from: &buf), 
-                payloadLength: FfiConverterUInt16.read(from: &buf)
+        try MessageInfo(
+            fullMessageLength: FfiConverterUInt16.read(from: &buf),
+            payloadLength: FfiConverterUInt16.read(from: &buf)
         )
     }
 
@@ -1206,21 +1136,19 @@ public struct FfiConverterTypeMessageInfo: FfiConverterRustBuffer {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeMessageInfo_lift(_ buf: RustBuffer) throws -> MessageInfo {
-    return try FfiConverterTypeMessageInfo.lift(buf)
+    try FfiConverterTypeMessageInfo.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeMessageInfo_lower(_ value: MessageInfo) -> RustBuffer {
-    return FfiConverterTypeMessageInfo.lower(value)
+    FfiConverterTypeMessageInfo.lower(value)
 }
-
 
 public struct NdefHeader {
     public var messageBegin: Bool
@@ -1249,12 +1177,11 @@ public struct NdefHeader {
 }
 
 #if compiler(>=6)
-extension NdefHeader: Sendable {}
+    extension NdefHeader: Sendable {}
 #endif
 
-
 extension NdefHeader: Equatable, Hashable {
-    public static func ==(lhs: NdefHeader, rhs: NdefHeader) -> Bool {
+    public static func == (lhs: NdefHeader, rhs: NdefHeader) -> Bool {
         if lhs.messageBegin != rhs.messageBegin {
             return false
         }
@@ -1298,24 +1225,21 @@ extension NdefHeader: Equatable, Hashable {
     }
 }
 
-
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNdefHeader: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefHeader {
-        return
-            try NdefHeader(
-                messageBegin: FfiConverterBool.read(from: &buf), 
-                messageEnd: FfiConverterBool.read(from: &buf), 
-                chunked: FfiConverterBool.read(from: &buf), 
-                shortRecord: FfiConverterBool.read(from: &buf), 
-                hasIdLength: FfiConverterBool.read(from: &buf), 
-                typeNameFormat: FfiConverterTypeNdefType.read(from: &buf), 
-                typeLength: FfiConverterUInt8.read(from: &buf), 
-                payloadLength: FfiConverterUInt32.read(from: &buf), 
-                idLength: FfiConverterOptionUInt8.read(from: &buf)
+        try NdefHeader(
+            messageBegin: FfiConverterBool.read(from: &buf),
+            messageEnd: FfiConverterBool.read(from: &buf),
+            chunked: FfiConverterBool.read(from: &buf),
+            shortRecord: FfiConverterBool.read(from: &buf),
+            hasIdLength: FfiConverterBool.read(from: &buf),
+            typeNameFormat: FfiConverterTypeNdefType.read(from: &buf),
+            typeLength: FfiConverterUInt8.read(from: &buf),
+            payloadLength: FfiConverterUInt32.read(from: &buf),
+            idLength: FfiConverterOptionUInt8.read(from: &buf)
         )
     }
 
@@ -1332,21 +1256,19 @@ public struct FfiConverterTypeNdefHeader: FfiConverterRustBuffer {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefHeader_lift(_ buf: RustBuffer) throws -> NdefHeader {
-    return try FfiConverterTypeNdefHeader.lift(buf)
+    try FfiConverterTypeNdefHeader.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefHeader_lower(_ value: NdefHeader) -> RustBuffer {
-    return FfiConverterTypeNdefHeader.lower(value)
+    FfiConverterTypeNdefHeader.lower(value)
 }
-
 
 public struct NdefRecord {
     public var header: NdefHeader
@@ -1365,12 +1287,11 @@ public struct NdefRecord {
 }
 
 #if compiler(>=6)
-extension NdefRecord: Sendable {}
+    extension NdefRecord: Sendable {}
 #endif
 
-
 extension NdefRecord: Equatable, Hashable {
-    public static func ==(lhs: NdefRecord, rhs: NdefRecord) -> Bool {
+    public static func == (lhs: NdefRecord, rhs: NdefRecord) -> Bool {
         if lhs.header != rhs.header {
             return false
         }
@@ -1394,19 +1315,16 @@ extension NdefRecord: Equatable, Hashable {
     }
 }
 
-
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNdefRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecord {
-        return
-            try NdefRecord(
-                header: FfiConverterTypeNdefHeader.read(from: &buf), 
-                type: FfiConverterData.read(from: &buf), 
-                id: FfiConverterOptionData.read(from: &buf), 
-                payload: FfiConverterTypeNdefPayload.read(from: &buf)
+        try NdefRecord(
+            header: FfiConverterTypeNdefHeader.read(from: &buf),
+            type: FfiConverterData.read(from: &buf),
+            id: FfiConverterOptionData.read(from: &buf),
+            payload: FfiConverterTypeNdefPayload.read(from: &buf)
         )
     }
 
@@ -1418,21 +1336,19 @@ public struct FfiConverterTypeNdefRecord: FfiConverterRustBuffer {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefRecord_lift(_ buf: RustBuffer) throws -> NdefRecord {
-    return try FfiConverterTypeNdefRecord.lift(buf)
+    try FfiConverterTypeNdefRecord.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefRecord_lower(_ value: NdefRecord) -> RustBuffer {
-    return FfiConverterTypeNdefRecord.lower(value)
+    FfiConverterTypeNdefRecord.lower(value)
 }
-
 
 public struct ParsingContext {
     public var messageInfo: MessageInfo
@@ -1449,12 +1365,11 @@ public struct ParsingContext {
 }
 
 #if compiler(>=6)
-extension ParsingContext: Sendable {}
+    extension ParsingContext: Sendable {}
 #endif
 
-
 extension ParsingContext: Equatable, Hashable {
-    public static func ==(lhs: ParsingContext, rhs: ParsingContext) -> Bool {
+    public static func == (lhs: ParsingContext, rhs: ParsingContext) -> Bool {
         if lhs.messageInfo != rhs.messageInfo {
             return false
         }
@@ -1474,18 +1389,15 @@ extension ParsingContext: Equatable, Hashable {
     }
 }
 
-
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeParsingContext: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ParsingContext {
-        return
-            try ParsingContext(
-                messageInfo: FfiConverterTypeMessageInfo.read(from: &buf), 
-                needed: FfiConverterUInt16.read(from: &buf), 
-                firstBlockHash: FfiConverterOptionString.read(from: &buf)
+        try ParsingContext(
+            messageInfo: FfiConverterTypeMessageInfo.read(from: &buf),
+            needed: FfiConverterUInt16.read(from: &buf),
+            firstBlockHash: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -1496,21 +1408,19 @@ public struct FfiConverterTypeParsingContext: FfiConverterRustBuffer {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParsingContext_lift(_ buf: RustBuffer) throws -> ParsingContext {
-    return try FfiConverterTypeParsingContext.lift(buf)
+    try FfiConverterTypeParsingContext.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParsingContext_lower(_ value: ParsingContext) -> RustBuffer {
-    return FfiConverterTypeParsingContext.lower(value)
+    FfiConverterTypeParsingContext.lower(value)
 }
-
 
 public struct ParsingMessage {
     public var messageInfo: MessageInfo
@@ -1525,12 +1435,11 @@ public struct ParsingMessage {
 }
 
 #if compiler(>=6)
-extension ParsingMessage: Sendable {}
+    extension ParsingMessage: Sendable {}
 #endif
 
-
 extension ParsingMessage: Equatable, Hashable {
-    public static func ==(lhs: ParsingMessage, rhs: ParsingMessage) -> Bool {
+    public static func == (lhs: ParsingMessage, rhs: ParsingMessage) -> Bool {
         if lhs.messageInfo != rhs.messageInfo {
             return false
         }
@@ -1546,17 +1455,14 @@ extension ParsingMessage: Equatable, Hashable {
     }
 }
 
-
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeParsingMessage: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ParsingMessage {
-        return
-            try ParsingMessage(
-                messageInfo: FfiConverterTypeMessageInfo.read(from: &buf), 
-                leftOverBytes: FfiConverterData.read(from: &buf)
+        try ParsingMessage(
+            messageInfo: FfiConverterTypeMessageInfo.read(from: &buf),
+            leftOverBytes: FfiConverterData.read(from: &buf)
         )
     }
 
@@ -1566,21 +1472,19 @@ public struct FfiConverterTypeParsingMessage: FfiConverterRustBuffer {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParsingMessage_lift(_ buf: RustBuffer) throws -> ParsingMessage {
-    return try FfiConverterTypeParsingMessage.lift(buf)
+    try FfiConverterTypeParsingMessage.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParsingMessage_lower(_ value: ParsingMessage) -> RustBuffer {
-    return FfiConverterTypeParsingMessage.lower(value)
+    FfiConverterTypeParsingMessage.lower(value)
 }
-
 
 public struct TextPayload {
     public var format: TextPayloadFormat
@@ -1597,12 +1501,11 @@ public struct TextPayload {
 }
 
 #if compiler(>=6)
-extension TextPayload: Sendable {}
+    extension TextPayload: Sendable {}
 #endif
 
-
 extension TextPayload: Equatable, Hashable {
-    public static func ==(lhs: TextPayload, rhs: TextPayload) -> Bool {
+    public static func == (lhs: TextPayload, rhs: TextPayload) -> Bool {
         if lhs.format != rhs.format {
             return false
         }
@@ -1622,18 +1525,15 @@ extension TextPayload: Equatable, Hashable {
     }
 }
 
-
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeTextPayload: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextPayload {
-        return
-            try TextPayload(
-                format: FfiConverterTypeTextPayloadFormat.read(from: &buf), 
-                language: FfiConverterString.read(from: &buf), 
-                text: FfiConverterString.read(from: &buf)
+        try TextPayload(
+            format: FfiConverterTypeTextPayloadFormat.read(from: &buf),
+            language: FfiConverterString.read(from: &buf),
+            text: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -1644,39 +1544,36 @@ public struct FfiConverterTypeTextPayload: FfiConverterRustBuffer {
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeTextPayload_lift(_ buf: RustBuffer) throws -> TextPayload {
-    return try FfiConverterTypeTextPayload.lift(buf)
+    try FfiConverterTypeTextPayload.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeTextPayload_lower(_ value: TextPayload) -> RustBuffer {
-    return FfiConverterTypeTextPayload.lower(value)
+    FfiConverterTypeTextPayload.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum NdefPayload {
-    
     case text(TextPayload
     )
     case data(Data
     )
 }
 
-
 #if compiler(>=6)
-extension NdefPayload: Sendable {}
+    extension NdefPayload: Sendable {}
 #endif
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNdefPayload: FfiConverterRustBuffer {
     typealias SwiftType = NdefPayload
@@ -1684,62 +1581,49 @@ public struct FfiConverterTypeNdefPayload: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefPayload {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
-        case 1: return .text(try FfiConverterTypeTextPayload.read(from: &buf)
-        )
-        
-        case 2: return .data(try FfiConverterData.read(from: &buf)
-        )
-        
+        case 1: return try .text(FfiConverterTypeTextPayload.read(from: &buf)
+            )
+
+        case 2: return try .data(FfiConverterData.read(from: &buf)
+            )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NdefPayload, into buf: inout [UInt8]) {
         switch value {
-        
-        
         case let .text(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeTextPayload.write(v1, into: &buf)
-            
-        
+
         case let .data(v1):
             writeInt(&buf, Int32(2))
             FfiConverterData.write(v1, into: &buf)
-            
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefPayload_lift(_ buf: RustBuffer) throws -> NdefPayload {
-    return try FfiConverterTypeNdefPayload.lift(buf)
+    try FfiConverterTypeNdefPayload.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefPayload_lower(_ value: NdefPayload) -> RustBuffer {
-    return FfiConverterTypeNdefPayload.lower(value)
+    FfiConverterTypeNdefPayload.lower(value)
 }
 
-
 extension NdefPayload: Equatable, Hashable {}
-
-
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum NdefType {
-    
     case empty
     case wellKnown
     case mime
@@ -1750,13 +1634,12 @@ public enum NdefType {
     case reserved
 }
 
-
 #if compiler(>=6)
-extension NdefType: Sendable {}
+    extension NdefType: Sendable {}
 #endif
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNdefType: FfiConverterRustBuffer {
     typealias SwiftType = NdefType
@@ -1764,100 +1647,77 @@ public struct FfiConverterTypeNdefType: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefType {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
         case 1: return .empty
-        
+
         case 2: return .wellKnown
-        
+
         case 3: return .mime
-        
+
         case 4: return .absoluteUri
-        
+
         case 5: return .external
-        
+
         case 6: return .unknown
-        
+
         case 7: return .unchanged
-        
+
         case 8: return .reserved
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NdefType, into buf: inout [UInt8]) {
         switch value {
-        
-        
         case .empty:
             writeInt(&buf, Int32(1))
-        
-        
+
         case .wellKnown:
             writeInt(&buf, Int32(2))
-        
-        
+
         case .mime:
             writeInt(&buf, Int32(3))
-        
-        
+
         case .absoluteUri:
             writeInt(&buf, Int32(4))
-        
-        
+
         case .external:
             writeInt(&buf, Int32(5))
-        
-        
+
         case .unknown:
             writeInt(&buf, Int32(6))
-        
-        
+
         case .unchanged:
             writeInt(&buf, Int32(7))
-        
-        
+
         case .reserved:
             writeInt(&buf, Int32(8))
-        
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefType_lift(_ buf: RustBuffer) throws -> NdefType {
-    return try FfiConverterTypeNdefType.lift(buf)
+    try FfiConverterTypeNdefType.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNdefType_lower(_ value: NdefType) -> RustBuffer {
-    return FfiConverterTypeNdefType.lower(value)
+    FfiConverterTypeNdefType.lower(value)
 }
-
 
 extension NdefType: Equatable, Hashable {}
 
-
-
-
-
-
-
 public enum NfcMessageError: Swift.Error {
-
-    
-    
     case NoStringNorData
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNfcMessageError: FfiConverterRustBuffer {
     typealias SwiftType = NfcMessageError
@@ -1865,50 +1725,35 @@ public struct FfiConverterTypeNfcMessageError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcMessageError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
-        
-
-        
         case 1: return .NoStringNorData
 
-         default: throw UniffiInternalError.unexpectedEnumCase
+        default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NfcMessageError, into buf: inout [UInt8]) {
         switch value {
-
-        
-
-        
-        
         case .NoStringNorData:
             writeInt(&buf, Int32(1))
-        
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcMessageError_lift(_ buf: RustBuffer) throws -> NfcMessageError {
-    return try FfiConverterTypeNfcMessageError.lift(buf)
+    try FfiConverterTypeNfcMessageError.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcMessageError_lower(_ value: NfcMessageError) -> RustBuffer {
-    return FfiConverterTypeNfcMessageError.lower(value)
+    FfiConverterTypeNfcMessageError.lower(value)
 }
 
-
 extension NfcMessageError: Equatable, Hashable {}
-
-
-
 
 extension NfcMessageError: Foundation.LocalizedError {
     public var errorDescription: String? {
@@ -1916,23 +1761,15 @@ extension NfcMessageError: Foundation.LocalizedError {
     }
 }
 
-
-
-
-
 public enum NfcReaderError: Swift.Error {
-
-    
-    
     case ParsingError(String
     )
     case NotEnoughData
     case AlreadyParsed
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNfcReaderError: FfiConverterRustBuffer {
     typealias SwiftType = NfcReaderError
@@ -1940,63 +1777,45 @@ public struct FfiConverterTypeNfcReaderError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcReaderError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
-        
-
-        
-        case 1: return .ParsingError(
-            try FfiConverterString.read(from: &buf)
+        case 1: return try .ParsingError(
+                FfiConverterString.read(from: &buf)
             )
         case 2: return .NotEnoughData
         case 3: return .AlreadyParsed
-
-         default: throw UniffiInternalError.unexpectedEnumCase
+        default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NfcReaderError, into buf: inout [UInt8]) {
         switch value {
-
-        
-
-        
-        
         case let .ParsingError(v1):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(v1, into: &buf)
-            
-        
+
         case .NotEnoughData:
             writeInt(&buf, Int32(2))
-        
-        
+
         case .AlreadyParsed:
             writeInt(&buf, Int32(3))
-        
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcReaderError_lift(_ buf: RustBuffer) throws -> NfcReaderError {
-    return try FfiConverterTypeNfcReaderError.lift(buf)
+    try FfiConverterTypeNfcReaderError.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeNfcReaderError_lower(_ value: NfcReaderError) -> RustBuffer {
-    return FfiConverterTypeNfcReaderError.lower(value)
+    FfiConverterTypeNfcReaderError.lower(value)
 }
 
-
 extension NfcReaderError: Equatable, Hashable {}
-
-
-
 
 extension NfcReaderError: Foundation.LocalizedError {
     public var errorDescription: String? {
@@ -2004,19 +1823,14 @@ extension NfcReaderError: Foundation.LocalizedError {
     }
 }
 
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ParseResult {
-    
     /**
      * Completed The message is a NDEF message
      */
-    case complete(MessageInfo,[NdefRecord]
-    )
+    case complete(MessageInfo, [NdefRecord])
     /**
      * Incomplete, need more data to parse the message
      */
@@ -2024,13 +1838,12 @@ public enum ParseResult {
     )
 }
 
-
 #if compiler(>=6)
-extension ParseResult: Sendable {}
+    extension ParseResult: Sendable {}
 #endif
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeParseResult: FfiConverterRustBuffer {
     typealias SwiftType = ParseResult
@@ -2038,76 +1851,61 @@ public struct FfiConverterTypeParseResult: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ParseResult {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
-        case 1: return .complete(try FfiConverterTypeMessageInfo.read(from: &buf), try FfiConverterSequenceTypeNdefRecord.read(from: &buf)
-        )
-        
-        case 2: return .incomplete(try FfiConverterTypeParsingMessage.read(from: &buf)
-        )
-        
+        case 1: return try .complete(FfiConverterTypeMessageInfo.read(from: &buf), FfiConverterSequenceTypeNdefRecord.read(from: &buf))
+
+        case 2: return try .incomplete(FfiConverterTypeParsingMessage.read(from: &buf)
+            )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ParseResult, into buf: inout [UInt8]) {
         switch value {
-        
-        
-        case let .complete(v1,v2):
+        case let .complete(v1, v2):
             writeInt(&buf, Int32(1))
             FfiConverterTypeMessageInfo.write(v1, into: &buf)
             FfiConverterSequenceTypeNdefRecord.write(v2, into: &buf)
-            
-        
+
         case let .incomplete(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeParsingMessage.write(v1, into: &buf)
-            
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParseResult_lift(_ buf: RustBuffer) throws -> ParseResult {
-    return try FfiConverterTypeParseResult.lift(buf)
+    try FfiConverterTypeParseResult.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParseResult_lower(_ value: ParseResult) -> RustBuffer {
-    return FfiConverterTypeParseResult.lower(value)
+    FfiConverterTypeParseResult.lower(value)
 }
 
-
 extension ParseResult: Equatable, Hashable {}
-
-
-
-
-
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ParserState {
-    
     case notStarted
     case parsing(ParsingContext
     )
     case complete
 }
 
-
 #if compiler(>=6)
-extension ParserState: Sendable {}
+    extension ParserState: Sendable {}
 #endif
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeParserState: FfiConverterRustBuffer {
     typealias SwiftType = ParserState
@@ -2115,66 +1913,49 @@ public struct FfiConverterTypeParserState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ParserState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
         case 1: return .notStarted
-        
-        case 2: return .parsing(try FfiConverterTypeParsingContext.read(from: &buf)
-        )
-        
+
+        case 2: return try .parsing(FfiConverterTypeParsingContext.read(from: &buf)
+            )
+
         case 3: return .complete
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ParserState, into buf: inout [UInt8]) {
         switch value {
-        
-        
         case .notStarted:
             writeInt(&buf, Int32(1))
-        
-        
+
         case let .parsing(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeParsingContext.write(v1, into: &buf)
-            
-        
+
         case .complete:
             writeInt(&buf, Int32(3))
-        
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParserState_lift(_ buf: RustBuffer) throws -> ParserState {
-    return try FfiConverterTypeParserState.lift(buf)
+    try FfiConverterTypeParserState.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeParserState_lower(_ value: ParserState) -> RustBuffer {
-    return FfiConverterTypeParserState.lower(value)
+    FfiConverterTypeParserState.lower(value)
 }
-
 
 extension ParserState: Equatable, Hashable {}
 
-
-
-
-
-
-
 public enum ResumeError: Swift.Error {
-
-    
-    
     /**
      * The starting block of the new message is not the same as the one in the old message
      */
@@ -2188,14 +1969,12 @@ public enum ResumeError: Swift.Error {
      * The bytes passed in needs to be a multiple of crate::cove_nfc::BYTES_PER_BLOCK
      * The bytes passed in needs to be the same size as the bytes in the old message (NUMBER_OF_BLOCKS_PER_CHUNK * BYTES_PER_BLOCK)
      */
-    case BlockSizeMismatch(expected: UInt16, actual: UInt16
-    )
+    case BlockSizeMismatch(expected: UInt16, actual: UInt16)
     case UnableToGetFirstBlockHash
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeResumeError: FfiConverterRustBuffer {
     typealias SwiftType = ResumeError
@@ -2203,78 +1982,58 @@ public struct FfiConverterTypeResumeError: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ResumeError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-
-        
-
-        
         case 1: return .BlocksDoNotMatch
         case 2: return .AlreadyParsed
-        case 3: return .ParsingError(
-            try FfiConverterString.read(from: &buf)
+        case 3: return try .ParsingError(
+                FfiConverterString.read(from: &buf)
             )
-        case 4: return .BlockSizeMismatch(
-            expected: try FfiConverterUInt16.read(from: &buf), 
-            actual: try FfiConverterUInt16.read(from: &buf)
+        case 4: return try .BlockSizeMismatch(
+                expected: FfiConverterUInt16.read(from: &buf),
+                actual: FfiConverterUInt16.read(from: &buf)
             )
         case 5: return .UnableToGetFirstBlockHash
-
-         default: throw UniffiInternalError.unexpectedEnumCase
+        default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ResumeError, into buf: inout [UInt8]) {
         switch value {
-
-        
-
-        
-        
         case .BlocksDoNotMatch:
             writeInt(&buf, Int32(1))
-        
-        
+
         case .AlreadyParsed:
             writeInt(&buf, Int32(2))
-        
-        
+
         case let .ParsingError(v1):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
-            
-        
-        case let .BlockSizeMismatch(expected,actual):
+
+        case let .BlockSizeMismatch(expected, actual):
             writeInt(&buf, Int32(4))
             FfiConverterUInt16.write(expected, into: &buf)
             FfiConverterUInt16.write(actual, into: &buf)
-            
-        
+
         case .UnableToGetFirstBlockHash:
             writeInt(&buf, Int32(5))
-        
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeResumeError_lift(_ buf: RustBuffer) throws -> ResumeError {
-    return try FfiConverterTypeResumeError.lift(buf)
+    try FfiConverterTypeResumeError.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeResumeError_lower(_ value: ResumeError) -> RustBuffer {
-    return FfiConverterTypeResumeError.lower(value)
+    FfiConverterTypeResumeError.lower(value)
 }
 
-
 extension ResumeError: Equatable, Hashable {}
-
-
-
 
 extension ResumeError: Foundation.LocalizedError {
     public var errorDescription: String? {
@@ -2282,25 +2041,20 @@ extension ResumeError: Foundation.LocalizedError {
     }
 }
 
-
-
-
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum TextPayloadFormat {
-    
     case utf8
     case utf16
 }
 
-
 #if compiler(>=6)
-extension TextPayloadFormat: Sendable {}
+    extension TextPayloadFormat: Sendable {}
 #endif
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeTextPayloadFormat: FfiConverterRustBuffer {
     typealias SwiftType = TextPayloadFormat
@@ -2308,61 +2062,49 @@ public struct FfiConverterTypeTextPayloadFormat: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TextPayloadFormat {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
         case 1: return .utf8
-        
+
         case 2: return .utf16
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: TextPayloadFormat, into buf: inout [UInt8]) {
         switch value {
-        
-        
         case .utf8:
             writeInt(&buf, Int32(1))
-        
-        
+
         case .utf16:
             writeInt(&buf, Int32(2))
-        
         }
     }
 }
 
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeTextPayloadFormat_lift(_ buf: RustBuffer) throws -> TextPayloadFormat {
-    return try FfiConverterTypeTextPayloadFormat.lift(buf)
+    try FfiConverterTypeTextPayloadFormat.lift(buf)
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
 public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) -> RustBuffer {
-    return FfiConverterTypeTextPayloadFormat.lower(value)
+    FfiConverterTypeTextPayloadFormat.lower(value)
 }
-
 
 extension TextPayloadFormat: Equatable, Hashable {}
 
-
-
-
-
-
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionUInt8: FfiConverterRustBuffer {
+private struct FfiConverterOptionUInt8: FfiConverterRustBuffer {
     typealias SwiftType = UInt8?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
+        guard let value else {
             writeInt(&buf, Int8(0))
             return
         }
@@ -2380,13 +2122,13 @@ fileprivate struct FfiConverterOptionUInt8: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
+private struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
+        guard let value else {
             writeInt(&buf, Int8(0))
             return
         }
@@ -2404,13 +2146,13 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
+private struct FfiConverterOptionData: FfiConverterRustBuffer {
     typealias SwiftType = Data?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
+        guard let value else {
             writeInt(&buf, Int8(0))
             return
         }
@@ -2428,13 +2170,13 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
+private struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
     typealias SwiftType = MessageInfo?
 
     public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
+        guard let value else {
             writeInt(&buf, Int8(0))
             return
         }
@@ -2452,9 +2194,9 @@ fileprivate struct FfiConverterOptionTypeMessageInfo: FfiConverterRustBuffer {
 }
 
 #if swift(>=5.8)
-@_documentation(visibility: private)
+    @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeNdefRecord: FfiConverterRustBuffer {
+private struct FfiConverterSequenceTypeNdefRecord: FfiConverterRustBuffer {
     typealias SwiftType = [NdefRecord]
 
     public static func write(_ value: [NdefRecord], into buf: inout [UInt8]) {
@@ -2470,18 +2212,19 @@ fileprivate struct FfiConverterSequenceTypeNdefRecord: FfiConverterRustBuffer {
         var seq = [NdefRecord]()
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeNdefRecord.read(from: &buf))
+            try seq.append(FfiConverterTypeNdefRecord.read(from: &buf))
         }
         return seq
     }
 }
-public func nfcMessageIsEqual(lhs: NfcMessage, rhs: NfcMessage) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_func_nfc_message_is_equal(
-        FfiConverterTypeNfcMessage_lower(lhs),
-        FfiConverterTypeNfcMessage_lower(rhs),$0
-    )
-})
+
+public func nfcMessageIsEqual(lhs: NfcMessage, rhs: NfcMessage) -> Bool {
+    try! FfiConverterBool.lift(try! rustCall {
+        uniffi_cove_nfc_fn_func_nfc_message_is_equal(
+            FfiConverterTypeNfcMessage_lower(lhs),
+            FfiConverterTypeNfcMessage_lower(rhs), $0
+        )
+    })
 }
 
 private enum InitializationResult {
@@ -2489,6 +2232,7 @@ private enum InitializationResult {
     case contractVersionMismatch
     case apiChecksumMismatch
 }
+
 // Use a global variable to perform the versioning checks. Swift ensures that
 // the code inside is only computed once.
 private let initializationResult: InitializationResult = {
@@ -2499,58 +2243,58 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 47520) {
+    if uniffi_cove_nfc_checksum_func_nfc_message_is_equal() != 47520 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 34072) {
+    if uniffi_cove_nfc_checksum_method_ffinfcreader_data_from_records() != 34072 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 15004) {
+    if uniffi_cove_nfc_checksum_method_ffinfcreader_is_resumeable() != 15004 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 34307) {
+    if uniffi_cove_nfc_checksum_method_ffinfcreader_is_started() != 34307 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 53340) {
+    if uniffi_cove_nfc_checksum_method_ffinfcreader_message_info() != 53340 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 62093) {
+    if uniffi_cove_nfc_checksum_method_ffinfcreader_parse() != 62093 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 499) {
+    if uniffi_cove_nfc_checksum_method_ffinfcreader_string_from_record() != 499 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ndefrecordreader_id() != 12646) {
+    if uniffi_cove_nfc_checksum_method_ndefrecordreader_id() != 12646 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_ndefrecordreader_type_() != 20702) {
+    if uniffi_cove_nfc_checksum_method_ndefrecordreader_type_() != 20702 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 42358) {
+    if uniffi_cove_nfc_checksum_method_nfcconst_bytes_per_block() != 42358 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk() != 58624) {
+    if uniffi_cove_nfc_checksum_method_nfcconst_number_of_blocks_per_chunk() != 58624 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk() != 25318) {
+    if uniffi_cove_nfc_checksum_method_nfcconst_total_bytes_per_chunk() != 25318 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcmessage_data() != 1508) {
+    if uniffi_cove_nfc_checksum_method_nfcmessage_data() != 1508 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_method_nfcmessage_string() != 21081) {
+    if uniffi_cove_nfc_checksum_method_nfcmessage_string() != 21081 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_ffinfcreader_new() != 61696) {
+    if uniffi_cove_nfc_checksum_constructor_ffinfcreader_new() != 61696 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 27665) {
+    if uniffi_cove_nfc_checksum_constructor_ndefrecordreader_new() != 27665 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 53215) {
+    if uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 53215 {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 28935) {
+    if uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 28935 {
         return InitializationResult.apiChecksumMismatch
     }
 
