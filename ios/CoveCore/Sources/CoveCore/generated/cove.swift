@@ -26062,10 +26062,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

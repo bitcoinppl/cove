@@ -1060,6 +1060,8 @@ public protocol AddressWithNetworkProtocol: AnyObject, Sendable {
     
     func amount()  -> Amount?
     
+    func isValidForNetwork(network: Network)  -> Bool
+    
     func network()  -> Network
     
 }
@@ -1133,6 +1135,14 @@ open func address() -> Address  {
 open func amount() -> Amount?  {
     return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
     uniffi_cove_types_fn_method_addresswithnetwork_amount(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func isValidForNetwork(network: Network) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_addresswithnetwork_isvalidfornetwork(self.uniffiClonePointer(),
+        FfiConverterTypeNetwork_lower(network),$0
     )
 })
 }
@@ -5292,6 +5302,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_addresswithnetwork_amount() != 13991) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_addresswithnetwork_isvalidfornetwork() != 50452) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_addresswithnetwork_network() != 19521) {
