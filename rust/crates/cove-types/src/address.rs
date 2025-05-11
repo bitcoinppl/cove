@@ -4,6 +4,7 @@ use std::{hash::Hasher, sync::Arc};
 
 use bdk_chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx};
 use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bitcoin::NetworkKind;
 use bitcoin::bip32::DerivationPath;
 use bitcoin::{
     Transaction,
@@ -166,18 +167,9 @@ impl AddressWithNetwork {
     }
 
     pub fn is_valid_for_network(&self, network: Network) -> bool {
-        match (self.network, network) {
-            // same network valid
-            (Network::Bitcoin, Network::Bitcoin) => true,
-            (Network::Testnet, Network::Testnet) => true,
-            (Network::Signet, Network::Signet) => true,
-
-            // testnet valid for signet and visa versa
-            (Network::Testnet, Network::Signet) => true,
-            (Network::Signet, Network::Testnet) => true,
-
-            _ => false,
-        }
+        let current_network_type = NetworkKind::from(self.network);
+        let network_type = NetworkKind::from(network);
+        current_network_type == network_type
     }
 }
 
@@ -225,6 +217,11 @@ impl AddressWithNetwork {
 
     fn amount(&self) -> Option<Arc<Amount>> {
         self.amount.map(Arc::new)
+    }
+
+    #[uniffi::method(name = "isValidForNetwork")]
+    pub fn ffi_is_valid_for_network(&self, network: Network) -> bool {
+        self.is_valid_for_network(network)
     }
 }
 
