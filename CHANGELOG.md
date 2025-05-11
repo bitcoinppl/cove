@@ -2,8 +2,6 @@
 
 ## [Unreleased]
 
-## [0.4.1] - 2025-05-10
-
 ### Changes
 
 - Redesigned address QR receive sheet
@@ -12,6 +10,7 @@
 ## Fixes
 
 - Fixed a bug where entering a comically large fiat amount would crash the app
+- Fixed a bug where in Testnet4 addresses were coming up as invalid when they weren't
 
 ## [0.4.0] - 2025-05-08
 
