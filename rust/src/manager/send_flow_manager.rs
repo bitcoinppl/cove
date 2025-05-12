@@ -640,6 +640,15 @@ impl RustSendFlowManager {
         self.state.lock().address = address.clone();
         sender.queue(Message::UpdateAddress(address.clone()));
 
+        // if both address and amount are valid, then clear the focus field, if amouunt is invalid, then focus on amount
+        if self.validate_address(false) {
+            let focus_field =
+                if !self.validate_amount(false) { Some(SetAmountFocusField::Amount) } else { None };
+
+            self.state.lock().focus_field = focus_field;
+            sender.queue(Message::UpdateFocusField(focus_field));
+        }
+
         // when we have a valid address, use that to get the fee rate options
         let me = self.clone();
         let is_max_selected = self.state.lock().max_selected.is_some();
