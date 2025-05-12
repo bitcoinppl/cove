@@ -640,7 +640,7 @@ impl RustSendFlowManager {
         self.state.lock().address = address.clone();
         sender.queue(Message::UpdateAddress(address.clone()));
 
-        // if both address and amount are valid, then clear the focus field, if amouunt is invalid, then focus on amount
+        // if both address and amount are valid, then clear the focus field, if amount is invalid, then focus on amount
         if self.validate_address(false) {
             let focus_field =
                 if !self.validate_amount(false) { Some(SetAmountFocusField::Amount) } else { None };
