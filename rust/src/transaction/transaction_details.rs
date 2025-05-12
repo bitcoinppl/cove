@@ -322,7 +322,7 @@ impl TransactionDetails {
             Network::Bitcoin => format!("https://mempool.space/tx/{}", self.tx_id.0),
             Network::Testnet => format!("https://mempool.space/testnet/tx/{}", self.tx_id.0),
             Network::Testnet4 => format!("https://mempool.space/testnet4/tx/{}", self.tx_id.0),
-            Network::Signet => format!("https://https://mutinynet.com/tx/{}", self.tx_id.0),
+            Network::Signet => format!("https://mutinynet.com/tx/{}", self.tx_id.0),
         }
     }
 
