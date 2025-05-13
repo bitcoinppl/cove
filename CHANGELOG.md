@@ -9,7 +9,7 @@
 - Redesigned address QR receive sheet
 - Redesigned "Advanced More Details" sheet in the send flow
 
-## Fixes
+### Fixes
 
 - Fixed a bug where entering a comically large fiat amount would crash the app
 - Fixed a bug where in Testnet4 addresses were coming up as invalid when they weren't
