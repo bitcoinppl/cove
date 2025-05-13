@@ -23056,9 +23056,6 @@ public func FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(_ v: Tap
 
 public protocol WalletManagerReconciler: AnyObject, Sendable {
     
-    /**
-     * tells the frontend to reconcile the manager changes
-     */
     func reconcile(message: WalletManagerReconcileMessage) 
     
     func reconcileMany(messages: [WalletManagerReconcileMessage]) 
@@ -26155,7 +26152,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 5326) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 24580) {
+    if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 42803) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many() != 61181) {
@@ -26170,10 +26167,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 
