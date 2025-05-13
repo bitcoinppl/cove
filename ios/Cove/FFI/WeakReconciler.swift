@@ -20,9 +20,23 @@ final class WeakReconciler<Reconciler: AnyObject, Message>: AnyReconciler, @unch
     func reconcile(message: Message) {
         reconciler?.reconcile(message: message)
     }
+    
+    func reconcileMany(messages: [Message]) {
+        reconciler?.reconcileMany(messages: messages)
+    }
 }
 
 protocol AnyReconciler: AnyObject {
     associatedtype Message
     func reconcile(message: Message)
+    func reconcileMany(messages: [Message])
+}
+
+/// Default “batch” implementation: just replay each message.
+extension AnyReconciler {
+    func reconcileMany(messages: [Message]) {
+        for msg in messages {
+            reconcile(message: msg)
+        }
+    }
 }

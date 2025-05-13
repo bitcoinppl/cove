@@ -22729,6 +22729,8 @@ public protocol SendFlowManagerReconciler: AnyObject, Sendable {
      */
     func reconcile(message: SendFlowManagerReconcileMessage) 
     
+    func reconcileMany(messages: [SendFlowManagerReconcileMessage]) 
+    
 }
 
 
@@ -22754,6 +22756,30 @@ fileprivate struct UniffiCallbackInterfaceSendFlowManagerReconciler {
                 }
                 return uniffiObj.reconcile(
                      message: try FfiConverterTypeSendFlowManagerReconcileMessage_lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reconcileMany: { (
+            uniffiHandle: UInt64,
+            messages: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceSendFlowManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcileMany(
+                     messages: try FfiConverterSequenceTypeSendFlowManagerReconcileMessage.lift(messages)
                 )
             }
 
@@ -24182,6 +24208,31 @@ fileprivate struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRoute.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSendFlowManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = [SendFlowManagerReconcileMessage]
+
+    public static func write(_ value: [SendFlowManagerReconcileMessage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSendFlowManagerReconcileMessage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SendFlowManagerReconcileMessage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SendFlowManagerReconcileMessage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSendFlowManagerReconcileMessage.read(from: &buf))
         }
         return seq
     }
@@ -26041,6 +26092,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile() != 9770) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many() != 404) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 41763) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26063,9 +26117,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 
