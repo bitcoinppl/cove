@@ -116,7 +116,6 @@ pub enum SendFlowErrorAlert {
 
 #[uniffi::export(callback_interface)]
 pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
-    /// tells the frontend to reconcile the manager changes
     fn reconcile(&self, message: Message);
     fn reconcile_many(&self, messages: Vec<Message>);
 }
