@@ -1033,10 +1033,10 @@ impl RustWalletManager {
     fn send(&self, message: impl Into<SingleOrMany>) {
         let message = message.into();
         debug!("send: {message:?}");
-        match self.reconciler.try_send(message.clone()) {
+        match self.reconciler.try_send(message) {
             Ok(_) => {}
-            Err(TrySendError::Full(err)) => {
-                warn!("[WARN] unable to send, queue is full: {err:?}, sending async");
+            Err(TrySendError::Full(message)) => {
+                warn!("[WARN] unable to send, queue is full, sending async");
 
                 let me = self.clone();
                 task::spawn(async move { me.send_async(message).await });
