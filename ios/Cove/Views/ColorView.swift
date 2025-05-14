@@ -11,7 +11,7 @@ struct ColorView: View {
         let renderer = ImageRenderer(content: pdfView)
 
         let docsDir = URL.documentsDirectory
-        let url = docsDir.appending(path: "output.pdf")
+        let url = docsDir.appending(path: "color_sheet.pdf")
 
         renderer.render { size, context in
             var box = CGRect(x: 0, y: 0, width: size.width, height: max(size.height, contentSize.height))
@@ -31,7 +31,7 @@ struct ColorView: View {
 
     func savePrintablePdf() {
         let docsDir = URL.documentsDirectory
-        let url = docsDir.appending(path: "output_printable.pdf")
+        let url = docsDir.appending(path: "color_sheet_printable.pdf")
 
         // Define page size (A4)
         let pageWidth: CGFloat = 595.2
@@ -93,6 +93,7 @@ struct ColorView: View {
         print("open \(url)")
         print("open \(docsDir)")
     }
+    
 
     // Helper view for each page of colors
     struct ColorPageView: View {
@@ -126,7 +127,7 @@ struct ColorView: View {
                                     .foregroundColor(color.color)
                                     .border(Color.black, width: 2)
 
-                                Text(color.color.toHexString(colorScheme: .light))
+                                Text(color.color.toHexStringAndOpacity(colorScheme: .light))
                                     .font(.caption2)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.secondary)
@@ -139,7 +140,7 @@ struct ColorView: View {
                                     .foregroundColor(color.color)
                                     .border(Color.black, width: 2)
 
-                                Text(color.color.toHexString(colorScheme: .dark))
+                                Text(color.color.toHexStringAndOpacity(colorScheme: .dark))
                                     .font(.caption2)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.gray)
@@ -252,10 +253,14 @@ struct ColorRow: View {
                                 .foregroundColor(color.color)
                                 .border(Color.black, width: 3)
 
-                            Text(color.color.toHexString(colorScheme: .light))
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 0){
+                                Text(color.color.toHexStringAndOpacity(colorScheme: .light))
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                      
                         }
                         .environment(\.colorScheme, .light)
 
@@ -265,10 +270,12 @@ struct ColorRow: View {
                                 .foregroundColor(color.color)
                                 .border(Color.black, width: 3)
 
-                            Text(color.color.toHexString(colorScheme: .dark))
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.gray)
+                            HStack(spacing: 0){
+                                Text(color.color.toHexStringAndOpacity(colorScheme: .dark))
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.gray)
+                            }
                         }
                         .environment(\.colorScheme, .dark)
                     }
@@ -281,10 +288,12 @@ struct ColorRow: View {
                             .foregroundColor(color.color)
                             .border(Color.black, width: 3)
 
-                        Text(color.color.toHexString(colorScheme: .light))
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 0){
+                            Text(color.color.toHexStringAndOpacity(colorScheme: .light))
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .environment(\.colorScheme, .light)
                 }
@@ -295,3 +304,4 @@ struct ColorRow: View {
         .font(.caption)
     }
 }
+
