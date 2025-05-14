@@ -127,7 +127,8 @@ struct WalletBalanceHeaderView: View {
                     }
 
                     if metadata.walletType == .watchOnly {
-                        return app.alertState = .init(.cantSendOnWatchOnlyWallet)
+                        app.alertState = .init(.cantSendOnWatchOnlyWallet)
+                        return
                     }
 
                     app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
@@ -180,6 +181,10 @@ struct WalletBalanceHeaderView: View {
                 return
             }
 
+            fiatBalance = manager.fiatBalance
+        }
+        .onAppear {
+            if fiatBalance != nil { return }
             fiatBalance = manager.fiatBalance
         }
         .task {
