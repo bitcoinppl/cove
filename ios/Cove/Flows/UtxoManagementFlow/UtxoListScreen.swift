@@ -28,21 +28,31 @@ struct ManageUTXOsView: View {
               amountBTC: 0.0135,
               date: .now,
               kind: .regular),
-        .init(name: "Facebook Marketplace",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .regular),
-        .init(name: "Change",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .change),
-        .init(name: "Open SATs Payment",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .regular),
+//        .init(name: "Facebook Marketplace",
+//              address: "bc1q uyye…e63s 0vus",
+//              amountBTC: 0.0135,
+//              date: .now,
+//              kind: .regular),
+//        .init(name: "Change",
+//              address: "bc1q uyye…e63s 0vus",
+//              amountBTC: 0.0135,
+//              date: .now,
+//              kind: .change),
+//        .init(name: "Open SATs Payment",
+//              address: "bc1q uyye…e63s 0vus",
+//              amountBTC: 0.0135,
+//              date: .now,
+//              kind: .regular),
+//        .init(name: "Change",
+//              address: "bc1q uyye…e63s 0vus",
+//              amountBTC: 0.0135,
+//              date: .now,
+//              kind: .change),
+//        .init(name: "Open SATs Payment",
+//              address: "bc1q uyye…e63s 0vus",
+//              amountBTC: 0.0135,
+//              date: .now,
+//              kind: .regular),
     ]
 
     // ─── UI state ────────────────────────────────────────────
@@ -74,83 +84,94 @@ struct ManageUTXOsView: View {
     // ─── Body ────────────────────────────────────────────────
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // ─ Search bar ─
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                    TextField("Search Assets", text: $search)
-                        .autocorrectionDisabled()
+            VStack(spacing: 24) {
+                VStack(spacing: 16) {
+                    // ─ Search bar ─
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                        TextField("Search UTXOs", text: $search)
+                            .autocorrectionDisabled()
+                    }
+                    .padding(8)
+                    .background(Color.systemGray5)
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                    
+                    // ─ Sort buttons ─
+                    HStack {
+                        sortButton(for: .date)
+                        Spacer()
+                        sortButton(for: .name)
+                        Spacer()
+                        sortButton(for: .amount)
+                    }
+                    .padding(.horizontal)
                 }
-                .padding(8)
-                .background(Color(.secondarySystemFill))
-                .cornerRadius(8)
-                .padding(.horizontal)
-                .padding(.top)
 
-                // ─ Sort buttons ─
-                HStack {
-                    Spacer()
-                    sortButton(for: .date)
-                    Spacer()
-                    sortButton(for: .name)
-                    Spacer()
-                    sortButton(for: .amount)
-                    Spacer()
+                VStack(spacing: 8){
+                    // ─ Section header ─
+                    HStack {
+                        Text("LIST OF UTXOS")
+                            .font(.caption)
+                            .fontWeight(.regular)
+                            .foregroundColor(.primary.opacity(0.6))
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.horizontal)
+                    
+                    // ─ UTXO list ─
+                    List(filteredUTXOs, selection: $selected) { utxo in
+                        UTXORow(utxo: utxo).listRowBackground(Color.systemBackground)
+                    }
+                    .listStyle(.insetGrouped)
+                    .environment(\.editMode, .constant(.active))
+                    .padding(.horizontal)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .scrollContentBackground(.hidden)
                 }
-                .padding(.top, 4)
-
-                // ─ Section header ─
-                HStack {
-                    Text("LIST OF ASSETS")
-                        .font(.footnote)
-                        .fontWeight(.regular)
-                        .foregroundColor(.primary)
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.top, 12)
-
-                // ─ UTXO list ─
-                List(filteredUTXOs, selection: $selected) { utxo in
-                    UTXORow(utxo: utxo)
-                        .listRowBackground(Color.white)
-                }
-                .scrollContentBackground(.hidden)
-                .environment(\.editMode, .constant(.active))
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal)
-
+                
                 // ─ Footer notes ─
-                VStack(spacing: 8) {
-                    Text("Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use.")
-                        .font(.footnote)
-                        .fontWeight(.regular)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                VStack(spacing: 16) {
+                    HStack{
+                        Text("Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use.")
+                            .font(.caption)
+                            .fontWeight(.regular)
+                        
+                        Spacer()
+                    }
 
                     HStack(spacing: 4) {
                         Image(systemName: "bitcoinsign.circle.fill")
                             .font(.footnote)
+                        
                         Text("Denotes UTXO change")
-                            .font(.footnote)
+                            .font(.caption)
                             .fontWeight(.regular)
+                        
+                        Spacer()
                     }
                 }
-                .padding(.bottom, 12)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.horizontal)
+                
+                Spacer()
 
                 // ─ Action buttons ─
                 Button("Continue") { /* … */ }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(
+                        selected.isEmpty ?
+                         DarkButtonStyle(backgroundColor: .systemGray4, foregroundColor: .secondary) :
+                                DarkButtonStyle()
+                    )
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal)
                     .padding(.bottom, 4)
                     .disabled(selected.isEmpty)
-
-                Button("Customize Selection") { /* … */ }
-                    .font(.callout)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal)
+                
             }
             .navigationTitle("Manage UTXOs")
             .background(
@@ -167,25 +188,20 @@ struct ManageUTXOsView: View {
     // MARK: - Helpers
 
     private func sortButton(for key: SortKey) -> some View {
-        Button {
-            sortKey = key
-        } label: {
+        Button { sortKey = key }
+        label: {
             Text(key.title)
                 .font(.footnote)
-                .fontWeight(.regular)
+                .fontWeight(.medium)
                 .frame(minWidth: 60)
-                .padding(.vertical, 6)
-                .background(sortKey == key
-                    ? Color.accentColor
-                    : Color(.secondarySystemFill)
-                )
-                .foregroundColor(sortKey == key
-                    ? .white
-                    : .primary
-                )
-                .cornerRadius(8)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(sortKey == key ? .blue : .systemGray5)
+                .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
+                .cornerRadius(100)
         }
         .buttonStyle(.plain)
+        .opacity(1)
     }
 
     private var filteredUTXOs: [UTXO] {
@@ -201,18 +217,18 @@ private struct UTXORow: View {
     let utxo: UTXO
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
                 // Name
                 Text(utxo.name)
-                    .font(.caption)
-                    .fontWeight(.semibold)
+                    .font(.footnote)
 
                 // Address (semi-bold caption)
                 Text(utxo.address)
-                    .font(.caption)
+                    .font(.caption2)
                     .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .foregroundColor(.secondary)
+                    .truncationMode(.middle)
             }
 
             Spacer(minLength: 8)
