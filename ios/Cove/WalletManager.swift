@@ -183,9 +183,10 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     }
 
     private let rustBridge = DispatchQueue(
-        label: "cove.walletmanager.rustbridge", qos: .userInitiated)
+        label: "cove.walletmanager.rustbridge", qos: .userInitiated
+    )
 
-    internal func reconcile(message: Message) {
+    func reconcile(message: Message) {
         rustBridge.async { [weak self] in
             guard let self else {
                 Log.error("WalletManager no longer available")
@@ -199,7 +200,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    internal func reconcileMany(messages: [Message]) {
+    func reconcileMany(messages: [Message]) {
         rustBridge.async { [weak self] in
             guard let self else {
                 Log.error("WalletManager no longer available")
