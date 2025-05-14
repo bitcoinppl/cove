@@ -7,7 +7,7 @@ use std::{
 
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
-use flume::{Receiver, Sender};
+use flume::{Receiver, Sender, TrySendError};
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
@@ -50,7 +50,13 @@ use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
 };
 
-use super::send_flow_manager::RustSendFlowManager;
+use super::{deferred_sender, send_flow_manager::RustSendFlowManager};
+
+type Action = WalletManagerAction;
+type Message = WalletManagerReconcileMessage;
+type Reconciler = dyn WalletManagerReconciler;
+pub type SingleOrMany = deferred_sender::SingleOrMany<Message>;
+cove_macros::impl_message_manager!(RustWalletManager);
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
@@ -110,8 +116,8 @@ pub enum SendFlowErrorAlert {
 
 #[uniffi::export(callback_interface)]
 pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
-    /// Tells the frontend to reconcile the view model changes
-    fn reconcile(&self, message: WalletManagerReconcileMessage);
+    fn reconcile(&self, message: Message);
+    fn reconcile_many(&self, messages: Vec<Message>);
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
@@ -123,8 +129,8 @@ pub struct RustWalletManager {
     // faster to access, but adds complexity to the code because we have to make sure its updated
     // in all the places
     pub metadata: Arc<RwLock<WalletMetadata>>,
-    pub reconciler: Sender<WalletManagerReconcileMessage>,
-    pub reconcile_receiver: Arc<Receiver<WalletManagerReconcileMessage>>,
+    pub reconciler: Sender<SingleOrMany>,
+    pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 
     label_manager: Arc<LabelManager>,
 
@@ -215,7 +221,7 @@ pub enum WalletManagerError {
 impl RustWalletManager {
     #[uniffi::constructor(name = "new")]
     pub fn try_new(id: WalletId) -> Result<Self, Error> {
-        let (sender, receiver) = flume::bounded(100);
+        let (sender, receiver) = flume::bounded(10);
 
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
@@ -390,9 +396,7 @@ impl RustWalletManager {
             .into(),
         )?;
 
-        self.reconciler
-            .send(WalletManagerReconcileMessage::UnsignedTransactionsChanged)
-            .expect("failed to send update");
+        self.send(Message::UnsignedTransactionsChanged);
 
         Ok(())
     }
@@ -429,9 +433,7 @@ impl RustWalletManager {
     pub async fn get_transactions(&self) {
         let Ok(txns) = call!(self.actor.transactions()).await else { return };
 
-        self.reconciler
-            .send(WalletManagerReconcileMessage::UpdatedTransactions(txns))
-            .expect("failed to send update");
+        self.send(Message::UpdatedTransactions(txns));
     }
 
     #[uniffi::method]
@@ -442,9 +444,7 @@ impl RustWalletManager {
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
         send!(self.actor.cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
-        self.reconciler
-            .send(WalletManagerReconcileMessage::UnsignedTransactionsChanged)
-            .expect("failed to send update");
+        self.send(Message::UnsignedTransactionsChanged);
 
         Ok(())
     }
@@ -694,7 +694,7 @@ impl RustWalletManager {
                 .map(Fingerprint::as_uppercase)
                 .unwrap_or_else(|| "Unnamed Wallet".to_string());
 
-            self.dispatch(WalletManagerAction::UpdateName(name));
+            self.dispatch(Action::UpdateName(name));
         }
     }
 
@@ -726,9 +726,7 @@ impl RustWalletManager {
             let mut wallet_metadata = self.metadata.write();
             wallet_metadata.verified = true;
 
-            self.reconciler
-                .send(WalletManagerReconcileMessage::WalletMetadataChanged(wallet_metadata.clone()))
-                .expect("failed to send update");
+            self.send(Message::WalletMetadataChanged(wallet_metadata.clone()));
         }
 
         let id = self.metadata.read().id.clone();
@@ -851,13 +849,15 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn listen_for_updates(&self, reconciler: Box<dyn WalletManagerReconciler>) {
+    pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
 
         std::thread::spawn(move || {
             while let Ok(field) = reconcile_receiver.recv() {
-                // call the reconcile method on the frontend
-                reconciler.reconcile(field);
+                match field {
+                    SingleOrMany::Single(message) => reconciler.reconcile(message),
+                    SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
+                }
             }
         });
     }
@@ -936,29 +936,29 @@ impl RustWalletManager {
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: WalletManagerAction) {
+    pub fn dispatch(&self, action: Action) {
         match action {
-            WalletManagerAction::UpdateName(name) => {
+            Action::UpdateName(name) => {
                 let mut metadata = self.metadata.write();
                 metadata.name = name;
             }
 
-            WalletManagerAction::UpdateColor(color) => {
+            Action::UpdateColor(color) => {
                 let mut metadata = self.metadata.write();
                 metadata.color = color;
             }
 
-            WalletManagerAction::UpdateUnit(unit) => {
+            Action::UpdateUnit(unit) => {
                 let mut metadata = self.metadata.write();
                 metadata.selected_unit = unit;
             }
 
-            WalletManagerAction::ToggleSensitiveVisibility => {
+            Action::ToggleSensitiveVisibility => {
                 let mut metadata = self.metadata.write();
                 metadata.sensitive_visible = !metadata.sensitive_visible;
             }
 
-            WalletManagerAction::ToggleFiatOrBtc => {
+            Action::ToggleFiatOrBtc => {
                 let mut metadata = self.metadata.write();
                 metadata.fiat_or_btc = match metadata.fiat_or_btc {
                     FiatOrBtc::Btc => FiatOrBtc::Fiat,
@@ -966,12 +966,12 @@ impl RustWalletManager {
                 };
             }
 
-            WalletManagerAction::UpdateFiatOrBtc(fiat_or_btc) => {
+            Action::UpdateFiatOrBtc(fiat_or_btc) => {
                 let mut metadata = self.metadata.write();
                 metadata.fiat_or_btc = fiat_or_btc;
             }
 
-            WalletManagerAction::ToggleFiatBtcPrimarySecondary => {
+            Action::ToggleFiatBtcPrimarySecondary => {
                 let order = [
                     (FiatOrBtc::Btc, Unit::Btc),
                     (FiatOrBtc::Fiat, Unit::Btc),
@@ -990,37 +990,35 @@ impl RustWalletManager {
                 let next_index = (current_index + 1) % order.len();
                 let (fiat_or_btc, unit) = order[next_index];
 
-                self.dispatch(WalletManagerAction::UpdateFiatOrBtc(fiat_or_btc));
-                self.dispatch(WalletManagerAction::UpdateUnit(unit));
+                self.dispatch(Action::UpdateFiatOrBtc(fiat_or_btc));
+                self.dispatch(Action::UpdateUnit(unit));
             }
 
-            WalletManagerAction::ToggleDetailsExpanded => {
+            Action::ToggleDetailsExpanded => {
                 let mut metadata = self.metadata.write();
                 metadata.details_expanded = !metadata.details_expanded;
             }
 
-            WalletManagerAction::SelectCurrentWalletAddressType => {
+            Action::SelectCurrentWalletAddressType => {
                 let mut metadata = self.metadata.write();
                 metadata.discovery_state = DiscoveryState::ChoseAdressType;
             }
 
-            WalletManagerAction::SelectDifferentWalletAddressType(wallet_address_type) => {
+            Action::SelectDifferentWalletAddressType(wallet_address_type) => {
                 let mut metadata = self.metadata.write();
                 metadata.address_type = wallet_address_type;
                 metadata.discovery_state = DiscoveryState::ChoseAdressType;
             }
 
-            WalletManagerAction::ToggleShowLabels => {
+            Action::ToggleShowLabels => {
                 let mut metadata = self.metadata.write();
                 metadata.show_labels = !metadata.show_labels;
             }
         }
 
         let metadata = self.metadata.read();
-        let metdata_changed_msg =
-            WalletManagerReconcileMessage::WalletMetadataChanged(metadata.clone());
-
-        self.reconciler.send(metdata_changed_msg).unwrap();
+        let metadata_changed_msg = Message::WalletMetadataChanged(metadata.clone());
+        self.send(metadata_changed_msg);
 
         // update wallet_metadata in the database
         if let Err(error) =
@@ -1032,6 +1030,31 @@ impl RustWalletManager {
 }
 
 impl RustWalletManager {
+    fn send(&self, message: impl Into<SingleOrMany>) {
+        let message = message.into();
+        debug!("send: {message:?}");
+        match self.reconciler.try_send(message) {
+            Ok(_) => {}
+            Err(TrySendError::Full(message)) => {
+                warn!("[WARN] unable to send, queue is full, sending async");
+
+                let me = self.clone();
+                task::spawn(async move { me.send_async(message).await });
+            }
+            Err(e) => {
+                error!("unable to send message to send flow manager: {e:?}");
+            }
+        }
+    }
+
+    async fn send_async(&self, message: impl Into<SingleOrMany>) {
+        let message = message.into();
+        debug!("send_async: {message:?}");
+        if let Err(err) = self.reconciler.send_async(message).await {
+            error!("unable to send message to send flow manager: {err}");
+        }
+    }
+
     pub async fn confirm_txn(
         &self,
         amount: Amount,

@@ -22729,6 +22729,8 @@ public protocol SendFlowManagerReconciler: AnyObject, Sendable {
      */
     func reconcile(message: SendFlowManagerReconcileMessage) 
     
+    func reconcileMany(messages: [SendFlowManagerReconcileMessage]) 
+    
 }
 
 
@@ -22754,6 +22756,30 @@ fileprivate struct UniffiCallbackInterfaceSendFlowManagerReconciler {
                 }
                 return uniffiObj.reconcile(
                      message: try FfiConverterTypeSendFlowManagerReconcileMessage_lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reconcileMany: { (
+            uniffiHandle: UInt64,
+            messages: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceSendFlowManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcileMany(
+                     messages: try FfiConverterSequenceTypeSendFlowManagerReconcileMessage.lift(messages)
                 )
             }
 
@@ -23031,9 +23057,11 @@ public func FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(_ v: Tap
 public protocol WalletManagerReconciler: AnyObject, Sendable {
     
     /**
-     * Tells the frontend to reconcile the view model changes
+     * tells the frontend to reconcile the manager changes
      */
     func reconcile(message: WalletManagerReconcileMessage) 
+    
+    func reconcileMany(messages: [WalletManagerReconcileMessage]) 
     
 }
 
@@ -23060,6 +23088,30 @@ fileprivate struct UniffiCallbackInterfaceWalletManagerReconciler {
                 }
                 return uniffiObj.reconcile(
                      message: try FfiConverterTypeWalletManagerReconcileMessage_lift(message)
+                )
+            }
+
+            
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reconcileMany: { (
+            uniffiHandle: UInt64,
+            messages: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceWalletManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcileMany(
+                     messages: try FfiConverterSequenceTypeWalletManagerReconcileMessage.lift(messages)
                 )
             }
 
@@ -24190,6 +24242,31 @@ fileprivate struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSendFlowManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = [SendFlowManagerReconcileMessage]
+
+    public static func write(_ value: [SendFlowManagerReconcileMessage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSendFlowManagerReconcileMessage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SendFlowManagerReconcileMessage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SendFlowManagerReconcileMessage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSendFlowManagerReconcileMessage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeTransaction: FfiConverterRustBuffer {
     typealias SwiftType = [Transaction]
 
@@ -24232,6 +24309,31 @@ fileprivate struct FfiConverterSequenceTypeWalletColor: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeWalletColor.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeWalletManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = [WalletManagerReconcileMessage]
+
+    public static func write(_ value: [WalletManagerReconcileMessage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWalletManagerReconcileMessage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WalletManagerReconcileMessage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WalletManagerReconcileMessage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWalletManagerReconcileMessage.read(from: &buf))
         }
         return seq
     }
@@ -26041,6 +26143,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile() != 9770) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many() != 404) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 41763) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26050,7 +26155,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 5326) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 1495) {
+    if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 24580) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many() != 61181) {
         return InitializationResult.apiChecksumMismatch
     }
 
@@ -26062,9 +26170,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()

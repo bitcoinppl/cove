@@ -11,6 +11,9 @@ import SwiftUI
 extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlowManager {}
 
 @Observable final class SendFlowManager: AnyReconciler, SendFlowManagerReconciler {
+    typealias Message = SendFlowManagerReconcileMessage
+    typealias Action = SendFlowManagerAction
+
     private let logger = Log(id: "SendFlowManager")
     var rust: RustSendFlowManager
 
@@ -78,69 +81,90 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.sendAmountFiat = self.rust.sendAmountFiat()
     }
 
-    func reconcile(message: SendFlowManagerReconcileMessage) {
-        Task { [weak self] in
+    private func apply(_ message: Message) {
+        switch message {
+        case let .updateAmountFiat(fiat):
+            self.fiatAmount = fiat
+
+        case let .updateAmountSats(sats):
+            self.refreshPresenters()
+            self.amount = Amount.fromSat(sats: sats)
+
+        case let .updateFeeRateOptions(options):
+            self.refreshPresenters()
+            self.feeRateOptions = options
+
+        case let .updateAddress(address):
+            self.address = address
+
+        case let .updateEnteringBtcAmount(amount):
+            self.enteringBtcAmount = amount
+
+        case let .updateEnteringAddress(address):
+            self._enteringAddress = address
+
+        case let .updateEnteringFiatAmount(amount):
+            self.enteringFiatAmount = amount
+
+        case let .updateSelectedFeeRate(rate):
+            self.refreshPresenters()
+            self.selectedFeeRate = rate
+
+        case let .updateFocusField(field):
+            self.presenter.focusField = field
+
+        case let .setAlert(alertState):
+            self.presenter.alertState = .init(alertState)
+
+        case .clearAlert:
+            self.presenter.alertState = .none
+
+        case let .setMaxSelected(maxSelected):
+            self.maxSelected = maxSelected
+
+        case .unsetMaxSelected:
+            self.maxSelected = nil
+
+        case .refreshPresenters:
+            self.refreshPresenters()
+        }
+    }
+
+    private let rustBridge = DispatchQueue(label: "cove.sendflowmanager.rustbridge", qos: .userInitiated)
+
+    func reconcile(message: Message) {
+        rustBridge.async { [weak self] in
             guard let self else {
                 Log.error("SendFlowManager no longer available")
                 return
             }
 
             logger.debug("reconcile: \(message)")
-            await MainActor.run {
-                switch message {
-                case let .updateAmountFiat(fiat):
-                    self.fiatAmount = fiat
+            DispatchQueue.main.async { [self] in
+                self.apply(message)
+            }
+        }
+    }
 
-                case let .updateAmountSats(sats):
-                    self.refreshPresenters()
-                    self.amount = Amount.fromSat(sats: sats)
+    func reconcileMany(messages: [Message]) {
+        rustBridge.async { [weak self] in
+            guard let self else {
+                Log.error("SendFlowManager no longer available")
+                return
+            }
 
-                case let .updateFeeRateOptions(options):
-                    self.refreshPresenters()
-                    self.feeRateOptions = options
-
-                case let .updateAddress(address):
-                    self.address = address
-
-                case let .updateEnteringBtcAmount(amount):
-                    self.enteringBtcAmount = amount
-
-                case let .updateEnteringAddress(address):
-                    self._enteringAddress = address
-
-                case let .updateEnteringFiatAmount(amount):
-                    self.enteringFiatAmount = amount
-
-                case let .updateSelectedFeeRate(rate):
-                    self.refreshPresenters()
-                    self.selectedFeeRate = rate
-
-                case let .updateFocusField(field):
-                    self.presenter.focusField = field
-
-                case let .setAlert(alertState):
-                    self.presenter.alertState = .init(alertState)
-
-                case .clearAlert:
-                    self.presenter.alertState = .none
-
-                case let .setMaxSelected(maxSelected):
-                    self.maxSelected = maxSelected
-
-                case .unsetMaxSelected:
-                    self.maxSelected = nil
-
-                case .refreshPresenters:
-                    self.refreshPresenters()
+            logger.debug("reconcile_messages: \(messages)")
+            DispatchQueue.main.async { [self] in
+                for message in messages {
+                    self.apply(message)
                 }
             }
         }
     }
 
-    private let dispatchQueue = DispatchQueue(label: "cove.sendflowmanager.dispatch", qos: .userInitiated)
-    public func dispatch(action: SendFlowManagerAction) { dispatch(action) }
-    public func dispatch(_ action: SendFlowManagerAction) {
-        dispatchQueue.async {
+    public func dispatch(action: Action) { dispatch(action) }
+    public func dispatch(_ action: Action) {
+        rustBridge.async {
             self.logger.debug("dispatch: \(action)")
             self.rust.dispatch(action: action)
         }

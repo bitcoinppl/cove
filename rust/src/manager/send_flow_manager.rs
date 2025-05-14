@@ -22,6 +22,7 @@ use crate::{
 use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
 use btc_on_change::BtcOnChangeHandler;
+use cove_macros::impl_message_manager;
 use cove_types::{
     address::AddressWithNetwork,
     amount::Amount,
@@ -37,7 +38,10 @@ use parking_lot::Mutex;
 use state::{SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
 
-use super::wallet::{RustWalletManager, actor::WalletActor};
+use super::{
+    deferred_sender::{self},
+    wallet::{RustWalletManager, actor::WalletActor},
+};
 
 pub type Error = error::SendFlowError;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -45,6 +49,9 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 type Action = SendFlowManagerAction;
 type Message = SendFlowManagerReconcileMessage;
 type Reconciler = dyn SendFlowManagerReconciler;
+type SingleOrMany = deferred_sender::SingleOrMany<Message>;
+type DeferredSender = deferred_sender::DeferredSender<Arc<RustSendFlowManager>, Message>;
+impl_message_manager!(RustSendFlowManager);
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SetAmountFocusField {
@@ -56,6 +63,7 @@ pub enum SetAmountFocusField {
 pub trait SendFlowManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// tells the frontend to reconcile the manager changes
     fn reconcile(&self, message: Message);
+    fn reconcile_many(&self, messages: Vec<Message>);
 }
 
 #[derive(Debug, uniffi::Object)]
@@ -66,8 +74,8 @@ pub struct RustSendFlowManager {
     wallet_manager: Arc<RustWalletManager>,
     pub state: Arc<Mutex<SendFlowManagerState>>,
 
-    reconciler: Sender<Message>,
-    reconcile_receiver: Arc<Receiver<Message>>,
+    reconciler: Sender<SingleOrMany>,
+    reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -133,7 +141,6 @@ pub enum SendFlowManagerAction {
 impl RustSendFlowManager {
     pub fn new(metadata: WalletMetadata, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
         let (sender, receiver) = flume::bounded(50);
-
         let state = State::new(metadata);
 
         let me: Arc<Self> = Self {
@@ -164,8 +171,10 @@ impl RustSendFlowManager {
         task::spawn(async move {
             while let Ok(field) = reconcile_receiver.recv_async().await {
                 trace!("reconcile_receiver: {field:?}");
-                // call the reconcile method on the frontend
-                reconciler.reconcile(field);
+                match field {
+                    SingleOrMany::Single(message) => reconciler.reconcile(message),
+                    SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
+                }
             }
         });
     }
@@ -1160,12 +1169,13 @@ impl RustSendFlowManager {
 
 /// MARK: helper method impls
 impl RustSendFlowManager {
-    fn send(self: &Arc<Self>, message: SendFlowManagerReconcileMessage) {
+    fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
+        let message = message.into();
         debug!("send: {message:?}");
-        match self.reconciler.try_send(message.clone()) {
+        match self.reconciler.try_send(message) {
             Ok(_) => {}
-            Err(TrySendError::Full(err)) => {
-                warn!("[WARN] unable to send, queue is full: {err:?}, sending async");
+            Err(TrySendError::Full(message)) => {
+                warn!("[WARN] unable to send, queue is full, sending async");
 
                 let me = self.clone();
                 task::spawn(async move { me.send_async(message).await });
@@ -1210,7 +1220,8 @@ impl RustSendFlowManager {
         }
     }
 
-    async fn send_async(self: &Arc<Self>, message: SendFlowManagerReconcileMessage) {
+    async fn send_async(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
+        let message = message.into();
         debug!("send_async: {message:?}");
         if let Err(err) = self.reconciler.send_async(message).await {
             error!("unable to send message to send flow manager: {err}");
@@ -1432,35 +1443,5 @@ impl RustSendFlowManager {
         let balance = self.wallet_manager.balance().await;
         let wallet_balance = Arc::new(balance);
         self.state.lock().wallet_balance = Some(wallet_balance.clone());
-    }
-}
-
-#[derive(Debug, Clone)]
-struct DeferredSender {
-    manager: Arc<RustSendFlowManager>,
-    messages: Vec<Message>,
-}
-
-impl DeferredSender {
-    fn new(manager: Arc<RustSendFlowManager>) -> Self {
-        Self { manager, messages: vec![] }
-    }
-
-    fn queue(&mut self, message: Message) {
-        self.messages.push(message);
-    }
-}
-
-impl Drop for DeferredSender {
-    fn drop(&mut self) {
-        let messages = std::mem::take(&mut self.messages);
-
-        if !messages.is_empty() {
-            let manager = self.manager.clone();
-
-            for message in messages {
-                manager.send(message);
-            }
-        }
     }
 }

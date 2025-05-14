@@ -18,7 +18,7 @@ use crate::{
         wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
     keychain::Keychain,
-    manager::wallet::WalletManagerReconcileMessage,
+    manager::wallet::{SingleOrMany, WalletManagerReconcileMessage},
     mnemonic::MnemonicExt,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
     task::spawn_actor,
@@ -89,7 +89,7 @@ pub struct WalletScanner {
     pub started_at: Instant,
     pub node_client_builder: NodeClientBuilder,
     pub scan_source: ScanSource,
-    pub responder: Sender<WalletManagerReconcileMessage>,
+    pub responder: Sender<SingleOrMany>,
 }
 
 #[derive(Debug, Clone)]
@@ -122,7 +122,7 @@ impl WalletScanner {
     /// have the required information to start a scan.
     pub fn try_new(
         metadata: WalletMetadata,
-        reconciler: Sender<WalletManagerReconcileMessage>,
+        reconciler: Sender<SingleOrMany>,
     ) -> Result<Self, WalletScannerError> {
         debug!("starting wallet scanner for {}, metadata: {metadata:?}", metadata.id);
 
@@ -168,7 +168,7 @@ impl WalletScanner {
         node_client_builder: NodeClientBuilder,
         wallets: Wallets,
         scan_source: ScanSource,
-        reconciler: Sender<WalletManagerReconcileMessage>,
+        reconciler: Sender<SingleOrMany>,
     ) -> Self {
         let mut started_workers = 0;
         let mut workers = Workers::default();
@@ -233,7 +233,10 @@ impl WalletScanner {
         if !any_still_running {
             let found_addresses = self.found_addresses();
 
-            self.responder.send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
+            let msg = WalletManagerReconcileMessage::from(ScannerResponse::FoundAddresses(
+                found_addresses.clone(),
+            ));
+            self.responder.send(msg.into())?;
 
             // update wallet metadata
             self.set_metadata_address_found()?;
@@ -261,12 +264,15 @@ impl WalletScanner {
             let found_addresses = self.found_addresses();
 
             if found_addresses.is_empty() {
-                self.responder.send(ScannerResponse::NoneFound.into())?;
+                let msg = WalletManagerReconcileMessage::from(ScannerResponse::NoneFound);
+                self.responder.send(msg.into())?;
                 self.set_metadata(DiscoveryState::NoneFound)?;
             } else {
-                self.responder
-                    .send(ScannerResponse::FoundAddresses(found_addresses.clone()).into())?;
+                let msg = WalletManagerReconcileMessage::from(ScannerResponse::FoundAddresses(
+                    found_addresses.clone(),
+                ));
 
+                self.responder.send(msg.into())?;
                 self.set_metadata_address_found()?;
             }
 
@@ -327,8 +333,8 @@ impl WalletScanner {
         metadata.discovery_state = discovery_state;
         db.update_metadata_discovery_state(&metadata)?;
 
-        self.responder.send(WalletManagerReconcileMessage::WalletMetadataChanged(metadata))?;
-
+        let msg = WalletManagerReconcileMessage::WalletMetadataChanged(metadata);
+        self.responder.send(msg.into())?;
         Produces::ok(())
     }
 }

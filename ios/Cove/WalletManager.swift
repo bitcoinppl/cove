@@ -2,7 +2,10 @@ import SwiftUI
 
 extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletManager {}
 
-@Observable class WalletManager: AnyReconciler, WalletManagerReconciler {
+@Observable final class WalletManager: AnyReconciler, WalletManagerReconciler {
+    typealias Message = WalletManagerReconcileMessage
+    typealias Action = WalletManagerAction
+
     private let logger = Log(id: "WalletManager")
 
     let id: WalletId
@@ -119,80 +122,106 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         await updateFiatBalance()
     }
 
-    func reconcile(message: WalletManagerReconcileMessage) {
-        Task { [weak self] in
+    func apply(_ message: Message) {
+        switch message {
+        case .startedInitialFullScan:
+            self.loadState = .loading
+
+        case let .startedExpandedFullScan(txns):
+            self.loadState = .scanning(txns)
+
+        case let .availableTransactions(txns):
+            if self.loadState == .loading {
+                self.loadState = .scanning(txns)
+            }
+
+        case let .updatedTransactions(txns):
+            switch self.loadState {
+            case .scanning, .loading:
+                self.loadState = .scanning(txns)
+            case .loaded:
+                self.loadState = .loaded(txns)
+            }
+
+        case let .scanComplete(txns):
+            self.loadState = .loaded(txns)
+
+        case let .walletBalanceChanged(balance):
+            withAnimation { self.balance = balance }
+            Task { await self.updateFiatBalance() }
+
+        case .unsignedTransactionsChanged:
+            self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
+
+        case let .walletMetadataChanged(metadata):
+            withAnimation {
+                self.walletMetadata = metadata
+                self.rust.setWalletMetadata(metadata: metadata)
+            }
+
+        case let .walletScannerResponse(scannerResponse):
+            self.logger.debug("walletScannerResponse: \(scannerResponse)")
+            if case let .foundAddresses(addressTypes) = scannerResponse {
+                self.foundAddresses = addressTypes
+            }
+
+        case let .nodeConnectionFailed(error):
+            self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)
+            self.logger.error(error)
+            self.logger.error("set errorAlert")
+
+        case let .walletError(error):
+            self.logger.error("WalletError \(error)")
+
+        case let .unknownError(error):
+            // TODO: show to user
+            self.logger.error("Unknown error \(error)")
+
+        case let .sendFlowError(error):
+            self.sendFlowErrorAlert = TaggedItem(error)
+        }
+    }
+
+    private let rustBridge = DispatchQueue(
+        label: "cove.walletmanager.rustbridge", qos: .userInitiated
+    )
+
+    func reconcile(message: Message) {
+        rustBridge.async { [weak self] in
             guard let self else {
                 Log.error("WalletManager no longer available")
                 return
             }
 
-            let rust = rust
-            logger.debug("WalletManagerReconcileMessage: \(message)")
+            logger.debug("reconcile: \(message)")
+            DispatchQueue.main.async { [self] in
+                self.apply(message)
+            }
+        }
+    }
 
-            await MainActor.run {
-                switch message {
-                case .startedInitialFullScan:
-                    self.loadState = .loading
+    func reconcileMany(messages: [Message]) {
+        rustBridge.async { [weak self] in
+            guard let self else {
+                Log.error("WalletManager no longer available")
+                return
+            }
 
-                case let .startedExpandedFullScan(txns):
-                    self.loadState = .scanning(txns)
-
-                case let .availableTransactions(txns):
-                    if self.loadState == .loading {
-                        self.loadState = .scanning(txns)
-                    }
-
-                case let .updatedTransactions(txns):
-                    switch self.loadState {
-                    case .scanning, .loading:
-                        self.loadState = .scanning(txns)
-                    case .loaded:
-                        self.loadState = .loaded(txns)
-                    }
-
-                case let .scanComplete(txns):
-                    self.loadState = .loaded(txns)
-
-                case let .walletBalanceChanged(balance):
-                    withAnimation { self.balance = balance }
-                    Task { await self.updateFiatBalance() }
-
-                case .unsignedTransactionsChanged:
-                    self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
-
-                case let .walletMetadataChanged(metadata):
-                    withAnimation {
-                        self.walletMetadata = metadata
-                        self.rust.setWalletMetadata(metadata: metadata)
-                    }
-
-                case let .walletScannerResponse(scannerResponse):
-                    self.logger.debug("walletScannerResponse: \(scannerResponse)")
-                    if case let .foundAddresses(addressTypes) = scannerResponse {
-                        self.foundAddresses = addressTypes
-                    }
-
-                case let .nodeConnectionFailed(error):
-                    self.errorAlert = WalletErrorAlert.nodeConnectionFailed(error)
-                    self.logger.error(error)
-                    self.logger.error("set errorAlert")
-
-                case let .walletError(error):
-                    self.logger.error("WalletError \(error)")
-
-                case let .unknownError(error):
-                    // TODO: show to user
-                    self.logger.error("Unknown error \(error)")
-
-                case let .sendFlowError(error):
-                    self.sendFlowErrorAlert = TaggedItem(error)
+            logger.debug("reconcile_messages: \(messages)")
+            DispatchQueue.main.async { [self] in
+                for message in messages {
+                    self.apply(message)
                 }
             }
         }
     }
 
-    public func dispatch(action: WalletManagerAction) {
-        rust.dispatch(action: action)
+    public func dispatch(action: Action) { dispatch(action) }
+    public func dispatch(_ action: Action) {
+        rustBridge.async {
+            self.logger.debug("dispatch: \(action)")
+            self.rust.dispatch(action: action)
+        }
     }
 
     // PREVIEW only

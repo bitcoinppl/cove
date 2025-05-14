@@ -40,12 +40,12 @@ use tracing::{debug, error, info, warn};
 
 use self::mnemonic::{Mnemonic, MnemonicExt as _};
 
-use super::WalletManagerReconcileMessage;
+use super::{SingleOrMany, WalletManagerReconcileMessage};
 
 #[derive(Debug)]
 pub struct WalletActor {
     pub addr: WeakAddr<Self>,
-    pub reconciler: Sender<WalletManagerReconcileMessage>,
+    pub reconciler: Sender<SingleOrMany>,
     pub wallet: Wallet,
     pub node_client: Option<NodeClient>,
 
@@ -140,7 +140,7 @@ impl Actor for WalletActor {
 }
 
 impl WalletActor {
-    pub fn new(wallet: Wallet, reconciler: Sender<WalletManagerReconcileMessage>) -> Self {
+    pub fn new(wallet: Wallet, reconciler: Sender<SingleOrMany>) -> Self {
         let db = WalletDataDb::new_or_existing(wallet.id.clone());
         let seed = rand::rng().random();
 
@@ -754,7 +754,7 @@ impl WalletActor {
         }
 
         debug!("starting initial full scan");
-        self.reconciler.send(WalletManagerReconcileMessage::StartedInitialFullScan).unwrap();
+        self.reconciler.send(WalletManagerReconcileMessage::StartedInitialFullScan.into()).unwrap();
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Initial);
@@ -777,7 +777,9 @@ impl WalletActor {
         debug!("starting expanded full scan");
         let txns = self.transactions().await?.await?;
 
-        self.reconciler.send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns)).unwrap();
+        self.reconciler
+            .send(WalletManagerReconcileMessage::StartedExpandedFullScan(txns).into())
+            .unwrap();
 
         // scan happens in the background, state update afterwards
         self.state = ActorState::PerformingFullScan(FullScanType::Expanded);
@@ -1078,7 +1080,7 @@ fn elapsed_secs_since(earlier: Duration) -> u64 {
 
 impl WalletActor {
     fn send(&self, msg: WalletManagerReconcileMessage) {
-        self.reconciler.send(msg).unwrap();
+        self.reconciler.send(msg.into()).unwrap();
     }
 }
 
