@@ -56,7 +56,7 @@ type Action = WalletManagerAction;
 type Message = WalletManagerReconcileMessage;
 type Reconciler = dyn WalletManagerReconciler;
 pub type SingleOrMany = deferred_sender::SingleOrMany<Message>;
-cove_macros::impl_message_manager!(RustWalletManager);
+cove_macros::impl_manager_message_send!(RustWalletManager);
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {

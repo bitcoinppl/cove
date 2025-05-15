@@ -47,6 +47,7 @@ bitcoin = { version = "0.32" }
 bdk_core = "0.4"
 bdk_wallet = { version = "1.1", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
+bip329 = { version = "0.4.0" }
 
 # bitcoin nodes
 bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
@@ -122,7 +123,7 @@ bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-featu
 pubport = { version = "0.4", features = [] }
 
 # bip329 labels
-bip329 = { version = "0.4.0" }
+bip329 = { workspace = true }
 
 # tapsigner / satscard
 rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }

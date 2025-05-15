@@ -107,9 +107,11 @@ macro_rules! new_type {
 
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
-macro_rules! impl_message_manager {
+macro_rules! impl_manager_message_send {
     ($manager:ident) => {
-        impl crate::manager::deferred_sender::MessageManager<Message> for std::sync::Arc<$manager> {
+        impl crate::manager::deferred_sender::ManagerMessageSend<Message>
+            for std::sync::Arc<$manager>
+        {
             fn send(&self, msgs: SingleOrMany) {
                 // just forward to the UDL-generated `send`
                 self.send(msgs);

@@ -17,13 +17,13 @@ impl<T> From<Vec<T>> for SingleOrMany<T> {
     }
 }
 
-pub trait MessageManager<T>: Clone + Send + Sync + 'static {
+pub trait ManagerMessageSend<T>: Clone + Send + Sync + 'static {
     fn send(&self, msgs: SingleOrMany<T>);
 }
 
 pub struct DeferredSender<M, T>
 where
-    M: MessageManager<T>,
+    M: ManagerMessageSend<T>,
 {
     manager: M,
     buffer: Vec<T>,
@@ -31,7 +31,7 @@ where
 
 impl<M, T> DeferredSender<M, T>
 where
-    M: MessageManager<T>,
+    M: ManagerMessageSend<T>,
 {
     pub fn new(manager: M) -> Self {
         DeferredSender { manager, buffer: Vec::new() }
@@ -44,7 +44,7 @@ where
 
 impl<M, T> Drop for DeferredSender<M, T>
 where
-    M: MessageManager<T>,
+    M: ManagerMessageSend<T>,
 {
     fn drop(&mut self) {
         let msgs = std::mem::take(&mut self.buffer);
