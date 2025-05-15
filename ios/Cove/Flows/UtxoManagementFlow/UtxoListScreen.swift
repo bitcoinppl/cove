@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Model
 
 struct UTXO: Identifiable, Hashable {
-    enum Kind { case change, regular }
+    enum Kind: Comparable { case change, regular }
 
     let id = UUID()
     let name: String
@@ -28,21 +28,21 @@ struct ManageUTXOsView: View {
               amountBTC: 0.0135,
               date: .now,
               kind: .regular),
-//        .init(name: "Facebook Marketplace",
-//              address: "bc1q uyye…e63s 0vus",
-//              amountBTC: 0.0135,
-//              date: .now,
-//              kind: .regular),
-//        .init(name: "Change",
-//              address: "bc1q uyye…e63s 0vus",
-//              amountBTC: 0.0135,
-//              date: .now,
-//              kind: .change),
-//        .init(name: "Open SATs Payment",
-//              address: "bc1q uyye…e63s 0vus",
-//              amountBTC: 0.0135,
-//              date: .now,
-//              kind: .regular),
+        .init(name: "Facebook Marketplace",
+              address: "bc1q uyye…e63s 0vus",
+              amountBTC: 0.0135,
+              date: .now,
+              kind: .regular),
+        .init(name: "Change",
+              address: "bc1q uyye…e63s 0vus",
+              amountBTC: 0.0135,
+              date: .now,
+              kind: .change),
+        .init(name: "Open SATs Payment",
+              address: "bc1q uyye…e63s 0vus",
+              amountBTC: 0.0135,
+              date: .now,
+              kind: .regular),
 //        .init(name: "Change",
 //              address: "bc1q uyye…e63s 0vus",
 //              amountBTC: 0.0135,
@@ -62,13 +62,14 @@ struct ManageUTXOsView: View {
 
     // ─── Sort helper ─────────────────────────────────────────
     enum SortKey: String, CaseIterable, Identifiable {
-        case date, name, amount
+        case date, name, amount, change
         var id: Self { self }
         var title: String {
             switch self {
             case .date: "Date"
             case .name: "Name"
             case .amount: "Amount"
+            case .change: "Change"
             }
         }
 
@@ -77,6 +78,7 @@ struct ManageUTXOsView: View {
             case .date: a.date > b.date
             case .name: a.name < b.name
             case .amount: a.amountBTC > b.amountBTC
+            case .change: a.kind > b.kind
             }
         }
     }
@@ -104,6 +106,8 @@ struct ManageUTXOsView: View {
                         sortButton(for: .name)
                         Spacer()
                         sortButton(for: .amount)
+                        Spacer()
+                        sortButton(for: .change)
                     }
                     .padding(.horizontal)
                 }
@@ -121,13 +125,21 @@ struct ManageUTXOsView: View {
                     .padding(.horizontal)
 
                     // ─ UTXO list ─
-                    List(filteredUTXOs, selection: $selected) { utxo in
-                        UTXORow(utxo: utxo).listRowBackground(Color.systemBackground)
+                    VStack(spacing: 0) {
+                        List(filteredUTXOs, selection: $selected) { utxo in
+                            UTXORow(utxo: utxo).listRowBackground(Color.systemBackground)
+                        }
+                        .scrollContentBackground(.hidden)
+                        .padding(.top, -35) // undo list default padding top
+                        .padding(.horizontal, -16) // undo default padding horizontal
+                        .environment(\.editMode, .constant(.active))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                    .scrollContentBackground(.hidden)
-                    // undo list default padding top
-                    .padding(.top, -35)
-                    .environment(\.editMode, .constant(.active))
+                    .background(filteredUTXOs.count < 6 ? Color.clear : Color.white)
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                    .padding(.horizontal)
                 }
 
                 Spacer()
