@@ -96,7 +96,7 @@ struct ManageUTXOsView: View {
                     .background(Color.systemGray5)
                     .cornerRadius(10)
                     .padding(.horizontal)
-                    
+
                     // ─ Sort buttons ─
                     HStack {
                         sortButton(for: .date)
@@ -108,7 +108,7 @@ struct ManageUTXOsView: View {
                     .padding(.horizontal)
                 }
 
-                VStack(spacing: 8){
+                VStack(spacing: 8) {
                     // ─ Section header ─
                     HStack {
                         Text("LIST OF UTXOS")
@@ -119,51 +119,50 @@ struct ManageUTXOsView: View {
                     }
                     .padding(.horizontal)
                     .padding(.horizontal)
-                    
+
                     // ─ UTXO list ─
                     List(filteredUTXOs, selection: $selected) { utxo in
                         UTXORow(utxo: utxo).listRowBackground(Color.systemBackground)
                     }
-                    .listStyle(.insetGrouped)
-                    .environment(\.editMode, .constant(.active))
-                    .padding(.horizontal)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .scrollContentBackground(.hidden)
+                    // undo list default padding top
+                    .padding(.top, -35)
+                    .environment(\.editMode, .constant(.active))
                 }
-                
+
+                Spacer()
+
                 // ─ Footer notes ─
                 VStack(spacing: 16) {
-                    HStack{
+                    HStack {
                         Text("Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use.")
                             .font(.caption)
                             .fontWeight(.regular)
-                        
+
                         Spacer()
                     }
 
                     HStack(spacing: 4) {
                         Image(systemName: "bitcoinsign.circle.fill")
                             .font(.footnote)
-                        
+
                         Text("Denotes UTXO change")
                             .font(.caption)
                             .fontWeight(.regular)
-                        
+
                         Spacer()
                     }
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
                 .padding(.horizontal)
-                
-                Spacer()
 
                 // ─ Action buttons ─
                 Button("Continue") { /* … */ }
                     .buttonStyle(
                         selected.isEmpty ?
-                         DarkButtonStyle(backgroundColor: .systemGray4, foregroundColor: .secondary) :
-                                DarkButtonStyle()
+                            DarkButtonStyle(backgroundColor: .systemGray4, foregroundColor: .secondary) :
+                            DarkButtonStyle()
                     )
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
@@ -171,12 +170,12 @@ struct ManageUTXOsView: View {
                     .padding(.bottom, 4)
                     .disabled(selected.isEmpty)
                     .padding(.horizontal)
-                
             }
             .navigationTitle("Manage UTXOs")
             .background(
                 Image(.utxoManagementPattern)
                     .ignoresSafeArea()
+                    .opacity(0.85)
             )
             .background(
                 Color(.systemGroupedBackground)
@@ -189,19 +188,19 @@ struct ManageUTXOsView: View {
 
     private func sortButton(for key: SortKey) -> some View {
         Button { sortKey = key }
-        label: {
-            Text(key.title)
-                .font(.footnote)
-                .fontWeight(.medium)
-                .frame(minWidth: 60)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .background(sortKey == key ? .blue : .systemGray5)
-                .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
-                .cornerRadius(100)
-        }
-        .buttonStyle(.plain)
-        .opacity(1)
+            label: {
+                Text(key.title)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .frame(minWidth: 60)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(sortKey == key ? .blue : .systemGray5)
+                    .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
+                    .cornerRadius(100)
+            }
+            .buttonStyle(.plain)
+            .opacity(1)
     }
 
     private var filteredUTXOs: [UTXO] {
