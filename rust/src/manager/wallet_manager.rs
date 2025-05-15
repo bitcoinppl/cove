@@ -276,7 +276,7 @@ impl RustWalletManager {
         let network = metadata.network;
         let unspent = call!(self.actor.list_unspent()).await.expect("actor failed");
 
-        let manager = RustCoinControlManager::new(unspent, network);
+        let manager = RustCoinControlManager::new(metadata.id, unspent, network);
         Arc::new(manager)
     }
 

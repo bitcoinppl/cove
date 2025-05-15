@@ -2,7 +2,7 @@ use std::{hash::Hasher, sync::Arc};
 
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    Network,
+    Network, WalletId,
     utxo::{Utxo, UtxoType},
 };
 use parking_lot::Mutex;
@@ -44,6 +44,7 @@ pub struct RustCoinControlManager {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct CoinControlManagerState {
+    wallet_id: WalletId,
     utxos: Vec<Utxo>,
 }
 
@@ -79,10 +80,10 @@ impl RustCoinControlManager {
 }
 
 impl RustCoinControlManager {
-    pub fn new(local_outputs: Vec<LocalOutput>, network: Network) -> Self {
+    pub fn new(id: WalletId, local_outputs: Vec<LocalOutput>, network: Network) -> Self {
         let (sender, receiver) = flume::bounded(10);
 
-        let state = State::new(local_outputs, network);
+        let state = State::new(id, local_outputs, network);
         Self {
             state: Arc::new(Mutex::new(state)),
             reconciler: sender,
@@ -138,11 +139,11 @@ pub enum ListSortDirection {
 }
 
 impl State {
-    pub fn new(unspent: Vec<LocalOutput>, network: Network) -> Self {
+    pub fn new(wallet_id: WalletId, unspent: Vec<LocalOutput>, network: Network) -> Self {
         let utxos =
             unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
 
-        Self { utxos }
+        Self { wallet_id, utxos }
     }
 }
 
