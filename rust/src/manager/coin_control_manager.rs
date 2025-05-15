@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{hash::Hasher, sync::Arc};
 
 use bdk_wallet::LocalOutput;
 use cove_types::{
@@ -42,7 +42,7 @@ pub struct RustCoinControlManager {
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 }
 
-#[derive(Clone, Debug, uniffi::Object)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct CoinControlManagerState {
     utxos: Vec<Utxo>,
 }
@@ -143,5 +143,24 @@ impl State {
             unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
 
         Self { utxos }
+    }
+}
+
+// MARK: impl
+impl std::hash::Hash for RustCoinControlManager {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        let RustCoinControlManager { state, reconciler: _, reconcile_receiver: _ } = self;
+        state.lock().hash(hasher);
+    }
+}
+
+impl Eq for RustCoinControlManager {}
+impl PartialEq for RustCoinControlManager {
+    fn eq(&self, other: &Self) -> bool {
+        let RustCoinControlManager { state, reconciler: _, reconcile_receiver: _ } = self;
+        let RustCoinControlManager { state: other_state, reconciler: _, reconcile_receiver: _ } =
+            other;
+
+        state.lock().eq(&other_state.lock())
     }
 }

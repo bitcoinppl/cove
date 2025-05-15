@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{
     app::FfiApp,
     database::Database,
+    manager::coin_control_manager::RustCoinControlManager,
     mnemonic::NumberOfBip39Words,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
@@ -24,6 +25,7 @@ pub enum Route {
     SecretWords(WalletId),
     TransactionDetails { id: WalletId, details: Arc<TransactionDetails> },
     Send(SendRoute),
+    CoinControl(Arc<RustCoinControlManager>),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
