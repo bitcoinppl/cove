@@ -18,7 +18,7 @@ use crate::{
         wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
     keychain::Keychain,
-    manager::wallet::{SingleOrMany, WalletManagerReconcileMessage},
+    manager::wallet_manager::{SingleOrMany, WalletManagerReconcileMessage},
     mnemonic::MnemonicExt,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
     task::spawn_actor,

@@ -40,7 +40,7 @@ use tracing::{debug, error, trace, warn};
 
 use super::{
     deferred_sender::{self},
-    wallet::{RustWalletManager, actor::WalletActor},
+    wallet_manager::{RustWalletManager, actor::WalletActor},
 };
 
 pub type Error = error::SendFlowError;

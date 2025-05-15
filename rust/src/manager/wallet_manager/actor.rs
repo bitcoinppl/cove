@@ -1,7 +1,7 @@
 use crate::{
     database::{Database, wallet_data::WalletDataDb},
     historical_price_service::HistoricalPriceService,
-    manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
+    manager::wallet_manager::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::{
         client::{NodeClient, NodeClientOptions},

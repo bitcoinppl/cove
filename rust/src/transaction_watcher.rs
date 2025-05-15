@@ -5,7 +5,7 @@ use bitcoin::{Transaction, Txid};
 use tracing::{debug, error, info};
 
 use crate::{
-    manager::wallet::actor::WalletActor,
+    manager::wallet_manager::actor::WalletActor,
     node::{client::NodeClient, client_builder::NodeClientBuilder},
 };
 
