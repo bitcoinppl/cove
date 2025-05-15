@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
-use cove_types::utxo::UtxoType;
+use bdk_wallet::LocalOutput;
+use cove_types::{
+    Network,
+    utxo::{Utxo, UtxoType},
+};
 use parking_lot::Mutex;
 
 use crate::manager::deferred_sender;
 use crate::task;
-use cove_macros::{impl_default_for, impl_manager_message_send};
+use cove_macros::impl_manager_message_send;
 use flume::{Receiver, Sender, TrySendError};
 use tracing::{debug, error, trace, warn};
 
@@ -38,28 +42,18 @@ pub struct RustCoinControlManager {
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 }
 
-#[derive(Clone, Debug, uniffi::Record)]
-pub struct CoinControlManagerState {}
+#[derive(Clone, Debug, uniffi::Object)]
+pub struct CoinControlManagerState {
+    utxos: Vec<Utxo>,
+}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerAction {
     NoOp,
 }
 
-impl_default_for!(RustCoinControlManager);
 #[uniffi::export]
 impl RustCoinControlManager {
-    #[uniffi::constructor]
-    pub fn new() -> Self {
-        let (sender, receiver) = flume::bounded(10);
-
-        Self {
-            state: Arc::new(Mutex::new(CoinControlManagerState::new())),
-            reconciler: sender,
-            reconcile_receiver: Arc::new(receiver),
-        }
-    }
-
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
@@ -85,6 +79,17 @@ impl RustCoinControlManager {
 }
 
 impl RustCoinControlManager {
+    pub fn new(local_outputs: Vec<LocalOutput>, network: Network) -> Self {
+        let (sender, receiver) = flume::bounded(10);
+
+        let state = State::new(local_outputs, network);
+        Self {
+            state: Arc::new(Mutex::new(state)),
+            reconciler: sender,
+            reconcile_receiver: Arc::new(receiver),
+        }
+    }
+
     fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
         let message = message.into();
         debug!("send: {message:?}");
@@ -132,9 +137,11 @@ pub enum ListSortDirection {
     Descending,
 }
 
-impl_default_for!(State);
 impl State {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(unspent: Vec<LocalOutput>, network: Network) -> Self {
+        let utxos =
+            unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
+
+        Self { utxos }
     }
 }

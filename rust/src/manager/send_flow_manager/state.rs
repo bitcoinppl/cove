@@ -18,7 +18,7 @@ use crate::{
 #[derive(Debug, Clone, derive_more::Deref)]
 pub struct State(Arc<Mutex<SendFlowManagerState>>);
 
-#[derive(Clone, Debug, uniffi::Record)]
+#[derive(Clone, Debug, uniffi::Object)]
 pub struct SendFlowManagerState {
     // private
     pub(crate) metadata: WalletMetadata,

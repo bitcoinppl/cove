@@ -18,7 +18,7 @@ use act_zero_ext::into_actor_result;
 use ahash::HashMap;
 use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
 use bdk_core::spk_client::{FullScanRequest, SyncResponse};
-use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
+use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
@@ -218,6 +218,10 @@ impl WalletActor {
     // cancel a transaction, reset the address & change address index
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
         self.wallet.bdk.cancel_tx(&txn)
+    }
+
+    pub async fn list_unspent(&mut self) -> ActorResult<Vec<LocalOutput>> {
+        Produces::ok(self.wallet.bdk.list_unspent().collect())
     }
 
     #[act_zero_ext::into_actor_result]
