@@ -108,7 +108,7 @@ extension Color {
             lround(b * 255)
         )
     }
-    
+
     func toHexStringAndOpacity(colorScheme: ColorScheme) -> String {
         let resolvedColor = UIColor(self).resolvedColor(
             with:
@@ -127,12 +127,12 @@ extension Color {
             lround(r * 255),
             lround(g * 255),
             lround(b * 255),
-        );
-        
+        )
+
         if a == 1 {
             return string
         }
-        
+
         let opacityPercentage = Int(a * 100)
         return "\(string) (\(opacityPercentage)%)"
     }

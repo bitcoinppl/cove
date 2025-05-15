@@ -43,7 +43,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         self.rust = rust
         walletMetadata = metadata
         id = metadata.id
-        
+
         Task { await updateFiatBalance() }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }

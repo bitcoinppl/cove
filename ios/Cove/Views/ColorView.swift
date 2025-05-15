@@ -93,7 +93,6 @@ struct ColorView: View {
         print("open \(url)")
         print("open \(docsDir)")
     }
-    
 
     // Helper view for each page of colors
     struct ColorPageView: View {
@@ -253,14 +252,12 @@ struct ColorRow: View {
                                 .foregroundColor(color.color)
                                 .border(Color.black, width: 3)
 
-                            HStack(spacing: 0){
+                            HStack(spacing: 0) {
                                 Text(color.color.toHexStringAndOpacity(colorScheme: .light))
                                     .font(.caption2)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.secondary)
                             }
-                            
-                      
                         }
                         .environment(\.colorScheme, .light)
 
@@ -270,7 +267,7 @@ struct ColorRow: View {
                                 .foregroundColor(color.color)
                                 .border(Color.black, width: 3)
 
-                            HStack(spacing: 0){
+                            HStack(spacing: 0) {
                                 Text(color.color.toHexStringAndOpacity(colorScheme: .dark))
                                     .font(.caption2)
                                     .fontWeight(.semibold)
@@ -288,7 +285,7 @@ struct ColorRow: View {
                             .foregroundColor(color.color)
                             .border(Color.black, width: 3)
 
-                        HStack(spacing: 0){
+                        HStack(spacing: 0) {
                             Text(color.color.toHexStringAndOpacity(colorScheme: .light))
                                 .font(.caption2)
                                 .fontWeight(.semibold)
@@ -304,4 +301,3 @@ struct ColorRow: View {
         .font(.caption)
     }
 }
-
