@@ -87,7 +87,7 @@ struct UtxoListScreen: View {
                     }
 
                     HStack(spacing: 4) {
-                        Image(systemName: "bitcoinsign.circle.fill")
+                        Image(systemName: "circlebadge.2")
                             .font(.footnote)
 
                         Text("Denotes UTXO change")
@@ -162,20 +162,35 @@ private struct UTXORow: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 // Name
-                Text(utxo.name)
-                    .font(.footnote)
+                HStack(spacing: 4) {
+                    Text(utxo.name)
+                        .font(.footnote)
+                        .truncationMode(.middle)
+                        .lineLimit(1)
+
+                    if utxo.type == .change {
+                        Image(systemName: "circlebadge.2")
+                            .font(.caption)
+                            .foregroundColor(.orange.opacity(0.8))
+                    }
+                }
 
                 // Address (semi-bold caption)
-                Text(utxo.address.spacedOut())
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-                    .truncationMode(.middle)
+                HStack {
+                    Text(utxo.address.spacedOut())
+                        .truncationMode(.middle)
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .foregroundColor(.secondary)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: screenWidth * 0.35)
             }
 
             Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: 4) {
                 Text(manager.displayAmount(utxo.amount))
                     .font(.footnote)
                     .fontWeight(.regular)

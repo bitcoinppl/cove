@@ -104,7 +104,7 @@ fn utxo_date(utxo: Utxo) -> String {
         return "".to_string();
     };
 
-    timestamp.strftime("%B %d, %Y").to_string()
+    timestamp.strftime("%b %d, %Y").to_string()
 }
 
 #[uniffi::export]
