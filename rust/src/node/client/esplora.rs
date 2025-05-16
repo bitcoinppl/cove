@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use bdk_wallet::chain::{
-    bitcoin::Address,
-    spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
-};
 use bdk_esplora::{
     EsploraAsyncExt as _,
     esplora_client::{self, r#async::AsyncClient},
 };
 use bdk_wallet::KeychainKind;
+use bdk_wallet::chain::{
+    bitcoin::Address,
+    spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
+};
 use bitcoin::Txid;
 use tap::TapFallible as _;
 use tracing::debug;

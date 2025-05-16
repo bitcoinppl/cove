@@ -35,13 +35,11 @@ impl FileHandler {
             return Err(FileHandlerError::FileNotFound);
         }
 
-        let file = std::fs::File::open(&self.file_path)
+        let mut file = std::fs::File::open(&self.file_path)
             .map_err(|e| FileHandlerError::OpenFile(e.to_string()))?;
 
-        let data = file
-            .bytes()
-            .collect::<Result<Vec<u8>, _>>()
-            .map_err(|e| FileHandlerError::ReadFile(e.to_string()))?;
+        let mut data = Vec::with_capacity(1024 * 128);
+        file.read_to_end(&mut data).map_err(|e| FileHandlerError::ReadFile(e.to_string()))?;
 
         let string_or_data = crate::multi_format::StringOrData::new(data);
 

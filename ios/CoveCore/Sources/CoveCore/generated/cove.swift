@@ -2292,6 +2292,13 @@ open class CoinControlManagerState: CoinControlManagerStateProtocol, @unchecked 
     }
 
     
+public static func previewNew() -> CoinControlManagerState  {
+    return try!  FfiConverterTypeCoinControlManagerState_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new($0
+    )
+})
+}
+    
 
     
 
@@ -6738,6 +6745,13 @@ open class RustCoinControlManager: RustCoinControlManagerProtocol, @unchecked Se
         try! rustCall { uniffi_cove_fn_free_rustcoincontrolmanager(pointer, $0) }
     }
 
+    
+public static func previewNew() -> RustCoinControlManager  {
+    return try!  FfiConverterTypeRustCoinControlManager_lift(try! rustCall() {
+    uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new($0
+    )
+})
+}
     
 
     
@@ -26646,6 +26660,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_boxedroute_new() != 62486) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new() != 47675) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_converter_new() != 25365) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26689,6 +26706,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustauthmanager_new() != 30134) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new() != 33455) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 63844) {
@@ -26806,10 +26826,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 

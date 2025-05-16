@@ -15,7 +15,8 @@ struct UTXO: Identifiable, Hashable {
 
 // MARK: - View
 
-struct UtoxListScreen: View {
+struct UtxoListScreen: View {
+    
     // ─── Sample data ─────────────────────────────────────────
     @State private var utxos: [UTXO] = [
         .init(
@@ -23,31 +24,36 @@ struct UtoxListScreen: View {
             address: "bc1q uyye…e63s 0vus",
             amountBTC: 0.0135,
             date: .now,
-            kind: .regular),
+            kind: .regular
+        ),
         .init(
             name: "Received",
             address: "bc1q uyye…e63s 0vus",
             amountBTC: 0.0135,
             date: .now,
-            kind: .regular),
+            kind: .regular
+        ),
         .init(
             name: "Facebook Marketplace",
             address: "bc1q uyye…e63s 0vus",
             amountBTC: 0.0135,
             date: .now,
-            kind: .regular),
+            kind: .regular
+        ),
         .init(
             name: "Change",
             address: "bc1q uyye…e63s 0vus",
             amountBTC: 0.0135,
             date: .now,
-            kind: .change),
+            kind: .change
+        ),
         .init(
             name: "Open SATs Payment",
             address: "bc1q uyye…e63s 0vus",
             amountBTC: 0.0135,
             date: .now,
-            kind: .regular),
+            kind: .regular
+        ),
         //        .init(name: "Change",
         //              address: "bc1q uyye…e63s 0vus",
         //              amountBTC: 0.0135,
@@ -135,8 +141,8 @@ struct UtoxListScreen: View {
                             UTXORow(utxo: utxo).listRowBackground(Color.systemBackground)
                         }
                         .scrollContentBackground(.hidden)
-                        .padding(.top, -35)  // undo list default padding top
-                        .padding(.horizontal, -16)  // undo default padding horizontal
+                        .padding(.top, -35) // undo list default padding top
+                        .padding(.horizontal, -16) // undo default padding horizontal
                         .environment(\.editMode, .constant(.active))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
@@ -177,11 +183,12 @@ struct UtoxListScreen: View {
                 .padding(.horizontal)
 
                 // ─ Action buttons ─
-                Button("Continue") { /* … */  }
+                Button("Continue") { /* … */ }
                     .buttonStyle(
                         selected.isEmpty
                             ? DarkButtonStyle(
-                                backgroundColor: .systemGray4, foregroundColor: .secondary)
+                                backgroundColor: .systemGray4, foregroundColor: .secondary
+                            )
                             : DarkButtonStyle()
                     )
                     .controlSize(.large)
@@ -272,5 +279,5 @@ private struct UTXORow: View {
 // MARK: - Preview
 
 #Preview {
-    UtoxListScreen()
+    UtxoListScreen()
 }
