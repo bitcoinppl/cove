@@ -88,7 +88,9 @@ impl RustCoinControlManager {
     pub fn new(id: WalletId, local_outputs: Vec<LocalOutput>, network: Network) -> Self {
         let (sender, receiver) = flume::bounded(10);
 
-        let state = State::new(id, local_outputs, network);
+        let mut state = State::new(id, local_outputs, network);
+        state.sort_utxos(CoinControlListSort::Date(ListSortDirection::Descending));
+
         Self {
             state: Arc::new(Mutex::new(state)),
             reconciler: sender,
@@ -158,12 +160,49 @@ pub enum ListSortDirection {
     Descending,
 }
 
+// MARK: STATE
 impl State {
     pub fn new(wallet_id: WalletId, unspent: Vec<LocalOutput>, network: Network) -> Self {
         let utxos =
             unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
 
         Self { wallet_id, utxos }
+    }
+
+    pub fn sort_utxos(&mut self, sort: CoinControlListSort) {
+        let mut utxos = self.utxos.clone();
+
+        match sort {
+            CoinControlListSort::Date(ListSortDirection::Ascending) => {
+                utxos.sort_by(|a, b| a.datetime.cmp(&b.datetime).reverse());
+            }
+            CoinControlListSort::Date(ListSortDirection::Descending) => {
+                utxos.sort_by(|a, b| a.datetime.cmp(&b.datetime));
+            }
+
+            CoinControlListSort::Name(ListSortDirection::Ascending) => {
+                utxos.sort_by(|a, b| a.label.cmp(&b.label).reverse());
+            }
+            CoinControlListSort::Name(ListSortDirection::Descending) => {
+                utxos.sort_by(|a, b| a.label.cmp(&b.label));
+            }
+
+            CoinControlListSort::Amount(ListSortDirection::Ascending) => {
+                utxos.sort_by(|a, b| a.amount.cmp(&b.amount).reverse());
+            }
+
+            CoinControlListSort::Amount(ListSortDirection::Descending) => {
+                utxos.sort_by(|a, b| a.amount.cmp(&b.amount));
+            }
+
+            CoinControlListSort::Change(UtxoType::Output) => {
+                utxos.sort_by(|a, b| a.type_.cmp(&b.type_).reverse());
+            }
+
+            CoinControlListSort::Change(UtxoType::Change) => {
+                utxos.sort_by(|a, b| a.type_.cmp(&b.type_));
+            }
+        }
     }
 }
 
