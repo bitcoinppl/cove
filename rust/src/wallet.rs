@@ -16,7 +16,7 @@ use crate::{
     xpub::{self, XpubError},
 };
 use balance::Balance;
-use bdk_chain::rusqlite::Connection;
+use bdk_wallet::chain::rusqlite::Connection;
 use bdk_wallet::{KeychainKind, descriptor::ExtendedDescriptor, keys::DescriptorPublicKey};
 use bip39::Mnemonic;
 use cove_bdk::descriptor_ext::DescriptorExt as _;

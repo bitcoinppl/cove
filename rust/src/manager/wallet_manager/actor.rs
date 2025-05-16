@@ -16,8 +16,11 @@ use crate::{
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
-use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
-use bdk_core::spk_client::{FullScanRequest, SyncResponse};
+use bdk_wallet::chain::{
+    TxGraph,
+    bitcoin::Psbt,
+    spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
+};
 use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};

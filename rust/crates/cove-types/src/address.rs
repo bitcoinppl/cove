@@ -2,8 +2,10 @@ use std::hash::Hash;
 use std::str::FromStr as _;
 use std::{hash::Hasher, sync::Arc};
 
-use bdk_chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx};
-use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bdk_wallet::{
+    AddressInfo as BdkAddressInfo,
+    chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx},
+};
 use bitcoin::NetworkKind;
 use bitcoin::bip32::DerivationPath;
 use bitcoin::{

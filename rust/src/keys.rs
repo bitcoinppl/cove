@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::str::FromStr as _;
 
-use bdk_chain::miniscript::descriptor::DescriptorType;
+use bdk_wallet::chain::miniscript::descriptor::DescriptorType;
 use bdk_wallet::bitcoin::bip32::{DerivationPath, Fingerprint};
 use bdk_wallet::descriptor::ExtendedDescriptor;
 use bdk_wallet::keys::bip39::Mnemonic;

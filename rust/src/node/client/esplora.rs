@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bdk_chain::{
+use bdk_wallet::chain::{
     bitcoin::Address,
     spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
 };

@@ -15,44 +15,49 @@ struct UTXO: Identifiable, Hashable {
 
 // MARK: - View
 
-struct ManageUTXOsView: View {
+struct UtoxListScreen: View {
     // ─── Sample data ─────────────────────────────────────────
     @State private var utxos: [UTXO] = [
-        .init(name: "Open SATs Payment",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .regular),
-        .init(name: "Received",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .regular),
-        .init(name: "Facebook Marketplace",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .regular),
-        .init(name: "Change",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .change),
-        .init(name: "Open SATs Payment",
-              address: "bc1q uyye…e63s 0vus",
-              amountBTC: 0.0135,
-              date: .now,
-              kind: .regular),
-//        .init(name: "Change",
-//              address: "bc1q uyye…e63s 0vus",
-//              amountBTC: 0.0135,
-//              date: .now,
-//              kind: .change),
-//        .init(name: "Open SATs Payment",
-//              address: "bc1q uyye…e63s 0vus",
-//              amountBTC: 0.0135,
-//              date: .now,
-//              kind: .regular),
+        .init(
+            name: "Open SATs Payment",
+            address: "bc1q uyye…e63s 0vus",
+            amountBTC: 0.0135,
+            date: .now,
+            kind: .regular),
+        .init(
+            name: "Received",
+            address: "bc1q uyye…e63s 0vus",
+            amountBTC: 0.0135,
+            date: .now,
+            kind: .regular),
+        .init(
+            name: "Facebook Marketplace",
+            address: "bc1q uyye…e63s 0vus",
+            amountBTC: 0.0135,
+            date: .now,
+            kind: .regular),
+        .init(
+            name: "Change",
+            address: "bc1q uyye…e63s 0vus",
+            amountBTC: 0.0135,
+            date: .now,
+            kind: .change),
+        .init(
+            name: "Open SATs Payment",
+            address: "bc1q uyye…e63s 0vus",
+            amountBTC: 0.0135,
+            date: .now,
+            kind: .regular),
+        //        .init(name: "Change",
+        //              address: "bc1q uyye…e63s 0vus",
+        //              amountBTC: 0.0135,
+        //              date: .now,
+        //              kind: .change),
+        //        .init(name: "Open SATs Payment",
+        //              address: "bc1q uyye…e63s 0vus",
+        //              amountBTC: 0.0135,
+        //              date: .now,
+        //              kind: .regular),
     ]
 
     // ─── UI state ────────────────────────────────────────────
@@ -130,8 +135,8 @@ struct ManageUTXOsView: View {
                             UTXORow(utxo: utxo).listRowBackground(Color.systemBackground)
                         }
                         .scrollContentBackground(.hidden)
-                        .padding(.top, -35) // undo list default padding top
-                        .padding(.horizontal, -16) // undo default padding horizontal
+                        .padding(.top, -35)  // undo list default padding top
+                        .padding(.horizontal, -16)  // undo default padding horizontal
                         .environment(\.editMode, .constant(.active))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
@@ -147,9 +152,11 @@ struct ManageUTXOsView: View {
                 // ─ Footer notes ─
                 VStack(spacing: 16) {
                     HStack {
-                        Text("Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use.")
-                            .font(.caption)
-                            .fontWeight(.regular)
+                        Text(
+                            "Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use."
+                        )
+                        .font(.caption)
+                        .fontWeight(.regular)
 
                         Spacer()
                     }
@@ -170,11 +177,12 @@ struct ManageUTXOsView: View {
                 .padding(.horizontal)
 
                 // ─ Action buttons ─
-                Button("Continue") { /* … */ }
+                Button("Continue") { /* … */  }
                     .buttonStyle(
-                        selected.isEmpty ?
-                            DarkButtonStyle(backgroundColor: .systemGray4, foregroundColor: .secondary) :
-                            DarkButtonStyle()
+                        selected.isEmpty
+                            ? DarkButtonStyle(
+                                backgroundColor: .systemGray4, foregroundColor: .secondary)
+                            : DarkButtonStyle()
                     )
                     .controlSize(.large)
                     .frame(maxWidth: .infinity)
@@ -199,20 +207,21 @@ struct ManageUTXOsView: View {
     // MARK: - Helpers
 
     private func sortButton(for key: SortKey) -> some View {
-        Button { sortKey = key }
-            label: {
-                Text(key.title)
-                    .font(.footnote)
-                    .fontWeight(.medium)
-                    .frame(minWidth: 60)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 12)
-                    .background(sortKey == key ? .blue : .systemGray5)
-                    .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
-                    .cornerRadius(100)
-            }
-            .buttonStyle(.plain)
-            .opacity(1)
+        Button {
+            sortKey = key
+        } label: {
+            Text(key.title)
+                .font(.footnote)
+                .fontWeight(.medium)
+                .frame(minWidth: 60)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(sortKey == key ? .blue : .systemGray5)
+                .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
+                .cornerRadius(100)
+        }
+        .buttonStyle(.plain)
+        .opacity(1)
     }
 
     private var filteredUTXOs: [UTXO] {
@@ -263,5 +272,5 @@ private struct UTXORow: View {
 // MARK: - Preview
 
 #Preview {
-    ManageUTXOsView()
+    UtoxListScreen()
 }

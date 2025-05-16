@@ -1,5 +1,5 @@
-use bdk_chain::ChainPosition as BdkChainPosition;
-use bdk_chain::ConfirmationBlockTime;
+use bdk_wallet::chain::ChainPosition as BdkChainPosition;
+use bdk_wallet::chain::ConfirmationBlockTime;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, uniffi::Object)]
 pub enum ChainPosition {

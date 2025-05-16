@@ -3,12 +3,12 @@ pub mod esplora;
 
 use std::sync::Arc;
 
-use bdk_chain::{
+use bdk_electrum::electrum_client;
+use bdk_esplora::esplora_client;
+use bdk_wallet::chain::{
     bitcoin::Address,
     spk_client::{SyncRequest, SyncResponse},
 };
-use bdk_electrum::electrum_client;
-use bdk_esplora::esplora_client;
 use bdk_wallet::{
     KeychainKind,
     chain::{

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bdk_chain::{ChainPosition as BdkChainPosition, ConfirmationBlockTime, tx_graph::CanonicalTx};
+use bdk_wallet::chain::{ChainPosition as BdkChainPosition, ConfirmationBlockTime, tx_graph::CanonicalTx};
 use bdk_wallet::Wallet as BdkWallet;
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bip329::{Label, Labels, TransactionRecord};

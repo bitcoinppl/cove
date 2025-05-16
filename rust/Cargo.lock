@@ -257,22 +257,11 @@ version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4955734f97b2baed3f36d16ae7c203fdde31ae85391ac44ee3cbcaf0886db5ce"
 dependencies = [
- "bdk_core 0.4.1",
+ "bdk_core",
  "bitcoin",
  "miniscript",
  "rusqlite",
  "serde",
-]
-
-[[package]]
-name = "bdk_chain"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "260ac6b2feb080a9af6e1df060e09ea78b2034955aeabef81b87309d6b7cfd47"
-dependencies = [
- "bdk_core 0.5.0",
- "bitcoin",
- "miniscript",
 ]
 
 [[package]]
@@ -287,21 +276,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "bdk_core"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cb2496e93fd104e32a36cd5dfb0638fc8376d83d80696b3b75f27abe39df343"
-dependencies = [
- "bitcoin",
-]
-
-[[package]]
 name = "bdk_electrum"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb2ac12acbf8f263c59d74ceeeed015e0fd00982aa8e71824f63d102999be040"
 dependencies = [
- "bdk_core 0.4.1",
+ "bdk_core",
  "electrum-client",
 ]
 
@@ -312,7 +292,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7fdf5efbebabc0c0bb46c0348ef0d4db505856c7d6c5d50cebba1e5eda5fe4"
 dependencies = [
  "async-trait",
- "bdk_core 0.4.1",
+ "bdk_core",
  "esplora-client",
  "futures",
  "miniscript",
@@ -324,7 +304,7 @@ version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2502fb75506a21d0b6e1b2002ecd9953ad1f70d82d4c3aaf812db1c028662ff1"
 dependencies = [
- "bdk_core 0.4.1",
+ "bdk_core",
  "bincode",
  "serde",
 ]
@@ -335,7 +315,7 @@ version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "461b92c4e47b688a92740b204f4580e0a51775df16b67dde1d2db6ede1f0ba09"
 dependencies = [
- "bdk_chain 0.21.1",
+ "bdk_chain",
  "bdk_file_store",
  "bip39",
  "bitcoin",
@@ -700,8 +680,6 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bbqr",
- "bdk_chain 0.22.0",
- "bdk_core 0.5.0",
  "bdk_electrum",
  "bdk_esplora",
  "bdk_file_store",
@@ -860,7 +838,6 @@ name = "cove-types"
 version = "0.1.0"
 dependencies = [
  "bbqr",
- "bdk_chain 0.22.0",
  "bdk_wallet",
  "bitcoin",
  "cove-macros",

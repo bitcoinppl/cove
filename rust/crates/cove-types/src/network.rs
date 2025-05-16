@@ -1,4 +1,4 @@
-use bdk_chain::bitcoin::params::Params;
+use bdk_wallet::chain::bitcoin::params::Params;
 use bdk_wallet::bitcoin;
 use bitcoin::NetworkKind;
 use serde::{Deserialize, Serialize};

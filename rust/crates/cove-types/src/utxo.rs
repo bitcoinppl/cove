@@ -1,5 +1,7 @@
-use bdk_chain::{ChainPosition, ConfirmationBlockTime};
-use bdk_wallet::{KeychainKind, LocalOutput};
+use bdk_wallet::{
+    KeychainKind, LocalOutput,
+    chain::{ChainPosition, ConfirmationBlockTime},
+};
 use bitcoin::{address::FromScriptError, params::Params};
 
 use crate::{Network, OutPoint, address::Address, amount::Amount};
