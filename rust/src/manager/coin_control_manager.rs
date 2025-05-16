@@ -165,3 +165,34 @@ impl PartialEq for RustCoinControlManager {
         state.lock().eq(&other_state.lock())
     }
 }
+
+mod ffi {
+    use cove_types::utxo::ffi::preview_new_utxo_list;
+
+    use super::*;
+
+    #[uniffi::export]
+    impl RustCoinControlManager {
+        #[uniffi::constructor]
+        pub fn preview_new() -> Self {
+            let (sender, receiver) = flume::bounded(10);
+
+            let state = State::preview_new();
+            Self {
+                state: Arc::new(Mutex::new(state)),
+                reconciler: sender,
+                reconcile_receiver: Arc::new(receiver),
+            }
+        }
+    }
+
+    #[uniffi::export]
+    impl CoinControlManagerState {
+        #[uniffi::constructor]
+        pub fn preview_new() -> Self {
+            let wallet_id = WalletId::preview_new();
+            let utxos = preview_new_utxo_list(10, 10);
+            Self { wallet_id, utxos }
+        }
+    }
+}

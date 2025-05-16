@@ -25,3 +25,21 @@ impl From<&bitcoin::OutPoint> for OutPoint {
         Self { txid: out_point.txid.into(), vout: out_point.vout }
     }
 }
+
+mod ffi {
+    use super::OutPoint;
+    use crate::TxId;
+
+    #[uniffi::export]
+    impl OutPoint {
+        #[uniffi::constructor]
+        pub fn preview_new() -> Self {
+            Self::with_vout(0)
+        }
+
+        #[uniffi::constructor]
+        pub fn with_vout(vout: u32) -> Self {
+            Self { txid: TxId::preview_new(), vout }
+        }
+    }
+}

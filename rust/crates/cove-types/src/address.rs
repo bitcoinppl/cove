@@ -366,6 +366,37 @@ impl<'de> Deserialize<'de> for Address {
     }
 }
 
+pub mod ffi {
+    use super::*;
+
+    use rand::seq::IndexedRandom;
+
+    fn random_address() -> &'static str {
+        const ADDRESSES: [&str; 10] = [
+            "tb1qj4w2g48r9w9y8dnm2w3c9zhc9h2xrsnw0lxl7p",
+            "tb1qlm0t79a5gydsmkknlmg63wdkgtf0uhyg9fwzpn",
+            "tb1quce0p4xw8y9e33z8n0x0wqkzt03cm2hyjgd6r8",
+            "tb1qzr8tp9n6arcc6hy6d7qynjy5h44xd9g8nht6mr",
+            "tb1qpjvm4p8pyulv7cmq5k3qh8n4r2ld3t2tpjtwck",
+            "tb1q8yzg47mxck2pmhv7rhz2h2wjnmz3y32h5u3jrj",
+            "tb1qkgc8st0s7ptzqu8tkv3e8l7w73elcsl9h8huzh",
+            "tb1qynf8a54p9zqhsn5y6g0dr9twnyr4mlv6a8tz8r",
+            "tb1qg0j32j3rpuxhcrd0mlcllz2qv5a2wjkzt7w0nl",
+            "tb1qvldn02as4y33kw7czwyy83t5lw3wsl08vnjhpl",
+        ];
+        let mut rng = rand::rng();
+        ADDRESSES.choose(&mut rng).unwrap()
+    }
+
+    #[uniffi::export]
+    impl Address {
+        #[uniffi::constructor]
+        pub fn random() -> Self {
+            Self::new(BdkAddress::from_str(random_address()).unwrap().assume_checked())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
