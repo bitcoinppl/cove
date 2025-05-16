@@ -1,97 +1,30 @@
 import SwiftUI
 
-// MARK: - Model
-
-struct UTXO: Identifiable, Hashable {
-    enum Kind: Comparable { case change, regular }
-
-    let id = UUID()
-    let name: String
-    let address: String
-    let amountBTC: Double
-    let date: Date
-    let kind: Kind
-}
-
 // MARK: - View
 
 struct UtxoListScreen: View {
-    
-    // ─── Sample data ─────────────────────────────────────────
-    @State private var utxos: [UTXO] = [
-        .init(
-            name: "Open SATs Payment",
-            address: "bc1q uyye…e63s 0vus",
-            amountBTC: 0.0135,
-            date: .now,
-            kind: .regular
-        ),
-        .init(
-            name: "Received",
-            address: "bc1q uyye…e63s 0vus",
-            amountBTC: 0.0135,
-            date: .now,
-            kind: .regular
-        ),
-        .init(
-            name: "Facebook Marketplace",
-            address: "bc1q uyye…e63s 0vus",
-            amountBTC: 0.0135,
-            date: .now,
-            kind: .regular
-        ),
-        .init(
-            name: "Change",
-            address: "bc1q uyye…e63s 0vus",
-            amountBTC: 0.0135,
-            date: .now,
-            kind: .change
-        ),
-        .init(
-            name: "Open SATs Payment",
-            address: "bc1q uyye…e63s 0vus",
-            amountBTC: 0.0135,
-            date: .now,
-            kind: .regular
-        ),
-        //        .init(name: "Change",
-        //              address: "bc1q uyye…e63s 0vus",
-        //              amountBTC: 0.0135,
-        //              date: .now,
-        //              kind: .change),
-        //        .init(name: "Open SATs Payment",
-        //              address: "bc1q uyye…e63s 0vus",
-        //              amountBTC: 0.0135,
-        //              date: .now,
-        //              kind: .regular),
-    ]
+    @State var manager: CoinControlManager
 
-    // ─── UI state ────────────────────────────────────────────
-    @State private var selected = Set<UTXO.ID>()
-    @State private var search = ""
-    @State private var sortKey = SortKey.date
-
-    // ─── Sort helper ─────────────────────────────────────────
-    enum SortKey: String, CaseIterable, Identifiable {
-        case date, name, amount, change
-        var id: Self { self }
-        var title: String {
-            switch self {
-            case .date: "Date"
-            case .name: "Name"
-            case .amount: "Amount"
-            case .change: "Change"
+    @ViewBuilder
+    func UTXOList() -> some View {
+        VStack(spacing: 0) {
+            List(selection: manager.selectedBinding) {
+                ForEach(manager.utxos) { utxo in
+                    UTXORow(manager: manager, utxo: utxo)
+                        .listRowBackground(Color.systemBackground)
+                }
             }
+            .scrollContentBackground(.hidden)
+            .padding(.top, -35) // undo list default padding top
+            .padding(.horizontal, -16) // undo default padding horizontal
+            .environment(\.editMode, .constant(.active))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-
-        func compare(_ a: UTXO, _ b: UTXO) -> Bool {
-            switch self {
-            case .date: a.date > b.date
-            case .name: a.name < b.name
-            case .amount: a.amountBTC > b.amountBTC
-            case .change: a.kind > b.kind
-            }
-        }
+        .background(manager.utxos.count < 6 ? Color.clear : Color.white)
+        .clipShape(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .padding(.horizontal)
     }
 
     // ─── Body ────────────────────────────────────────────────
@@ -102,7 +35,7 @@ struct UtxoListScreen: View {
                     // ─ Search bar ─
                     HStack {
                         Image(systemName: "magnifyingglass")
-                        TextField("Search UTXOs", text: $search)
+                        TextField("Search UTXOs", text: manager.searchBinding)
                             .autocorrectionDisabled()
                     }
                     .padding(8)
@@ -136,21 +69,7 @@ struct UtxoListScreen: View {
                     .padding(.horizontal)
 
                     // ─ UTXO list ─
-                    VStack(spacing: 0) {
-                        List(filteredUTXOs, selection: $selected) { utxo in
-                            UTXORow(utxo: utxo).listRowBackground(Color.systemBackground)
-                        }
-                        .scrollContentBackground(.hidden)
-                        .padding(.top, -35) // undo list default padding top
-                        .padding(.horizontal, -16) // undo default padding horizontal
-                        .environment(\.editMode, .constant(.active))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                    .background(filteredUTXOs.count < 6 ? Color.clear : Color.white)
-                    .clipShape(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    )
-                    .padding(.horizontal)
+                    UTXOList()
                 }
 
                 Spacer()
@@ -185,7 +104,7 @@ struct UtxoListScreen: View {
                 // ─ Action buttons ─
                 Button("Continue") { /* … */ }
                     .buttonStyle(
-                        selected.isEmpty
+                        manager.selected.isEmpty
                             ? DarkButtonStyle(
                                 backgroundColor: .systemGray4, foregroundColor: .secondary
                             )
@@ -195,7 +114,7 @@ struct UtxoListScreen: View {
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal)
                     .padding(.bottom, 4)
-                    .disabled(selected.isEmpty)
+                    .disabled(manager.selected.isEmpty)
                     .padding(.horizontal)
             }
             .navigationTitle("Manage UTXOs")
@@ -208,14 +127,15 @@ struct UtxoListScreen: View {
                 Color(.systemGroupedBackground)
                     .ignoresSafeArea()
             )
+            .environment(manager)
         }
     }
 
     // MARK: - Helpers
 
-    private func sortButton(for key: SortKey) -> some View {
+    private func sortButton(for key: CoinControlListSortKey) -> some View {
         Button {
-            sortKey = key
+//            sortKey = key
         } label: {
             Text(key.title)
                 .font(.footnote)
@@ -223,25 +143,20 @@ struct UtxoListScreen: View {
                 .frame(minWidth: 60)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
-                .background(sortKey == key ? .blue : .systemGray5)
-                .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
+//                .background(sortKey == key ? .blue : .systemGray5)
+//                .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
                 .cornerRadius(100)
         }
         .buttonStyle(.plain)
         .opacity(1)
-    }
-
-    private var filteredUTXOs: [UTXO] {
-        utxos
-            .filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
-            .sorted(by: sortKey.compare)
     }
 }
 
 // MARK: - Row
 
 private struct UTXORow: View {
-    let utxo: UTXO
+    var manager: CoinControlManager
+    let utxo: Utxo
 
     var body: some View {
         HStack(spacing: 0) {
@@ -251,7 +166,7 @@ private struct UTXORow: View {
                     .font(.footnote)
 
                 // Address (semi-bold caption)
-                Text(utxo.address)
+                Text(utxo.address.spacedOut())
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundColor(.secondary)
@@ -261,13 +176,11 @@ private struct UTXORow: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 2) {
-                // Amount (regular footnote)
-                Text(utxo.amountBTC, format: .currency(code: "BTC"))
+                Text(manager.displayAmount(utxo.amount))
                     .font(.footnote)
                     .fontWeight(.regular)
 
-                // Date (caption, secondary)
-                Text(utxo.date, format: .dateTime.year().month().day())
+                Text(utxo.date)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -279,5 +192,9 @@ private struct UTXORow: View {
 // MARK: - Preview
 
 #Preview {
-    UtxoListScreen()
+    AsyncPreview {
+        UtxoListScreen(
+            manager: CoinControlManager(RustCoinControlManager.previewNew())
+        )
+    }
 }

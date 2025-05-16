@@ -593,6 +593,8 @@ fileprivate struct FfiConverterDuration: FfiConverterRustBuffer {
 
 public protocol AddressProtocol: AnyObject, Sendable {
     
+    func hashToUint()  -> UInt64
+    
     func spacedOut()  -> String
     
     func string()  -> String
@@ -676,6 +678,13 @@ public static func random() -> Address  {
 }
     
 
+    
+open func hashToUint() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_address_hashtouint(self.uniffiClonePointer(),$0
+    )
+})
+}
     
 open func spacedOut() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -2757,6 +2766,10 @@ public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails
 
 public protocol OutPointProtocol: AnyObject, Sendable {
     
+    func eq(rhs: OutPoint)  -> Bool
+    
+    func hashToUint()  -> UInt64
+    
 }
 open class OutPoint: OutPointProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -2824,6 +2837,21 @@ public static func withVout(vout: UInt32) -> OutPoint  {
 }
     
 
+    
+open func eq(rhs: OutPoint) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_eq(self.uniffiClonePointer(),
+        FfiConverterTypeOutPoint_lower(rhs),$0
+    )
+})
+}
+    
+open func hashToUint() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_hashtouint(self.uniffiClonePointer(),$0
+    )
+})
+}
     
 
 }
@@ -3920,7 +3948,6 @@ public func FfiConverterTypeSplitOutput_lower(_ value: SplitOutput) -> RustBuffe
 
 
 public struct Utxo {
-    public var id: String
     public var outpoint: OutPoint
     public var label: String?
     public var datetime: UInt64
@@ -3932,8 +3959,7 @@ public struct Utxo {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType) {
-        self.id = id
+    public init(outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType) {
         self.outpoint = outpoint
         self.label = label
         self.datetime = datetime
@@ -3958,7 +3984,6 @@ public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Utxo {
         return
             try Utxo(
-                id: FfiConverterString.read(from: &buf), 
                 outpoint: FfiConverterTypeOutPoint.read(from: &buf), 
                 label: FfiConverterOptionString.read(from: &buf), 
                 datetime: FfiConverterUInt64.read(from: &buf), 
@@ -3971,7 +3996,6 @@ public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: Utxo, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.id, into: &buf)
         FfiConverterTypeOutPoint.write(value.outpoint, into: &buf)
         FfiConverterOptionString.write(value.label, into: &buf)
         FfiConverterUInt64.write(value.datetime, into: &buf)
@@ -5406,6 +5430,35 @@ public func unitToString(unit: Unit) -> String  {
     )
 })
 }
+public func utxoDate(utxo: Utxo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_date(
+        FfiConverterTypeUtxo_lower(utxo),$0
+    )
+})
+}
+public func utxoHashToUint(utxo: Utxo) -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_hash_to_uint(
+        FfiConverterTypeUtxo_lower(utxo),$0
+    )
+})
+}
+public func utxoIsEqual(lhs: Utxo, rhs: Utxo) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_is_equal(
+        FfiConverterTypeUtxo_lower(lhs),
+        FfiConverterTypeUtxo_lower(rhs),$0
+    )
+})
+}
+public func utxoName(utxo: Utxo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_name(
+        FfiConverterTypeUtxo_lower(utxo),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -5468,6 +5521,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_unit_to_string() != 52878) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_date() != 4098) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 28817) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_is_equal() != 4992) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_name() != 59798) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_address_hashtouint() != 57811) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_spaced_out() != 48577) {
@@ -5663,6 +5731,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 38410) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_eq() != 21627) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_hashtouint() != 32526) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_psbt_fee() != 64967) {

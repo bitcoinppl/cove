@@ -38,24 +38,24 @@ struct RouteView: View {
 func routeToView(app: AppManager, route: Route) -> some View {
     Group {
         switch route {
-        case let .loadAndReset(resetTo: routes, afterMillis: time):
-            LoadAndResetContainer(nextRoute: routes.routes, loadingTimeMs: Int(time))
-        case let .settings(route):
-            SettingsContainer(route: route)
-        case .listWallets:
-            ListWalletsScreen()
-        case let .newWallet(route: route):
-            NewWalletContainer(route: route)
-        case let .selectedWallet(walletId):
-            SelectedWalletContainer(id: walletId)
-        case let .secretWords(id: walletId):
-            SecretWordsScreen(id: walletId)
-        case let .transactionDetails(id: id, details: details):
-            TransactionsDetailScreen(id: id, transactionDetails: details)
-        case let .send(sendRoute):
-            SendFlowContainer(sendRoute: sendRoute)
-        case let .coinControl(coinControlManager):
-            UtxoListScreen(manager: coinControlManager)
+            case let .loadAndReset(resetTo: routes, afterMillis: time):
+                LoadAndResetContainer(nextRoute: routes.routes, loadingTimeMs: Int(time))
+            case let .settings(route):
+                SettingsContainer(route: route)
+            case .listWallets:
+                ListWalletsScreen()
+            case let .newWallet(route: route):
+                NewWalletContainer(route: route)
+            case let .selectedWallet(walletId):
+                SelectedWalletContainer(id: walletId)
+            case let .secretWords(id: walletId):
+                SecretWordsScreen(id: walletId)
+            case let .transactionDetails(id: id, details: details):
+                TransactionsDetailScreen(id: id, transactionDetails: details)
+            case let .send(sendRoute):
+                SendFlowContainer(sendRoute: sendRoute)
+            case .coinControl(let rustManager):
+                UtxoListScreen(manager: CoinControlManager(rustManager))
         }
     }
     .environment(app)

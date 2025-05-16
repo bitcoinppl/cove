@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 10/20/24.
 //
 
+import CoveCore
 // General extention for types from rust
 import Foundation
 import SwiftUI
@@ -66,8 +67,8 @@ extension PriceResponse: Equatable {
     }
 }
 
-public extension SendRoute {
-    func id() -> WalletId {
+extension SendRoute {
+    public func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
         case let .confirm(args): args.id
@@ -89,7 +90,8 @@ extension [BoxedRoute] {
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
+    {
         feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
 }
@@ -228,3 +230,44 @@ extension SendFlowAlertState {
         self = addressErrorToAlertState(error: addressError, address: address)
     }
 }
+
+extension Utxo: @retroactive Identifiable, @retroactive Hashable, @retroactive Equatable {
+    public typealias ID = OutPoint
+
+    public var id: OutPoint {
+        self.outpoint
+    }
+    
+    public var name: String {
+        utxoName(utxo: self)
+    }
+    
+    public var date: String{
+        utxoDate(utxo: self)
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(utxoHashToUint(utxo: self))
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        utxoIsEqual(lhs: lhs, rhs: rhs)
+    }
+}
+
+extension OutPoint: @retroactive Hashable, Equatable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.hashToUint())
+    }
+
+    public static func == (lhs: OutPoint, rhs: OutPoint) -> Bool {
+        lhs.eq(rhs: rhs)
+    }
+}
+
+extension CoinControlListSortKey {
+    public var title: String {
+       coinControlListSortKeyToString(key: self)
+    }
+}
+

@@ -2292,9 +2292,11 @@ open class CoinControlManagerState: CoinControlManagerStateProtocol, @unchecked 
     }
 
     
-public static func previewNew() -> CoinControlManagerState  {
+public static func previewNew(outputCount: UInt8 = UInt8(20), changeCount: UInt8 = UInt8(4)) -> CoinControlManagerState  {
     return try!  FfiConverterTypeCoinControlManagerState_lift(try! rustCall() {
-    uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new($0
+    uniffi_cove_fn_constructor_coincontrolmanagerstate_preview_new(
+        FfiConverterUInt8.lower(outputCount),
+        FfiConverterUInt8.lower(changeCount),$0
     )
 })
 }
@@ -6695,6 +6697,8 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: CoinControlManagerReconciler) 
     
+    func utxos()  -> [Utxo]
+    
 }
 open class RustCoinControlManager: RustCoinControlManagerProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -6746,9 +6750,11 @@ open class RustCoinControlManager: RustCoinControlManagerProtocol, @unchecked Se
     }
 
     
-public static func previewNew() -> RustCoinControlManager  {
+public static func previewNew(outputCount: UInt8 = UInt8(20), changeCount: UInt8 = UInt8(4)) -> RustCoinControlManager  {
     return try!  FfiConverterTypeRustCoinControlManager_lift(try! rustCall() {
-    uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new($0
+    uniffi_cove_fn_constructor_rustcoincontrolmanager_preview_new(
+        FfiConverterUInt8.lower(outputCount),
+        FfiConverterUInt8.lower(changeCount),$0
     )
 })
 }
@@ -6770,6 +6776,13 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
         FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(reconciler),$0
     )
 }
+}
+    
+open func utxos() -> [Utxo]  {
+    return try!  FfiConverterSequenceTypeUtxo.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustcoincontrolmanager_utxos(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 
@@ -13878,6 +13891,90 @@ public func FfiConverterTypeCoinControlListSort_lower(_ value: CoinControlListSo
 
 
 extension CoinControlListSort: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CoinControlListSortKey {
+    
+    case date
+    case name
+    case amount
+    case change
+}
+
+
+#if compiler(>=6)
+extension CoinControlListSortKey: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoinControlListSortKey: FfiConverterRustBuffer {
+    typealias SwiftType = CoinControlListSortKey
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoinControlListSortKey {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .date
+        
+        case 2: return .name
+        
+        case 3: return .amount
+        
+        case 4: return .change
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CoinControlListSortKey, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .date:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .name:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .amount:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .change:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoinControlListSortKey_lift(_ buf: RustBuffer) throws -> CoinControlListSortKey {
+    return try FfiConverterTypeCoinControlListSortKey.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoinControlListSortKey_lower(_ value: CoinControlListSortKey) -> RustBuffer {
+    return FfiConverterTypeCoinControlListSortKey.lower(value)
+}
+
+
+extension CoinControlListSortKey: Equatable, Hashable {}
 
 
 
@@ -22959,7 +23056,7 @@ public protocol CoinControlManagerReconciler: AnyObject, Sendable {
      */
     func reconcile(message: CoinControlManagerReconcileMessage) 
     
-    func reconcileMany(message: [CoinControlManagerReconcileMessage]) 
+    func reconcileMany(messages: [CoinControlManagerReconcileMessage]) 
     
 }
 
@@ -22999,7 +23096,7 @@ fileprivate struct UniffiCallbackInterfaceCoinControlManagerReconciler {
         },
         reconcileMany: { (
             uniffiHandle: UInt64,
-            message: RustBuffer,
+            messages: RustBuffer,
             uniffiOutReturn: UnsafeMutableRawPointer,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
@@ -23009,7 +23106,7 @@ fileprivate struct UniffiCallbackInterfaceCoinControlManagerReconciler {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return uniffiObj.reconcileMany(
-                     message: try FfiConverterSequenceTypeCoinControlManagerReconcileMessage.lift(message)
+                     messages: try FfiConverterSequenceTypeCoinControlManagerReconcileMessage.lift(messages)
                 )
             }
 
@@ -24776,6 +24873,31 @@ fileprivate struct FfiConverterSequenceTypeAddressAndAmount: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
+    typealias SwiftType = [Utxo]
+
+    public static func write(_ value: [Utxo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUtxo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Utxo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Utxo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUtxo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCoinControlManagerReconcileMessage: FfiConverterRustBuffer {
     typealias SwiftType = [CoinControlManagerReconcileMessage]
 
@@ -25224,6 +25346,13 @@ public func allFiatCurrencies() -> [FiatCurrency]  {
     )
 })
 }
+public func coinControlListSortKeyToString(key: CoinControlListSortKey) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_coin_control_list_sort_key_to_string(
+        FfiConverterTypeCoinControlListSortKey_lower(key),$0
+    )
+})
+}
 public func createTransportErrorFromCode(code: UInt16, message: String) -> TransportError  {
     return try!  FfiConverterTypeTransportError_lift(try! rustCall() {
     uniffi_cove_fn_func_create_transport_error_from_code(
@@ -25623,6 +25752,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_all_fiat_currencies() != 51329) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_coin_control_list_sort_key_to_string() != 57975) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_create_transport_error_from_code() != 58675) {
@@ -26252,6 +26384,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 58980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_utxos() != 48699) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustimportwalletmanager_dispatch() != 61781) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26660,7 +26795,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_boxedroute_new() != 62486) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new() != 47675) {
+    if (uniffi_cove_checksum_constructor_coincontrolmanagerstate_preview_new() != 58010) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_converter_new() != 25365) {
@@ -26708,7 +26843,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustauthmanager_new() != 30134) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new() != 33455) {
+    if (uniffi_cove_checksum_constructor_rustcoincontrolmanager_preview_new() != 63329) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_constructor_rustimportwalletmanager_new() != 63844) {
@@ -26783,7 +26918,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile() != 34248) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 7691) {
+    if (uniffi_cove_checksum_method_coincontrolmanagerreconciler_reconcile_many() != 41554) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffireconcile_reconcile() != 54238) {
@@ -26827,9 +26962,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

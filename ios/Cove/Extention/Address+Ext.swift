@@ -14,7 +14,8 @@ extension Address: @retroactive Equatable {
 }
 
 extension Address: @retroactive Hashable {
-    static func checkValid(_ address: String, network: Network? = nil) -> Result<Void, AddressError> {
+    static func checkValid(_ address: String, network: Network? = nil) -> Result<Void, AddressError>
+    {
         if address.isEmpty { return .failure(AddressError.EmptyAddress) }
 
         if let network {
@@ -32,6 +33,6 @@ extension Address: @retroactive Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(string())
+        hasher.combine(self.hashToUint())
     }
 }

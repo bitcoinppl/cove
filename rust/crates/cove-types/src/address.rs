@@ -373,16 +373,16 @@ pub mod ffi {
 
     fn random_address() -> &'static str {
         const ADDRESSES: [&str; 10] = [
-            "tb1qj4w2g48r9w9y8dnm2w3c9zhc9h2xrsnw0lxl7p",
-            "tb1qlm0t79a5gydsmkknlmg63wdkgtf0uhyg9fwzpn",
-            "tb1quce0p4xw8y9e33z8n0x0wqkzt03cm2hyjgd6r8",
-            "tb1qzr8tp9n6arcc6hy6d7qynjy5h44xd9g8nht6mr",
-            "tb1qpjvm4p8pyulv7cmq5k3qh8n4r2ld3t2tpjtwck",
-            "tb1q8yzg47mxck2pmhv7rhz2h2wjnmz3y32h5u3jrj",
-            "tb1qkgc8st0s7ptzqu8tkv3e8l7w73elcsl9h8huzh",
-            "tb1qynf8a54p9zqhsn5y6g0dr9twnyr4mlv6a8tz8r",
-            "tb1qg0j32j3rpuxhcrd0mlcllz2qv5a2wjkzt7w0nl",
-            "tb1qvldn02as4y33kw7czwyy83t5lw3wsl08vnjhpl",
+            "tb1q2z9f42gfafthstgn34es2eamr2afv474sdsld8",
+            "tb1p6vhsxjsszp63gedr8ywq8qx00wnkqx3pmuxatffh8za62v5uy0xqk92z4y",
+            "tb1q6exja52re3dykawlwqfca4kv0tg0y7crpnttvt",
+            "tb1psq467xgaqwda3nexzshg8llzhyrw5k5053k3jzv769rlyldtp73q2wcqzk",
+            "tb1pc5ul0lzjl6nwxewmrmay5ppcmn3w2dzxw349t0unnjnemq53tv9qg0xgfy",
+            "tb1pqcffycem084xfr5kql5ypqeqr9uknzls08xat7f8p9ag3f8tmk7sz66vl2",
+            "tb1pvam2nqaw9hsw0nzahuhdak4l8v0h5dwsaca6264ns7ppk8unrk9qvjrtxn",
+            "tb1qum986qkqf363jhaau2nlavyehdqg487p8m2ydu",
+            "tb1qmt3vg7e4krvy77sevcdtlaxh9qasen0dhrx63s",
+            "tb1qhajp86w02393277e9wp4u2puqfs6gl6mpthyez",
         ];
         let mut rng = rand::rng();
         ADDRESSES.choose(&mut rng).unwrap()
@@ -393,6 +393,13 @@ pub mod ffi {
         #[uniffi::constructor]
         pub fn random() -> Self {
             Self::new(BdkAddress::from_str(random_address()).unwrap().assume_checked())
+        }
+
+        #[uniffi::method(name = "hashToUint")]
+        fn ffi_hash(&self) -> u64 {
+            let mut hasher = std::hash::DefaultHasher::new();
+            self.hash(&mut hasher);
+            hasher.finish()
         }
     }
 }

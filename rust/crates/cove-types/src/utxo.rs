@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    hash::{Hash as _, Hasher as _},
+    sync::Arc,
+};
 
 use bdk_wallet::{
     KeychainKind, LocalOutput,
@@ -16,7 +19,6 @@ pub enum UtxoType {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct Utxo {
-    pub id: String,
     pub outpoint: Arc<OutPoint>,
     pub label: Option<String>,
     pub datetime: u64,
@@ -59,7 +61,6 @@ impl Utxo {
         let derivation_index = local.derivation_index;
 
         let utxo = Utxo {
-            id: outpoint.to_string(),
             label: None,
             datetime,
             outpoint: Arc::new(outpoint),
@@ -83,7 +84,43 @@ impl From<KeychainKind> for UtxoType {
     }
 }
 
-pub mod ffi {
+// MARK: FFI
+#[uniffi::export]
+fn utxo_name(utxo: Utxo) -> String {
+    if let Some(label) = utxo.label {
+        return label;
+    }
+
+    match utxo.type_ {
+        UtxoType::Output => "Received",
+        UtxoType::Change => "Change",
+    }
+    .to_string()
+}
+
+#[uniffi::export]
+fn utxo_date(utxo: Utxo) -> String {
+    let Ok(timestamp) = jiff::Timestamp::from_second(utxo.datetime as i64) else {
+        return "".to_string();
+    };
+
+    timestamp.strftime("%B %d, %Y").to_string()
+}
+
+#[uniffi::export]
+fn utxo_hash_to_uint(utxo: Utxo) -> u64 {
+    let mut hasher = std::hash::DefaultHasher::new();
+    utxo.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[uniffi::export]
+fn utxo_is_equal(lhs: Utxo, rhs: Utxo) -> bool {
+    lhs == rhs
+}
+
+// MAKR: FFI PREVIEW
+pub mod ffi_preview {
     use super::*;
     use rand::random_range;
 
@@ -123,7 +160,6 @@ pub mod ffi {
             let block_height = random_range(0..=900_000);
 
             Self {
-                id: outpoint.to_string(),
                 outpoint: Arc::new(outpoint),
                 label: None,
                 datetime: random_timestamp,

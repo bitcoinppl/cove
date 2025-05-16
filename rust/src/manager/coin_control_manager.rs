@@ -31,7 +31,7 @@ pub enum CoinControlManagerReconcileMessage {
 pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the manager changes
     fn reconcile(&self, message: Message);
-    fn reconcile_many(&self, message: Vec<Message>);
+    fn reconcile_many(&self, messages: Vec<Message>);
 }
 
 #[derive(Clone, Debug, uniffi::Object)]
@@ -55,6 +55,11 @@ pub enum CoinControlManagerAction {
 
 #[uniffi::export]
 impl RustCoinControlManager {
+    #[uniffi::method]
+    pub fn utxos(&self) -> Vec<Utxo> {
+        self.state.lock().utxos.clone()
+    }
+
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
@@ -126,6 +131,21 @@ pub enum CoinControlListSort {
     Change(UtxoType),
 }
 
+#[derive(
+    Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum, derive_more::Display,
+)]
+pub enum CoinControlListSortKey {
+    Date,
+    Name,
+    Amount,
+    Change,
+}
+
+#[uniffi::export]
+fn coin_control_list_sort_key_to_string(key: CoinControlListSortKey) -> String {
+    key.to_string()
+}
+
 impl Default for CoinControlListSort {
     fn default() -> Self {
         Self::Date(ListSortDirection::Descending)
@@ -167,17 +187,17 @@ impl PartialEq for RustCoinControlManager {
 }
 
 mod ffi {
-    use cove_types::utxo::ffi::preview_new_utxo_list;
+    use cove_types::utxo::ffi_preview::preview_new_utxo_list;
 
     use super::*;
 
     #[uniffi::export]
     impl RustCoinControlManager {
-        #[uniffi::constructor]
-        pub fn preview_new() -> Self {
+        #[uniffi::constructor(default(output_count = 20, change_count = 4))]
+        pub fn preview_new(output_count: u8, change_count: u8) -> Self {
             let (sender, receiver) = flume::bounded(10);
 
-            let state = State::preview_new();
+            let state = State::preview_new(output_count, change_count);
             Self {
                 state: Arc::new(Mutex::new(state)),
                 reconciler: sender,
@@ -188,10 +208,10 @@ mod ffi {
 
     #[uniffi::export]
     impl CoinControlManagerState {
-        #[uniffi::constructor]
-        pub fn preview_new() -> Self {
+        #[uniffi::constructor(default(output_count = 20, change_count = 4))]
+        pub fn preview_new(output_count: u8, change_count: u8) -> Self {
             let wallet_id = WalletId::preview_new();
-            let utxos = preview_new_utxo_list(10, 10);
+            let utxos = preview_new_utxo_list(output_count, change_count);
             Self { wallet_id, utxos }
         }
     }
