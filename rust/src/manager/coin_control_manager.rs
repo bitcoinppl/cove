@@ -2,7 +2,7 @@ use std::{hash::Hasher, sync::Arc};
 
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    Network, WalletId,
+    Network, OutPoint, WalletId,
     utxo::{Utxo, UtxoType},
 };
 use parking_lot::Mutex;
@@ -46,11 +46,14 @@ pub struct RustCoinControlManager {
 pub struct CoinControlManagerState {
     wallet_id: WalletId,
     utxos: Vec<Utxo>,
+    sort: CoinControlListSort,
+    selected_utxos: Vec<OutPoint>,
+    search: String,
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerAction {
-    NoOp,
+    ChangeSort(CoinControlListSortKey),
 }
 
 #[uniffi::export]
@@ -79,7 +82,9 @@ impl RustCoinControlManager {
     #[uniffi::method]
     pub fn dispatch(&self, action: Action) {
         match action {
-            CoinControlManagerAction::NoOp => {}
+            CoinControlManagerAction::ChangeSort(sort_button_pressed) => {
+                self.sort_button_pressed(sort_button_pressed);
+            }
         }
     }
 }
@@ -96,6 +101,11 @@ impl RustCoinControlManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
+    }
+
+    fn sort_button_pressed(&self, sort_button_pressed: CoinControlListSortKey) {
+        // TODO: sort
+        let current_sort = self.state.lock().sort;
     }
 
     fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
@@ -166,7 +176,11 @@ impl State {
         let utxos =
             unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
 
-        Self { wallet_id, utxos }
+        let sort = CoinControlListSort::Date(ListSortDirection::Descending);
+        let selected_utxos = vec![];
+        let search = String::new();
+
+        Self { wallet_id, utxos, sort, selected_utxos, search }
     }
 
     pub fn sort_utxos(&mut self, sort: CoinControlListSort) {
