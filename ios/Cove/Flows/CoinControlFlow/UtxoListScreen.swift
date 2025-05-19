@@ -11,7 +11,7 @@ struct UtxoListScreen: View {
             List(selection: manager.selectedBinding) {
                 ForEach(manager.utxos) { utxo in
                     UTXORow(manager: manager, utxo: utxo)
-                        .listRowBackground(Color.systemBackground)
+                        .listRowBackground(Color.secondarySystemGroupedBackground)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -20,11 +20,16 @@ struct UtxoListScreen: View {
             .environment(\.editMode, .constant(.active))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .background(manager.utxos.count < 6 ? Color.clear : Color.white)
+        .background(manager.utxos.count < 6 ? Color.clear : Color.secondarySystemGroupedBackground)
         .clipShape(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
         )
         .padding(.horizontal)
+    }
+
+    var continueText: String {
+        if manager.selected.count <= 1 { return "Continue" }
+        return "Continue (\(manager.selected.count))"
     }
 
     // ─── Body ────────────────────────────────────────────────
@@ -110,7 +115,7 @@ struct UtxoListScreen: View {
             .padding(.horizontal)
 
             // ─ Action buttons ─
-            Button("Continue") { /* … */ }
+            Button(continueText) { /* … */ }
                 .buttonStyle(
                     manager.selected.isEmpty
                         ? DarkButtonStyle(

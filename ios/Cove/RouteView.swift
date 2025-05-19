@@ -56,6 +56,7 @@ func routeToView(app: AppManager, route: Route) -> some View {
             SendFlowContainer(sendRoute: sendRoute)
         case let .coinControl(route):
             CoinControlContainer(route: route)
+                .tint(.blue)
         }
     }
     .environment(app)

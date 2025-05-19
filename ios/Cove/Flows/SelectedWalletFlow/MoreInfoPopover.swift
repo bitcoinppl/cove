@@ -103,10 +103,6 @@ struct MoreInfoPopover: View {
         }
     }
 
-    func manageUtxos() {
-        app.pushRoute(.coinControl(.list(metadata.id)))
-    }
-
     var body: some View {
         VStack {
             Button(action: app.nfcReader.scan) {
@@ -132,8 +128,10 @@ struct MoreInfoPopover: View {
                 DownloadBackupButton(t)
             }
 
-            Button(action: manageUtxos) {
-                Label("Manage UTXOs", systemImage: "arrow.left.arrow.right")
+            Button(action: {
+                app.pushRoute(.coinControl(.list(metadata.id)))
+            }) {
+                Label("Manage UTXOs", systemImage: "circlebadge.2")
             }
 
             // wallet settings last button
