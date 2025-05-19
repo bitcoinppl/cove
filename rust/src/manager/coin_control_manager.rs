@@ -179,7 +179,9 @@ impl RustCoinControlManager {
             self.state.lock().filter_utxos(&search);
         }
 
+        self.state.lock().filter_utxos(&search);
         self.state.lock().search = search;
+
         self.send(Message::UpdateUtxos(self.utxos()));
     }
 
