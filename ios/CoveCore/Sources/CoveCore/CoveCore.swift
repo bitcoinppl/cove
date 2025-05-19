@@ -49,6 +49,14 @@ extension SendRoute {
     }
 }
 
+extension CoinControlRoute {
+    public func id() -> WalletId {
+        switch self {
+        case let .list(id): id
+        }
+    }
+}
+
 extension UnsignedTransaction: Identifiable {
     public var ID: TxId {
         id()

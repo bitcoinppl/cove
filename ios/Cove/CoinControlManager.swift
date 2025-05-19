@@ -75,6 +75,8 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
             withAnimation { self.sort = sort }
         case let .updateUtxos(utxos):
             withAnimation { self.utxos = utxos }
+        case let .updateSearch(search):
+            withAnimation { self.search = search }
         }
     }
 

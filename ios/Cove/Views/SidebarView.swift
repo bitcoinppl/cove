@@ -28,6 +28,7 @@ struct SidebarView: View {
             Log.error("Failed to get wallets \(error)")
             self.wallets = []
         }
+        
     }
 
     func setForeground(_ route: Route) -> LinearGradient {

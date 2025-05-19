@@ -103,6 +103,10 @@ struct MoreInfoPopover: View {
         }
     }
 
+    func manageUtxos() {
+        app.pushRoute(.coinControl(.list(metadata.id)))
+    }
+
     var body: some View {
         VStack {
             Button(action: app.nfcReader.scan) {
@@ -126,6 +130,10 @@ struct MoreInfoPopover: View {
             if case let .tapSigner(t) = metadata.hardwareMetadata {
                 ChangePinButton(t)
                 DownloadBackupButton(t)
+            }
+
+            Button(action: manageUtxos) {
+                Label("Manage UTXOs", systemImage: "arrow.left.arrow.right")
             }
 
             // wallet settings last button

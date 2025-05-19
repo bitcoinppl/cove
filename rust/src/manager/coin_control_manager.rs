@@ -1,4 +1,6 @@
-use std::{hash::Hasher, sync::Arc};
+mod state;
+
+use std::sync::Arc;
 
 use bdk_wallet::LocalOutput;
 use cove_types::{
@@ -25,6 +27,7 @@ impl_manager_message_send!(RustCoinControlManager);
 pub enum CoinControlManagerReconcileMessage {
     UpdateSort(CoinControlListSort),
     UpdateUtxos(Vec<Utxo>),
+    UpdateSearch(String),
 }
 
 #[uniffi::export(callback_interface)]
@@ -51,9 +54,12 @@ pub struct CoinControlManagerState {
     search: String,
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerAction {
     ChangeSort(CoinControlListSortKey),
+    ClearSearch,
+
+    NotifySearchChanged(String),
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -111,8 +117,13 @@ impl RustCoinControlManager {
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
         match action {
-            CoinControlManagerAction::ChangeSort(sort_button_pressed) => {
-                self.sort_button_pressed(sort_button_pressed);
+            Action::ChangeSort(sort_button_pressed) => {
+                self.sort_button_pressed(sort_button_pressed)
+            }
+            Action::NotifySearchChanged(search) => self.notify_search_changed(search),
+            Action::ClearSearch => {
+                self.notify_search_changed(String::new());
+                self.send(Message::UpdateSearch(String::new()));
             }
         }
     }
@@ -158,6 +169,16 @@ impl RustCoinControlManager {
 
         self.state.lock().sort_utxos(sort);
         sender.queue(Message::UpdateUtxos(self.utxos()));
+    }
+
+    fn notify_search_changed(self: &Arc<Self>, search: String) {
+        if !search.is_empty() {
+            self.state.lock().sort_utxos(self.state.lock().sort);
+            self.state.lock().filter_utxos(&search);
+        }
+
+        self.state.lock().search = search;
+        self.send(Message::UpdateUtxos(self.utxos()));
     }
 
     fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
@@ -228,75 +249,6 @@ impl ListSortDirection {
             Self::Ascending => Self::Descending,
             Self::Descending => Self::Ascending,
         }
-    }
-}
-
-// MARK: STATE
-impl State {
-    pub fn new(wallet_id: WalletId, unspent: Vec<LocalOutput>, network: Network) -> Self {
-        let utxos =
-            unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
-
-        let sort = CoinControlListSort::Date(ListSortDirection::Descending);
-        let selected_utxos = vec![];
-        let search = String::new();
-
-        Self { wallet_id, utxos, sort, selected_utxos, search }
-    }
-
-    pub fn sort_utxos(&mut self, sort: CoinControlListSort) {
-        let mut utxos = self.utxos.clone();
-
-        match sort {
-            CoinControlListSort::Date(ListSortDirection::Ascending) => {
-                utxos.sort_by(|a, b| a.datetime.cmp(&b.datetime).reverse());
-            }
-            CoinControlListSort::Date(ListSortDirection::Descending) => {
-                utxos.sort_by(|a, b| a.datetime.cmp(&b.datetime));
-            }
-
-            CoinControlListSort::Name(ListSortDirection::Ascending) => {
-                utxos.sort_by(|a, b| a.label.cmp(&b.label).reverse());
-            }
-            CoinControlListSort::Name(ListSortDirection::Descending) => {
-                utxos.sort_by(|a, b| a.label.cmp(&b.label));
-            }
-
-            CoinControlListSort::Amount(ListSortDirection::Ascending) => {
-                utxos.sort_by(|a, b| a.amount.cmp(&b.amount).reverse());
-            }
-
-            CoinControlListSort::Amount(ListSortDirection::Descending) => {
-                utxos.sort_by(|a, b| a.amount.cmp(&b.amount));
-            }
-
-            CoinControlListSort::Change(UtxoType::Output) => {
-                utxos.sort_by(|a, b| a.type_.cmp(&b.type_).reverse());
-            }
-
-            CoinControlListSort::Change(UtxoType::Change) => {
-                utxos.sort_by(|a, b| a.type_.cmp(&b.type_));
-            }
-        }
-    }
-}
-
-// MARK: impl
-impl std::hash::Hash for RustCoinControlManager {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        let RustCoinControlManager { state, reconciler: _, reconcile_receiver: _ } = self;
-        state.lock().hash(hasher);
-    }
-}
-
-impl Eq for RustCoinControlManager {}
-impl PartialEq for RustCoinControlManager {
-    fn eq(&self, other: &Self) -> bool {
-        let RustCoinControlManager { state, reconciler: _, reconcile_receiver: _ } = self;
-        let RustCoinControlManager { state: other_state, reconciler: _, reconcile_receiver: _ } =
-            other;
-
-        state.lock().eq(&other_state.lock())
     }
 }
 

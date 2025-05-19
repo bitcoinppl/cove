@@ -14071,6 +14071,9 @@ public enum CoinControlManagerAction {
     
     case changeSort(CoinControlListSortKey
     )
+    case clearSearch
+    case notifySearchChanged(String
+    )
 }
 
 
@@ -14091,6 +14094,11 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
         case 1: return .changeSort(try FfiConverterTypeCoinControlListSortKey.read(from: &buf)
         )
         
+        case 2: return .clearSearch
+        
+        case 3: return .notifySearchChanged(try FfiConverterString.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -14102,6 +14110,15 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
         case let .changeSort(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeCoinControlListSortKey.write(v1, into: &buf)
+            
+        
+        case .clearSearch:
+            writeInt(&buf, Int32(2))
+        
+        
+        case let .notifySearchChanged(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
             
         }
     }
@@ -14139,6 +14156,8 @@ public enum CoinControlManagerReconcileMessage {
     )
     case updateUtxos([Utxo]
     )
+    case updateSearch(String
+    )
 }
 
 
@@ -14162,6 +14181,9 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case 2: return .updateUtxos(try FfiConverterSequenceTypeUtxo.read(from: &buf)
         )
         
+        case 3: return .updateSearch(try FfiConverterString.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -14178,6 +14200,11 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case let .updateUtxos(v1):
             writeInt(&buf, Int32(2))
             FfiConverterSequenceTypeUtxo.write(v1, into: &buf)
+            
+        
+        case let .updateSearch(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
             
         }
     }
@@ -14200,6 +14227,72 @@ public func FfiConverterTypeCoinControlManagerReconcileMessage_lower(_ value: Co
 
 
 extension CoinControlManagerReconcileMessage: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum CoinControlRoute {
+    
+    case list(WalletId
+    )
+}
+
+
+#if compiler(>=6)
+extension CoinControlRoute: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoinControlRoute: FfiConverterRustBuffer {
+    typealias SwiftType = CoinControlRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoinControlRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .list(try FfiConverterTypeWalletId.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CoinControlRoute, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .list(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeWalletId.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoinControlRoute_lift(_ buf: RustBuffer) throws -> CoinControlRoute {
+    return try FfiConverterTypeCoinControlRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoinControlRoute_lower(_ value: CoinControlRoute) -> RustBuffer {
+    return FfiConverterTypeCoinControlRoute.lower(value)
+}
+
+
+extension CoinControlRoute: Equatable, Hashable {}
 
 
 
@@ -18028,7 +18121,7 @@ public enum Route {
     )
     case send(SendRoute
     )
-    case coinControl(RustCoinControlManager
+    case coinControl(CoinControlRoute
     )
 }
 
@@ -18070,7 +18163,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         case 8: return .send(try FfiConverterTypeSendRoute.read(from: &buf)
         )
         
-        case 9: return .coinControl(try FfiConverterTypeRustCoinControlManager.read(from: &buf)
+        case 9: return .coinControl(try FfiConverterTypeCoinControlRoute.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -18124,7 +18217,7 @@ public struct FfiConverterTypeRoute: FfiConverterRustBuffer {
         
         case let .coinControl(v1):
             writeInt(&buf, Int32(9))
-            FfiConverterTypeRustCoinControlManager.write(v1, into: &buf)
+            FfiConverterTypeCoinControlRoute.write(v1, into: &buf)
             
         }
     }
@@ -27063,10 +27156,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

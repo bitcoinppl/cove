@@ -39,6 +39,17 @@ pub enum UtxoError {
 }
 
 impl Utxo {
+    pub fn name(&self) -> &str {
+        if let Some(label) = &self.label {
+            return label;
+        }
+
+        match self.type_ {
+            UtxoType::Output => "Received",
+            UtxoType::Change => "Change",
+        }
+    }
+
     pub fn try_from_local(local: LocalOutput, network: Network) -> Result<Self, UtxoError> {
         let confirmed: &ConfirmationBlockTime = match &local.chain_position {
             ChainPosition::Confirmed { anchor: confirmed, .. } => confirmed,
@@ -104,15 +115,7 @@ impl From<KeychainKind> for UtxoType {
 // MARK: FFI
 #[uniffi::export]
 fn utxo_name(utxo: Utxo) -> String {
-    if let Some(label) = utxo.label {
-        return label;
-    }
-
-    match utxo.type_ {
-        UtxoType::Output => "Received",
-        UtxoType::Change => "Change",
-    }
-    .to_string()
+    utxo.name().to_string()
 }
 
 #[uniffi::export]

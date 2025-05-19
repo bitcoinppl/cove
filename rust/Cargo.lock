@@ -727,6 +727,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sha2",
+ "strsim",
  "strum",
  "tap",
  "tempfile",
