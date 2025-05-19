@@ -14199,6 +14199,7 @@ public func FfiConverterTypeCoinControlManagerReconcileMessage_lower(_ value: Co
 }
 
 
+extension CoinControlManagerReconcileMessage: Equatable, Hashable {}
 
 
 
@@ -27062,10 +27063,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 
