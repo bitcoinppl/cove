@@ -134,7 +134,9 @@ impl RustCoinControlManager {
         let (sender, receiver) = flume::bounded(10);
 
         let mut state = State::new(id, local_outputs, network);
+
         state.sort_utxos(CoinControlListSort::Date(ListSortDirection::Descending));
+        state.load_utxo_labels();
 
         Self {
             state: Arc::new(Mutex::new(state)),

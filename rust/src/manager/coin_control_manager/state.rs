@@ -4,6 +4,8 @@ use cove_types::{
     utxo::{Utxo, UtxoType},
 };
 
+use crate::database::wallet_data::WalletDataDb;
+
 use super::{CoinControlListSort, CoinControlManagerState, ListSortDirection};
 
 type State = CoinControlManagerState;
@@ -19,6 +21,29 @@ impl State {
         let search = String::new();
 
         Self { wallet_id, utxos, sort, selected_utxos, search }
+    }
+
+    pub fn load_utxo_labels(&mut self) {
+        let utxos = &mut self.utxos;
+
+        let labels_db = WalletDataDb::new_or_existing(self.wallet_id.clone()).labels;
+
+        utxos.iter_mut().for_each(|utxo| {
+            let label = labels_db
+                .get_txn_label_record(utxo.outpoint.txid)
+                .ok()
+                .flatten()
+                .map(|record| record.item.label)
+                .unwrap_or_else(|| {
+                    labels_db
+                        .get_address_record(utxo.address.as_unchecked())
+                        .ok()
+                        .flatten()
+                        .and_then(|record| record.item.label)
+                });
+
+            utxo.label = label;
+        });
     }
 
     pub fn sort_utxos(&mut self, sort: CoinControlListSort) {
