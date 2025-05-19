@@ -135,17 +135,25 @@ struct UtxoListScreen: View {
 
     private func sortButton(for key: CoinControlListSortKey) -> some View {
         Button {
-//            sortKey = key
+            manager.dispatch(.changeSort(key))
         } label: {
-            Text(key.title)
-                .font(.footnote)
-                .fontWeight(.medium)
-                .frame(minWidth: 60)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-//                .background(sortKey == key ? .blue : .systemGray5)
-//                .foregroundColor(sortKey == key ? .white : .secondary.opacity(0.60))
-                .cornerRadius(100)
+            HStack {
+                Text(key.title)
+
+                if let arrow = manager.buttonArrow(key) {
+                    Image(systemName: arrow)
+                        .contentTransition(.symbolEffect)
+                }
+            }
+            .font(.footnote)
+            .fontWeight(.medium)
+            .frame(minWidth: 60)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(manager.buttonColor(key))
+            .foregroundColor(manager.buttonTextColor(key))
+            .cornerRadius(100)
+            .contentTransition(.interpolate)
         }
         .buttonStyle(.plain)
         .opacity(1)

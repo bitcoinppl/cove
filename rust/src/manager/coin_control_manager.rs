@@ -7,14 +7,13 @@ use cove_types::{
 };
 use parking_lot::Mutex;
 
-use crate::manager::deferred_sender;
+use crate::manager::deferred_sender::{self, DeferredSender};
 use crate::task;
 use cove_macros::impl_manager_message_send;
 use flume::{Receiver, Sender, TrySendError};
 use tracing::{debug, error, trace, warn};
 
 #[allow(dead_code)]
-type DeferredSender = deferred_sender::DeferredSender<Arc<RustCoinControlManager>, Message>;
 type Message = CoinControlManagerReconcileMessage;
 type Action = CoinControlManagerAction;
 type State = CoinControlManagerState;
@@ -22,9 +21,10 @@ type Reconciler = dyn CoinControlManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 impl_manager_message_send!(RustCoinControlManager);
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerReconcileMessage {
-    NoOp,
+    UpdateSort(CoinControlListSort),
+    UpdateUtxos(Vec<Utxo>),
 }
 
 #[uniffi::export(callback_interface)]
@@ -56,12 +56,41 @@ pub enum CoinControlManagerAction {
     ChangeSort(CoinControlListSortKey),
 }
 
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum ButtonPresentation {
+    NotSelected,
+    Selected(ListSortDirection),
+}
+
 #[uniffi::export]
 impl RustCoinControlManager {
     #[uniffi::method]
-    pub fn utxos(&self) -> Vec<Utxo> {
+    pub fn utxos(self: &Arc<Self>) -> Vec<Utxo> {
         self.state.lock().utxos.clone()
     }
+
+    #[uniffi::method]
+    pub fn button_presentation(
+        self: &Arc<Self>,
+        button: CoinControlListSortKey,
+    ) -> ButtonPresentation {
+        use ButtonPresentation as Present;
+        use CoinControlListSort as Sort;
+        use CoinControlListSortKey as Key;
+        use ListSortDirection as D;
+        let sort = self.state.lock().sort;
+
+        match (sort, button) {
+            (Sort::Date(d), Key::Date) => Present::Selected(d),
+            (Sort::Amount(d), Key::Amount) => Present::Selected(d),
+            (Sort::Name(d), Key::Name) => Present::Selected(d),
+            (Sort::Change(UtxoType::Output), Key::Change) => Present::Selected(D::Ascending),
+            (Sort::Change(UtxoType::Change), Key::Change) => Present::Selected(D::Descending),
+            _ => Present::NotSelected,
+        }
+    }
+
+    // MARK: boilerplate
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
@@ -80,7 +109,7 @@ impl RustCoinControlManager {
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: Action) {
+    pub fn dispatch(self: Arc<Self>, action: Action) {
         match action {
             CoinControlManagerAction::ChangeSort(sort_button_pressed) => {
                 self.sort_button_pressed(sort_button_pressed);
@@ -103,9 +132,32 @@ impl RustCoinControlManager {
         }
     }
 
-    fn sort_button_pressed(&self, sort_button_pressed: CoinControlListSortKey) {
-        // TODO: sort
+    fn sort_button_pressed(self: &Arc<Self>, sort_button_pressed: CoinControlListSortKey) {
+        use CoinControlListSort as Sort;
+        use CoinControlListSortKey as Key;
+
+        let mut sender = DeferredSender::new(self.clone());
+
         let current_sort = self.state.lock().sort;
+        let sort = match (current_sort, sort_button_pressed) {
+            (Sort::Date(sort_direction), Key::Date) => Sort::Date(sort_direction.reverse()),
+            (_, Key::Date) => Sort::Date(ListSortDirection::Descending),
+
+            (Sort::Amount(sort_directino), Key::Amount) => Sort::Amount(sort_directino.reverse()),
+            (_, Key::Amount) => Sort::Amount(ListSortDirection::Descending),
+
+            (Sort::Name(sort_direction), Key::Name) => Sort::Name(sort_direction.reverse()),
+            (_, Key::Name) => Sort::Name(ListSortDirection::Descending),
+
+            (Sort::Change(sort_direction), Key::Change) => Sort::Change(sort_direction.reverse()),
+            (_, Key::Change) => Sort::Change(UtxoType::Output),
+        };
+
+        self.state.lock().sort = sort;
+        sender.queue(Message::UpdateSort(sort));
+
+        self.state.lock().sort_utxos(sort);
+        sender.queue(Message::UpdateUtxos(self.utxos()));
     }
 
     fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
@@ -168,6 +220,15 @@ impl Default for CoinControlListSort {
 pub enum ListSortDirection {
     Ascending,
     Descending,
+}
+
+impl ListSortDirection {
+    pub fn reverse(self) -> Self {
+        match self {
+            Self::Ascending => Self::Descending,
+            Self::Descending => Self::Ascending,
+        }
+    }
 }
 
 // MARK: STATE
@@ -265,7 +326,10 @@ mod ffi {
         pub fn preview_new(output_count: u8, change_count: u8) -> Self {
             let wallet_id = WalletId::preview_new();
             let utxos = preview_new_utxo_list(output_count, change_count);
-            Self { wallet_id, utxos }
+            let sort = CoinControlListSort::Date(ListSortDirection::Descending);
+            let selected_utxos = vec![];
+            let search = String::new();
+            Self { wallet_id, utxos, sort, selected_utxos, search }
         }
     }
 }

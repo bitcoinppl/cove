@@ -33,15 +33,48 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
 
     public init(_ rust: RustCoinControlManager) {
         self.rust = rust
-
         self.utxos = rust.utxos()
-
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
+    }
+
+    public func buttonColor(_ key: CoinControlListSortKey) -> Color {
+        let _ = self.sort
+        return switch self.rust.buttonPresentation(button: key) {
+        case .notSelected:
+            .systemGray5
+        case .selected:
+            .blue
+        }
+    }
+
+    public func buttonTextColor(_ key: CoinControlListSortKey) -> Color {
+        let _ = self.sort
+        return switch self.rust.buttonPresentation(button: key) {
+        case .notSelected:
+            .secondary.opacity(0.60)
+        case .selected:
+            .white
+        }
+    }
+
+    public func buttonArrow(_ key: CoinControlListSortKey) -> String? {
+        let _ = self.sort
+        return switch self.rust.buttonPresentation(button: key) {
+        case .selected(.ascending):
+            "arrow.up"
+        case .selected(.descending):
+            "arrow.down"
+        case .notSelected:
+            .none
+        }
     }
 
     private func apply(_ message: Message) {
         switch message {
-        case .noOp: ()
+        case let .updateSort(sort):
+            withAnimation { self.sort = sort }
+        case let .updateUtxos(utxos):
+            withAnimation { self.utxos = utxos }
         }
     }
 

@@ -75,6 +75,23 @@ impl Utxo {
     }
 }
 
+impl UtxoType {
+    pub fn is_change(&self) -> bool {
+        matches!(self, UtxoType::Change)
+    }
+
+    pub fn is_output(&self) -> bool {
+        matches!(self, UtxoType::Output)
+    }
+
+    pub fn reverse(self) -> Self {
+        match self {
+            Self::Output => Self::Change,
+            Self::Change => Self::Output,
+        }
+    }
+}
+
 impl From<KeychainKind> for UtxoType {
     fn from(keychain: KeychainKind) -> Self {
         match keychain {

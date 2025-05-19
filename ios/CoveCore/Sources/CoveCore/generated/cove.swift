@@ -6690,6 +6690,8 @@ public func FfiConverterTypeRustAuthManager_lower(_ value: RustAuthManager) -> U
 
 public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
+    func buttonPresentation(button: CoinControlListSortKey)  -> ButtonPresentation
+    
     /**
      * Action from the frontend to change the state of the view model
      */
@@ -6760,6 +6762,14 @@ public static func previewNew(outputCount: UInt8 = UInt8(20), changeCount: UInt8
 }
     
 
+    
+open func buttonPresentation(button: CoinControlListSortKey) -> ButtonPresentation  {
+    return try!  FfiConverterTypeButtonPresentation_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustcoincontrolmanager_button_presentation(self.uniffiClonePointer(),
+        FfiConverterTypeCoinControlListSortKey_lower(button),$0
+    )
+})
+}
     
     /**
      * Action from the frontend to change the state of the view model
@@ -13597,6 +13607,79 @@ extension BitcoinTransactionError: Foundation.LocalizedError {
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum ButtonPresentation {
+    
+    case notSelected
+    case selected(ListSortDirection
+    )
+}
+
+
+#if compiler(>=6)
+extension ButtonPresentation: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeButtonPresentation: FfiConverterRustBuffer {
+    typealias SwiftType = ButtonPresentation
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ButtonPresentation {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .notSelected
+        
+        case 2: return .selected(try FfiConverterTypeListSortDirection.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ButtonPresentation, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .notSelected:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .selected(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeListSortDirection.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeButtonPresentation_lift(_ buf: RustBuffer) throws -> ButtonPresentation {
+    return try FfiConverterTypeButtonPresentation.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeButtonPresentation_lower(_ value: ButtonPresentation) -> RustBuffer {
+    return FfiConverterTypeButtonPresentation.lower(value)
+}
+
+
+extension ButtonPresentation: Equatable, Hashable {}
+
+
+
+
+
+
 
 public enum ByteReaderError: Swift.Error {
 
@@ -13986,7 +14069,8 @@ extension CoinControlListSortKey: Equatable, Hashable {}
 
 public enum CoinControlManagerAction {
     
-    case noOp
+    case changeSort(CoinControlListSortKey
+    )
 }
 
 
@@ -14004,7 +14088,8 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .noOp
+        case 1: return .changeSort(try FfiConverterTypeCoinControlListSortKey.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14014,9 +14099,10 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
         switch value {
         
         
-        case .noOp:
+        case let .changeSort(v1):
             writeInt(&buf, Int32(1))
-        
+            FfiConverterTypeCoinControlListSortKey.write(v1, into: &buf)
+            
         }
     }
 }
@@ -14049,7 +14135,10 @@ extension CoinControlManagerAction: Equatable, Hashable {}
 
 public enum CoinControlManagerReconcileMessage {
     
-    case noOp
+    case updateSort(CoinControlListSort
+    )
+    case updateUtxos([Utxo]
+    )
 }
 
 
@@ -14067,7 +14156,11 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .noOp
+        case 1: return .updateSort(try FfiConverterTypeCoinControlListSort.read(from: &buf)
+        )
+        
+        case 2: return .updateUtxos(try FfiConverterSequenceTypeUtxo.read(from: &buf)
+        )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -14077,9 +14170,15 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         switch value {
         
         
-        case .noOp:
+        case let .updateSort(v1):
             writeInt(&buf, Int32(1))
+            FfiConverterTypeCoinControlListSort.write(v1, into: &buf)
+            
         
+        case let .updateUtxos(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterSequenceTypeUtxo.write(v1, into: &buf)
+            
         }
     }
 }
@@ -14100,7 +14199,6 @@ public func FfiConverterTypeCoinControlManagerReconcileMessage_lower(_ value: Co
 }
 
 
-extension CoinControlManagerReconcileMessage: Equatable, Hashable {}
 
 
 
@@ -26378,6 +26476,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_validate_pin_settings() != 46433) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_button_presentation() != 38676) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_dispatch() != 16991) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26961,8 +27062,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
