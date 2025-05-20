@@ -4,13 +4,17 @@ use std::sync::Arc;
 
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    Network, OutPoint, WalletId,
+    OutPoint,
+    unit::Unit,
     utxo::{Utxo, UtxoType},
 };
 use parking_lot::Mutex;
 
-use crate::manager::deferred_sender::{self, DeferredSender};
 use crate::task;
+use crate::{
+    manager::deferred_sender::{self, DeferredSender},
+    wallet::metadata::WalletMetadata,
+};
 use cove_macros::impl_manager_message_send;
 use flume::{Receiver, Sender, TrySendError};
 use tracing::{debug, error, trace, warn};
@@ -45,6 +49,7 @@ pub enum CoinControlManagerReconcileMessage {
     UpdateUtxos(Vec<Utxo>),
     UpdateSearch(String),
     UpdateSelectedUtxos(Vec<Arc<OutPoint>>),
+    UpdateUnit(Unit),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -65,8 +70,13 @@ pub enum ButtonPresentation {
 #[uniffi::export]
 impl RustCoinControlManager {
     #[uniffi::method]
-    pub fn utxos(self: &Arc<Self>) -> Vec<Utxo> {
+    pub fn utxos(&self) -> Vec<Utxo> {
         self.state.lock().utxos()
+    }
+
+    #[uniffi::method]
+    pub fn unit(&self) -> Unit {
+        self.state.lock().unit
     }
 
     #[uniffi::method]
@@ -132,10 +142,10 @@ impl RustCoinControlManager {
 }
 
 impl RustCoinControlManager {
-    pub fn new(id: WalletId, local_outputs: Vec<LocalOutput>, network: Network) -> Self {
+    pub fn new(metadata: WalletMetadata, local_outputs: Vec<LocalOutput>) -> Self {
         let (sender, receiver) = flume::bounded(10);
 
-        let mut state = State::new(id, local_outputs, network);
+        let mut state = State::new(metadata, local_outputs);
 
         state.sort_utxos(CoinControlListSort::Date(ListSortDirection::Descending));
         state.load_utxo_labels();

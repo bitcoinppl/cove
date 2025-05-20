@@ -37,7 +37,10 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
 
     public init(_ rust: RustCoinControlManager) {
         self.rust = rust
+
         self.utxos = rust.utxos()
+        self.unit = rust.unit()
+
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -85,6 +88,8 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
             withAnimation { self.search = search }
         case let .updateSelectedUtxos(selected):
             self.selected = Set(selected)
+        case let .updateUnit(unit):
+            withAnimation { self.unit = unit }
         }
     }
 

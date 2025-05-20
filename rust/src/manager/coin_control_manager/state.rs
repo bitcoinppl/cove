@@ -1,10 +1,11 @@
 use bdk_wallet::LocalOutput;
 use cove_types::{
     Network, OutPoint, WalletId,
+    unit::Unit,
     utxo::{Utxo, UtxoType},
 };
 
-use crate::database::wallet_data::WalletDataDb;
+use crate::{database::wallet_data::WalletDataDb, wallet::metadata::WalletMetadata};
 
 use super::{CoinControlListSort, ListSortDirection};
 
@@ -15,6 +16,9 @@ type ListSort = super::CoinControlListSort;
 #[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct CoinControlManagerState {
     pub wallet_id: WalletId,
+    pub unit: Unit,
+    pub network: Network,
+
     pub utxos: Vec<Utxo>,
     pub filtered_utxos: FilteredUtxos,
     pub sort: SortState,
@@ -30,7 +34,10 @@ pub enum FilteredUtxos {
 
 // MARK: STATE
 impl State {
-    pub fn new(wallet_id: WalletId, unspent: Vec<LocalOutput>, network: Network) -> Self {
+    pub fn new(metadata: WalletMetadata, unspent: Vec<LocalOutput>) -> Self {
+        let wallet_id = metadata.id.clone();
+        let unit = metadata.selected_unit;
+        let network = metadata.network;
         let utxos =
             unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
 
@@ -38,7 +45,17 @@ impl State {
         let selected_utxos = vec![];
         let search = String::new();
 
-        Self { wallet_id, utxos, sort, selected_utxos, search, filtered_utxos: FilteredUtxos::All }
+        Self {
+            wallet_id,
+            unit,
+            network,
+
+            utxos,
+            sort,
+            selected_utxos,
+            search,
+            filtered_utxos: FilteredUtxos::All,
+        }
     }
 
     pub fn utxos(&self) -> Vec<Utxo> {
@@ -188,14 +205,18 @@ mod ffi {
     impl CoinControlManagerState {
         #[uniffi::constructor(default(output_count = 20, change_count = 4))]
         pub fn preview_new(output_count: u8, change_count: u8) -> Self {
-            let wallet_id = WalletId::preview_new();
+            let metadata = WalletMetadata::preview_new();
+
+            let wallet_id = metadata.id.clone();
+            let unit = metadata.selected_unit;
+            let network = metadata.network;
             let utxos = preview_new_utxo_list(output_count, change_count);
             let sort = Default::default();
             let selected_utxos = vec![];
             let search = String::new();
             let filtered_utxos = FilteredUtxos::All;
 
-            Self { wallet_id, utxos, sort, selected_utxos, search, filtered_utxos }
+            Self { wallet_id, unit, network, utxos, sort, selected_utxos, search, filtered_utxos }
         }
     }
 }

@@ -273,10 +273,9 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn new_coin_control_manager(&self) -> Arc<RustCoinControlManager> {
         let metadata = self.metadata.read().clone();
-        let network = metadata.network;
         let unspent = call!(self.actor.list_unspent()).await.expect("actor failed");
 
-        let manager = RustCoinControlManager::new(metadata.id, unspent, network);
+        let manager = RustCoinControlManager::new(metadata, unspent);
         Arc::new(manager)
     }
 

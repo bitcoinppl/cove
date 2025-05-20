@@ -6812,6 +6812,8 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: CoinControlManagerReconciler) 
     
+    func unit()  -> Unit
+    
     func utxos()  -> [Utxo]
     
 }
@@ -6899,6 +6901,13 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
         FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(reconciler),$0
     )
 }
+}
+    
+open func unit() -> Unit  {
+    return try!  FfiConverterTypeUnit_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustcoincontrolmanager_unit(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func utxos() -> [Utxo]  {
@@ -14357,6 +14366,8 @@ public enum CoinControlManagerReconcileMessage {
     )
     case updateSelectedUtxos([OutPoint]
     )
+    case updateUnit(Unit
+    )
 }
 
 
@@ -14386,6 +14397,9 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         )
         
         case 5: return .updateSelectedUtxos(try FfiConverterSequenceTypeOutPoint.read(from: &buf)
+        )
+        
+        case 6: return .updateUnit(try FfiConverterTypeUnit.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14418,6 +14432,11 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case let .updateSelectedUtxos(v1):
             writeInt(&buf, Int32(5))
             FfiConverterSequenceTypeOutPoint.write(v1, into: &buf)
+            
+        
+        case let .updateUnit(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeUnit.write(v1, into: &buf)
             
         }
     }
@@ -26814,6 +26833,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 58980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_unit() != 56844) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_utxos() != 48699) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27391,10 +27413,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 
