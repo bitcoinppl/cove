@@ -56,7 +56,9 @@ pub enum CoinControlManagerReconcileMessage {
 pub enum CoinControlManagerAction {
     ChangeSort(CoinControlListSortKey),
     ClearSearch,
+
     ToggleSelectAll,
+    ToggleUnit,
 
     NotifySearchChanged(String),
 }
@@ -136,6 +138,16 @@ impl RustCoinControlManager {
             }
             Action::ToggleSelectAll => {
                 self.clone().toggle_select_all();
+            }
+            Action::ToggleUnit => {
+                let new_unit = {
+                    let mut state = self.state.lock();
+                    let new_unit = state.unit.toggle();
+                    state.unit = new_unit;
+                    new_unit
+                };
+
+                self.send(Message::UpdateUnit(new_unit));
             }
         }
     }

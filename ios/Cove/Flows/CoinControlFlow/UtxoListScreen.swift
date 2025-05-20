@@ -187,6 +187,26 @@ struct UtxoListScreen: View {
             }
         }
         .navigationTitle("Manage UTXOs")
+        .navigationBarTitleDisplayMode(isFocused ? .inline : .automatic)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu("More", systemImage: "ellipsis") {
+                    Button(action: { manager.dispatch(.toggleUnit) }) {
+                        Text("Toggle Unit")
+                    }
+
+                    Button(action: { manager.dispatch(.toggleSelectAll) }) {
+                        if manager.selected.isEmpty {
+                            Text("Select All")
+                        } else {
+                            Text("Deselect All")
+                        }
+                    }
+                }
+                .foregroundColor(.primary)
+                .tint(.primary)
+            }
+        }
         .background(
             Image(.utxoManagementPattern)
                 .ignoresSafeArea()

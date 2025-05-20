@@ -14271,6 +14271,7 @@ public enum CoinControlManagerAction {
     )
     case clearSearch
     case toggleSelectAll
+    case toggleUnit
     case notifySearchChanged(String
     )
 }
@@ -14297,7 +14298,9 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
         
         case 3: return .toggleSelectAll
         
-        case 4: return .notifySearchChanged(try FfiConverterString.read(from: &buf)
+        case 4: return .toggleUnit
+        
+        case 5: return .notifySearchChanged(try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14321,8 +14324,12 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(3))
         
         
-        case let .notifySearchChanged(v1):
+        case .toggleUnit:
             writeInt(&buf, Int32(4))
+        
+        
+        case let .notifySearchChanged(v1):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -27413,10 +27420,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 
