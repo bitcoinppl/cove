@@ -77,12 +77,14 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         switch message {
         case let .updateSort(sort):
             withAnimation { self.sort = sort }
-        case let .clearSort:
+        case .clearSort:
             withAnimation { self.sort = .none }
         case let .updateUtxos(utxos):
             withAnimation { self.utxos = utxos }
         case let .updateSearch(search):
             withAnimation { self.search = search }
+        case let .updateSelectedUtxos(selected):
+            self.selected = Set(selected)
         }
     }
 

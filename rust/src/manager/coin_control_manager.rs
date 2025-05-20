@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    Network, WalletId,
+    Network, OutPoint, WalletId,
     utxo::{Utxo, UtxoType},
 };
 use parking_lot::Mutex;
@@ -24,14 +24,6 @@ type Reconciler = dyn CoinControlManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 impl_manager_message_send!(RustCoinControlManager);
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum CoinControlManagerReconcileMessage {
-    ClearSort,
-    UpdateSort(CoinControlListSort),
-    UpdateUtxos(Vec<Utxo>),
-    UpdateSearch(String),
-}
-
 #[uniffi::export(callback_interface)]
 pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the manager changes
@@ -46,11 +38,20 @@ pub struct RustCoinControlManager {
     pub reconciler: Sender<SingleOrMany>,
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 }
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum CoinControlManagerReconcileMessage {
+    ClearSort,
+    UpdateSort(CoinControlListSort),
+    UpdateUtxos(Vec<Utxo>),
+    UpdateSearch(String),
+    UpdateSelectedUtxos(Vec<Arc<OutPoint>>),
+}
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerAction {
     ChangeSort(CoinControlListSortKey),
     ClearSearch,
+    ToggleSelectAll,
 
     NotifySearchChanged(String),
 }
@@ -123,6 +124,9 @@ impl RustCoinControlManager {
                 self.clone().notify_search_changed(String::new());
                 self.send(Message::UpdateSearch(String::new()));
             }
+            Action::ToggleSelectAll => {
+                self.clone().toggle_select_all();
+            }
         }
     }
 }
@@ -178,6 +182,26 @@ impl RustCoinControlManager {
 
         self.state.lock().sort_utxos(sort);
         sender.queue(Message::UpdateUtxos(self.utxos()));
+    }
+
+    fn toggle_select_all(self: Arc<Self>) {
+        let mut sender = DeferredSender::new(self.clone());
+
+        let selected_utxos = self.state.lock().selected_utxos.clone();
+
+        if selected_utxos.is_empty() {
+            let selected =
+                self.utxos().into_iter().map(|utxo| utxo.outpoint.as_ref().clone()).collect();
+            self.state.lock().selected_utxos = selected;
+        } else {
+            self.state.lock().selected_utxos = vec![];
+        }
+
+        let new_selected = &self.state.lock().selected_utxos;
+        if new_selected != &selected_utxos {
+            let new_selected = new_selected.into_iter().cloned().map(Arc::new).collect();
+            sender.queue(Message::UpdateSelectedUtxos(new_selected));
+        }
     }
 
     fn notify_search_changed(self: Arc<Self>, search: String) {

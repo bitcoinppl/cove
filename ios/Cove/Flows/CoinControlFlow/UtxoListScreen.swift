@@ -83,9 +83,24 @@ struct UtxoListScreen: View {
                         .fontWeight(.regular)
                         .foregroundColor(.primary.opacity(0.6))
                     Spacer()
+
+                    Button(action: { manager.dispatch(.toggleSelectAll) }) {
+                        Group {
+                            if manager.selected.isEmpty {
+                                Text("Select All")
+                            } else {
+                                Text("Deselect All")
+                            }
+                        }
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .contentShape(Rectangle())
+                        .onTapGesture { manager.dispatch(.toggleSelectAll) }
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.horizontal)
+                .zIndex(1)
 
                 // ─ UTXO list ─
                 UTXOList()

@@ -14261,6 +14261,7 @@ public enum CoinControlManagerAction {
     case changeSort(CoinControlListSortKey
     )
     case clearSearch
+    case toggleSelectAll
     case notifySearchChanged(String
     )
 }
@@ -14285,7 +14286,9 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
         
         case 2: return .clearSearch
         
-        case 3: return .notifySearchChanged(try FfiConverterString.read(from: &buf)
+        case 3: return .toggleSelectAll
+        
+        case 4: return .notifySearchChanged(try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14305,8 +14308,12 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case let .notifySearchChanged(v1):
+        case .toggleSelectAll:
             writeInt(&buf, Int32(3))
+        
+        
+        case let .notifySearchChanged(v1):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -14348,6 +14355,8 @@ public enum CoinControlManagerReconcileMessage {
     )
     case updateSearch(String
     )
+    case updateSelectedUtxos([OutPoint]
+    )
 }
 
 
@@ -14376,6 +14385,9 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case 4: return .updateSearch(try FfiConverterString.read(from: &buf)
         )
         
+        case 5: return .updateSelectedUtxos(try FfiConverterSequenceTypeOutPoint.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -14402,6 +14414,11 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case let .updateSelectedUtxos(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeOutPoint.write(v1, into: &buf)
+            
         }
     }
 }
@@ -14420,9 +14437,6 @@ public func FfiConverterTypeCoinControlManagerReconcileMessage_lift(_ buf: RustB
 public func FfiConverterTypeCoinControlManagerReconcileMessage_lower(_ value: CoinControlManagerReconcileMessage) -> RustBuffer {
     return FfiConverterTypeCoinControlManagerReconcileMessage.lower(value)
 }
-
-
-extension CoinControlManagerReconcileMessage: Equatable, Hashable {}
 
 
 
@@ -25161,6 +25175,31 @@ fileprivate struct FfiConverterSequenceTypeUnsignedTransaction: FfiConverterRust
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeOutPoint: FfiConverterRustBuffer {
+    typealias SwiftType = [OutPoint]
+
+    public static func write(_ value: [OutPoint], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeOutPoint.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [OutPoint] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [OutPoint]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeOutPoint.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFoundAddress: FfiConverterRustBuffer {
     typealias SwiftType = [FoundAddress]
 
@@ -27352,10 +27391,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 
