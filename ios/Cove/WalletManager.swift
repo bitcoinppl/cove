@@ -69,6 +69,14 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
+    var hasTransactions: Bool {
+        switch loadState {
+        case .loading: false
+        case let .scanning(txns): !txns.isEmpty
+        case let .loaded(txns): !txns.isEmpty
+        }
+    }
+
     var isVerified: Bool {
         walletMetadata.verified
     }

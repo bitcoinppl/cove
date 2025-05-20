@@ -21,6 +21,12 @@ struct UtxoListScreen: View {
             .padding(.horizontal, -16) // undo default padding horizontal
             .environment(\.editMode, .constant(.active))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                if manager.utxos.isEmpty {
+                    ContentUnavailableView.search
+                        .background(Color.secondarySystemGroupedBackground)
+                }
+            }
         }
         .background(manager.utxos.count < 6 ? Color.clear : Color.secondarySystemGroupedBackground)
         .clipShape(
@@ -254,6 +260,14 @@ private struct UTXORow: View {
     AsyncPreview {
         UtxoListScreen(
             manager: CoinControlManager(RustCoinControlManager.previewNew())
+        )
+    }
+}
+
+#Preview("Empty") {
+    AsyncPreview {
+        UtxoListScreen(
+            manager: CoinControlManager(RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0))
         )
     }
 }
