@@ -171,7 +171,7 @@ pub mod ffi_preview {
         fn preview_new(type_: UtxoType) -> Self {
             let outpoint = OutPoint::preview_new();
 
-            let random_sats = random_range(10_100..=10_00_000);
+            let random_sats = random_range(10_100..=10_000_000);
             let amount = Amount::from_sat(random_sats).into();
 
             let now = jiff::Timestamp::now().as_second() as u64;

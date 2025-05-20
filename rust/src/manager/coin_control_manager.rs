@@ -199,7 +199,7 @@ impl RustCoinControlManager {
 
         let new_selected = &self.state.lock().selected_utxos;
         if new_selected != &selected_utxos {
-            let new_selected = new_selected.into_iter().cloned().map(Arc::new).collect();
+            let new_selected = new_selected.iter().cloned().map(Arc::new).collect();
             sender.queue(Message::UpdateSelectedUtxos(new_selected));
         }
     }

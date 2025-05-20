@@ -1,5 +1,5 @@
-import Foundation
 @_exported import cove_core_ffi
+import Foundation
 
 extension WalletAddressType: @retroactive Comparable {
     public static func < (lhs: WalletAddressType, rhs: WalletAddressType) -> Bool {
@@ -13,16 +13,16 @@ extension DiscoveryState: @retroactive Equatable {
     }
 }
 
-extension FeeSpeed {
-    public var string: String {
+public extension FeeSpeed {
+    var string: String {
         feeSpeedToString(feeSpeed: self)
     }
 
-    public var duration: String {
+    var duration: String {
         feeSpeedDuration(feeSpeed: self)
     }
 
-    public var isCustom: Bool {
+    var isCustom: Bool {
         feeSpeedIsCustom(feeSpeed: self)
     }
 }
@@ -39,8 +39,8 @@ extension PriceResponse: Equatable {
     }
 }
 
-extension SendRoute {
-    public func id() -> WalletId {
+public extension SendRoute {
+    func id() -> WalletId {
         switch self {
         case let .setAmount(id, address: _, amount: _): id
         case let .confirm(args): args.id
@@ -49,8 +49,8 @@ extension SendRoute {
     }
 }
 
-extension CoinControlRoute {
-    public func id() -> WalletId {
+public extension CoinControlRoute {
+    func id() -> WalletId {
         switch self {
         case let .list(id): id
         }
@@ -63,15 +63,14 @@ extension UnsignedTransaction: Identifiable {
     }
 }
 
-extension [BoxedRoute] {
-    public var routes: [Route] {
+public extension [BoxedRoute] {
+    var routes: [Route] {
         map { $0.route() }
     }
 }
 
 extension FeeRateOptionsWithTotalFee: Equatable {
-    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool
-    {
+    public static func == (lhs: FeeRateOptionsWithTotalFee, rhs: FeeRateOptionsWithTotalFee) -> Bool {
         feeRateOptionsWithTotalFeeIsEqual(lhs: lhs, rhs: rhs)
     }
 }
@@ -82,14 +81,14 @@ extension FeeRateOptionWithTotalFee: Equatable {
     }
 }
 
-extension FiatOrBtc {
-    public func toggle() -> FiatOrBtc {
+public extension FiatOrBtc {
+    func toggle() -> FiatOrBtc {
         self == .fiat ? .btc : .fiat
     }
 }
 
-extension LabelManager {
-    public func `import`(labels: Bip329Labels) throws {
+public extension LabelManager {
+    func `import`(labels: Bip329Labels) throws {
         try importLabels(labels: labels)
     }
 }
@@ -118,14 +117,14 @@ extension NfcMessage: Equatable {
     }
 }
 
-extension Data {
-    public func hexEncodedString() -> String {
+public extension Data {
+    func hexEncodedString() -> String {
         map { String(format: "%02hhx", $0) }.joined()
     }
 }
 
-extension SetupCmdResponse {
-    public var error: TapSignerReaderError? {
+public extension SetupCmdResponse {
+    var error: TapSignerReaderError? {
         switch self {
         case .complete: .none
         case let .continueFromInit(continueCmd): continueCmd.error
@@ -145,36 +144,36 @@ extension TapSignerRoute: Equatable, Hashable {
     }
 }
 
-extension TapSignerResponse {
-    public var setupResponse: SetupCmdResponse? {
+public extension TapSignerResponse {
+    var setupResponse: SetupCmdResponse? {
         tapSignerResponseSetupResponse(response: self)
     }
 
-    public var deriveResponse: DeriveInfo? {
+    var deriveResponse: DeriveInfo? {
         tapSignerResponseDeriveResponse(response: self)
     }
 
-    public var backupResponse: Data? {
+    var backupResponse: Data? {
         tapSignerResponseBackupResponse(response: self)
     }
 
-    public var signResponse: Psbt? {
+    var signResponse: Psbt? {
         tapSignerResponseSignResponse(response: self)
     }
 
-    public var isChangeResponse: Bool {
+    var isChangeResponse: Bool {
         tapSignerResponseChangeResponse(response: self)
     }
 }
 
-extension AfterPinAction {
-    public var userMessage: String {
+public extension AfterPinAction {
+    var userMessage: String {
         afterPinActionUserMessage(action: self)
     }
 }
 
-extension TapSignerConfirmPinArgs {
-    public init(from: TapSignerNewPinArgs, newPin: String) {
+public extension TapSignerConfirmPinArgs {
+    init(from: TapSignerNewPinArgs, newPin: String) {
         self = tapSignerConfirmPinArgsNewFromNewPin(args: from, newPin: newPin)
     }
 }
@@ -185,12 +184,12 @@ extension TapSigner: @retroactive Equatable {
     }
 }
 
-extension WalletMetadata {
-    public func isTapSigner() -> Bool {
+public extension WalletMetadata {
+    func isTapSigner() -> Bool {
         hardwareMetadata?.isTapSigner() ?? false
     }
 
-    public func identOrFingerprint() -> String {
+    func identOrFingerprint() -> String {
         if case let .tapSigner(t) = hardwareMetadata {
             return t.fullCardIdent()
         }
@@ -199,8 +198,8 @@ extension WalletMetadata {
     }
 }
 
-extension HardwareWalletMetadata {
-    public func isTapSigner() -> Bool {
+public extension HardwareWalletMetadata {
+    func isTapSigner() -> Bool {
         hardwareWalletIsTapSigner(hardwareWallet: self)
     }
 }
@@ -245,8 +244,8 @@ extension OutPoint: @retroactive Hashable, Equatable {
     }
 }
 
-extension CoinControlListSortKey {
-    public var title: String {
+public extension CoinControlListSortKey {
+    var title: String {
         coinControlListSortKeyToString(key: self)
     }
 }
