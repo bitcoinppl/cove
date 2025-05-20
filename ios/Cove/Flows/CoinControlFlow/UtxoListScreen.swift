@@ -4,6 +4,7 @@ import SwiftUI
 
 struct UtxoListScreen: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
 
     let manager: CoinControlManager
 
@@ -16,6 +17,29 @@ struct UtxoListScreen: View {
                 ForEach(manager.utxos) { utxo in
                     UTXORow(manager: manager, utxo: utxo)
                         .listRowBackground(Color.secondarySystemGroupedBackground)
+                        .contextMenu {
+                            Button(action: {
+                                UIPasteboard.general.string = utxo.address.toString()
+                            }) {
+                                Text("Copy Address")
+                            }
+
+                            Button(action: {
+                                UIPasteboard.general.string = utxo.outpoint.txidStr()
+                            }) {
+                                Text("Copy Transaction ID")
+                            }
+
+                            Button(action: {
+                                if let url = URL(string: utxo.outpoint.txnLink()) {
+                                    openURL(url)
+                                }
+                            }) {
+                                Text("View in Explorer")
+                            }
+                        } preview: {
+                            UTXORowPreview(manager: manager, utxo: utxo)
+                        }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -218,8 +242,8 @@ private struct UTXORow: View {
                 HStack(spacing: 4) {
                     Text(utxo.name)
                         .font(.footnote)
-                        .truncationMode(.middle)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
 
                     if utxo.type == .change {
                         Image(systemName: "circlebadge.2")
@@ -256,6 +280,57 @@ private struct UTXORow: View {
     }
 }
 
+private struct UTXORowPreview: View {
+    var manager: CoinControlManager
+    let utxo: Utxo
+
+    @State private var height: CGFloat = 200
+
+    var body: some View {
+        VStack {
+            Text(utxo.address.spacedOut())
+                .font(.footnote)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(nil)
+
+            Spacer()
+
+            HStack(spacing: 4) {
+                Text(utxo.name)
+                    .foregroundColor(.primary)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+
+                if utxo.type == .change {
+                    Spacer()
+                    Image(systemName: "circlebadge.2")
+                        .font(.caption)
+                        .foregroundColor(.orange.opacity(0.8))
+                }
+            }
+
+            Spacer()
+
+            // AM
+            HStack {
+                Text(manager.displayAmount(utxo.amount))
+                Spacer()
+                Text(utxo.date)
+            }
+            .foregroundColor(.secondary)
+            .font(.footnote)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 250)
+        .padding(.vertical, 20)
+        .padding(.horizontal)
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
@@ -269,7 +344,15 @@ private struct UTXORow: View {
 #Preview("Empty") {
     AsyncPreview {
         UtxoListScreen(
-            manager: CoinControlManager(RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0))
+            manager: CoinControlManager(
+                RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0))
         )
+    }
+}
+
+#Preview("UTXORowPreview") {
+    AsyncPreview {
+        let manager = CoinControlManager(RustCoinControlManager.previewNew())
+        UTXORowPreview(manager: manager, utxo: manager.utxos[0])
     }
 }

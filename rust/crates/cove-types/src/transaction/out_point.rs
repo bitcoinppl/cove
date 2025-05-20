@@ -8,6 +8,21 @@ pub struct OutPoint {
     pub vout: u32,
 }
 
+#[uniffi::export]
+impl OutPoint {
+    pub fn txid(&self) -> TxId {
+        self.txid
+    }
+
+    pub fn txid_str(&self) -> String {
+        self.txid.to_string()
+    }
+
+    pub fn txn_link(&self) -> String {
+        format!("https://mempool.space/tx/{}", self.txid_str())
+    }
+}
+
 impl Display for OutPoint {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.txid, self.vout)

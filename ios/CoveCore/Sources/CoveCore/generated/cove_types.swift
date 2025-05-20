@@ -2770,6 +2770,12 @@ public protocol OutPointProtocol: AnyObject, Sendable {
     
     func hashToUint()  -> UInt64
     
+    func txid()  -> TxId
+    
+    func txidStr()  -> String
+    
+    func txnLink()  -> String
+    
 }
 open class OutPoint: OutPointProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -2849,6 +2855,27 @@ open func eq(rhs: OutPoint) -> Bool  {
 open func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
     uniffi_cove_types_fn_method_outpoint_hashtouint(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txid() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_txid(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txidStr() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_txid_str(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txnLink() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_txn_link(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -5737,6 +5764,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_outpoint_hashtouint() != 32526) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_txid() != 18444) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_txid_str() != 20225) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_txn_link() != 4002) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_psbt_fee() != 64967) {
