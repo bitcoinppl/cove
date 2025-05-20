@@ -216,13 +216,15 @@ impl RustCoinControlManager {
 
         if search.is_empty() {
             let sort = self.state.lock().sort.sorter();
-            self.state.lock().sort = SortState::Active(sort);
+            let sort_state = SortState::Active(sort);
+
+            self.state.lock().sort = sort_state;
             self.state.lock().reset_search();
 
             let utxos = self.utxos();
-
             sender.queue(Message::UpdateUtxos(utxos));
-            sender.queue(Message::UpdateSort(CoinControlListSort::default()));
+            sender.queue(Message::UpdateSort(sort));
+
             return;
         }
 

@@ -3583,10 +3583,10 @@ public func FfiConverterTypeFileHandler_lower(_ value: FileHandler) -> UnsafeMut
 
 
 
-public protocol FilterdUtxosProtocol: AnyObject, Sendable {
+public protocol FilteredUtxosProtocol: AnyObject, Sendable {
     
 }
-open class FilterdUtxos: FilterdUtxosProtocol, @unchecked Sendable {
+open class FilteredUtxos: FilteredUtxosProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -3623,7 +3623,7 @@ open class FilterdUtxos: FilterdUtxosProtocol, @unchecked Sendable {
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_fn_clone_filterdutxos(self.pointer, $0) }
+        return try! rustCall { uniffi_cove_fn_clone_filteredutxos(self.pointer, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -3632,7 +3632,7 @@ open class FilterdUtxos: FilterdUtxosProtocol, @unchecked Sendable {
             return
         }
 
-        try! rustCall { uniffi_cove_fn_free_filterdutxos(pointer, $0) }
+        try! rustCall { uniffi_cove_fn_free_filteredutxos(pointer, $0) }
     }
 
     
@@ -3645,20 +3645,20 @@ open class FilterdUtxos: FilterdUtxosProtocol, @unchecked Sendable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeFilterdUtxos: FfiConverter {
+public struct FfiConverterTypeFilteredUtxos: FfiConverter {
 
     typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = FilterdUtxos
+    typealias SwiftType = FilteredUtxos
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FilterdUtxos {
-        return FilterdUtxos(unsafeFromRawPointer: pointer)
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FilteredUtxos {
+        return FilteredUtxos(unsafeFromRawPointer: pointer)
     }
 
-    public static func lower(_ value: FilterdUtxos) -> UnsafeMutableRawPointer {
+    public static func lower(_ value: FilteredUtxos) -> UnsafeMutableRawPointer {
         return value.uniffiClonePointer()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FilterdUtxos {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FilteredUtxos {
         let v: UInt64 = try readInt(&buf)
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
@@ -3669,7 +3669,7 @@ public struct FfiConverterTypeFilterdUtxos: FfiConverter {
         return try lift(ptr!)
     }
 
-    public static func write(_ value: FilterdUtxos, into buf: inout [UInt8]) {
+    public static func write(_ value: FilteredUtxos, into buf: inout [UInt8]) {
         // This fiddling is because `Int` is the thing that's the same size as a pointer.
         // The Rust code won't compile if a pointer won't fit in a `UInt64`.
         writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
@@ -3680,15 +3680,15 @@ public struct FfiConverterTypeFilterdUtxos: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFilterdUtxos_lift(_ pointer: UnsafeMutableRawPointer) throws -> FilterdUtxos {
-    return try FfiConverterTypeFilterdUtxos.lift(pointer)
+public func FfiConverterTypeFilteredUtxos_lift(_ pointer: UnsafeMutableRawPointer) throws -> FilteredUtxos {
+    return try FfiConverterTypeFilteredUtxos.lift(pointer)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFilterdUtxos_lower(_ value: FilterdUtxos) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeFilterdUtxos.lower(value)
+public func FfiConverterTypeFilteredUtxos_lower(_ value: FilteredUtxos) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeFilteredUtxos.lower(value)
 }
 
 
@@ -27391,10 +27391,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

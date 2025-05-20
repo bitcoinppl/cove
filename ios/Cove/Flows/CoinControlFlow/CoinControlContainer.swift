@@ -18,20 +18,21 @@ struct CoinControlContainer: View {
     @State var walletManager: WalletManager? = nil
     @State var manager: CoinControlManager? = nil
 
-    func initOnAppear() {
+    func initOnAppear() async {
         let id = route.id()
         if walletManager != nil, manager != nil { return }
 
-        Task {
-            do {
-                Log.debug("Getting wallet for CoinControlRoute \(id)")
-                let walletManager = try app.getWalletManager(id: id)
-                let rustManager = await walletManager.rust.newCoinControlManager()
-                let manager = CoinControlManager(rustManager)
+        do {
+            Log.debug("Getting wallet for CoinControlRoute \(id)")
+            let walletManager = try app.getWalletManager(id: id)
+            let rustManager = await walletManager.rust.newCoinControlManager()
+            let manager = CoinControlManager(rustManager)
 
-                self.walletManager = walletManager
-                self.manager = manager
-            }
+            self.walletManager = walletManager
+            self.manager = manager
+        } catch {
+            Log.error("[ERROR] Unable to get wallet \(error.localizedDescription)")
+            app.alertState = .init(.general(title: "Error!", message: "Unable to get wallet \(error.localizedDescription)"))
         }
     }
 
@@ -44,7 +45,7 @@ struct CoinControlContainer: View {
             }
         } else {
             ProgressView()
-                .onAppear(perform: initOnAppear)
+                .task { await initOnAppear() }
         }
     }
 }

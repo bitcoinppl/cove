@@ -26,7 +26,7 @@ impl From<&bitcoin::OutPoint> for OutPoint {
     }
 }
 
-// MAKR: FFI
+// MARK: FFI
 mod ffi {
     use std::{
         hash::{Hash as _, Hasher as _},
@@ -51,7 +51,7 @@ mod ffi {
     }
 }
 
-// MAKR: FFI PREVIEW
+// MARK: FFI PREVIEW
 mod ffi_preview {
     use super::OutPoint;
     use crate::TxId;

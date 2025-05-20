@@ -114,12 +114,12 @@ impl From<KeychainKind> for UtxoType {
 
 // MARK: FFI
 #[uniffi::export]
-fn utxo_name(utxo: Utxo) -> String {
+fn utxo_name(utxo: &Utxo) -> String {
     utxo.name().to_string()
 }
 
 #[uniffi::export]
-fn utxo_date(utxo: Utxo) -> String {
+fn utxo_date(utxo: &Utxo) -> String {
     let Ok(timestamp) = jiff::Timestamp::from_second(utxo.datetime as i64) else {
         return "".to_string();
     };
@@ -128,18 +128,18 @@ fn utxo_date(utxo: Utxo) -> String {
 }
 
 #[uniffi::export]
-fn utxo_hash_to_uint(utxo: Utxo) -> u64 {
+fn utxo_hash_to_uint(utxo: &Utxo) -> u64 {
     let mut hasher = std::hash::DefaultHasher::new();
     utxo.hash(&mut hasher);
     hasher.finish()
 }
 
 #[uniffi::export]
-fn utxo_is_equal(lhs: Utxo, rhs: Utxo) -> bool {
+fn utxo_is_equal(lhs: &Utxo, rhs: &Utxo) -> bool {
     lhs == rhs
 }
 
-// MAKR: FFI PREVIEW
+// MARK: FFI PREVIEW
 pub mod ffi_preview {
     use super::*;
     use rand::random_range;

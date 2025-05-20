@@ -3,6 +3,8 @@ import SwiftUI
 // MARK: - View
 
 struct UtxoListScreen: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let manager: CoinControlManager
 
     @FocusState private var isFocused: Bool
@@ -164,7 +166,7 @@ struct UtxoListScreen: View {
         .background(
             Image(.utxoManagementPattern)
                 .ignoresSafeArea()
-                .opacity(0.85)
+                .opacity(colorScheme == .light ? 0.80 : 1)
         )
         .background(
             Color(.systemGroupedBackground)

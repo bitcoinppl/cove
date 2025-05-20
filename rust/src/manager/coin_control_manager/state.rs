@@ -16,14 +16,14 @@ type ListSort = super::CoinControlListSort;
 pub struct CoinControlManagerState {
     pub wallet_id: WalletId,
     pub utxos: Vec<Utxo>,
-    pub filtered_utxos: FilterdUtxos,
+    pub filtered_utxos: FilteredUtxos,
     pub sort: SortState,
     pub selected_utxos: Vec<OutPoint>,
     pub search: String,
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
-pub enum FilterdUtxos {
+pub enum FilteredUtxos {
     All,
     Search(Vec<Utxo>),
 }
@@ -38,13 +38,13 @@ impl State {
         let selected_utxos = vec![];
         let search = String::new();
 
-        Self { wallet_id, utxos, sort, selected_utxos, search, filtered_utxos: FilterdUtxos::All }
+        Self { wallet_id, utxos, sort, selected_utxos, search, filtered_utxos: FilteredUtxos::All }
     }
 
-    pub fn utxos(&mut self) -> Vec<Utxo> {
+    pub fn utxos(&self) -> Vec<Utxo> {
         match &self.filtered_utxos {
-            FilterdUtxos::All => self.utxos.clone(),
-            FilterdUtxos::Search(utxos) => utxos.clone(),
+            FilteredUtxos::All => self.utxos.clone(),
+            FilteredUtxos::Search(utxos) => utxos.clone(),
         }
     }
 
@@ -73,8 +73,8 @@ impl State {
 
     pub fn sort_utxos(&mut self, sort: ListSort) {
         let utxos = match &mut self.filtered_utxos {
-            FilterdUtxos::All => &mut self.utxos,
-            FilterdUtxos::Search(utxos) => utxos,
+            FilteredUtxos::All => &mut self.utxos,
+            FilteredUtxos::Search(utxos) => utxos,
         };
 
         match sort {
@@ -113,7 +113,7 @@ impl State {
     pub fn reset_search(&mut self) {
         let sort = self.sort.sorter();
         self.search = String::new();
-        self.filtered_utxos = FilterdUtxos::All;
+        self.filtered_utxos = FilteredUtxos::All;
         self.sort_utxos(sort);
     }
 
@@ -144,7 +144,7 @@ impl State {
 
         // if we have filtered utxos, update the state and return
         if !filtered_utxos.is_empty() {
-            return self.filtered_utxos = FilterdUtxos::Search(filtered_utxos);
+            return self.filtered_utxos = FilteredUtxos::Search(filtered_utxos);
         }
 
         // if no utxos found, and search looks like an address, search by address
@@ -162,7 +162,7 @@ impl State {
                 .cloned()
                 .collect::<Vec<_>>();
 
-            return self.filtered_utxos = FilterdUtxos::Search(filtered);
+            return self.filtered_utxos = FilteredUtxos::Search(filtered);
         }
 
         // if no utxos found, search by txid
@@ -176,7 +176,7 @@ impl State {
             .cloned()
             .collect::<Vec<_>>();
 
-        self.filtered_utxos = FilterdUtxos::Search(filtered);
+        self.filtered_utxos = FilteredUtxos::Search(filtered);
     }
 }
 
@@ -193,7 +193,7 @@ mod ffi {
             let sort = Default::default();
             let selected_utxos = vec![];
             let search = String::new();
-            let filtered_utxos = FilterdUtxos::All;
+            let filtered_utxos = FilteredUtxos::All;
 
             Self { wallet_id, utxos, sort, selected_utxos, search, filtered_utxos }
         }
