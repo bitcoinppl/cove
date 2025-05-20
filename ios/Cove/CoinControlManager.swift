@@ -20,8 +20,8 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         Binding(
             get: { self.search },
             set: {
+                if self.search != $0 { self.dispatch(.notifySearchChanged($0)) }
                 self.search = $0
-                self.dispatch(.notifySearchChanged($0))
             }
         )
     }

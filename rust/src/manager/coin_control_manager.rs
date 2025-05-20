@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    Network, OutPoint, WalletId,
+    Network, WalletId,
     utxo::{Utxo, UtxoType},
 };
 use parking_lot::Mutex;
@@ -18,7 +18,7 @@ use tracing::{debug, error, trace, warn};
 #[allow(dead_code)]
 type Message = CoinControlManagerReconcileMessage;
 type Action = CoinControlManagerAction;
-type State = CoinControlManagerState;
+type State = state::CoinControlManagerState;
 type Reconciler = dyn CoinControlManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 impl_manager_message_send!(RustCoinControlManager);
@@ -40,18 +40,9 @@ pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static 
 #[derive(Clone, Debug, uniffi::Object)]
 #[allow(dead_code)]
 pub struct RustCoinControlManager {
-    pub state: Arc<Mutex<CoinControlManagerState>>,
+    pub state: Arc<Mutex<State>>,
     pub reconciler: Sender<SingleOrMany>,
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
-}
-
-#[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
-pub struct CoinControlManagerState {
-    wallet_id: WalletId,
-    utxos: Vec<Utxo>,
-    sort: CoinControlListSort,
-    selected_utxos: Vec<OutPoint>,
-    search: String,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -72,7 +63,7 @@ pub enum ButtonPresentation {
 impl RustCoinControlManager {
     #[uniffi::method]
     pub fn utxos(self: &Arc<Self>) -> Vec<Utxo> {
-        self.state.lock().utxos.clone()
+        self.state.lock().utxos()
     }
 
     #[uniffi::method]
@@ -122,7 +113,7 @@ impl RustCoinControlManager {
             }
             Action::NotifySearchChanged(search) => self.notify_search_changed(search),
             Action::ClearSearch => {
-                self.notify_search_changed(String::new());
+                self.clone().notify_search_changed(String::new());
                 self.send(Message::UpdateSearch(String::new()));
             }
         }
@@ -145,7 +136,7 @@ impl RustCoinControlManager {
         }
     }
 
-    fn sort_button_pressed(self: &Arc<Self>, sort_button_pressed: CoinControlListSortKey) {
+    fn sort_button_pressed(self: Arc<Self>, sort_button_pressed: CoinControlListSortKey) {
         use CoinControlListSort as Sort;
         use CoinControlListSortKey as Key;
 
@@ -173,15 +164,22 @@ impl RustCoinControlManager {
         sender.queue(Message::UpdateUtxos(self.utxos()));
     }
 
-    fn notify_search_changed(self: &Arc<Self>, search: String) {
-        if !search.is_empty() {
-            let sort = self.state.lock().sort;
-            self.state.lock().sort_utxos(sort);
-            self.state.lock().filter_utxos(&search);
+    fn notify_search_changed(self: Arc<Self>, search: String) {
+        if search == self.state.lock().search {
+            return;
+        }
+
+        // update the search state
+        self.state.lock().search = search.clone();
+
+        if search.is_empty() {
+            self.state.lock().reset_search();
+
+            let utxos = self.utxos();
+            return self.send(Message::UpdateUtxos(utxos));
         }
 
         self.state.lock().filter_utxos(&search);
-        self.state.lock().search = search;
 
         let utxos = self.utxos();
         self.send(Message::UpdateUtxos(utxos));
@@ -190,10 +188,10 @@ impl RustCoinControlManager {
     fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
         let message = message.into();
         debug!("send: {message:?}");
-        match self.reconciler.try_send(message.clone()) {
+        match self.reconciler.try_send(message) {
             Ok(_) => {}
-            Err(TrySendError::Full(err)) => {
-                warn!("[WARN] unable to send, queue is full: {err:?}, sending async");
+            Err(TrySendError::Full(message)) => {
+                warn!("[WARN] unable to send, queue is full sending async");
 
                 let me = self.clone();
                 task::spawn(async move { me.send_async(message).await });
@@ -259,7 +257,6 @@ impl ListSortDirection {
 }
 
 mod ffi {
-    use cove_types::utxo::ffi_preview::preview_new_utxo_list;
 
     use super::*;
 
@@ -275,19 +272,6 @@ mod ffi {
                 reconciler: sender,
                 reconcile_receiver: Arc::new(receiver),
             }
-        }
-    }
-
-    #[uniffi::export]
-    impl CoinControlManagerState {
-        #[uniffi::constructor(default(output_count = 20, change_count = 4))]
-        pub fn preview_new(output_count: u8, change_count: u8) -> Self {
-            let wallet_id = WalletId::preview_new();
-            let utxos = preview_new_utxo_list(output_count, change_count);
-            let sort = CoinControlListSort::Date(ListSortDirection::Descending);
-            let selected_utxos = vec![];
-            let search = String::new();
-            Self { wallet_id, utxos, sort, selected_utxos, search }
         }
     }
 }

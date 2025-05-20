@@ -44,6 +44,7 @@ struct UtxoListScreen: View {
                     TextField("Search UTXOs", text: manager.searchBinding)
                         .focused($isFocused)
                         .autocorrectionDisabled()
+                        .autocapitalization(.none)
 
                     if !manager.search.isEmpty {
                         Button(action: { manager.dispatch(.clearSearch) }) {
@@ -60,16 +61,18 @@ struct UtxoListScreen: View {
                 .padding(.horizontal)
 
                 // ─ Sort buttons ─
-                HStack {
-                    sortButton(for: .date)
-                    Spacer()
-                    sortButton(for: .name)
-                    Spacer()
-                    sortButton(for: .amount)
-                    Spacer()
-                    sortButton(for: .change)
+                if !isFocused {
+                    HStack {
+                        sortButton(for: .date)
+                        Spacer()
+                        sortButton(for: .name)
+                        Spacer()
+                        sortButton(for: .amount)
+                        Spacer()
+                        sortButton(for: .change)
+                    }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
             }
 
             VStack(spacing: 8) {
@@ -90,48 +93,51 @@ struct UtxoListScreen: View {
 
             Spacer()
 
-            // ─ Footer notes ─
-            VStack(spacing: 16) {
-                HStack {
-                    Text(
-                        "Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use."
-                    )
-                    .font(.caption)
-                    .fontWeight(.regular)
-
-                    Spacer()
-                }
-
-                HStack(spacing: 4) {
-                    Image(systemName: "circlebadge.2")
-                        .font(.footnote)
-
-                    Text("Denotes UTXO change")
+            if !isFocused {
+                // ─ Footer notes ─
+                VStack(spacing: 16) {
+                    HStack {
+                        Text(
+                            "Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use."
+                        )
                         .font(.caption)
                         .fontWeight(.regular)
 
-                    Spacer()
-                }
-            }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal)
-            .padding(.horizontal)
+                        Spacer()
+                    }
 
-            // ─ Action buttons ─
-            Button(continueText) { /* … */ }
-                .buttonStyle(
-                    manager.selected.isEmpty
-                        ? DarkButtonStyle(
-                            backgroundColor: .systemGray4, foregroundColor: .secondary
-                        )
-                        : DarkButtonStyle()
-                )
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
+                    HStack(spacing: 4) {
+                        Image(systemName: "circlebadge.2")
+                            .font(.footnote)
+
+                        Text("Denotes UTXO change")
+                            .font(.caption)
+                            .fontWeight(.regular)
+
+                        Spacer()
+                    }
+                }
+                .foregroundStyle(.secondary)
                 .padding(.horizontal)
-                .padding(.bottom, 4)
-                .disabled(manager.selected.isEmpty)
                 .padding(.horizontal)
+
+                // ─ Action buttons ─
+                Button(continueText) { /* … */ }
+                    .buttonStyle(
+                        manager.selected.isEmpty
+                            ? DarkButtonStyle(
+                                backgroundColor: .systemGray4, foregroundColor: .secondary
+                            )
+                            : DarkButtonStyle()
+                    )
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+                    .disabled(manager.selected.isEmpty)
+                    .padding(.horizontal)
+                    .contentTransition(.interpolate)
+            }
         }
         .navigationTitle("Manage UTXOs")
         .background(
@@ -183,7 +189,7 @@ private struct UTXORow: View {
     let utxo: Utxo
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
                 // Name
                 HStack(spacing: 4) {
@@ -209,7 +215,6 @@ private struct UTXORow: View {
                         .foregroundColor(.secondary)
                         .truncationMode(.middle)
                 }
-                .frame(maxWidth: screenWidth * 0.35)
             }
 
             Spacer(minLength: 8)

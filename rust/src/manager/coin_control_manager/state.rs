@@ -1,14 +1,30 @@
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    Network, WalletId,
+    Network, OutPoint, WalletId,
     utxo::{Utxo, UtxoType},
 };
 
 use crate::database::wallet_data::WalletDataDb;
 
-use super::{CoinControlListSort, CoinControlManagerState, ListSortDirection};
+use super::{CoinControlListSort, ListSortDirection};
 
 type State = CoinControlManagerState;
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
+pub struct CoinControlManagerState {
+    pub wallet_id: WalletId,
+    pub utxos: Vec<Utxo>,
+    pub filtered_utxos: FilterdUtxos,
+    pub sort: CoinControlListSort,
+    pub selected_utxos: Vec<OutPoint>,
+    pub search: String,
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
+pub enum FilterdUtxos {
+    All,
+    Search(Vec<Utxo>),
+}
 
 // MARK: STATE
 impl State {
@@ -20,7 +36,16 @@ impl State {
         let selected_utxos = vec![];
         let search = String::new();
 
-        Self { wallet_id, utxos, sort, selected_utxos, search }
+        Self { wallet_id, utxos, sort, selected_utxos, search, filtered_utxos: FilterdUtxos::All }
+    }
+
+    pub fn utxos(&mut self) -> Vec<Utxo> {
+        let current_filter = std::mem::replace(&mut self.filtered_utxos, FilterdUtxos::All);
+
+        match current_filter {
+            FilterdUtxos::All => self.utxos.clone(),
+            FilterdUtxos::Search(utxos) => utxos,
+        }
     }
 
     pub fn load_utxo_labels(&mut self) {
@@ -82,11 +107,93 @@ impl State {
         }
     }
 
+    pub fn reset_search(&mut self) {
+        let sort = self.sort;
+        self.search = String::new();
+        self.filtered_utxos = FilterdUtxos::All;
+        self.sort_utxos(sort);
+    }
+
     pub fn filter_utxos(&mut self, search: &str) {
-        self.utxos.sort_unstable_by(|a, b| {
-            let a = strsim::normalized_damerau_levenshtein(a.name(), search);
-            let b = strsim::normalized_damerau_levenshtein(b.name(), search);
-            a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal)
+        let search = &search.to_ascii_lowercase();
+
+        let mut filtered_utxos = self
+            .utxos
+            .iter()
+            .filter_map(|utxo| {
+                let utxo_name = utxo.name().to_ascii_lowercase();
+                let distance = strsim::normalized_damerau_levenshtein(&utxo_name, search);
+
+                if distance >= 0.20 || utxo_name.contains(search) || utxo_name.starts_with(search) {
+                    Some((utxo, distance))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        filtered_utxos.sort_unstable_by(|a, b| {
+            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).reverse()
         });
+
+        let filtered_utxos =
+            filtered_utxos.into_iter().map(|(utxo, _)| utxo.clone()).collect::<Vec<_>>();
+
+        // if we have filtered utxos, update the state and return
+        if !filtered_utxos.is_empty() {
+            return self.filtered_utxos = FilterdUtxos::Search(filtered_utxos);
+        }
+
+        // if no utxos found, and search looks like an address, search by address
+        if search.starts_with("bc1") || search.starts_with("tb1") {
+            let filtered = self
+                .utxos
+                .iter()
+                .filter(|utxo| {
+                    let address = &utxo.address.to_string();
+                    address == search
+                        || address.starts_with(search)
+                        || address.ends_with(search)
+                        || address.contains(search)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            return self.filtered_utxos = FilterdUtxos::Search(filtered);
+        }
+
+        // if no utxos found, search by txid
+        let filtered = self
+            .utxos
+            .iter()
+            .filter(|utxo| {
+                let tx_id_str = &utxo.outpoint.txid.to_string();
+                println!("tx_id_str: {tx_id_str}");
+                tx_id_str == search || tx_id_str.starts_with(search)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        self.filtered_utxos = FilterdUtxos::Search(filtered);
+    }
+}
+
+mod ffi {
+    use super::*;
+    use cove_types::utxo::ffi_preview::preview_new_utxo_list;
+
+    #[uniffi::export]
+    impl CoinControlManagerState {
+        #[uniffi::constructor(default(output_count = 20, change_count = 4))]
+        pub fn preview_new(output_count: u8, change_count: u8) -> Self {
+            let wallet_id = WalletId::preview_new();
+            let utxos = preview_new_utxo_list(output_count, change_count);
+            let sort = CoinControlListSort::Date(ListSortDirection::Descending);
+            let selected_utxos = vec![];
+            let search = String::new();
+            let filtered_utxos = FilterdUtxos::All;
+
+            Self { wallet_id, utxos, sort, selected_utxos, search, filtered_utxos }
+        }
     }
 }
