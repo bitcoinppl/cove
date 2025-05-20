@@ -45,7 +45,7 @@ struct UtxoListScreen: View {
                         .focused($isFocused)
                         .autocorrectionDisabled()
 
-                    if !manager.searchBinding.wrappedValue.isEmpty {
+                    if !manager.search.isEmpty {
                         Button(action: { manager.dispatch(.clearSearch) }) {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(.gray)
