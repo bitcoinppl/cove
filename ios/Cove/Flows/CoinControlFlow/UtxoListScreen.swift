@@ -5,6 +5,8 @@ import SwiftUI
 struct UtxoListScreen: View {
     let manager: CoinControlManager
 
+    @FocusState private var isFocused: Bool
+
     @ViewBuilder
     func UTXOList() -> some View {
         VStack(spacing: 0) {
@@ -40,6 +42,7 @@ struct UtxoListScreen: View {
                 HStack {
                     Image(systemName: "magnifyingglass")
                     TextField("Search UTXOs", text: manager.searchBinding)
+                        .focused($isFocused)
                         .autocorrectionDisabled()
 
                     if !manager.searchBinding.wrappedValue.isEmpty {

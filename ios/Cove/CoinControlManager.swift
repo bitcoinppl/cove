@@ -19,7 +19,10 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     var searchBinding: Binding<String> {
         Binding(
             get: { self.search },
-            set: { self.search = $0 }
+            set: {
+                self.search = $0
+                self.dispatch(.notifySearchChanged($0))
+            }
         )
     }
 

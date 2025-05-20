@@ -83,8 +83,7 @@ impl State {
     }
 
     pub fn filter_utxos(&mut self, search: &str) {
-        let utxos = &mut self.utxos;
-        utxos.sort_unstable_by(|a, b| {
+        self.utxos.sort_unstable_by(|a, b| {
             let a = strsim::normalized_damerau_levenshtein(a.name(), search);
             let b = strsim::normalized_damerau_levenshtein(b.name(), search);
             a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal)

@@ -175,14 +175,16 @@ impl RustCoinControlManager {
 
     fn notify_search_changed(self: &Arc<Self>, search: String) {
         if !search.is_empty() {
-            self.state.lock().sort_utxos(self.state.lock().sort);
+            let sort = self.state.lock().sort;
+            self.state.lock().sort_utxos(sort);
             self.state.lock().filter_utxos(&search);
         }
 
         self.state.lock().filter_utxos(&search);
         self.state.lock().search = search;
 
-        self.send(Message::UpdateUtxos(self.utxos()));
+        let utxos = self.utxos();
+        self.send(Message::UpdateUtxos(utxos));
     }
 
     fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
