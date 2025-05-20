@@ -9,13 +9,15 @@ use crate::database::wallet_data::WalletDataDb;
 use super::{CoinControlListSort, ListSortDirection};
 
 type State = CoinControlManagerState;
+type SortState = super::CoinControlListSortState;
+type ListSort = super::CoinControlListSort;
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, uniffi::Object)]
 pub struct CoinControlManagerState {
     pub wallet_id: WalletId,
     pub utxos: Vec<Utxo>,
     pub filtered_utxos: FilterdUtxos,
-    pub sort: CoinControlListSort,
+    pub sort: SortState,
     pub selected_utxos: Vec<OutPoint>,
     pub search: String,
 }
@@ -32,7 +34,7 @@ impl State {
         let utxos =
             unspent.into_iter().filter_map(|o| Utxo::try_from_local(o, network).ok()).collect();
 
-        let sort = CoinControlListSort::Date(ListSortDirection::Descending);
+        let sort = SortState::default();
         let selected_utxos = vec![];
         let search = String::new();
 
@@ -40,11 +42,9 @@ impl State {
     }
 
     pub fn utxos(&mut self) -> Vec<Utxo> {
-        let current_filter = std::mem::replace(&mut self.filtered_utxos, FilterdUtxos::All);
-
-        match current_filter {
+        match &self.filtered_utxos {
             FilterdUtxos::All => self.utxos.clone(),
-            FilterdUtxos::Search(utxos) => utxos,
+            FilterdUtxos::Search(utxos) => utxos.clone(),
         }
     }
 
@@ -71,8 +71,11 @@ impl State {
         });
     }
 
-    pub fn sort_utxos(&mut self, sort: CoinControlListSort) {
-        let utxos = &mut self.utxos;
+    pub fn sort_utxos(&mut self, sort: ListSort) {
+        let utxos = match &mut self.filtered_utxos {
+            FilterdUtxos::All => &mut self.utxos,
+            FilterdUtxos::Search(utxos) => utxos,
+        };
 
         match sort {
             CoinControlListSort::Date(ListSortDirection::Ascending) => {
@@ -108,7 +111,7 @@ impl State {
     }
 
     pub fn reset_search(&mut self) {
-        let sort = self.sort;
+        let sort = self.sort.sorter();
         self.search = String::new();
         self.filtered_utxos = FilterdUtxos::All;
         self.sort_utxos(sort);
@@ -168,7 +171,6 @@ impl State {
             .iter()
             .filter(|utxo| {
                 let tx_id_str = &utxo.outpoint.txid.to_string();
-                println!("tx_id_str: {tx_id_str}");
                 tx_id_str == search || tx_id_str.starts_with(search)
             })
             .cloned()
@@ -188,7 +190,7 @@ mod ffi {
         pub fn preview_new(output_count: u8, change_count: u8) -> Self {
             let wallet_id = WalletId::preview_new();
             let utxos = preview_new_utxo_list(output_count, change_count);
-            let sort = CoinControlListSort::Date(ListSortDirection::Descending);
+            let sort = Default::default();
             let selected_utxos = vec![];
             let search = String::new();
             let filtered_utxos = FilterdUtxos::All;

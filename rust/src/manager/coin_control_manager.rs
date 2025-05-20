@@ -19,12 +19,14 @@ use tracing::{debug, error, trace, warn};
 type Message = CoinControlManagerReconcileMessage;
 type Action = CoinControlManagerAction;
 type State = state::CoinControlManagerState;
+type SortState = CoinControlListSortState;
 type Reconciler = dyn CoinControlManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 impl_manager_message_send!(RustCoinControlManager);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerReconcileMessage {
+    ClearSort,
     UpdateSort(CoinControlListSort),
     UpdateUtxos(Vec<Utxo>),
     UpdateSearch(String),
@@ -76,6 +78,11 @@ impl RustCoinControlManager {
         use CoinControlListSortKey as Key;
         use ListSortDirection as D;
         let sort = self.state.lock().sort;
+
+        let sort = match sort {
+            SortState::Active(sort) => sort,
+            SortState::Inactive(_) => return Present::NotSelected,
+        };
 
         match (sort, button) {
             (Sort::Date(d), Key::Date) => Present::Selected(d),
@@ -140,24 +147,33 @@ impl RustCoinControlManager {
         use CoinControlListSort as Sort;
         use CoinControlListSortKey as Key;
 
-        let mut sender = DeferredSender::new(self.clone());
-
         let current_sort = self.state.lock().sort;
-        let sort = match (current_sort, sort_button_pressed) {
-            (Sort::Date(sort_direction), Key::Date) => Sort::Date(sort_direction.reverse()),
-            (_, Key::Date) => Sort::Date(ListSortDirection::Descending),
+        fn get_new_sort(current_sort: SortState, button: Key) -> CoinControlListSort {
+            if !current_sort.is_active() {
+                return button.to_default_sort();
+            }
 
-            (Sort::Amount(sort_directino), Key::Amount) => Sort::Amount(sort_directino.reverse()),
-            (_, Key::Amount) => Sort::Amount(ListSortDirection::Descending),
+            match (current_sort.sorter(), button) {
+                (Sort::Date(sort_direction), Key::Date) => Sort::Date(sort_direction.reverse()),
 
-            (Sort::Name(sort_direction), Key::Name) => Sort::Name(sort_direction.reverse()),
-            (_, Key::Name) => Sort::Name(ListSortDirection::Descending),
+                (Sort::Amount(sort_direction), Key::Amount) => {
+                    Sort::Amount(sort_direction.reverse())
+                }
 
-            (Sort::Change(sort_direction), Key::Change) => Sort::Change(sort_direction.reverse()),
-            (_, Key::Change) => Sort::Change(UtxoType::Output),
-        };
+                (Sort::Name(sort_direction), Key::Name) => Sort::Name(sort_direction.reverse()),
 
-        self.state.lock().sort = sort;
+                (Sort::Change(sort_direction), Key::Change) => {
+                    Sort::Change(sort_direction.reverse())
+                }
+
+                _ => button.to_default_sort(),
+            }
+        }
+
+        let mut sender = DeferredSender::new(self.clone());
+        let sort = get_new_sort(current_sort, sort_button_pressed);
+
+        self.state.lock().sort = SortState::Active(sort);
         sender.queue(Message::UpdateSort(sort));
 
         self.state.lock().sort_utxos(sort);
@@ -169,20 +185,36 @@ impl RustCoinControlManager {
             return;
         }
 
+        let mut sender = DeferredSender::new(self.clone());
+
         // update the search state
         self.state.lock().search = search.clone();
 
         if search.is_empty() {
+            let sort = self.state.lock().sort.sorter();
+            self.state.lock().sort = SortState::Active(sort);
             self.state.lock().reset_search();
 
             let utxos = self.utxos();
-            return self.send(Message::UpdateUtxos(utxos));
+
+            sender.queue(Message::UpdateUtxos(utxos));
+            sender.queue(Message::UpdateSort(CoinControlListSort::default()));
+            return;
         }
 
         self.state.lock().filter_utxos(&search);
 
         let utxos = self.utxos();
-        self.send(Message::UpdateUtxos(utxos));
+        sender.queue(Message::UpdateUtxos(utxos));
+
+        // clear the sort if searching
+        let has_sort = self.state.lock().sort.is_active();
+
+        if has_sort {
+            let sort = self.state.lock().sort.sorter();
+            self.state.lock().sort = SortState::Inactive(sort);
+            sender.queue(Message::ClearSort);
+        }
     }
 
     fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
@@ -213,6 +245,12 @@ impl RustCoinControlManager {
 
 // MARK: Sorting
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum)]
+pub enum CoinControlListSortState {
+    Active(CoinControlListSort),
+    Inactive(CoinControlListSort),
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum)]
 pub enum CoinControlListSort {
     Date(ListSortDirection),
     Name(ListSortDirection),
@@ -241,6 +279,25 @@ impl Default for CoinControlListSort {
     }
 }
 
+impl Default for SortState {
+    fn default() -> Self {
+        Self::Active(CoinControlListSort::default())
+    }
+}
+
+impl SortState {
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Active(_))
+    }
+
+    pub fn sorter(&self) -> CoinControlListSort {
+        match self {
+            Self::Active(sort) => *sort,
+            Self::Inactive(sort) => *sort,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum)]
 pub enum ListSortDirection {
     Ascending,
@@ -252,6 +309,17 @@ impl ListSortDirection {
         match self {
             Self::Ascending => Self::Descending,
             Self::Descending => Self::Ascending,
+        }
+    }
+}
+
+impl CoinControlListSortKey {
+    pub fn to_default_sort(self) -> CoinControlListSort {
+        match self {
+            Self::Date => CoinControlListSort::Date(ListSortDirection::Descending),
+            Self::Amount => CoinControlListSort::Amount(ListSortDirection::Descending),
+            Self::Name => CoinControlListSort::Name(ListSortDirection::Descending),
+            Self::Change => CoinControlListSort::Change(UtxoType::Output),
         }
     }
 }

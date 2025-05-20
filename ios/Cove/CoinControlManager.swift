@@ -9,9 +9,10 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     private let logger = Log(id: "CoinControlManager")
     var rust: RustCoinControlManager
 
+    private var sort: CoinControlListSort? = .some(.date(.descending))
+
     var search: String = ""
     var selected: Set<Utxo.ID> = []
-    var sort: CoinControlListSort = .date(.descending)
     var utxos: [Utxo]
     var unit: Unit = .sat
 
@@ -76,6 +77,8 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         switch message {
         case let .updateSort(sort):
             withAnimation { self.sort = sort }
+        case let .clearSort:
+            withAnimation { self.sort = .none }
         case let .updateUtxos(utxos):
             withAnimation { self.utxos = utxos }
         case let .updateSearch(search):

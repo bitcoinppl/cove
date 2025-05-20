@@ -14180,6 +14180,82 @@ extension CoinControlListSortKey: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum CoinControlListSortState {
+    
+    case active(CoinControlListSort
+    )
+    case inactive(CoinControlListSort
+    )
+}
+
+
+#if compiler(>=6)
+extension CoinControlListSortState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCoinControlListSortState: FfiConverterRustBuffer {
+    typealias SwiftType = CoinControlListSortState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CoinControlListSortState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .active(try FfiConverterTypeCoinControlListSort.read(from: &buf)
+        )
+        
+        case 2: return .inactive(try FfiConverterTypeCoinControlListSort.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CoinControlListSortState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .active(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeCoinControlListSort.write(v1, into: &buf)
+            
+        
+        case let .inactive(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeCoinControlListSort.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoinControlListSortState_lift(_ buf: RustBuffer) throws -> CoinControlListSortState {
+    return try FfiConverterTypeCoinControlListSortState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCoinControlListSortState_lower(_ value: CoinControlListSortState) -> RustBuffer {
+    return FfiConverterTypeCoinControlListSortState.lower(value)
+}
+
+
+extension CoinControlListSortState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum CoinControlManagerAction {
     
     case changeSort(CoinControlListSortKey
@@ -14265,6 +14341,7 @@ extension CoinControlManagerAction: Equatable, Hashable {}
 
 public enum CoinControlManagerReconcileMessage {
     
+    case clearSort
     case updateSort(CoinControlListSort
     )
     case updateUtxos([Utxo]
@@ -14288,13 +14365,15 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .updateSort(try FfiConverterTypeCoinControlListSort.read(from: &buf)
+        case 1: return .clearSort
+        
+        case 2: return .updateSort(try FfiConverterTypeCoinControlListSort.read(from: &buf)
         )
         
-        case 2: return .updateUtxos(try FfiConverterSequenceTypeUtxo.read(from: &buf)
+        case 3: return .updateUtxos(try FfiConverterSequenceTypeUtxo.read(from: &buf)
         )
         
-        case 3: return .updateSearch(try FfiConverterString.read(from: &buf)
+        case 4: return .updateSearch(try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14305,18 +14384,22 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         switch value {
         
         
-        case let .updateSort(v1):
+        case .clearSort:
             writeInt(&buf, Int32(1))
+        
+        
+        case let .updateSort(v1):
+            writeInt(&buf, Int32(2))
             FfiConverterTypeCoinControlListSort.write(v1, into: &buf)
             
         
         case let .updateUtxos(v1):
-            writeInt(&buf, Int32(2))
+            writeInt(&buf, Int32(3))
             FfiConverterSequenceTypeUtxo.write(v1, into: &buf)
             
         
         case let .updateSearch(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -27271,8 +27354,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 
