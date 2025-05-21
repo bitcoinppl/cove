@@ -14272,6 +14272,8 @@ public enum CoinControlManagerAction {
     case clearSearch
     case toggleSelectAll
     case toggleUnit
+    case notifySelectedUtxosChanged([OutPoint]
+    )
     case notifySearchChanged(String
     )
 }
@@ -14300,7 +14302,10 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
         
         case 4: return .toggleUnit
         
-        case 5: return .notifySearchChanged(try FfiConverterString.read(from: &buf)
+        case 5: return .notifySelectedUtxosChanged(try FfiConverterSequenceTypeOutPoint.read(from: &buf)
+        )
+        
+        case 6: return .notifySearchChanged(try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14328,8 +14333,13 @@ public struct FfiConverterTypeCoinControlManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
         
         
-        case let .notifySearchChanged(v1):
+        case let .notifySelectedUtxosChanged(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterSequenceTypeOutPoint.write(v1, into: &buf)
+            
+        
+        case let .notifySearchChanged(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -14350,9 +14360,6 @@ public func FfiConverterTypeCoinControlManagerAction_lift(_ buf: RustBuffer) thr
 public func FfiConverterTypeCoinControlManagerAction_lower(_ value: CoinControlManagerAction) -> RustBuffer {
     return FfiConverterTypeCoinControlManagerAction.lower(value)
 }
-
-
-extension CoinControlManagerAction: Equatable, Hashable {}
 
 
 
@@ -27420,10 +27427,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

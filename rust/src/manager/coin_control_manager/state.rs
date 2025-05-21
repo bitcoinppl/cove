@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bdk_wallet::LocalOutput;
 use cove_types::{
     Network, OutPoint, WalletId,
@@ -22,7 +24,7 @@ pub struct CoinControlManagerState {
     pub utxos: Vec<Utxo>,
     pub filtered_utxos: FilteredUtxos,
     pub sort: SortState,
-    pub selected_utxos: Vec<OutPoint>,
+    pub selected_utxos: Vec<Arc<OutPoint>>,
     pub search: String,
 }
 

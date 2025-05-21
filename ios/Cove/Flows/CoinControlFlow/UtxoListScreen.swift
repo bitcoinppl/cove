@@ -385,6 +385,7 @@ private struct UTXORowPreview: View {
         UtxoListScreen(
             manager: CoinControlManager(RustCoinControlManager.previewNew())
         )
+        .environment(WalletManager(preview: "preview_only"))
     }
 }
 
@@ -394,6 +395,7 @@ private struct UTXORowPreview: View {
             manager: CoinControlManager(
                 RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0))
         )
+        .environment(WalletManager(preview: "preview_only"))
     }
 }
 
@@ -401,5 +403,6 @@ private struct UTXORowPreview: View {
     AsyncPreview {
         let manager = CoinControlManager(RustCoinControlManager.previewNew())
         UTXORowPreview(manager: manager, utxo: manager.utxos[0])
+            .environment(WalletManager(preview: "preview_only"))
     }
 }

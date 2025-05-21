@@ -60,6 +60,7 @@ pub enum CoinControlManagerAction {
     ToggleSelectAll,
     ToggleUnit,
 
+    NotifySelectedUtxosChanged(Vec<Arc<OutPoint>>),
     NotifySearchChanged(String),
 }
 
@@ -149,6 +150,9 @@ impl RustCoinControlManager {
 
                 self.send(Message::UpdateUnit(new_unit));
             }
+            Action::NotifySelectedUtxosChanged(selected_utxos) => {
+                self.state.lock().selected_utxos = selected_utxos;
+            }
         }
     }
 }
@@ -210,10 +214,8 @@ impl RustCoinControlManager {
         let mut sender = DeferredSender::new(self.clone());
 
         let selected_utxos = self.state.lock().selected_utxos.clone();
-
         if selected_utxos.is_empty() {
-            let selected =
-                self.utxos().into_iter().map(|utxo| utxo.outpoint.as_ref().clone()).collect();
+            let selected = self.utxos().into_iter().map(|utxo| utxo.outpoint).collect();
             self.state.lock().selected_utxos = selected;
         } else {
             self.state.lock().selected_utxos = vec![];
@@ -221,8 +223,7 @@ impl RustCoinControlManager {
 
         let new_selected = &self.state.lock().selected_utxos;
         if new_selected != &selected_utxos {
-            let new_selected = new_selected.iter().cloned().map(Arc::new).collect();
-            sender.queue(Message::UpdateSelectedUtxos(new_selected));
+            sender.queue(Message::UpdateSelectedUtxos(new_selected.clone()));
         }
     }
 

@@ -31,7 +31,10 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     var selectedBinding: Binding<Set<Utxo.ID>> {
         Binding(
             get: { self.selected },
-            set: { self.selected = $0 }
+            set: {
+                self.selected = $0
+                self.dispatch(.notifySelectedUtxosChanged(Array($0)))
+            }
         )
     }
 
