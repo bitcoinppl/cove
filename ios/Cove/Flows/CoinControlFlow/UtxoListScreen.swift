@@ -188,7 +188,6 @@ struct UtxoListScreen: View {
                     .padding(.horizontal)
                     .padding(.bottom, 4)
                     .disabled(manager.selected.isEmpty)
-                    .padding(.horizontal)
                     .contentTransition(.interpolate)
             }
         }
