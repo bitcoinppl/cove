@@ -35,6 +35,10 @@ struct SendFlowCoinControlSetAmountScreen: View {
         manager.walletMetadata
     }
 
+    private var address: Binding<String> {
+        sendFlowManager.enteringAddress
+    }
+
     private var network: Network {
         metadata.network
     }
@@ -43,25 +47,24 @@ struct SendFlowCoinControlSetAmountScreen: View {
         sendFlowManager.totalSpentInFiat
     }
 
-    private var address: Binding<String> {
-        sendFlowManager.enteringAddress
+    private var totalFeeString: String {
+        sendFlowManager.totalFeeString
+    }
+
+    private var totalSpentBtc: String {
+        sendFlowManager.totalSpentInBtc
     }
 
     private var totalSending: String {
         sendFlowManager.sendAmountBtc
     }
 
-    private var utxoTotal: Amount {
+    private func utxoTotal() -> Amount {
         Amount.fromSat(sats: utxos.reduce(0) { $0 + $1.amount.asSats() })
     }
 
     private var displayAmount: String {
-        switch metadata.selectedUnit {
-        case .sat:
-            utxoTotal.satsString()
-        case .btc:
-            utxoTotal.btcString()
-        }
+        sendFlowManager.rust.sendAmountBtc()
     }
 
     // MARK: Actions
@@ -97,61 +100,68 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     @ViewBuilder
     var AmountSection: some View {
-        HStack(alignment: .bottom) {
-            Text(displayAmount)
-                .font(.system(size: 48, weight: .bold))
-                .multilineTextAlignment(.center)
-                .keyboardType(.decimalPad)
-                .minimumScaleFactor(0.01)
-                .lineLimit(1)
-                .scrollDisabled(true)
-                .offset(x: offset)
-                .padding(.horizontal, 30)
-                .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom) {
+                Text(displayAmount)
+                    .font(.system(size: 48, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .keyboardType(.decimalPad)
+                    .minimumScaleFactor(0.01)
+                    .lineLimit(1)
+                    .scrollDisabled(true)
+                    .offset(x: offset)
+                    .padding(.horizontal, 30)
+                    .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
 
-            HStack(spacing: 0) {
-                Menu {
-                    VStack(alignment: .center, spacing: 0) {
-                        Button(action: {
-                            manager.dispatch(action: .updateUnit(.sat))
-                        }) {
-                            Text("sats")
-                                .frame(maxWidth: .infinity)
-                                .padding(12)
-                                .background(Color.clear)
+                HStack(spacing: 0) {
+                    Menu {
+                        VStack(alignment: .center, spacing: 0) {
+                            Button(action: {
+                                manager.dispatch(action: .updateUnit(.sat))
+                            }) {
+                                Text("sats")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(12)
+                                    .background(Color.clear)
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
+
+                            Button(action: {
+                                manager.dispatch(action: .updateUnit(.btc))
+                            }) {
+                                Text("btc")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(12)
+                                    .background(Color.clear)
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .foregroundStyle(.primary.opacity(0.8))
                         .contentShape(Rectangle())
+                    } label: {
+                        HStack(spacing: 2) {
+                            Text(manager.unit)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 10)
+                                .fixedSize(horizontal: true, vertical: true)
 
-                        Button(action: {
-                            manager.dispatch(action: .updateUnit(.btc))
-                        }) {
-                            Text("btc")
-                                .frame(maxWidth: .infinity)
-                                .padding(12)
-                                .background(Color.clear)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .padding(.top, 2)
                         }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
+                        .offset(y: -2)
                     }
-                    .foregroundStyle(.primary.opacity(0.8))
-                    .contentShape(Rectangle())
-                } label: {
-                    HStack(spacing: 2) {
-                        Text(manager.unit)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 10)
-                            .fixedSize(horizontal: true, vertical: true)
-
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .padding(.top, 2)
-                    }
-                    .offset(y: -2)
+                    .foregroundStyle(.primary)
                 }
-                .foregroundStyle(.primary)
             }
+
+            Text(sendFlowManager.rust.sendAmountFiat())
+                .contentTransition(.numericText())
+                .font(.subheadline)
+                .foregroundColor(.secondary)
         }
     }
 
@@ -183,7 +193,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                         AccountSection
 
                         if sendFlowManager.feeRateOptions != nil,
-                           sendFlowManager.address != nil
+                            sendFlowManager.address != nil
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -222,11 +232,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
             sendFlowManager.dispatch(.notifyPricesChanged(prices))
         }
 
-        .task {
-            await MainActor.run {
-                // TODO: set amount using UTXO list
-            }
-        }
         .onAppear {
             presenter.focusField = .address
 
@@ -235,6 +240,8 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 app.popRoute()
                 return
             }
+
+            sendFlowManager.setAmount(utxoTotal())
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .alert(
@@ -244,14 +251,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
             actions: presenter.alertButtons,
             message: presenter.alertMessage
         )
-    }
-
-    private var totalFeeString: String {
-        sendFlowManager.totalFeeString
-    }
-
-    private var totalSpentBtc: String {
-        sendFlowManager.totalSpentInBtc
     }
 
     private func validate(_ displayAlert: Bool = false) -> Bool {
