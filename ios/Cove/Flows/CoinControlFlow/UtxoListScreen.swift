@@ -116,19 +116,25 @@ struct UtxoListScreen: View {
                         .foregroundColor(.primary.opacity(0.6))
                     Spacer()
 
-                    Button(action: { manager.dispatch(.toggleSelectAll) }) {
-                        Group {
-                            if manager.selected.isEmpty {
-                                Text("Select All")
-                            } else {
-                                Text("Deselect All")
-                            }
+                    Group {
+                        if manager.selected.isEmpty {
+                            Text("Select All")
+                        } else {
+                            Text("Deselect All")
                         }
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .contentShape(Rectangle())
-                        .onTapGesture { manager.dispatch(.toggleSelectAll) }
                     }
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.blue)
+                    .contentShape(Rectangle().inset(by:
+                        EdgeInsets(
+                            top: -15,
+                            leading: -35,
+                            bottom: -10,
+                            trailing: -35
+                        ))
+                    )
+                    .onTapGesture { manager.dispatch(.toggleSelectAll) }
                 }
                 .padding(.horizontal)
                 .padding(.horizontal)
@@ -262,8 +268,8 @@ private struct UTXORow: View {
                 HStack(spacing: 4) {
                     Text(utxo.name)
                         .font(.footnote)
+                        .truncationMode(.middle)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
 
                     if utxo.type == .change {
                         Image(systemName: "circlebadge.2")
@@ -313,20 +319,17 @@ private struct UTXORowPreview: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-                .lineLimit(nil)
 
             Spacer()
 
-            HStack(spacing: 4) {
+            HStack(spacing: 8) {
                 Text(utxo.name)
                     .foregroundColor(.primary)
                     .font(.body)
                     .fontWeight(.medium)
                     .multilineTextAlignment(.center)
-                    .lineLimit(nil)
 
                 if utxo.type == .change {
-                    Spacer()
                     Image(systemName: "circlebadge.2")
                         .font(.caption)
                         .foregroundColor(.orange.opacity(0.8))
@@ -345,7 +348,7 @@ private struct UTXORowPreview: View {
             .font(.footnote)
         }
         .frame(maxWidth: .infinity)
-        .frame(minHeight: 250)
+        .frame(minHeight: 175)
         .padding(.vertical, 20)
         .padding(.horizontal)
     }
