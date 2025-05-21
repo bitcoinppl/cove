@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ahash::HashSet;
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    OutPoint,
+    OutPoint, WalletId,
     amount::Amount,
     unit::Unit,
     utxo::{Utxo, UtxoType},
@@ -82,6 +82,11 @@ impl RustCoinControlManager {
     #[uniffi::method]
     pub fn unit(&self) -> Unit {
         self.state.lock().unit
+    }
+
+    #[uniffi::method]
+    pub fn id(&self) -> WalletId {
+        self.state.lock().wallet_id.clone()
     }
 
     #[uniffi::method]

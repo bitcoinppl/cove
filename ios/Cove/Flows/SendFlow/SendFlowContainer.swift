@@ -61,7 +61,7 @@ public struct SendFlowContainer: View {
         switch sendRoute {
         case let .setAmount(id: id, address: _, amount: amount):
             SendFlowSetAmountScreen(id: id, amount: amount)
-        case let .coinControlSetAmount(id: id, selectedUtxos: utxos):
+        case let .coinControlSetAmount(id: id, utxos: utxos):
             SendFlowCoinControlSetAmountScreen(id: id, utxos: utxos)
         case let .confirm(confirm):
             SendFlowConfirmScreen(

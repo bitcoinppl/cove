@@ -63,10 +63,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         Amount.fromSat(sats: utxos.reduce(0) { $0 + $1.amount.asSats() })
     }
 
-    private var displayAmount: String {
-        sendFlowManager.rust.sendAmountBtc()
-    }
-
     // MARK: Actions
 
     // validate, create final psbt and send to next screen
@@ -102,7 +98,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
     var AmountSection: some View {
         VStack(spacing: 8) {
             HStack(alignment: .bottom) {
-                Text(displayAmount)
+                Text(totalSending)
                     .font(.system(size: 48, weight: .bold))
                     .multilineTextAlignment(.center)
                     .keyboardType(.decimalPad)
@@ -193,7 +189,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                         AccountSection
 
                         if sendFlowManager.feeRateOptions != nil,
-                            sendFlowManager.address != nil
+                           sendFlowManager.address != nil
                         {
                             // Network Fee Section
                             NetworkFeeSection
@@ -223,9 +219,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
         .onChange(of: metadata.selectedUnit, initial: false) { oldUnit, newUnit in
             sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
-        }
-        .onChange(of: metadata.fiatOrBtc, initial: false) { old, new in
-            sendFlowManager.dispatch(.notifyBtcOrFiatChanged(old: old, new: new))
         }
         .onChange(of: app.prices, initial: true) { _, newPrices in
             guard let prices = newPrices else { return }

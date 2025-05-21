@@ -206,20 +206,28 @@ struct UtxoListScreen: View {
                 .padding(.horizontal)
 
                 // ─ Action buttons ─
-                Button(continueText) { /* … */ }
-                    .buttonStyle(
-                        manager.selected.isEmpty
-                            ? DarkButtonStyle(
-                                backgroundColor: .systemGray4, foregroundColor: .secondary
+                Button(continueText) {
+                    navigate(
+                        RouteFactory()
+                            .coinControlSend(
+                                id: manager.rust.id(),
+                                utxos: manager.rust.selectedUtxos(),
                             )
-                            : DarkButtonStyle()
                     )
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
-                    .disabled(manager.selected.isEmpty)
-                    .contentTransition(.interpolate)
+                }
+                .buttonStyle(
+                    manager.selected.isEmpty
+                        ? DarkButtonStyle(
+                            backgroundColor: .systemGray4, foregroundColor: .secondary
+                        )
+                        : DarkButtonStyle()
+                )
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal)
+                .padding(.bottom, 4)
+                .disabled(manager.selected.isEmpty)
+                .contentTransition(.interpolate)
             }
         }
         .navigationTitle("Manage UTXOs")

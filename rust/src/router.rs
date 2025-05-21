@@ -85,7 +85,7 @@ pub enum WalletSettingsRoute {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendRoute {
     SetAmount { id: WalletId, address: Option<Arc<Address>>, amount: Option<Arc<Amount>> },
-    CoinControlSetAmount { id: WalletId, selected_utxos: Vec<Utxo> },
+    CoinControlSetAmount { id: WalletId, utxos: Vec<Utxo> },
     HardwareExport { id: WalletId, details: Arc<ConfirmDetails> },
     Confirm(SendRouteConfirmArgs),
 }
@@ -345,6 +345,11 @@ impl RouteFactory {
 
     pub fn send_hardware_export(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
         let send = SendRoute::HardwareExport { id, details };
+        Route::Send(send)
+    }
+
+    pub fn coin_control_send(&self, id: WalletId, utxos: Vec<Utxo>) -> Route {
+        let send = SendRoute::CoinControlSetAmount { id, utxos };
         Route::Send(send)
     }
 

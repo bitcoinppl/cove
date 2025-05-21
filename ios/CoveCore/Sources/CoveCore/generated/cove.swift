@@ -6114,6 +6114,8 @@ public func FfiConverterTypePushTx_lower(_ value: PushTx) -> UnsafeMutableRawPoi
 
 public protocol RouteFactoryProtocol: AnyObject, Sendable {
     
+    func coinControlSend(id: WalletId, utxos: [Utxo])  -> Route
+    
     func coldWalletImport(route: ColdWalletRoute)  -> Route
     
     func hotWallet(route: HotWalletRoute)  -> Route
@@ -6211,6 +6213,15 @@ public convenience init() {
 
     
 
+    
+open func coinControlSend(id: WalletId, utxos: [Utxo]) -> Route  {
+    return try!  FfiConverterTypeRoute_lift(try! rustCall() {
+    uniffi_cove_fn_method_routefactory_coin_control_send(self.uniffiClonePointer(),
+        FfiConverterTypeWalletId_lower(id),
+        FfiConverterSequenceTypeUtxo.lower(utxos),$0
+    )
+})
+}
     
 open func coldWalletImport(route: ColdWalletRoute) -> Route  {
     return try!  FfiConverterTypeRoute_lift(try! rustCall() {
@@ -6810,6 +6821,8 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
      */
     func dispatch(action: CoinControlManagerAction) 
     
+    func id()  -> WalletId
+    
     func listenForUpdates(reconciler: CoinControlManagerReconciler) 
     
     func selectedUtxos()  -> [Utxo]
@@ -6898,6 +6911,13 @@ open func dispatch(action: CoinControlManagerAction)  {try! rustCall() {
         FfiConverterTypeCoinControlManagerAction_lower(action),$0
     )
 }
+}
+    
+open func id() -> WalletId  {
+    return try!  FfiConverterTypeWalletId_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustcoincontrolmanager_id(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rustCall() {
@@ -19556,7 +19576,7 @@ public enum SendRoute {
     
     case setAmount(id: WalletId, address: Address?, amount: Amount?
     )
-    case coinControlSetAmount(id: WalletId, selectedUtxos: [Utxo]
+    case coinControlSetAmount(id: WalletId, utxos: [Utxo]
     )
     case hardwareExport(id: WalletId, details: ConfirmDetails
     )
@@ -19582,7 +19602,7 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
         case 1: return .setAmount(id: try FfiConverterTypeWalletId.read(from: &buf), address: try FfiConverterOptionTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf)
         )
         
-        case 2: return .coinControlSetAmount(id: try FfiConverterTypeWalletId.read(from: &buf), selectedUtxos: try FfiConverterSequenceTypeUtxo.read(from: &buf)
+        case 2: return .coinControlSetAmount(id: try FfiConverterTypeWalletId.read(from: &buf), utxos: try FfiConverterSequenceTypeUtxo.read(from: &buf)
         )
         
         case 3: return .hardwareExport(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf)
@@ -19606,10 +19626,10 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
             FfiConverterOptionTypeAmount.write(amount, into: &buf)
             
         
-        case let .coinControlSetAmount(id,selectedUtxos):
+        case let .coinControlSetAmount(id,utxos):
             writeInt(&buf, Int32(2))
             FfiConverterTypeWalletId.write(id, into: &buf)
-            FfiConverterSequenceTypeUtxo.write(selectedUtxos, into: &buf)
+            FfiConverterSequenceTypeUtxo.write(utxos, into: &buf)
             
         
         case let .hardwareExport(id,details):
@@ -26753,6 +26773,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_priceresponse_get_for_currency() != 7349) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_routefactory_coin_control_send() != 12083) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_routefactory_cold_wallet_import() != 14120) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -26871,6 +26894,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_dispatch() != 16991) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_id() != 50563) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 58980) {
@@ -27462,10 +27488,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 
