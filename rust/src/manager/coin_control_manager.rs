@@ -100,6 +100,17 @@ impl RustCoinControlManager {
     }
 
     #[uniffi::method]
+    pub fn selected_utxos(&self) -> Vec<Utxo> {
+        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
+            self.state.lock().selected_utxos.iter().cloned().collect();
+
+        self.utxos()
+            .into_iter()
+            .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
+            .collect()
+    }
+
+    #[uniffi::method]
     pub fn button_presentation(
         self: &Arc<Self>,
         button: CoinControlListSortKey,

@@ -6812,6 +6812,8 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: CoinControlManagerReconciler) 
     
+    func selectedUtxos()  -> [Utxo]
+    
     func totalSelectedAmount()  -> Amount
     
     func unit()  -> Unit
@@ -6903,6 +6905,13 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
         FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(reconciler),$0
     )
 }
+}
+    
+open func selectedUtxos() -> [Utxo]  {
+    return try!  FfiConverterSequenceTypeUtxo.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func totalSelectedAmount() -> Amount  {
@@ -19547,6 +19556,8 @@ public enum SendRoute {
     
     case setAmount(id: WalletId, address: Address?, amount: Amount?
     )
+    case coinControlSetAmount(id: WalletId, selectedUtxos: [Utxo]
+    )
     case hardwareExport(id: WalletId, details: ConfirmDetails
     )
     case confirm(SendRouteConfirmArgs
@@ -19571,10 +19582,13 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
         case 1: return .setAmount(id: try FfiConverterTypeWalletId.read(from: &buf), address: try FfiConverterOptionTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf)
         )
         
-        case 2: return .hardwareExport(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf)
+        case 2: return .coinControlSetAmount(id: try FfiConverterTypeWalletId.read(from: &buf), selectedUtxos: try FfiConverterSequenceTypeUtxo.read(from: &buf)
         )
         
-        case 3: return .confirm(try FfiConverterTypeSendRouteConfirmArgs.read(from: &buf)
+        case 3: return .hardwareExport(id: try FfiConverterTypeWalletId.read(from: &buf), details: try FfiConverterTypeConfirmDetails.read(from: &buf)
+        )
+        
+        case 4: return .confirm(try FfiConverterTypeSendRouteConfirmArgs.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -19592,14 +19606,20 @@ public struct FfiConverterTypeSendRoute: FfiConverterRustBuffer {
             FfiConverterOptionTypeAmount.write(amount, into: &buf)
             
         
-        case let .hardwareExport(id,details):
+        case let .coinControlSetAmount(id,selectedUtxos):
             writeInt(&buf, Int32(2))
+            FfiConverterTypeWalletId.write(id, into: &buf)
+            FfiConverterSequenceTypeUtxo.write(selectedUtxos, into: &buf)
+            
+        
+        case let .hardwareExport(id,details):
+            writeInt(&buf, Int32(3))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeConfirmDetails.write(details, into: &buf)
             
         
         case let .confirm(v1):
-            writeInt(&buf, Int32(3))
+            writeInt(&buf, Int32(4))
             FfiConverterTypeSendRouteConfirmArgs.write(v1, into: &buf)
             
         }
@@ -26856,6 +26876,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 58980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos() != 6695) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_total_selected_amount() != 8051) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27440,8 +27463,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
