@@ -124,6 +124,7 @@ struct QrCodeAddressView: View {
                     scannedCode = TaggedString(data)
                 }
             } catch {
+                dismiss()
                 app.alertState = TaggedItem(
                     .general(
                         title: "QR Scan Error",
