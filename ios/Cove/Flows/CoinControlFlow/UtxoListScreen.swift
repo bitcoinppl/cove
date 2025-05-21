@@ -1,14 +1,41 @@
+import MijickPopupView
 import SwiftUI
 
 // MARK: - View
 
 struct UtxoListScreen: View {
+    @Environment(WalletManager.self) private var walletManager
+    @Environment(\.navigate) private var navigate
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
 
     let manager: CoinControlManager
 
     @FocusState private var isFocused: Bool
+
+    func goToTransactionDetails(_ utxo: Utxo) {
+        let txId = utxo.id.txid()
+        let walletId = walletManager.walletMetadata.id
+
+        if let details = walletManager.transactionDetails[txId] {
+            return navigate(Route.transactionDetails(id: walletId, details: details))
+        }
+
+        MiddlePopup(state: .loading).showAndStack()
+        Task {
+            do {
+                let details = try await walletManager.transactionDetails(for: txId)
+                await MainActor.run {
+                    PopupManager.dismiss()
+                    navigate(Route.transactionDetails(id: walletId, details: details))
+                }
+            } catch {
+                Log.error(
+                    "Unable to get transaction details: \(error.localizedDescription), for txn: \(txId)"
+                )
+            }
+        }
+    }
 
     @ViewBuilder
     func UTXOList() -> some View {
@@ -31,11 +58,9 @@ struct UtxoListScreen: View {
                             }
 
                             Button(action: {
-                                if let url = URL(string: utxo.outpoint.txnLink()) {
-                                    openURL(url)
-                                }
+                                goToTransactionDetails(utxo)
                             }) {
-                                Text("View in Explorer")
+                                Text("View Transaction Details")
                             }
                         } preview: {
                             UTXORowPreview(manager: manager, utxo: utxo)

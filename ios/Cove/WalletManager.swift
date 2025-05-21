@@ -23,6 +23,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     // errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
+    // cached transaction details
+    var transactionDetails: [TxId: TransactionDetails] = [:]
+
     public init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
@@ -111,6 +114,17 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case .btc: amount.btcStringWithUnit()
         case .sat: amount.satsStringWithUnit()
         }
+    }
+
+    func transactionDetails(for txId: TxId) async throws -> TransactionDetails {
+        if let details = transactionDetails[txId] {
+            return details
+        }
+
+        let details = try await rust.transactionDetails(txId: txId)
+        transactionDetails[txId] = details
+
+        return details
     }
 
     private func updateFiatBalance() async {
