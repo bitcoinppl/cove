@@ -89,13 +89,13 @@ impl RustCoinControlManager {
         let selected_utxos_ids: HashSet<Arc<OutPoint>> =
             self.state.lock().selected_utxos.iter().cloned().collect();
 
-        let selected_utxos = self
+        let final_amount_sats = self
             .utxos()
             .into_iter()
             .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
-            .collect::<Vec<_>>();
+            .map(|utxo| utxo.amount.as_sats())
+            .sum();
 
-        let final_amount_sats = selected_utxos.iter().map(|utxo| utxo.amount.as_sats()).sum();
         Amount::from_sat(final_amount_sats)
     }
 
