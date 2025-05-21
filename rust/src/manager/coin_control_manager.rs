@@ -2,6 +2,7 @@ mod state;
 
 use std::sync::Arc;
 
+use ahash::HashSet;
 use bdk_wallet::LocalOutput;
 use cove_types::{
     OutPoint,
@@ -85,7 +86,9 @@ impl RustCoinControlManager {
 
     #[uniffi::method]
     pub fn total_selected_amount(&self) -> Amount {
-        let selected_utxos_ids = self.state.lock().selected_utxos.clone();
+        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
+            self.state.lock().selected_utxos.iter().cloned().collect();
+
         let selected_utxos = self
             .utxos()
             .into_iter()
