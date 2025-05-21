@@ -5,6 +5,7 @@ use std::sync::Arc;
 use bdk_wallet::LocalOutput;
 use cove_types::{
     OutPoint,
+    amount::Amount,
     unit::Unit,
     utxo::{Utxo, UtxoType},
 };
@@ -80,6 +81,19 @@ impl RustCoinControlManager {
     #[uniffi::method]
     pub fn unit(&self) -> Unit {
         self.state.lock().unit
+    }
+
+    #[uniffi::method]
+    pub fn total_selected_amount(&self) -> Amount {
+        let selected_utxos_ids = self.state.lock().selected_utxos.clone();
+        let selected_utxos = self
+            .utxos()
+            .into_iter()
+            .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
+            .collect::<Vec<_>>();
+
+        let final_amount_sats = selected_utxos.iter().map(|utxo| utxo.amount.as_sats()).sum();
+        Amount::from_sat(final_amount_sats)
     }
 
     #[uniffi::method]

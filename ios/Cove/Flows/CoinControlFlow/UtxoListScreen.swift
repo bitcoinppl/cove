@@ -57,9 +57,7 @@ struct UtxoListScreen: View {
                                 Text("Copy Transaction ID")
                             }
 
-                            Button(action: {
-                                goToTransactionDetails(utxo)
-                            }) {
+                            Button(action: { goToTransactionDetails(utxo) }) {
                                 Text("View Transaction Details")
                             }
                         } preview: {
@@ -166,7 +164,15 @@ struct UtxoListScreen: View {
                 .zIndex(1)
 
                 // ─ UTXO list ─
-                UTXOList()
+                VStack(spacing: 8) {
+                    UTXOList()
+                    Text(manager.totalSelectedAmount)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .opacity(manager.selected.isEmpty ? 0 : 0.8)
+                        .contentTransition(.numericText())
+                        .animation(.easeInOut(duration: 0.1), value: manager.totalSelectedAmount)
+                }
             }
 
             Spacer()

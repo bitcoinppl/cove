@@ -6812,6 +6812,8 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: CoinControlManagerReconciler) 
     
+    func totalSelectedAmount()  -> Amount
+    
     func unit()  -> Unit
     
     func utxos()  -> [Utxo]
@@ -6901,6 +6903,13 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
         FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(reconciler),$0
     )
 }
+}
+    
+open func totalSelectedAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_method_rustcoincontrolmanager_total_selected_amount(self.uniffiClonePointer(),$0
+    )
+})
 }
     
 open func unit() -> Unit  {
@@ -26847,6 +26856,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 58980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_total_selected_amount() != 8051) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_unit() != 56844) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27429,8 +27441,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 
