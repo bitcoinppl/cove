@@ -1,7 +1,7 @@
 use crate::{
     database::{Database, wallet_data::WalletDataDb},
     historical_price_service::HistoricalPriceService,
-    manager::wallet::{Error, SendFlowErrorAlert, WalletManagerError},
+    manager::wallet_manager::{Error, SendFlowErrorAlert, WalletManagerError},
     mnemonic,
     node::{
         client::{NodeClient, NodeClientOptions},
@@ -16,9 +16,12 @@ use crate::{
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
-use bdk_chain::{TxGraph, bitcoin::Psbt, spk_client::FullScanResponse};
-use bdk_core::spk_client::{FullScanRequest, SyncResponse};
-use bdk_wallet::{KeychainKind, SignOptions, TxOrdering};
+use bdk_wallet::chain::{
+    TxGraph,
+    bitcoin::Psbt,
+    spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
+};
+use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
@@ -218,6 +221,10 @@ impl WalletActor {
     // cancel a transaction, reset the address & change address index
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
         self.wallet.bdk.cancel_tx(&txn)
+    }
+
+    pub async fn list_unspent(&mut self) -> ActorResult<Vec<LocalOutput>> {
+        Produces::ok(self.wallet.bdk.list_unspent().collect())
     }
 
     #[act_zero_ext::into_actor_result]

@@ -17,6 +17,15 @@ impl Default for Unit {
 
 use strum::IntoEnumIterator;
 
+impl Unit {
+    pub fn toggle(self) -> Self {
+        match self {
+            Unit::Btc => Unit::Sat,
+            Unit::Sat => Unit::Btc,
+        }
+    }
+}
+
 #[uniffi::export]
 fn all_units() -> Vec<Unit> {
     Unit::iter().collect()

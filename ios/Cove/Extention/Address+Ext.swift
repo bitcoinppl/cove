@@ -32,6 +32,6 @@ extension Address: @retroactive Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(string())
+        hasher.combine(self.hashToUint())
     }
 }

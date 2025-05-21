@@ -593,6 +593,8 @@ fileprivate struct FfiConverterDuration: FfiConverterRustBuffer {
 
 public protocol AddressProtocol: AnyObject, Sendable {
     
+    func hashToUint()  -> UInt64
+    
     func spacedOut()  -> String
     
     func string()  -> String
@@ -668,7 +670,21 @@ public static func previewNew() -> Address  {
 })
 }
     
+public static func random() -> Address  {
+    return try!  FfiConverterTypeAddress_lift(try! rustCall() {
+    uniffi_cove_types_fn_constructor_address_random($0
+    )
+})
+}
+    
 
+    
+open func hashToUint() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_address_hashtouint(self.uniffiClonePointer(),$0
+    )
+})
+}
     
 open func spacedOut() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -2750,6 +2766,16 @@ public func FfiConverterTypeInputOutputDetails_lower(_ value: InputOutputDetails
 
 public protocol OutPointProtocol: AnyObject, Sendable {
     
+    func eq(rhs: OutPoint)  -> Bool
+    
+    func hashToUint()  -> UInt64
+    
+    func txid()  -> TxId
+    
+    func txidStr()  -> String
+    
+    func txnLink()  -> String
+    
 }
 open class OutPoint: OutPointProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -2801,7 +2827,58 @@ open class OutPoint: OutPointProtocol, @unchecked Sendable {
     }
 
     
+public static func previewNew() -> OutPoint  {
+    return try!  FfiConverterTypeOutPoint_lift(try! rustCall() {
+    uniffi_cove_types_fn_constructor_outpoint_preview_new($0
+    )
+})
+}
+    
+public static func withVout(vout: UInt32) -> OutPoint  {
+    return try!  FfiConverterTypeOutPoint_lift(try! rustCall() {
+    uniffi_cove_types_fn_constructor_outpoint_with_vout(
+        FfiConverterUInt32.lower(vout),$0
+    )
+})
+}
+    
 
+    
+open func eq(rhs: OutPoint) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_eq(self.uniffiClonePointer(),
+        FfiConverterTypeOutPoint_lower(rhs),$0
+    )
+})
+}
+    
+open func hashToUint() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_hashtouint(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txid() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_txid(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txidStr() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_txid_str(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func txnLink() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_outpoint_txn_link(self.uniffiClonePointer(),$0
+    )
+})
+}
     
 
 }
@@ -3897,6 +3974,82 @@ public func FfiConverterTypeSplitOutput_lower(_ value: SplitOutput) -> RustBuffe
 }
 
 
+public struct Utxo {
+    public var outpoint: OutPoint
+    public var label: String?
+    public var datetime: UInt64
+    public var amount: Amount
+    public var address: Address
+    public var derivationIndex: UInt32
+    public var blockHeight: UInt32
+    public var type: UtxoType
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(outpoint: OutPoint, label: String?, datetime: UInt64, amount: Amount, address: Address, derivationIndex: UInt32, blockHeight: UInt32, type: UtxoType) {
+        self.outpoint = outpoint
+        self.label = label
+        self.datetime = datetime
+        self.amount = amount
+        self.address = address
+        self.derivationIndex = derivationIndex
+        self.blockHeight = blockHeight
+        self.type = type
+    }
+}
+
+#if compiler(>=6)
+extension Utxo: Sendable {}
+#endif
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUtxo: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Utxo {
+        return
+            try Utxo(
+                outpoint: FfiConverterTypeOutPoint.read(from: &buf), 
+                label: FfiConverterOptionString.read(from: &buf), 
+                datetime: FfiConverterUInt64.read(from: &buf), 
+                amount: FfiConverterTypeAmount.read(from: &buf), 
+                address: FfiConverterTypeAddress.read(from: &buf), 
+                derivationIndex: FfiConverterUInt32.read(from: &buf), 
+                blockHeight: FfiConverterUInt32.read(from: &buf), 
+                type: FfiConverterTypeUtxoType.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Utxo, into buf: inout [UInt8]) {
+        FfiConverterTypeOutPoint.write(value.outpoint, into: &buf)
+        FfiConverterOptionString.write(value.label, into: &buf)
+        FfiConverterUInt64.write(value.datetime, into: &buf)
+        FfiConverterTypeAmount.write(value.amount, into: &buf)
+        FfiConverterTypeAddress.write(value.address, into: &buf)
+        FfiConverterUInt32.write(value.derivationIndex, into: &buf)
+        FfiConverterUInt32.write(value.blockHeight, into: &buf)
+        FfiConverterTypeUtxoType.write(value.type, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtxo_lift(_ buf: RustBuffer) throws -> Utxo {
+    return try FfiConverterTypeUtxo.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtxo_lower(_ value: Utxo) -> RustBuffer {
+    return FfiConverterTypeUtxo.lower(value)
+}
+
+
 public enum AddressError: Swift.Error {
 
     
@@ -4813,6 +4966,76 @@ extension Unit: Equatable, Hashable {}
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum UtxoType {
+    
+    case output
+    case change
+}
+
+
+#if compiler(>=6)
+extension UtxoType: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUtxoType: FfiConverterRustBuffer {
+    typealias SwiftType = UtxoType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UtxoType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .output
+        
+        case 2: return .change
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UtxoType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .output:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .change:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtxoType_lift(_ buf: RustBuffer) throws -> UtxoType {
+    return try FfiConverterTypeUtxoType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUtxoType_lower(_ value: UtxoType) -> RustBuffer {
+    return FfiConverterTypeUtxoType.lower(value)
+}
+
+
+extension UtxoType: Equatable, Hashable {}
+
+
+
+
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -4930,6 +5153,31 @@ fileprivate struct FfiConverterSequenceTypeAddressAndAmount: FfiConverterRustBuf
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAddressAndAmount.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer {
+    typealias SwiftType = [Utxo]
+
+    public static func write(_ value: [Utxo], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeUtxo.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Utxo] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Utxo]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeUtxo.read(from: &buf))
         }
         return seq
     }
@@ -5194,10 +5442,47 @@ public func networkToString(network: Network) -> String  {
     )
 })
 }
+public func previewNewUtxoList(outputCount: UInt8, changeCount: UInt8) -> [Utxo]  {
+    return try!  FfiConverterSequenceTypeUtxo.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_preview_new_utxo_list(
+        FfiConverterUInt8.lower(outputCount),
+        FfiConverterUInt8.lower(changeCount),$0
+    )
+})
+}
 public func unitToString(unit: Unit) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_func_unit_to_string(
         FfiConverterTypeUnit_lower(unit),$0
+    )
+})
+}
+public func utxoDate(utxo: Utxo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_date(
+        FfiConverterTypeUtxo_lower(utxo),$0
+    )
+})
+}
+public func utxoHashToUint(utxo: Utxo) -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_hash_to_uint(
+        FfiConverterTypeUtxo_lower(utxo),$0
+    )
+})
+}
+public func utxoIsEqual(lhs: Utxo, rhs: Utxo) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_is_equal(
+        FfiConverterTypeUtxo_lower(lhs),
+        FfiConverterTypeUtxo_lower(rhs),$0
+    )
+})
+}
+public func utxoName(utxo: Utxo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_types_fn_func_utxo_name(
+        FfiConverterTypeUtxo_lower(utxo),$0
     )
 })
 }
@@ -5259,7 +5544,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_network_to_string() != 39809) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_types_checksum_func_preview_new_utxo_list() != 38611) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_types_checksum_func_unit_to_string() != 52878) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_date() != 4098) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_hash_to_uint() != 28817) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_is_equal() != 4992) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_func_utxo_name() != 59798) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_address_hashtouint() != 57811) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_spaced_out() != 48577) {
@@ -5457,6 +5760,21 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_method_feerateoptionswithtotalfee_transaction_size() != 38410) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_types_checksum_method_outpoint_eq() != 21627) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_hashtouint() != 32526) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_txid() != 18444) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_txid_str() != 20225) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_txn_link() != 4002) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_types_checksum_method_psbt_fee() != 64967) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5502,6 +5820,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_constructor_address_preview_new() != 59780) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_types_checksum_constructor_address_random() != 43251) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_types_checksum_constructor_addresswithnetwork_new() != 19636) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5530,6 +5851,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_feerateoptionswithtotalfee_preview_new() != 34906) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_constructor_outpoint_preview_new() != 56715) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_constructor_outpoint_with_vout() != 23992) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_constructor_psbt_new() != 54693) {

@@ -1,8 +1,10 @@
 use std::{sync::Arc, time::Instant};
 
 use act_zero::*;
-use bdk_chain::bitcoin::{Address, Network};
-use bdk_wallet::{KeychainKind, Wallet as BdkWallet};
+use bdk_wallet::{
+    KeychainKind, Wallet as BdkWallet,
+    bitcoin::{Address, Network},
+};
 use bip39::Mnemonic;
 use eyre::Context;
 use flume::Sender;
@@ -18,7 +20,7 @@ use crate::{
         wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
     keychain::Keychain,
-    manager::wallet::{SingleOrMany, WalletManagerReconcileMessage},
+    manager::wallet_manager::{SingleOrMany, WalletManagerReconcileMessage},
     mnemonic::MnemonicExt,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
     task::spawn_actor,

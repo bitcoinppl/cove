@@ -128,7 +128,12 @@ struct QrCodeScanView: View {
                 dismiss()
             }
         } catch {
-            Log.error("error scanning bbqr part: \(error)")
+            dismiss()
+            app.alertState = TaggedItem(
+                .general(
+                    title: "QR Scan Error",
+                    message: "Unable to scan QR code, error: \(error.localizedDescription)"
+                ))
         }
     }
 }

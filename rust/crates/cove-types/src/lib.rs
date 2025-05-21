@@ -16,6 +16,7 @@ pub mod psbt;
 pub mod redb;
 pub mod transaction;
 pub mod unit;
+pub mod utxo;
 
 // export the types
 pub use address_index::AddressIndex;

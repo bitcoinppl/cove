@@ -109,6 +109,34 @@ extension Color {
         )
     }
 
+    func toHexStringAndOpacity(colorScheme: ColorScheme) -> String {
+        let resolvedColor = UIColor(self).resolvedColor(
+            with:
+            UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light))
+
+        // Get the RGBA values
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+
+        resolvedColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+
+        let string = String(
+            format: "#%02lX%02lX%02lX",
+            lround(r * 255),
+            lround(g * 255),
+            lround(b * 255),
+        )
+
+        if a == 1 {
+            return string
+        }
+
+        let opacityPercentage = Int(a * 100)
+        return "\(string) (\(opacityPercentage)%)"
+    }
+
     var hasDarkVariant: Bool {
         let light = UIColor(self)
             .resolvedColor(with: UITraitCollection(userInterfaceStyle: .light))

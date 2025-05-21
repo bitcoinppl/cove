@@ -130,8 +130,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
-    private let rustBridge = DispatchQueue(label: "cove.sendflowmanager.rustbridge", qos: .userInitiated)
-
+    private let rustBridge = DispatchQueue(label: "cove.SendFlowManager.rustbridge", qos: .userInitiated)
     func reconcile(message: Message) {
         rustBridge.async { [weak self] in
             guard let self else {

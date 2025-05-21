@@ -11,7 +11,7 @@ use crate::{
     wallet::{WalletAddressType, metadata::WalletId},
 };
 
-use bdk_chain::bitcoin::{Network, bip32::Xpub};
+use bitcoin::{Network, bip32::Xpub};
 use cove_device::keychain::{Keychain, KeychainError};
 use derive_more::{AsRef, Deref, From, Into};
 

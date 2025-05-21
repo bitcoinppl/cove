@@ -205,7 +205,7 @@ impl GlobalConfigTable {
             .unwrap_or(None)
             .unwrap_or("bitcoin".to_string());
 
-        let network = match Network::try_from(network.as_str()) {
+        match Network::try_from(network.as_str()) {
             Ok(network) => network,
             Err(_) => {
                 self.set_selected_network(Network::Bitcoin)
@@ -213,9 +213,7 @@ impl GlobalConfigTable {
 
                 Network::Bitcoin
             }
-        };
-
-        network
+        }
     }
 
     pub fn set_selected_network(&self, network: Network) -> Result<()> {

@@ -148,6 +148,28 @@ struct ConfirmedTransactionView: View {
         }
     }
 
+    private func goToTransactionDetails() {
+        let txId = txn.id()
+        if let details = manager.transactionDetails[txId] {
+            return navigate(Route.transactionDetails(id: metadata.id, details: details))
+        }
+
+        MiddlePopup(state: .loading).showAndStack()
+        Task {
+            do {
+                let details = try await manager.transactionDetails(for: txId)
+                await MainActor.run {
+                    PopupManager.dismiss()
+                    navigate(Route.transactionDetails(id: metadata.id, details: details))
+                }
+            } catch {
+                Log.error(
+                    "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
+                )
+            }
+        }
+    }
+
     var label: String {
         if metadata.showLabels { return txn.label() }
         return txn.sentAndReceived().label()
@@ -185,20 +207,7 @@ struct ConfirmedTransactionView: View {
             }
         }
         .onTapGesture {
-            MiddlePopup(state: .loading).showAndStack()
-            Task {
-                do {
-                    let details = try await manager.rust.transactionDetails(txId: txn.id())
-                    await MainActor.run {
-                        PopupManager.dismiss()
-                        navigate(Route.transactionDetails(id: metadata.id, details: details))
-                    }
-                } catch {
-                    Log.error(
-                        "Unable to get transaction details: \(error.localizedDescription), for txn: \(txn.id())"
-                    )
-                }
-            }
+            goToTransactionDetails()
         }
     }
 }

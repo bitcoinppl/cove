@@ -119,13 +119,23 @@ struct MoreInfoPopover: View {
                 }
             }
 
-            Button(action: exportTransactions) {
-                Label("Export Transactions", systemImage: "arrow.up.arrow.down")
+            if manager.hasTransactions {
+                Button(action: exportTransactions) {
+                    Label("Export Transactions", systemImage: "arrow.up.arrow.down")
+                }
             }
 
             if case let .tapSigner(t) = metadata.hardwareMetadata {
                 ChangePinButton(t)
                 DownloadBackupButton(t)
+            }
+
+            if manager.hasTransactions {
+                Button(action: {
+                    app.pushRoute(.coinControl(.list(metadata.id)))
+                }) {
+                    Label("Manage UTXOs", systemImage: "circlebadge.2")
+                }
             }
 
             // wallet settings last button

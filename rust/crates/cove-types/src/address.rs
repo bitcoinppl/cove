@@ -2,8 +2,10 @@ use std::hash::Hash;
 use std::str::FromStr as _;
 use std::{hash::Hasher, sync::Arc};
 
-use bdk_chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx};
-use bdk_wallet::AddressInfo as BdkAddressInfo;
+use bdk_wallet::{
+    AddressInfo as BdkAddressInfo,
+    chain::{ConfirmationBlockTime, bitcoin::Address as BdkAddress, tx_graph::CanonicalTx},
+};
 use bitcoin::NetworkKind;
 use bitcoin::bip32::DerivationPath;
 use bitcoin::{
@@ -361,6 +363,44 @@ impl<'de> Deserialize<'de> for Address {
             BdkAddress::from_str(&s).map_err(serde::de::Error::custom)?.assume_checked();
 
         Ok(Address(bdk_address))
+    }
+}
+
+pub mod ffi {
+    use super::*;
+
+    use rand::seq::IndexedRandom;
+
+    fn random_address() -> &'static str {
+        const ADDRESSES: [&str; 10] = [
+            "tb1q2z9f42gfafthstgn34es2eamr2afv474sdsld8",
+            "tb1p6vhsxjsszp63gedr8ywq8qx00wnkqx3pmuxatffh8za62v5uy0xqk92z4y",
+            "tb1q6exja52re3dykawlwqfca4kv0tg0y7crpnttvt",
+            "tb1psq467xgaqwda3nexzshg8llzhyrw5k5053k3jzv769rlyldtp73q2wcqzk",
+            "tb1pc5ul0lzjl6nwxewmrmay5ppcmn3w2dzxw349t0unnjnemq53tv9qg0xgfy",
+            "tb1pqcffycem084xfr5kql5ypqeqr9uknzls08xat7f8p9ag3f8tmk7sz66vl2",
+            "tb1pvam2nqaw9hsw0nzahuhdak4l8v0h5dwsaca6264ns7ppk8unrk9qvjrtxn",
+            "tb1qum986qkqf363jhaau2nlavyehdqg487p8m2ydu",
+            "tb1qmt3vg7e4krvy77sevcdtlaxh9qasen0dhrx63s",
+            "tb1qhajp86w02393277e9wp4u2puqfs6gl6mpthyez",
+        ];
+        let mut rng = rand::rng();
+        ADDRESSES.choose(&mut rng).unwrap()
+    }
+
+    #[uniffi::export]
+    impl Address {
+        #[uniffi::constructor]
+        pub fn random() -> Self {
+            Self::new(BdkAddress::from_str(random_address()).unwrap().assume_checked())
+        }
+
+        #[uniffi::method(name = "hashToUint")]
+        fn ffi_hash(&self) -> u64 {
+            let mut hasher = std::hash::DefaultHasher::new();
+            self.hash(&mut hasher);
+            hasher.finish()
+        }
     }
 }
 

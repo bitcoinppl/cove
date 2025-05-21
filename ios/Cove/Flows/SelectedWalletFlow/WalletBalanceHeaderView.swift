@@ -127,7 +127,8 @@ struct WalletBalanceHeaderView: View {
                     }
 
                     if metadata.walletType == .watchOnly {
-                        return app.alertState = .init(.cantSendOnWatchOnlyWallet)
+                        app.alertState = .init(.cantSendOnWatchOnlyWallet)
+                        return
                     }
 
                     app.pushRoute(RouteFactory().sendSetAmount(id: metadata.id))
@@ -174,17 +175,18 @@ struct WalletBalanceHeaderView: View {
                 .brightness(0.1)
         )
         .background(.midnightBlue)
-        .onChange(of: manager.fiatBalance, initial: true) {
+        .onChange(of: manager.fiatBalance, initial: false) {
             // if fiatBalance was pased in explicitly, don't update it, only for previews
-            if fiatBalance ?? 0.0 > 0.0, manager.fiatBalance ?? 0.0 == 0.0 {
-                return
-            }
-
+            if fiatBalance ?? 0.0 > 0.0, manager.fiatBalance ?? 0.0 == 0.0 { return }
+            fiatBalance = manager.fiatBalance
+        }
+        .onAppear {
+            if fiatBalance != nil { return }
             fiatBalance = manager.fiatBalance
         }
         .task {
             if balance.asSats() != 0, fiatBalance == 0.00 || fiatBalance == nil {
-                Task { await manager.updateWalletBalance() }
+                await manager.updateWalletBalance()
             }
         }
     }

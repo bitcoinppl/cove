@@ -50,13 +50,16 @@ use cove_types::{
     confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
 };
 
-use super::{deferred_sender, send_flow_manager::RustSendFlowManager};
+use super::{
+    coin_control_manager::RustCoinControlManager, deferred_sender,
+    send_flow_manager::RustSendFlowManager,
+};
 
 type Action = WalletManagerAction;
 type Message = WalletManagerReconcileMessage;
 type Reconciler = dyn WalletManagerReconciler;
 pub type SingleOrMany = deferred_sender::SingleOrMany<Message>;
-cove_macros::impl_message_manager!(RustWalletManager);
+cove_macros::impl_manager_message_send!(RustWalletManager);
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
@@ -265,6 +268,15 @@ impl RustWalletManager {
         let metadata = self.metadata.read().clone();
 
         RustSendFlowManager::new(metadata, me)
+    }
+
+    #[uniffi::method]
+    pub async fn new_coin_control_manager(&self) -> Arc<RustCoinControlManager> {
+        let metadata = self.metadata.read().clone();
+        let unspent = call!(self.actor.list_unspent()).await.expect("actor failed");
+
+        let manager = RustCoinControlManager::new(metadata, unspent);
+        Arc::new(manager)
     }
 
     #[uniffi::method]

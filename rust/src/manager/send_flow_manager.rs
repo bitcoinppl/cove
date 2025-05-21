@@ -22,7 +22,7 @@ use crate::{
 use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
 use btc_on_change::BtcOnChangeHandler;
-use cove_macros::impl_message_manager;
+use cove_macros::impl_manager_message_send;
 use cove_types::{
     address::AddressWithNetwork,
     amount::Amount,
@@ -40,7 +40,7 @@ use tracing::{debug, error, trace, warn};
 
 use super::{
     deferred_sender::{self},
-    wallet::{RustWalletManager, actor::WalletActor},
+    wallet_manager::{RustWalletManager, actor::WalletActor},
 };
 
 pub type Error = error::SendFlowError;
@@ -51,7 +51,7 @@ type Message = SendFlowManagerReconcileMessage;
 type Reconciler = dyn SendFlowManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 type DeferredSender = deferred_sender::DeferredSender<Arc<RustSendFlowManager>, Message>;
-impl_message_manager!(RustSendFlowManager);
+impl_manager_message_send!(RustSendFlowManager);
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SetAmountFocusField {

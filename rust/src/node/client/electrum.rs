@@ -1,12 +1,18 @@
 use std::sync::Arc;
 
-use bdk_chain::{ConfirmationBlockTime, TxGraph, bitcoin::Address};
-use bdk_core::spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse};
 use bdk_electrum::{
     BdkElectrumClient,
     electrum_client::{self, Client, ElectrumApi as _},
 };
-use bdk_wallet::KeychainKind;
+use bdk_wallet::chain::{
+    ConfirmationBlockTime, TxGraph,
+    bitcoin::Address,
+    spk_client::{SyncRequest, SyncResponse},
+};
+use bdk_wallet::{
+    KeychainKind,
+    chain::spk_client::{FullScanRequest, FullScanResponse},
+};
 use bitcoin::{Transaction, Txid};
 use serde_json::Value;
 use tap::TapFallible as _;

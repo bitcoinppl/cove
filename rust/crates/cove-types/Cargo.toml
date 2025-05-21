@@ -11,7 +11,6 @@ cove-macros = { path = "../cove-macros" }
 # bitcoin
 bitcoin = { workspace = true, features = ["serde"] }
 bdk_wallet = { workspace = true }
-bdk_chain = { workspace = true }
 
 # error handling
 thiserror = { workspace = true }

@@ -1,0 +1,20 @@
+review:
+  path_instructions:
+    - path: "rust/**/*.rs"
+      instructions: |
+        - Ensure Rust code compiles without errors.
+        - Verify correct functionality and logic consistency.
+        - Check for idiomatic Rust usage and performance best practices.
+        - Suggest improvements to error handling, unwraps, and Result handling.
+        - Check for any potential memory leaks or unsafe code.
+        - Check for any potential mutex deadlocks.
+        - Check for potentail security issues, make sure Bitcoin wallets are handled securely.
+    - path: "ios/Cove/**/*.swift"
+      instructions: |
+        - Review SwiftUI view code for proper layout, best practices
+        - Identify spelling mistakes in comments, string literals, and documentation
+  general_guidelines: |
+    - Check spelling and grammar in code comments and documentation across all files.
+    - Look for consistent styling, formatting, and naming conventions.
+    - Suggest improvements for readability, maintainability, and modularity.
+    - Flag TODOs, FIXMEs, and commented-out code for potential cleanup.

@@ -24,6 +24,7 @@ pub enum Route {
     SecretWords(WalletId),
     TransactionDetails { id: WalletId, details: Arc<TransactionDetails> },
     Send(SendRoute),
+    CoinControl(CoinControlRoute),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Default, From, uniffi::Enum)]
@@ -86,6 +87,11 @@ pub enum SendRoute {
     SetAmount { id: WalletId, address: Option<Arc<Address>>, amount: Option<Arc<Amount>> },
     HardwareExport { id: WalletId, details: Arc<ConfirmDetails> },
     Confirm(SendRouteConfirmArgs),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum CoinControlRoute {
+    List(WalletId),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]

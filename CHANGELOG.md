@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Features
+
+- New UTXO list screen to search, filter, sort and select individual UTXOs
+
 ## [0.4.1] - 2025-05-12
 
 ### Changes

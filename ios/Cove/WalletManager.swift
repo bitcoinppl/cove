@@ -23,6 +23,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     // errors in SendFlow
     var sendFlowErrorAlert: TaggedItem<SendFlowErrorAlert>? = nil
 
+    // cached transaction details
+    var transactionDetails: [TxId: TransactionDetails] = [:]
+
     public init(id: WalletId) throws {
         self.id = id
         let rust = try RustWalletManager(id: id)
@@ -32,8 +35,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
-        rust.listenForUpdates(reconciler: WeakReconciler(self))
         Task { await updateFiatBalance() }
+        rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
     public init(xpub: String) throws {
@@ -44,6 +47,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = metadata
         id = metadata.id
 
+        Task { await updateFiatBalance() }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -65,6 +69,14 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         switch walletMetadata.selectedUnit {
         case .btc: "btc"
         case .sat: "sats"
+        }
+    }
+
+    var hasTransactions: Bool {
+        switch loadState {
+        case .loading: false
+        case let .scanning(txns): !txns.isEmpty
+        case let .loaded(txns): !txns.isEmpty
         }
     }
 
@@ -102,6 +114,17 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         case .btc: amount.btcStringWithUnit()
         case .sat: amount.satsStringWithUnit()
         }
+    }
+
+    func transactionDetails(for txId: TxId) async throws -> TransactionDetails {
+        if let details = transactionDetails[txId] {
+            return details
+        }
+
+        let details = try await rust.transactionDetails(txId: txId)
+        transactionDetails[txId] = details
+
+        return details
     }
 
     private func updateFiatBalance() async {
