@@ -154,7 +154,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 }
             }
 
-            Text(sendFlowManager.rust.sendAmountFiat())
+            Text(sendFlowManager.sendAmountFiat)
                 .contentTransition(.numericText())
                 .font(.subheadline)
                 .foregroundColor(.secondary)
@@ -234,7 +234,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 return
             }
 
-            sendFlowManager.setAmount(utxoTotal())
+            sendFlowManager.dispatch(.setCoinControlMode(utxoTotal()))
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .alert(

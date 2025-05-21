@@ -35,7 +35,7 @@ use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use flume::{Receiver, Sender, TrySendError};
 use parking_lot::Mutex;
-use state::{SendFlowManagerState, State};
+use state::{EnterType, SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
 
 use super::{
@@ -113,6 +113,8 @@ pub enum SendFlowManagerAction {
     SelectMaxSend,
     ClearSendAmount,
     ClearAddress,
+
+    SetCoinControlMode(Arc<Amount>),
 
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
@@ -503,6 +505,11 @@ impl RustSendFlowManager {
             Action::ChangeEnteringAddress(string) => {
                 self.send(Message::UpdateEnteringAddress(string.clone()));
                 self.handle_entering_address_changed(string);
+            }
+
+            Action::SetCoinControlMode(utxo_total) => {
+                self.handle_amount_changed(*utxo_total.as_ref());
+                self.state.lock().enter_type = EnterType::CoinControl(utxo_total);
             }
         }
     }
@@ -1058,6 +1065,12 @@ impl RustSendFlowManager {
         self.state.lock().entering_address = address.to_string();
         sender.queue(Message::UpdateEnteringAddress(address.to_string()));
 
+        // if we are in coin control, we don't need to handle amount
+        if self.state.lock().enter_type.is_coin_control() {
+            return;
+        };
+
+        // handle amount if its present
         let mut should_show_amount_error = false;
 
         // set amount if its valid

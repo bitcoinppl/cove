@@ -28,6 +28,7 @@ pub struct SendFlowManagerState {
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
     pub(crate) init_complete: bool,
+    pub(crate) enter_type: EnterType,
 
     // public
     pub entering_btc_amount: String,
@@ -45,6 +46,21 @@ pub struct SendFlowManagerState {
     pub selected_fee_rate: Option<Arc<FeeRateOptionWithTotalFee>>,
     pub fee_rate_options: Option<Arc<FeeRateOptionsWithTotalFee>>,
 }
+
+#[derive(Debug, Default, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum EnterType {
+    #[default]
+    SetAmount,
+    CoinControl(Arc<UtxoTotal>),
+}
+
+impl EnterType {
+    pub fn is_coin_control(&self) -> bool {
+        matches!(self, Self::CoinControl(_))
+    }
+}
+
+type UtxoTotal = Amount;
 
 /// MARK: State
 impl State {
@@ -75,6 +91,7 @@ impl SendFlowManagerState {
             entering_btc_amount: String::new(),
             entering_fiat_amount: selected_fiat_currency.symbol().to_string(),
             entering_address: String::new(),
+            enter_type: EnterType::SetAmount,
             first_address: None,
             amount_sats: None,
             amount_fiat: None,
