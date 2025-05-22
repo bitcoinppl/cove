@@ -5,6 +5,7 @@ use parking_lot::{Mutex, MutexGuard};
 use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+    utxo::UtxoList,
 };
 
 use super::SetAmountFocusField;
@@ -28,7 +29,7 @@ pub struct SendFlowManagerState {
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
     pub(crate) init_complete: bool,
-    pub(crate) enter_type: EnterType,
+    pub(crate) mode: SendFlowEnterMode,
 
     // public
     pub entering_btc_amount: String,
@@ -48,19 +49,17 @@ pub struct SendFlowManagerState {
 }
 
 #[derive(Debug, Default, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum EnterType {
+pub enum SendFlowEnterMode {
     #[default]
     SetAmount,
-    CoinControl(Arc<UtxoTotal>),
+    CoinControl(Arc<UtxoList>),
 }
 
-impl EnterType {
+impl SendFlowEnterMode {
     pub fn is_coin_control(&self) -> bool {
         matches!(self, Self::CoinControl(_))
     }
 }
-
-type UtxoTotal = Amount;
 
 /// MARK: State
 impl State {
@@ -91,7 +90,7 @@ impl SendFlowManagerState {
             entering_btc_amount: String::new(),
             entering_fiat_amount: selected_fiat_currency.symbol().to_string(),
             entering_address: String::new(),
-            enter_type: EnterType::SetAmount,
+            mode: SendFlowEnterMode::SetAmount,
             first_address: None,
             amount_sats: None,
             amount_fiat: None,

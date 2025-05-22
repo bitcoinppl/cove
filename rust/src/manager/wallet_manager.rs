@@ -218,6 +218,9 @@ pub enum WalletManagerError {
 
     #[error("Unable to create report CSV: {0}")]
     CsvCreationError(String),
+
+    #[error("Unable to add UTXOs to PSBT")]
+    AddUtxosError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]

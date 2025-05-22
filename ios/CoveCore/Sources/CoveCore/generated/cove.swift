@@ -15205,76 +15205,6 @@ public func FfiConverterTypeDiscoveryState_lower(_ value: DiscoveryState) -> Rus
 
 
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum EnterType {
-    
-    case setAmount
-    case coinControl(Amount
-    )
-}
-
-
-#if compiler(>=6)
-extension EnterType: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeEnterType: FfiConverterRustBuffer {
-    typealias SwiftType = EnterType
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EnterType {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .setAmount
-        
-        case 2: return .coinControl(try FfiConverterTypeAmount.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: EnterType, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case .setAmount:
-            writeInt(&buf, Int32(1))
-        
-        
-        case let .coinControl(v1):
-            writeInt(&buf, Int32(2))
-            FfiConverterTypeAmount.write(v1, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEnterType_lift(_ buf: RustBuffer) throws -> EnterType {
-    return try FfiConverterTypeEnterType.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeEnterType_lower(_ value: EnterType) -> RustBuffer {
-    return FfiConverterTypeEnterType.lower(value)
-}
-
-
-
-
-
-
 
 public enum FiatAmountError: Swift.Error {
 
@@ -18953,6 +18883,76 @@ extension SendFlowAlertState: Equatable, Hashable {}
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum SendFlowEnterMode {
+    
+    case setAmount
+    case coinControl(UtxoList
+    )
+}
+
+
+#if compiler(>=6)
+extension SendFlowEnterMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowEnterMode: FfiConverterRustBuffer {
+    typealias SwiftType = SendFlowEnterMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowEnterMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .setAmount
+        
+        case 2: return .coinControl(try FfiConverterTypeUtxoList.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendFlowEnterMode, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .setAmount:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .coinControl(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeUtxoList.write(v1, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowEnterMode_lift(_ buf: RustBuffer) throws -> SendFlowEnterMode {
+    return try FfiConverterTypeSendFlowEnterMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowEnterMode_lower(_ value: SendFlowEnterMode) -> RustBuffer {
+    return FfiConverterTypeSendFlowEnterMode.lower(value)
+}
+
+
+
+
+
+
 
 public enum SendFlowError: Swift.Error {
 
@@ -19300,7 +19300,7 @@ public enum SendFlowManagerAction {
     case selectMaxSend
     case clearSendAmount
     case clearAddress
-    case setCoinControlMode(Amount
+    case setCoinControlMode([Utxo]
     )
     case selectFeeRate(FeeRateOptionWithTotalFee
     )
@@ -19356,7 +19356,7 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         
         case 5: return .clearAddress
         
-        case 6: return .setCoinControlMode(try FfiConverterTypeAmount.read(from: &buf)
+        case 6: return .setCoinControlMode(try FfiConverterSequenceTypeUtxo.read(from: &buf)
         )
         
         case 7: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
@@ -19429,7 +19429,7 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         
         case let .setCoinControlMode(v1):
             writeInt(&buf, Int32(6))
-            FfiConverterTypeAmount.write(v1, into: &buf)
+            FfiConverterSequenceTypeUtxo.write(v1, into: &buf)
             
         
         case let .selectFeeRate(v1):
@@ -22589,6 +22589,8 @@ public enum WalletManagerError: Swift.Error {
     )
     case CsvCreationError(String
     )
+    case AddUtxosError(String
+    )
 }
 
 
@@ -22673,6 +22675,9 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 25: return .CsvCreationError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 26: return .AddUtxosError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -22807,6 +22812,11 @@ public struct FfiConverterTypeWalletManagerError: FfiConverterRustBuffer {
         
         case let .CsvCreationError(v1):
             writeInt(&buf, Int32(25))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .AddUtxosError(v1):
+            writeInt(&buf, Int32(26))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -27620,9 +27630,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
+    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()

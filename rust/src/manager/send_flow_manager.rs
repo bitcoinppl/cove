@@ -31,13 +31,14 @@ use cove_types::{
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
     psbt::Psbt,
     unit::Unit,
+    utxo::{Utxo, UtxoList},
 };
 use cove_util::format::NumberFormatter as _;
 use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use flume::{Receiver, Sender, TrySendError};
 use parking_lot::Mutex;
-use state::{EnterType, SendFlowManagerState, State};
+use state::{SendFlowEnterMode, SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
 
 use super::{
@@ -115,7 +116,7 @@ pub enum SendFlowManagerAction {
     ClearSendAmount,
     ClearAddress,
 
-    SetCoinControlMode(Arc<Amount>),
+    SetCoinControlMode(Vec<Utxo>),
 
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
@@ -435,20 +436,10 @@ impl RustSendFlowManager {
         address: Arc<Address>,
         amount: AmountOrMax,
     ) -> Result<Arc<FeeRateOptionWithTotalFee>, Error> {
-        let actor = self.wallet_actor();
         let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
         let address = Arc::unwrap_or_clone(address);
 
-        let psbt = match amount {
-            AmountOrMax::Amount(amount) => {
-                let amount = amount.as_ref().0;
-                call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()
-            }
-
-            AmountOrMax::Max => {
-                call!(actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()
-            }
-        }?;
+        let psbt = self.build_psbt(amount, address, fee_rate).await?;
 
         let total_fee =
             psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))?;
@@ -541,9 +532,10 @@ impl RustSendFlowManager {
                 self.handle_entering_address_changed(string);
             }
 
-            Action::SetCoinControlMode(utxo_total) => {
-                self.handle_amount_changed(*utxo_total.as_ref());
-                self.state.lock().enter_type = EnterType::CoinControl(utxo_total);
+            Action::SetCoinControlMode(utxos) => {
+                let utxo_list = UtxoList::from(utxos);
+                self.handle_amount_changed(utxo_list.total);
+                self.state.lock().mode = SendFlowEnterMode::CoinControl(utxo_list.into());
             }
         }
     }
@@ -886,6 +878,66 @@ impl RustSendFlowManager {
         sender.queue(Message::UpdateFocusField(new));
     }
 
+    async fn build_psbt(
+        &self,
+        amount: AmountOrMax,
+        address: Address,
+        fee_rate: FeeRate,
+    ) -> Result<Psbt> {
+        let mode = self.state.lock().mode.clone();
+
+        match mode {
+            SendFlowEnterMode::SetAmount => {
+                self.build_psbt_for_amount(amount, address, fee_rate).await
+            }
+            SendFlowEnterMode::CoinControl(ref utxo_list) => {
+                self.build_psbt_for_utxo_list(amount, address, fee_rate, utxo_list.clone()).await
+            }
+        }
+    }
+
+    async fn build_psbt_for_amount(
+        &self,
+        amount: AmountOrMax,
+        address: Address,
+        fee_rate: FeeRate,
+    ) -> Result<Psbt> {
+        let actor = self.wallet_actor();
+        let psbt = match amount {
+            AmountOrMax::Amount(amount) => {
+                let amount = amount.as_ref().0;
+                call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()
+            }
+
+            AmountOrMax::Max => {
+                call!(actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()
+            }
+        }?;
+
+        Ok(psbt.into())
+    }
+
+    async fn build_psbt_for_utxo_list(
+        &self,
+        amount: AmountOrMax,
+        address: Address,
+        fee_rate: FeeRate,
+        utxo_list: Arc<UtxoList>,
+    ) -> Result<Psbt> {
+        let amount = match amount {
+            AmountOrMax::Amount(amount) => amount.as_ref().0,
+            AmountOrMax::Max => utxo_list.total.0,
+        };
+
+        let outpoints = utxo_list.outpoints();
+        let actor = self.wallet_actor();
+        let psbt = call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate))
+            .await
+            .unwrap()?;
+
+        Ok(psbt.into())
+    }
+
     async fn select_max_send_report_error(self: &Arc<Self>) {
         match self.select_max_send().await {
             Ok(_) => {}
@@ -1100,7 +1152,7 @@ impl RustSendFlowManager {
         sender.queue(Message::UpdateEnteringAddress(address.to_string()));
 
         // if we are in coin control, we don't need to handle amount
-        if self.state.lock().enter_type.is_coin_control() {
+        if self.state.lock().mode.is_coin_control() {
             return;
         };
 
@@ -1452,15 +1504,18 @@ impl RustSendFlowManager {
         }
 
         let wallet_actor = self.wallet_actor();
-        let old_fee_rate = selected_fee_rate.fee_rate;
         let max_selected = self.state.lock().max_selected.clone();
 
         let psbt = match max_selected {
             Some(_) => {
-                call!(wallet_actor.build_ephemeral_drain_tx(address, old_fee_rate))
+                call!(wallet_actor.build_ephemeral_drain_tx(address, selected_fee_rate.fee_rate))
             }
             None => {
-                call!(wallet_actor.build_ephemeral_tx(amount.into(), address, old_fee_rate))
+                call!(wallet_actor.build_ephemeral_tx(
+                    amount.into(),
+                    address,
+                    selected_fee_rate.fee_rate
+                ))
             }
         }
         .await

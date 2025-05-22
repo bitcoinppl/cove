@@ -22,7 +22,7 @@ use bdk_wallet::chain::{
     spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
 };
 use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
-use bitcoin::{Amount, FeeRate as BdkFeeRate, Txid};
+use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::GAP_LIMIT;
@@ -184,6 +184,7 @@ impl WalletActor {
         Ok(psbt)
     }
 
+    /// Build a transaction
     #[into_actor_result]
     pub async fn build_tx(
         &mut self,
@@ -206,7 +207,7 @@ impl WalletActor {
         Ok(psbt)
     }
 
-    // Build a transaction but don't advance the change address index
+    /// Build a transaction but don't advance the change address index
     #[into_actor_result]
     pub async fn build_ephemeral_tx(
         &mut self,
@@ -215,6 +216,45 @@ impl WalletActor {
         fee: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
         let psbt = self.do_build_tx(amount, address, fee).await?;
+        self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
+        Ok(psbt)
+    }
+
+    /// Build a transaction using only the given UTXOs
+    #[into_actor_result]
+    pub async fn build_manual_tx(
+        &mut self,
+        utxos: Vec<OutPoint>,
+        amount: Amount,
+        address: Address,
+        fee_rate: impl Into<BdkFeeRate>,
+    ) -> Result<Psbt, Error> {
+        let fee_rate = fee_rate.into();
+        let script_pubkey = address.script_pubkey();
+
+        let mut tx_builder = self.wallet.bdk.build_tx();
+
+        tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+        tx_builder.manually_selected_only();
+        tx_builder.ordering(TxOrdering::Untouched);
+        tx_builder.add_recipient(script_pubkey, amount);
+        tx_builder.fee_rate(fee_rate);
+
+        let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
+
+        Ok(psbt)
+    }
+
+    /// Build a manual transaction but don't advance the change address index
+    #[into_actor_result]
+    pub async fn build_manual_ephemeral_tx(
+        &mut self,
+        utxos: Vec<OutPoint>,
+        amount: Amount,
+        address: Address,
+        fee: impl Into<BdkFeeRate>,
+    ) -> Result<Psbt, Error> {
+        let psbt = self.do_build_manual_tx(utxos, amount, address, fee).await?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
         Ok(psbt)
     }

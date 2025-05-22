@@ -41,6 +41,18 @@ impl From<&bitcoin::OutPoint> for OutPoint {
     }
 }
 
+impl From<OutPoint> for bitcoin::OutPoint {
+    fn from(out_point: OutPoint) -> Self {
+        Self { txid: out_point.txid.0, vout: out_point.vout }
+    }
+}
+
+impl From<&OutPoint> for bitcoin::OutPoint {
+    fn from(out_point: &OutPoint) -> Self {
+        Self { txid: out_point.txid.0, vout: out_point.vout }
+    }
+}
+
 // MARK: FFI
 mod ffi {
     use std::{

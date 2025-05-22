@@ -29,6 +29,12 @@ pub struct Utxo {
     pub type_: UtxoType,
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
+pub struct UtxoList {
+    pub total: Amount,
+    pub utxos: Vec<Utxo>,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum UtxoError {
     #[error("utxo unconfirmed transaction can't be converted to Utxo")]
@@ -100,6 +106,23 @@ impl UtxoType {
             Self::Output => Self::Change,
             Self::Change => Self::Output,
         }
+    }
+}
+
+impl UtxoList {
+    pub fn new(utxos: Vec<Utxo>) -> Self {
+        let total: u64 = utxos.iter().map(|utxo| utxo.amount.as_ref().as_sats()).sum();
+        let total = Amount::from_sat(total);
+        Self { total: total.into(), utxos }
+    }
+
+    pub fn outpoints(&self) -> Vec<bitcoin::OutPoint> {
+        self.utxos.iter().map(|utxo| utxo.outpoint.as_ref().into()).collect()
+    }
+}
+impl From<Vec<Utxo>> for UtxoList {
+    fn from(utxos: Vec<Utxo>) -> Self {
+        Self::new(utxos)
     }
 }
 
