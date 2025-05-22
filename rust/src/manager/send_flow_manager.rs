@@ -533,9 +533,17 @@ impl RustSendFlowManager {
             }
 
             Action::SetCoinControlMode(utxos) => {
-                let utxo_list = UtxoList::from(utxos);
-                self.handle_amount_changed(utxo_list.total);
-                self.state.lock().mode = SendFlowEnterMode::CoinControl(utxo_list.into());
+                {
+                    let utxo_list = UtxoList::from(utxos);
+                    self.handle_amount_changed(utxo_list.total);
+                    self.state.lock().mode = SendFlowEnterMode::CoinControl(utxo_list.into());
+                }
+
+                // update the fee rate options for utxos
+                let me = self.clone();
+                task::spawn(async move {
+                    me.get_or_update_fee_rate_options().await;
+                });
             }
         }
     }
@@ -1423,17 +1431,26 @@ impl RustSendFlowManager {
         let amount_sats = amount_sats.unwrap_or(10_000);
         let amount = Amount::from_sat(amount_sats);
 
+        let mode = self.state.lock().mode.clone();
         let max_selected = self.state.lock().max_selected.clone();
 
-        let new_fee_rate_options = match max_selected {
-            Some(_) => {
+        let new_fee_rate_options = match (max_selected, mode) {
+            (Some(_), _) => {
                 call!(wallet_actor.fee_rate_options_with_total_fee_for_drain(
                     fee_rate_options_base,
                     address.clone()
                 ))
             }
-            None => {
+            (None, SendFlowEnterMode::SetAmount) => {
                 call!(wallet_actor.fee_rate_options_with_total_fee(
+                    fee_rate_options_base,
+                    amount.into(),
+                    address.clone()
+                ))
+            }
+            (None, SendFlowEnterMode::CoinControl(utxo_list)) => {
+                call!(wallet_actor.fee_rate_options_with_total_fee_for_manual(
+                    utxo_list,
                     fee_rate_options_base,
                     amount.into(),
                     address.clone()

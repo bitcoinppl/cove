@@ -30,6 +30,7 @@ use cove_types::{
     address::AddressInfoWithDerivation,
     confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+    utxo::UtxoList,
 };
 use eyre::Result;
 use flume::Sender;
@@ -329,6 +330,64 @@ impl WalletActor {
             self.do_build_ephemeral_tx(amount, address.clone(), medium_fee_rate).await?;
 
         let slow_psbt = self.do_build_ephemeral_tx(amount, address.clone(), slow_fee_rate).await?;
+
+        let options = FeeRateOptionsWithTotalFee {
+            fast: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.fast,
+                fast_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            medium: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.medium,
+                medium_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            slow: FeeRateOptionWithTotalFee::new(
+                fee_rate_options.slow,
+                slow_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+            ),
+            custom: None,
+        };
+
+        Ok(options)
+    }
+
+    #[into_actor_result]
+    pub async fn fee_rate_options_with_total_fee_for_manual(
+        &mut self,
+        utxos: Arc<UtxoList>,
+        fee_rate_options: FeeRateOptions,
+        amount: Amount,
+        address: Address,
+    ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        let fast_fee_rate = fee_rate_options.fast.fee_rate;
+        let medium_fee_rate = fee_rate_options.medium.fee_rate;
+        let slow_fee_rate = fee_rate_options.slow.fee_rate;
+
+        let fast_psbt = self
+            .do_build_manual_ephemeral_tx(
+                utxos.clone().outpoints(),
+                amount,
+                address.clone(),
+                fast_fee_rate,
+            )
+            .await?;
+
+        let medium_psbt = self
+            .do_build_manual_ephemeral_tx(
+                utxos.clone().outpoints(),
+                amount,
+                address.clone(),
+                medium_fee_rate,
+            )
+            .await?;
+
+        let slow_psbt = self
+            .do_build_manual_ephemeral_tx(
+                utxos.clone().outpoints(),
+                amount,
+                address.clone(),
+                slow_fee_rate,
+            )
+            .await?;
 
         let options = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
