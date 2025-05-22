@@ -892,6 +892,7 @@ impl RustSendFlowManager {
         address: Address,
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
+        debug!("build_psbt");
         let mode = self.state.lock().mode.clone();
 
         match mode {
@@ -910,6 +911,8 @@ impl RustSendFlowManager {
         address: Address,
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
+        debug!("build_psbt_for_amount");
+
         let actor = self.wallet_actor();
         let psbt = match amount {
             AmountOrMax::Amount(amount) => {
@@ -932,6 +935,7 @@ impl RustSendFlowManager {
         fee_rate: FeeRate,
         utxo_list: Arc<UtxoList>,
     ) -> Result<Psbt> {
+        debug!("build_psbt_for_utxo_list");
         let amount = match amount {
             AmountOrMax::Amount(amount) => amount.as_ref().0,
             AmountOrMax::Max => utxo_list.total.0,
@@ -939,10 +943,10 @@ impl RustSendFlowManager {
 
         let outpoints = utxo_list.outpoints();
         let actor = self.wallet_actor();
-        let psbt = call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate))
-            .await
-            .unwrap()?;
+        let psbt =
+            call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate)).await;
 
+        let psbt = psbt.map_err(|error| SendFlowError::UnableToBuildTxn(error.to_string()))??;
         Ok(psbt.into())
     }
 
@@ -958,7 +962,6 @@ impl RustSendFlowManager {
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
         debug!("select_max_send");
-
         let mut sender = DeferredSender::new(self.clone());
 
         // access the mutex once
@@ -1159,23 +1162,21 @@ impl RustSendFlowManager {
         self.state.lock().entering_address = address.to_string();
         sender.queue(Message::UpdateEnteringAddress(address.to_string()));
 
-        // if we are in coin control, we don't need to handle amount
-        if self.state.lock().mode.is_coin_control() {
-            return;
-        };
-
         // handle amount if its present
         let mut should_show_amount_error = false;
 
         // set amount if its valid
+        let is_coin_control = self.state.lock().mode.is_coin_control();
         if let Some(amount) = address_with_network.amount {
-            let max_was_selected = self.state.lock().max_selected.take().is_some();
-            if max_was_selected {
-                sender.queue(Message::UnsetMaxSelected)
-            }
+            if !is_coin_control {
+                let max_was_selected = self.state.lock().max_selected.take().is_some();
+                if max_was_selected {
+                    sender.queue(Message::UnsetMaxSelected)
+                }
 
-            should_show_amount_error = true;
-            self.handle_amount_changed(amount);
+                should_show_amount_error = true;
+                self.handle_amount_changed(amount);
+            }
         }
 
         // if amount is invalid, go to amount field

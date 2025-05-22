@@ -59,10 +59,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         sendFlowManager.sendAmountBtc
     }
 
-    private func utxoTotal() -> Amount {
-        Amount.fromSat(sats: utxos.reduce(0) { $0 + $1.amount.asSats() })
-    }
-
     // MARK: Actions
 
     // validate, create final psbt and send to next screen
@@ -234,7 +230,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 return
             }
 
-            sendFlowManager.dispatch(.setCoinControlMode(utxoTotal()))
+            sendFlowManager.dispatch(.setCoinControlMode(utxos))
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .alert(

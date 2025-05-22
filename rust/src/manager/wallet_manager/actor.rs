@@ -16,15 +16,18 @@ use crate::{
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
-use bdk_wallet::chain::{
-    TxGraph,
-    bitcoin::Psbt,
-    spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
+use bdk_wallet::{
+    AddUtxoError, Utxo, WeightedUtxo,
+    chain::{
+        TxGraph,
+        bitcoin::Psbt,
+        spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
+    },
 };
 use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
-use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, Txid};
+use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
-use cove_bdk::coin_selection::CoveDefaultCoinSelection;
+use cove_bdk::coin_selection::{CoveDefaultCoinSelection, ManualUtxoSelection};
 use cove_common::consts::GAP_LIMIT;
 use cove_types::{
     address::AddressInfoWithDerivation,
@@ -193,6 +196,7 @@ impl WalletActor {
         address: Address,
         fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        debug!("build_tx");
         let fee_rate = fee_rate.into();
         let script_pubkey = address.script_pubkey();
 
@@ -216,6 +220,7 @@ impl WalletActor {
         address: Address,
         fee: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        debug!("build_ephemeral_tx");
         let psbt = self.do_build_tx(amount, address, fee).await?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
         Ok(psbt)
@@ -226,19 +231,21 @@ impl WalletActor {
     pub async fn build_manual_tx(
         &mut self,
         utxos: Vec<OutPoint>,
-        amount: Amount,
+        total_amount: Amount,
         address: Address,
         fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        debug!("build_manual_tx");
+
         let fee_rate = fee_rate.into();
         let script_pubkey = address.script_pubkey();
 
-        let mut tx_builder = self.wallet.bdk.build_tx();
-
+        let send_amount = self.get_max_send_for_utxos(total_amount, fee_rate, &utxos)?;
+        let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(ManualUtxoSelection);
         tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
         tx_builder.manually_selected_only();
         tx_builder.ordering(TxOrdering::Untouched);
-        tx_builder.add_recipient(script_pubkey, amount);
+        tx_builder.add_recipient(script_pubkey, send_amount);
         tx_builder.fee_rate(fee_rate);
 
         let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
@@ -255,6 +262,7 @@ impl WalletActor {
         address: Address,
         fee: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        debug!("build_manual_ephemeral_tx");
         let psbt = self.do_build_manual_tx(utxos, amount, address, fee).await?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
         Ok(psbt)
@@ -358,6 +366,7 @@ impl WalletActor {
         amount: Amount,
         address: Address,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
+        debug!("fee_rate_options_with_total_fee_for_manual");
         let fast_fee_rate = fee_rate_options.fast.fee_rate;
         let medium_fee_rate = fee_rate_options.medium.fee_rate;
         let slow_fee_rate = fee_rate_options.slow.fee_rate;
@@ -868,6 +877,70 @@ impl WalletActor {
         self.perform_initial_full_scan().await?;
 
         Produces::ok(())
+    }
+
+    /// Get the max amount that can be sent for the given utxos
+    /// The total amount max is the UTXO total amount, if the total amount is less than the UTXO
+    /// total amount we will have a change output as well.
+    fn get_max_send_for_utxos(
+        &self,
+        total_amount: Amount,
+        fee_rate: bitcoin::FeeRate,
+        utxos: &[bitcoin::OutPoint],
+    ) -> Result<Amount, Error> {
+        let mut utxo_total_amount = Amount::ZERO;
+        let mut fee_amount = Amount::ZERO;
+
+        let weighted_utxos =
+            self.get_weighted_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+
+        for weighted_utxo in weighted_utxos {
+            let weight = TxIn::default()
+                .segwit_weight()
+                .checked_add(weighted_utxo.satisfaction_weight)
+                .expect("`Weight` addition should not cause an integer overflow");
+
+            utxo_total_amount += weighted_utxo.utxo.txout().value;
+            fee_amount += fee_rate * weight;
+        }
+
+        if total_amount > utxo_total_amount {
+            return Err(Error::InsufficientFunds(format!(
+                "custom amount {} is greater than the total amount available, total available: {}, fees: {}",
+                total_amount, utxo_total_amount, fee_amount,
+            )).into());
+        };
+
+        let send_amount = total_amount.checked_sub(fee_amount).ok_or_else(|| {
+            Error::InsufficientFunds(format!(
+                "no enough funds to cover the fees, total available: {}, fees: {}",
+                total_amount, fee_amount,
+            ))
+        })?;
+
+        Ok(send_amount)
+    }
+
+    fn get_weighted_utxos(
+        &self,
+        outpoints: &[bitcoin::OutPoint],
+    ) -> Result<Vec<WeightedUtxo>, AddUtxoError> {
+        outpoints
+            .iter()
+            .map(|outpoint| {
+                self.wallet.bdk.get_utxo(*outpoint).ok_or(AddUtxoError::UnknownUtxo(*outpoint)).map(
+                    |output| WeightedUtxo {
+                        satisfaction_weight: self
+                            .wallet
+                            .bdk
+                            .public_descriptor(output.keychain)
+                            .max_weight_to_satisfy()
+                            .unwrap(),
+                        utxo: Utxo::Local(output),
+                    },
+                )
+            })
+            .collect()
     }
 
     // after the initial full scan is complete, do a much for comprehensive scan of the wallet
