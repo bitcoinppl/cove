@@ -189,8 +189,9 @@ impl WalletActor {
         &mut self,
         amount: Amount,
         address: Address,
-        fee_rate: BdkFeeRate,
+        fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
+        let fee_rate = fee_rate.into();
         let script_pubkey = address.script_pubkey();
 
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
@@ -211,7 +212,7 @@ impl WalletActor {
         &mut self,
         amount: Amount,
         address: Address,
-        fee: BdkFeeRate,
+        fee: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
         let psbt = self.do_build_tx(amount, address, fee).await?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
@@ -278,9 +279,9 @@ impl WalletActor {
         amount: Amount,
         address: Address,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
-        let fast_fee_rate = fee_rate_options.fast.fee_rate.into();
-        let medium_fee_rate = fee_rate_options.medium.fee_rate.into();
-        let slow_fee_rate = fee_rate_options.slow.fee_rate.into();
+        let fast_fee_rate = fee_rate_options.fast.fee_rate;
+        let medium_fee_rate = fee_rate_options.medium.fee_rate;
+        let slow_fee_rate = fee_rate_options.slow.fee_rate;
 
         let fast_psbt = self.do_build_ephemeral_tx(amount, address.clone(), fast_fee_rate).await?;
 

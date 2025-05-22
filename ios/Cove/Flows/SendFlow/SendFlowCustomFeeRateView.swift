@@ -73,21 +73,11 @@ struct SendFlowCustomFeeRateView: View {
             if Task.isCancelled { return }
 
             do {
-                let psbt =
-                    if isMaxSelected {
-                        try await manager.rust.buildDrainTransaction(address: address, fee: feeRate)
-                    } else {
-                        try await manager.rust.buildTransactionWithFeeRate(
-                            amount: amount, address: address, feeRate: feeRate
-                        )
-                    }
+                let amountOrMax =
+                    if isMaxSelected { AmountOrMax.max } else { AmountOrMax.amount(amount) }
 
-                let totalFee = try psbt.fee()
-                let totalFeeSats = totalFee.asSats()
-                totalSats = Int(totalFeeSats)
-
-                let feeRateOption = FeeRateOptionWithTotalFee(
-                    feeSpeed: feeSpeed, feeRate: feeRate, totalFee: totalFee
+                let feeRateOption = try await sendFlowManager.getNewCustomFeeRateWithTotal(
+                    feeRate: feeRate, feeSpeed: feeSpeed, address: address, amount: amountOrMax
                 )
 
                 await MainActor.run {

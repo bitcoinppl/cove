@@ -7387,6 +7387,11 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func enteringFiatAmount()  -> String
     
+    /**
+     * get the custom fee rate option
+     */
+    func getCustomFeeOption(feeRate: FeeRate, feeSpeed: FeeSpeed, address: Address, amount: AmountOrMax) async throws  -> FeeRateOptionWithTotalFee
+    
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
     func sanitizeBtcEnteringAmount(oldValue: String, newValue: String)  -> String?
@@ -7500,6 +7505,26 @@ open func enteringFiatAmount() -> String  {
     uniffi_cove_fn_method_rustsendflowmanager_entering_fiat_amount(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+    /**
+     * get the custom fee rate option
+     */
+open func getCustomFeeOption(feeRate: FeeRate, feeSpeed: FeeSpeed, address: Address, amount: AmountOrMax)async throws  -> FeeRateOptionWithTotalFee  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeFeeRate_lower(feeRate),FfiConverterTypeFeeSpeed_lower(feeSpeed),FfiConverterTypeAddress_lower(address),FfiConverterTypeAmountOrMax_lower(amount)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_pointer,
+            completeFunc: ffi_cove_rust_future_complete_pointer,
+            freeFunc: ffi_cove_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeFeeRateOptionWithTotalFee_lift,
+            errorHandler: FfiConverterTypeSendFlowError_lift
+        )
 }
     
 open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCall() {
@@ -12628,6 +12653,76 @@ public func FfiConverterTypeAfterPinAction_lift(_ buf: RustBuffer) throws -> Aft
 #endif
 public func FfiConverterTypeAfterPinAction_lower(_ value: AfterPinAction) -> RustBuffer {
     return FfiConverterTypeAfterPinAction.lower(value)
+}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum AmountOrMax {
+    
+    case amount(Amount
+    )
+    case max
+}
+
+
+#if compiler(>=6)
+extension AmountOrMax: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAmountOrMax: FfiConverterRustBuffer {
+    typealias SwiftType = AmountOrMax
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AmountOrMax {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .amount(try FfiConverterTypeAmount.read(from: &buf)
+        )
+        
+        case 2: return .max
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AmountOrMax, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .amount(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeAmount.write(v1, into: &buf)
+            
+        
+        case .max:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAmountOrMax_lift(_ buf: RustBuffer) throws -> AmountOrMax {
+    return try FfiConverterTypeAmountOrMax.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAmountOrMax_lower(_ value: AmountOrMax) -> RustBuffer {
+    return FfiConverterTypeAmountOrMax.lower(value)
 }
 
 
@@ -18937,6 +19032,10 @@ public enum SendFlowError: Swift.Error {
     )
     case UnableToSaveUnsignedTransaction(String
     )
+    case WalletManagerError(WalletManagerError
+    )
+    case UnableToGetFeeDetails(String
+    )
 }
 
 
@@ -18975,6 +19074,12 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 12: return .UnableToSaveUnsignedTransaction(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 13: return .WalletManagerError(
+            try FfiConverterTypeWalletManagerError.read(from: &buf)
+            )
+        case 14: return .UnableToGetFeeDetails(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -19041,6 +19146,16 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
         
         case let .UnableToSaveUnsignedTransaction(v1):
             writeInt(&buf, Int32(12))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .WalletManagerError(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeWalletManagerError.write(v1, into: &buf)
+            
+        
+        case let .UnableToGetFeeDetails(v1):
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -27042,6 +27157,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_entering_fiat_amount() != 65483) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option() != 43450) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27569,9 +27687,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

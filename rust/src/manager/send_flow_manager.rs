@@ -1,4 +1,5 @@
 pub mod alert_state;
+pub mod amount_or_max;
 pub mod btc_on_change;
 pub mod error;
 pub mod fiat_on_change;
@@ -21,6 +22,7 @@ use crate::{
 };
 use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
+use amount_or_max::AmountOrMax;
 use btc_on_change::BtcOnChangeHandler;
 use cove_macros::impl_manager_message_send;
 use cove_types::{
@@ -67,7 +69,6 @@ pub trait SendFlowManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
 }
 
 #[derive(Debug, uniffi::Object)]
-
 pub struct RustSendFlowManager {
     app: App,
 
@@ -423,6 +424,38 @@ impl RustSendFlowManager {
         }
 
         Some(changed)
+    }
+
+    /// get the custom fee rate option
+    #[uniffi::method]
+    pub async fn get_custom_fee_option(
+        self: &Arc<Self>,
+        fee_rate: Arc<FeeRate>,
+        fee_speed: FeeSpeed,
+        address: Arc<Address>,
+        amount: AmountOrMax,
+    ) -> Result<Arc<FeeRateOptionWithTotalFee>, Error> {
+        let actor = self.wallet_actor();
+        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
+        let address = Arc::unwrap_or_clone(address);
+
+        let psbt = match amount {
+            AmountOrMax::Amount(amount) => {
+                call!(actor.build_ephemeral_tx(amount.as_ref().0, address, fee_rate)).await.unwrap()
+            }
+
+            AmountOrMax::Max => {
+                call!(actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()
+            }
+        }?;
+
+        let total_fee =
+            psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))?;
+
+        let fee_rate_option =
+            FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: total_fee.into() };
+
+        Ok(fee_rate_option.into())
     }
 
     // MARK: Action handler
@@ -1426,7 +1459,7 @@ impl RustSendFlowManager {
                 call!(wallet_actor.build_ephemeral_drain_tx(address, old_fee_rate))
             }
             None => {
-                call!(wallet_actor.build_ephemeral_tx(amount.into(), address, old_fee_rate.into()))
+                call!(wallet_actor.build_ephemeral_tx(amount.into(), address, old_fee_rate))
             }
         }
         .await

@@ -74,6 +74,10 @@ import SwiftUI
             "Unable to get max send"
         case .UnableToSaveUnsignedTransaction:
             "Unable to Save Unsigned Transaction"
+        case .WalletManagerError:
+            "Error"
+        case .UnableToGetFeeDetails:
+            "Fee Details Error"
         }
     }
 
@@ -105,6 +109,10 @@ import SwiftUI
             "Send amount is too low. Please send atleast 5000 sats"
         case .UnableToGetFeeRate:
             "Are you connected to the internet?"
+        case let .WalletManagerError(msg):
+            msg.describe
+        case let .UnableToGetFeeDetails(msg):
+            msg
         case let .UnableToBuildTxn(msg):
             msg
         case let .UnableToGetMaxSend(msg):
@@ -135,7 +143,7 @@ import SwiftUI
                 self.alertState = .none
                 self.app.popRoute()
             }
-        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount:
+        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount, .WalletManagerError, .UnableToGetFeeDetails:
             Button("OK") {
                 self.focusField = .amount
                 self.alertState = .none

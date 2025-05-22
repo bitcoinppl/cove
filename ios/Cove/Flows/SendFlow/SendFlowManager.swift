@@ -81,6 +81,14 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.sendAmountFiat = self.rust.sendAmountFiat()
     }
 
+    public func getNewCustomFeeRateWithTotal(
+        feeRate: FeeRate, feeSpeed: FeeSpeed, address: Address, amount: AmountOrMax
+    ) async throws -> FeeRateOptionWithTotalFee {
+        try await self.rust.getCustomFeeOption(
+            feeRate: feeRate, feeSpeed: feeSpeed, address: address, amount: amount
+        )
+    }
+
     private func apply(_ message: Message) {
         switch message {
         case let .updateAmountFiat(fiat):
@@ -130,7 +138,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
-    private let rustBridge = DispatchQueue(label: "cove.SendFlowManager.rustbridge", qos: .userInitiated)
+    private let rustBridge = DispatchQueue(
+        label: "cove.SendFlowManager.rustbridge", qos: .userInitiated
+    )
     func reconcile(message: Message) {
         rustBridge.async { [weak self] in
             guard let self else {

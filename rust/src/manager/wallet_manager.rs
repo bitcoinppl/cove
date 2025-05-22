@@ -853,7 +853,7 @@ impl RustWalletManager {
 
         let amount = Arc::unwrap_or_clone(amount).into();
         let address = Arc::unwrap_or_clone(address);
-        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
+        let fee_rate = Arc::unwrap_or_clone(fee_rate);
 
         let psbt = call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()?;
 
