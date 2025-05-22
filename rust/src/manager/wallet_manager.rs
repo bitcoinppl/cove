@@ -816,50 +816,6 @@ impl RustWalletManager {
         Ok(fees.into())
     }
 
-    pub async fn build_drain_transaction(
-        &self,
-        address: Arc<Address>,
-        fee: Arc<FeeRate>,
-    ) -> Result<Psbt, Error> {
-        let address = Arc::unwrap_or_clone(address);
-        let fee = Arc::unwrap_or_clone(fee);
-
-        let psbt: Psbt =
-            call!(self.actor.build_ephemeral_drain_tx(address, fee)).await.unwrap()?.into();
-
-        Ok(psbt)
-    }
-
-    pub async fn build_transaction(
-        &self,
-        amount: Arc<Amount>,
-        address: Arc<Address>,
-    ) -> Result<Psbt, Error> {
-        let medium_fee = self
-            .fees()
-            .map(|fees| FeeRateOptions::from(fees).medium.fee_rate)
-            .unwrap_or_else(|| FeeRate::from_sat_per_vb(10.0));
-
-        self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee)).await
-    }
-
-    pub async fn build_transaction_with_fee_rate(
-        &self,
-        amount: Arc<Amount>,
-        address: Arc<Address>,
-        fee_rate: Arc<FeeRate>,
-    ) -> Result<Psbt, Error> {
-        let actor = self.actor.clone();
-
-        let amount = Arc::unwrap_or_clone(amount).into();
-        let address = Arc::unwrap_or_clone(address);
-        let fee_rate = Arc::unwrap_or_clone(fee_rate);
-
-        let psbt = call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()?;
-
-        Ok(psbt.into())
-    }
-
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();

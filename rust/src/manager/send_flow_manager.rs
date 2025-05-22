@@ -441,7 +441,8 @@ impl RustSendFlowManager {
 
         let psbt = match amount {
             AmountOrMax::Amount(amount) => {
-                call!(actor.build_ephemeral_tx(amount.as_ref().0, address, fee_rate)).await.unwrap()
+                let amount = amount.as_ref().0;
+                call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()
             }
 
             AmountOrMax::Max => {
