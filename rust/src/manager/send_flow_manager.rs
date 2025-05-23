@@ -216,9 +216,10 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     pub fn send_amount_btc(&self) -> String {
-        let amount_sats = self.amount_sats();
-        let send_amount = Amount::from_sat(amount_sats);
-        match self.state.lock().metadata.selected_unit {
+        let selected_unit = self.state.lock().metadata.selected_unit;
+        let send_amount = self.send_amount().unwrap_or(Amount::ZERO);
+
+        match selected_unit {
             Unit::Btc => {
                 let string = send_amount.as_btc().thousands();
                 if string.contains("e") { send_amount.btc_string() } else { string.to_string() }
@@ -233,22 +234,23 @@ impl RustSendFlowManager {
             return "---".to_string();
         };
 
-        let amount_sats = self.amount_sats();
-        let send_amount_in_fiat = self.state.lock().amount_fiat.unwrap_or_else(|| {
-            let send_amount = Amount::from_sat(amount_sats);
-            send_amount.as_btc().ceil() * (btc_price_in_fiat as f64)
-        });
+        let send_amount = self.send_amount().unwrap_or(Amount::ZERO);
+        let send_amount_in_fiat = self
+            .state
+            .lock()
+            .amount_fiat
+            .unwrap_or_else(|| send_amount.as_btc().ceil() * (btc_price_in_fiat as f64));
 
         self.display_fiat_amount(send_amount_in_fiat, true).to_string()
     }
 
     #[uniffi::method]
     pub fn total_spent_in_btc(self: &Arc<Self>) -> String {
-        let Some(amount_sats) = self.state.lock().amount_sats else {
+        if self.state.lock().amount_sats.is_none() {
             return "---".to_string();
         };
 
-        let Some(total_spent) = self.total_spent_btc_amount(amount_sats) else {
+        let Some(total_spent) = self.total_spent_btc_amount() else {
             return "---".to_string();
         };
 
@@ -260,11 +262,11 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     pub fn total_spent_in_fiat(self: &Arc<Self>) -> String {
-        let Some(amount_sats) = self.state.lock().amount_sats else {
+        if self.state.lock().amount_sats.is_none() {
             return "---".to_string();
         };
 
-        let Some(total_spent) = self.total_spent_btc_amount(amount_sats) else {
+        let Some(total_spent) = self.total_spent_btc_amount() else {
             return "---".to_string();
         };
 
@@ -533,19 +535,35 @@ impl RustSendFlowManager {
             }
 
             Action::SetCoinControlMode(utxos) => {
-                {
-                    let utxo_list = UtxoList::from(utxos);
-                    self.handle_amount_changed(utxo_list.total);
-                    self.state.lock().mode = SendFlowEnterMode::CoinControl(utxo_list.into());
-                }
-
-                // update the fee rate options for utxos
-                let me = self.clone();
-                task::spawn(async move {
-                    me.get_or_update_fee_rate_options().await;
-                });
+                self.set_coin_control_mode(utxos);
             }
         }
+    }
+}
+
+// MARK: Private getters
+impl RustSendFlowManager {
+    pub fn send_amount(&self) -> Option<Amount> {
+        let (amount_sats, is_coin_control, total_fee_sats) = {
+            let state = self.state.lock();
+
+            let is_coin_control = state.mode.is_coin_control();
+
+            let total_fee_sats = state
+                .selected_fee_rate
+                .as_ref()
+                .map(|fee_rate| fee_rate.total_fee.as_sats())
+                .unwrap_or(0);
+
+            (state.amount_sats?, is_coin_control, total_fee_sats)
+        };
+
+        let amount_sats = match is_coin_control {
+            true => amount_sats.checked_sub(total_fee_sats).unwrap_or(0),
+            false => amount_sats,
+        };
+
+        Some(Amount::from_sat(amount_sats))
     }
 }
 
@@ -884,6 +902,20 @@ impl RustSendFlowManager {
 
         self.state.lock().focus_field = new;
         sender.queue(Message::UpdateFocusField(new));
+    }
+
+    fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {
+        {
+            let utxo_list = UtxoList::from(utxos);
+            self.handle_amount_changed(utxo_list.total);
+            self.state.lock().mode = SendFlowEnterMode::CoinControl(utxo_list.into());
+        }
+
+        // update the fee rate options for utxos
+        let me = self.clone();
+        task::spawn(async move {
+            me.get_or_update_fee_rate_options().await;
+        });
     }
 
     async fn build_psbt(
@@ -1358,13 +1390,10 @@ impl RustSendFlowManager {
         self.send_async(Message::SetAlert(alert.into())).await;
     }
 
-    fn total_spent_btc_amount(self: &Arc<Self>, amount_sats: u64) -> Option<Amount> {
-        let selected_fee_rate = self.state.lock().selected_fee_rate.as_ref()?.clone();
-
-        let amount = Amount::from_sat(amount_sats);
-        let total_fee = selected_fee_rate.total_fee();
-
-        Some(amount + total_fee)
+    fn total_spent_btc_amount(self: &Arc<Self>) -> Option<Amount> {
+        let send_amount = self.send_amount()?;
+        let total_fee = self.state.lock().selected_fee_rate.as_ref()?.total_fee;
+        Some(send_amount + total_fee)
     }
 
     // Get the first address for the wallet

@@ -1051,11 +1051,12 @@ impl RustWalletManager {
         address: Arc<Address>,
         fee_rate: FeeRate,
     ) -> Result<ConfirmDetails, Error> {
+        debug!("confirm_manual_txn amount: {amount:?}  fee_rate: {fee_rate:?}");
         let actor = self.actor.clone();
 
         let amount = amount.into();
-        let address = Arc::unwrap_or_clone(address);
         let fee_rate = fee_rate.into();
+        let address = Arc::unwrap_or_clone(address);
 
         let psbt = call!(actor.build_manual_tx(utxos, amount, address, fee_rate)).await.unwrap()?;
         let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
