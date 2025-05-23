@@ -880,8 +880,8 @@ impl WalletActor {
     }
 
     /// Get the max amount that can be sent for the given utxos
-    /// The total amount max is the UTXO total amount, if the total amount is less than the UTXO
-    /// total amount we will have a change output as well.
+    /// The total amount max is the total value of the UTXOs.
+    /// If the total amount is less than the UTXO total amount we will have a change output as well.
     fn get_max_send_for_utxos(
         &self,
         total_amount: Amount,

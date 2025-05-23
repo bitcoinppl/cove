@@ -1233,11 +1233,25 @@ impl RustSendFlowManager {
         };
 
         let me = self.clone();
+        let send_mode = self.state.lock().mode.clone();
         let manager = self.wallet_manager.clone();
 
         task::spawn(async move {
-            let confirm_details =
-                manager.confirm_txn(amount, address, selected_fee_rate.fee_rate).await;
+            let confirm_details = match send_mode {
+                SendFlowEnterMode::SetAmount => {
+                    manager.confirm_txn(amount, address, selected_fee_rate.fee_rate).await
+                }
+                SendFlowEnterMode::CoinControl(utxo_list) => {
+                    manager
+                        .confirm_manual_txn(
+                            utxo_list.outpoints(),
+                            amount,
+                            address,
+                            selected_fee_rate.fee_rate,
+                        )
+                        .await
+                }
+            };
 
             let details = match confirm_details {
                 Ok(details) => details,
