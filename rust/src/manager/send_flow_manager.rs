@@ -38,7 +38,7 @@ use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use flume::{Receiver, Sender, TrySendError};
 use parking_lot::Mutex;
-use state::{SendFlowEnterMode, SendFlowManagerState, State};
+use state::{CoinControlMode, EnterMode, SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
 
 use super::{
@@ -435,13 +435,9 @@ impl RustSendFlowManager {
         self: &Arc<Self>,
         fee_rate: Arc<FeeRate>,
         fee_speed: FeeSpeed,
-        address: Arc<Address>,
-        amount: AmountOrMax,
     ) -> Result<Arc<FeeRateOptionWithTotalFee>, Error> {
         let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
-        let address = Arc::unwrap_or_clone(address);
-
-        let psbt = self.build_psbt(amount, address, fee_rate).await?;
+        let psbt = self.build_psbt(fee_rate).await?;
 
         let total_fee =
             psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))?;
@@ -908,7 +904,7 @@ impl RustSendFlowManager {
         {
             let utxo_list = UtxoList::from(utxos);
             self.handle_amount_changed(utxo_list.total);
-            self.state.lock().mode = SendFlowEnterMode::CoinControl(utxo_list.into());
+            self.state.lock().mode = EnterMode::coin_control(utxo_list);
         }
 
         // update the fee rate options for utxos
@@ -918,32 +914,42 @@ impl RustSendFlowManager {
         });
     }
 
-    async fn build_psbt(
-        &self,
-        amount: AmountOrMax,
-        address: Address,
-        fee_rate: FeeRate,
-    ) -> Result<Psbt> {
+    async fn build_psbt(&self, fee_rate: FeeRate) -> Result<Psbt> {
         debug!("build_psbt");
         let mode = self.state.lock().mode.clone();
 
         match mode {
-            SendFlowEnterMode::SetAmount => {
-                self.build_psbt_for_amount(amount, address, fee_rate).await
-            }
-            SendFlowEnterMode::CoinControl(ref utxo_list) => {
-                self.build_psbt_for_utxo_list(amount, address, fee_rate, utxo_list.clone()).await
+            EnterMode::SetAmount => self.build_psbt_for_amount(fee_rate).await,
+            EnterMode::CoinControl(coin_control) => {
+                self.build_psbt_for_coin_control(coin_control, fee_rate).await
             }
         }
     }
 
-    async fn build_psbt_for_amount(
-        &self,
-        amount: AmountOrMax,
-        address: Address,
-        fee_rate: FeeRate,
-    ) -> Result<Psbt> {
+    async fn build_psbt_for_amount(&self, fee_rate: FeeRate) -> Result<Psbt> {
         debug!("build_psbt_for_amount");
+
+        let (amount, address) = {
+            let state = self.state.lock();
+
+            let amount_sats = state
+                .amount_sats
+                .ok_or_else(|| Error::UnableToBuildTxn("no amount".to_string()))?;
+
+            let amount = match state.max_selected.is_some() {
+                true => AmountOrMax::Max,
+                false => AmountOrMax::Amount(Amount::from_sat(amount_sats).into()),
+            };
+
+            let address = state
+                .address
+                .clone()
+                .ok_or_else(|| Error::UnableToBuildTxn("no address".to_string()))?
+                .as_ref()
+                .clone();
+
+            (amount, address)
+        };
 
         let actor = self.wallet_actor();
         let psbt = match amount {
@@ -960,20 +966,36 @@ impl RustSendFlowManager {
         Ok(psbt.into())
     }
 
-    async fn build_psbt_for_utxo_list(
+    async fn build_psbt_for_coin_control(
         &self,
-        amount: AmountOrMax,
-        address: Address,
+        coin_control: CoinControlMode,
         fee_rate: FeeRate,
-        utxo_list: Arc<UtxoList>,
     ) -> Result<Psbt> {
         debug!("build_psbt_for_utxo_list");
-        let amount = match amount {
-            AmountOrMax::Amount(amount) => amount.as_ref().0,
-            AmountOrMax::Max => utxo_list.total.0,
+
+        let (address, amount) = {
+            let state = self.state.lock();
+
+            let amount = match coin_control.is_max_selected {
+                true => coin_control.max_send(),
+                false => Amount::from_sat(
+                    state
+                        .amount_sats
+                        .ok_or_else(|| Error::UnableToBuildTxn("no amount".to_string()))?,
+                ),
+            };
+
+            let address = state
+                .address
+                .clone()
+                .ok_or_else(|| Error::UnableToBuildTxn("no address".to_string()))?
+                .as_ref()
+                .clone();
+
+            (address, bitcoin::Amount::from(amount))
         };
 
-        let outpoints = utxo_list.outpoints();
+        let outpoints = coin_control.outpoints();
         let actor = self.wallet_actor();
         let psbt =
             call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate)).await;
@@ -1270,13 +1292,18 @@ impl RustSendFlowManager {
 
         task::spawn(async move {
             let confirm_details = match send_mode {
-                SendFlowEnterMode::SetAmount => {
+                EnterMode::SetAmount => {
                     manager.confirm_txn(amount, address, selected_fee_rate.fee_rate).await
                 }
-                SendFlowEnterMode::CoinControl(utxo_list) => {
+                EnterMode::CoinControl(coin_control) => {
+                    let amount = match coin_control.is_max_selected {
+                        true => coin_control.max_send(),
+                        false => amount,
+                    };
+
                     manager
                         .confirm_manual_txn(
-                            utxo_list.outpoints(),
+                            coin_control.outpoints(),
                             amount,
                             address,
                             selected_fee_rate.fee_rate,
@@ -1485,16 +1512,16 @@ impl RustSendFlowManager {
                     address.clone()
                 ))
             }
-            (None, SendFlowEnterMode::SetAmount) => {
+            (None, EnterMode::SetAmount) => {
                 call!(wallet_actor.fee_rate_options_with_total_fee(
                     fee_rate_options_base,
                     amount.into(),
                     address.clone()
                 ))
             }
-            (None, SendFlowEnterMode::CoinControl(utxo_list)) => {
+            (None, EnterMode::CoinControl(coin_control)) => {
                 call!(wallet_actor.fee_rate_options_with_total_fee_for_manual(
-                    utxo_list,
+                    coin_control.utxo_list(),
                     fee_rate_options_base,
                     amount.into(),
                     address.clone()

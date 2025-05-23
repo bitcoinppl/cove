@@ -7390,7 +7390,7 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     /**
      * get the custom fee rate option
      */
-    func getCustomFeeOption(feeRate: FeeRate, feeSpeed: FeeSpeed, address: Address, amount: AmountOrMax) async throws  -> FeeRateOptionWithTotalFee
+    func getCustomFeeOption(feeRate: FeeRate, feeSpeed: FeeSpeed) async throws  -> FeeRateOptionWithTotalFee
     
     func listenForUpdates(reconciler: SendFlowManagerReconciler) 
     
@@ -7510,13 +7510,13 @@ open func enteringFiatAmount() -> String  {
     /**
      * get the custom fee rate option
      */
-open func getCustomFeeOption(feeRate: FeeRate, feeSpeed: FeeSpeed, address: Address, amount: AmountOrMax)async throws  -> FeeRateOptionWithTotalFee  {
+open func getCustomFeeOption(feeRate: FeeRate, feeSpeed: FeeSpeed)async throws  -> FeeRateOptionWithTotalFee  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_fn_method_rustsendflowmanager_get_custom_fee_option(
                     self.uniffiClonePointer(),
-                    FfiConverterTypeFeeRate_lower(feeRate),FfiConverterTypeFeeSpeed_lower(feeSpeed),FfiConverterTypeAddress_lower(address),FfiConverterTypeAmountOrMax_lower(amount)
+                    FfiConverterTypeFeeRate_lower(feeRate),FfiConverterTypeFeeSpeed_lower(feeSpeed)
                 )
             },
             pollFunc: ffi_cove_rust_future_poll_pointer,
@@ -12133,6 +12133,58 @@ public func FfiConverterTypeScanningInfo_lift(_ buf: RustBuffer) throws -> Scann
 #endif
 public func FfiConverterTypeScanningInfo_lower(_ value: ScanningInfo) -> RustBuffer {
     return FfiConverterTypeScanningInfo.lower(value)
+}
+
+
+public struct SendFlowCoinControlMode {
+    public var utxoList: UtxoList
+    public var isMaxSelected: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(utxoList: UtxoList, isMaxSelected: Bool) {
+        self.utxoList = utxoList
+        self.isMaxSelected = isMaxSelected
+    }
+}
+
+#if compiler(>=6)
+extension SendFlowCoinControlMode: Sendable {}
+#endif
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowCoinControlMode: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowCoinControlMode {
+        return
+            try SendFlowCoinControlMode(
+                utxoList: FfiConverterTypeUtxoList.read(from: &buf), 
+                isMaxSelected: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendFlowCoinControlMode, into buf: inout [UInt8]) {
+        FfiConverterTypeUtxoList.write(value.utxoList, into: &buf)
+        FfiConverterBool.write(value.isMaxSelected, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowCoinControlMode_lift(_ buf: RustBuffer) throws -> SendFlowCoinControlMode {
+    return try FfiConverterTypeSendFlowCoinControlMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowCoinControlMode_lower(_ value: SendFlowCoinControlMode) -> RustBuffer {
+    return FfiConverterTypeSendFlowCoinControlMode.lower(value)
 }
 
 
@@ -18889,7 +18941,7 @@ extension SendFlowAlertState: Equatable, Hashable {}
 public enum SendFlowEnterMode {
     
     case setAmount
-    case coinControl(UtxoList
+    case coinControl(SendFlowCoinControlMode
     )
 }
 
@@ -18910,7 +18962,7 @@ public struct FfiConverterTypeSendFlowEnterMode: FfiConverterRustBuffer {
         
         case 1: return .setAmount
         
-        case 2: return .coinControl(try FfiConverterTypeUtxoList.read(from: &buf)
+        case 2: return .coinControl(try FfiConverterTypeSendFlowCoinControlMode.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -18927,7 +18979,7 @@ public struct FfiConverterTypeSendFlowEnterMode: FfiConverterRustBuffer {
         
         case let .coinControl(v1):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeUtxoList.write(v1, into: &buf)
+            FfiConverterTypeSendFlowCoinControlMode.write(v1, into: &buf)
             
         }
     }
@@ -27110,7 +27162,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_entering_fiat_amount() != 65483) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option() != 43450) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_get_custom_fee_option() != 55244) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 19115) {
@@ -27630,10 +27682,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

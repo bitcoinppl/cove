@@ -29,7 +29,7 @@ pub struct SendFlowManagerState {
     pub(crate) first_address: Option<Arc<Address>>,
     pub(crate) wallet_balance: Option<Arc<Balance>>,
     pub(crate) init_complete: bool,
-    pub(crate) mode: SendFlowEnterMode,
+    pub(crate) mode: EnterMode,
 
     // public
     pub entering_btc_amount: String,
@@ -48,16 +48,52 @@ pub struct SendFlowManagerState {
     pub fee_rate_options: Option<Arc<FeeRateOptionsWithTotalFee>>,
 }
 
-#[derive(Debug, Default, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
-pub enum SendFlowEnterMode {
-    #[default]
-    SetAmount,
-    CoinControl(Arc<UtxoList>),
+// define types this way so uniffi generates unique named types but the rust code just uses the abbreviated name
+pub use internal::SendFlowCoinControlMode as CoinControlMode;
+pub use internal::SendFlowEnterMode as EnterMode;
+
+mod internal {
+    use super::*;
+
+    #[derive(Debug, Default, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+    pub enum SendFlowEnterMode {
+        #[default]
+        SetAmount,
+        CoinControl(SendFlowCoinControlMode),
+    }
+
+    #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+    pub struct SendFlowCoinControlMode {
+        pub utxo_list: Arc<UtxoList>,
+        pub is_max_selected: bool,
+    }
 }
 
-impl SendFlowEnterMode {
+impl EnterMode {
+    pub fn coin_control(utxos: impl Into<Arc<UtxoList>>) -> Self {
+        Self::CoinControl(CoinControlMode::new(utxos, false))
+    }
+
     pub fn is_coin_control(&self) -> bool {
         matches!(self, Self::CoinControl(_))
+    }
+}
+
+impl CoinControlMode {
+    pub fn new(utxo_list: impl Into<Arc<UtxoList>>, is_max_selected: bool) -> Self {
+        Self { utxo_list: utxo_list.into(), is_max_selected }
+    }
+
+    pub fn max_send(&self) -> Amount {
+        self.utxo_list.total
+    }
+
+    pub fn utxo_list(&self) -> Arc<UtxoList> {
+        self.utxo_list.clone()
+    }
+
+    pub fn outpoints(&self) -> Vec<bitcoin::OutPoint> {
+        self.utxo_list.outpoints()
     }
 }
 
@@ -90,7 +126,7 @@ impl SendFlowManagerState {
             entering_btc_amount: String::new(),
             entering_fiat_amount: selected_fiat_currency.symbol().to_string(),
             entering_address: String::new(),
-            mode: SendFlowEnterMode::SetAmount,
+            mode: EnterMode::SetAmount,
             first_address: None,
             amount_sats: None,
             amount_fiat: None,

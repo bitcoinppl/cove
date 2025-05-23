@@ -82,10 +82,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     }
 
     public func getNewCustomFeeRateWithTotal(
-        feeRate: FeeRate, feeSpeed: FeeSpeed, address: Address, amount: AmountOrMax
+        feeRate: FeeRate, feeSpeed: FeeSpeed
     ) async throws -> FeeRateOptionWithTotalFee {
         try await self.rust.getCustomFeeOption(
-            feeRate: feeRate, feeSpeed: feeSpeed, address: address, amount: amount
+            feeRate: feeRate, feeSpeed: feeSpeed
         )
     }
 

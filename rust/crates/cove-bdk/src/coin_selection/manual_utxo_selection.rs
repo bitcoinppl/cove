@@ -34,11 +34,9 @@ impl CoinSelectionAlgorithm for ManualUtxoSelection {
             selected.push(weighted_utxo.utxo);
         }
 
-        let remaining_amount = selected_amount.checked_sub(target_amount).ok_or_else(|| {
-            InsufficientFunds { needed: target_amount, available: selected_amount }
-        })?;
-
+        let remaining_amount = selected_amount.checked_sub(target_amount).unwrap_or(Amount::ZERO);
         let excess = decide_change(remaining_amount, fee_rate, drain_script);
+
         Ok(CoinSelectionResult { selected, fee_amount, excess })
     }
 }

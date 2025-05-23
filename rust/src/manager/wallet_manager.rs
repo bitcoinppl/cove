@@ -1046,20 +1046,24 @@ impl RustWalletManager {
 
     pub async fn confirm_manual_txn(
         &self,
-        utxos: Vec<bitcoin::OutPoint>,
+        outpoints: Vec<bitcoin::OutPoint>,
         amount: Amount,
         address: Arc<Address>,
         fee_rate: FeeRate,
     ) -> Result<ConfirmDetails, Error> {
-        debug!("confirm_manual_txn amount: {amount:?}  fee_rate: {fee_rate:?}");
+        debug!("confirm_manual_txn amount: {amount:?}  fee_rate: {:?}", fee_rate.sat_per_vb());
         let actor = self.actor.clone();
 
         let amount = amount.into();
         let fee_rate = fee_rate.into();
         let address = Arc::unwrap_or_clone(address);
 
-        let psbt = call!(actor.build_manual_tx(utxos, amount, address, fee_rate)).await.unwrap()?;
+        let psbt =
+            call!(actor.build_manual_tx(outpoints, amount, address, fee_rate)).await.unwrap()?;
+        debug!("confirm_manual_txn psbt fee: {:?}", psbt.fee());
+
         let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
+        debug!("confirm_manual_txn details fee: {:?}", details);
 
         Ok(details)
     }

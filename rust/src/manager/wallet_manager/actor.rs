@@ -208,7 +208,6 @@ impl WalletActor {
         tx_builder.fee_rate(fee_rate);
 
         let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
-
         Ok(psbt)
     }
 
@@ -238,14 +237,13 @@ impl WalletActor {
         debug!("build_manual_tx");
 
         let fee_rate = fee_rate.into();
-        let script_pubkey = address.script_pubkey();
+        let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
 
-        let send_amount = self.get_max_send_for_utxos(total_amount, fee_rate, &utxos)?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(ManualUtxoSelection);
         tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
         tx_builder.manually_selected_only();
         tx_builder.ordering(TxOrdering::Untouched);
-        tx_builder.add_recipient(script_pubkey, send_amount);
+        tx_builder.add_recipient(address.script_pubkey(), send_amount);
         tx_builder.fee_rate(fee_rate);
 
         let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
@@ -883,11 +881,13 @@ impl WalletActor {
     /// The total amount max is the total value of the UTXOs.
     /// If the total amount is less than the UTXO total amount we will have a change output as well.
     fn get_max_send_for_utxos(
-        &self,
+        &mut self,
         total_amount: Amount,
-        fee_rate: bitcoin::FeeRate,
+        address: &Address,
+        fee_rate: impl Into<BdkFeeRate>,
         utxos: &[bitcoin::OutPoint],
     ) -> Result<Amount, Error> {
+        let fee_rate = fee_rate.into();
         let mut utxo_total_amount = Amount::ZERO;
         let mut fee_amount = Amount::ZERO;
 
@@ -911,10 +911,32 @@ impl WalletActor {
             )).into());
         };
 
-        let send_amount = total_amount.checked_sub(fee_amount).ok_or_else(|| {
+        let fee = {
+            let send_amount_estimate = total_amount.checked_sub(fee_amount).ok_or_else(|| {
+                Error::InsufficientFunds(format!(
+                    "no enough funds to cover the fees, total available: {}, fees: {}",
+                    total_amount, fee_amount,
+                ))
+            })?;
+
+            let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(ManualUtxoSelection);
+            tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+            tx_builder.manually_selected_only();
+            tx_builder.ordering(TxOrdering::Untouched);
+            tx_builder.add_recipient(address.script_pubkey(), send_amount_estimate);
+            tx_builder.fee_rate(fee_rate);
+
+            let fee_psbt =
+                tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
+
+            self.wallet.bdk.cancel_tx(&fee_psbt.unsigned_tx);
+            fee_psbt.fee().map_err(|err| Error::BuildTxError(err.to_string()))?
+        };
+
+        let send_amount = total_amount.checked_sub(fee).ok_or_else(|| {
             Error::InsufficientFunds(format!(
                 "no enough funds to cover the fees, total available: {}, fees: {}",
-                total_amount, fee_amount,
+                total_amount, fee,
             ))
         })?;
 
