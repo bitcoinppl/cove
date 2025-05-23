@@ -51,8 +51,8 @@ impl Utxo {
         }
 
         match self.type_ {
-            UtxoType::Output => "Received",
-            UtxoType::Change => "Change",
+            UtxoType::Output => "Receive Address",
+            UtxoType::Change => "Change Address",
         }
     }
 
