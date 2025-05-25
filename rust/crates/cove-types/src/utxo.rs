@@ -113,7 +113,7 @@ impl UtxoList {
     pub fn new(utxos: Vec<Utxo>) -> Self {
         let total: u64 = utxos.iter().map(|utxo| utxo.amount.as_ref().as_sats()).sum();
         let total = Amount::from_sat(total);
-        Self { total: total.into(), utxos }
+        Self { total, utxos }
     }
 
     pub fn outpoints(&self) -> Vec<bitcoin::OutPoint> {

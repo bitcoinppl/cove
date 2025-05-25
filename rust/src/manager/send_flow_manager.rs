@@ -436,14 +436,14 @@ impl RustSendFlowManager {
         fee_rate: Arc<FeeRate>,
         fee_speed: FeeSpeed,
     ) -> Result<Arc<FeeRateOptionWithTotalFee>, Error> {
-        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
+        let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let psbt = self.build_psbt(None, None, fee_rate).await?;
 
         let total_fee =
             psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))?;
 
         let fee_rate_option =
-            FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: total_fee.into() };
+            FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee };
 
         Ok(fee_rate_option.into())
     }
@@ -555,7 +555,7 @@ impl RustSendFlowManager {
         };
 
         let amount_sats = match is_coin_control {
-            true => amount_sats.checked_sub(total_fee_sats).unwrap_or(0),
+            true => amount_sats.saturating_sub(total_fee_sats),
             false => amount_sats,
         };
 
@@ -1612,7 +1612,7 @@ impl RustSendFlowManager {
         });
 
         let total_fee = match total_fee {
-            Ok(total_fee) => total_fee.into(),
+            Ok(total_fee) => total_fee,
             Err(error) => {
                 let error = SendFlowError::UnableToGetMaxSend(error.to_string());
                 self.send_async(Message::SetAlert(error.into())).await;

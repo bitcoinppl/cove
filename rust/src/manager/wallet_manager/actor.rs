@@ -892,7 +892,7 @@ impl WalletActor {
         let mut fee_amount = Amount::ZERO;
 
         let weighted_utxos =
-            self.get_weighted_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+            self.get_weighted_utxos(utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
 
         for weighted_utxo in weighted_utxos {
             let weight = TxIn::default()
@@ -908,7 +908,7 @@ impl WalletActor {
             return Err(Error::InsufficientFunds(format!(
                 "custom amount {} is greater than the total amount available, total available: {}, fees: {}",
                 total_amount, utxo_total_amount, fee_amount,
-            )).into());
+            )));
         };
 
         let fee = {
@@ -920,7 +920,7 @@ impl WalletActor {
             })?;
 
             let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(ManualUtxoSelection);
-            tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+            tx_builder.add_utxos(utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
             tx_builder.manually_selected_only();
             tx_builder.ordering(TxOrdering::Untouched);
             tx_builder.add_recipient(address.script_pubkey(), send_amount_estimate);
