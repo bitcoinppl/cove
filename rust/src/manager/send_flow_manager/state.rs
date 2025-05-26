@@ -71,7 +71,7 @@ mod internal {
 
 impl EnterMode {
     pub fn coin_control(utxos: impl Into<Arc<UtxoList>>) -> Self {
-        Self::CoinControl(CoinControlMode::new(utxos, false))
+        Self::CoinControl(CoinControlMode::new(utxos, true))
     }
 
     pub fn is_coin_control(&self) -> bool {
