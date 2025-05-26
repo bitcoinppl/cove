@@ -15,6 +15,8 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     var metadata: WalletMetadata { walletManager.walletMetadata }
 
+    let utxos: [Utxo]
+
     @ViewBuilder
     private var divider: some View {
         Divider()
@@ -54,7 +56,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
             // content sections
             ScrollView {
-                // TODO!!!
+                ForEach(utxos) { utxo in
+                    UtxoRow(utxo: utxo)
+                }
             }
         }
         .padding()
@@ -64,14 +68,81 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     }
 }
 
+private struct UtxoRow: View {
+    @Environment(WalletManager.self) private var wm
+    let utxo: Utxo
+
+    var body: some View {
+        HStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                // Name
+                HStack(spacing: 4) {
+                    Text(utxo.name)
+                        .font(.footnote)
+                        .truncationMode(.middle)
+                        .lineLimit(1)
+
+                    if utxo.type == .change {
+                        Image(systemName: "circlebadge.2")
+                            .font(.caption)
+                            .foregroundColor(.orange.opacity(0.8))
+                    }
+                }
+
+                // Address (semi-bold caption)
+                HStack {
+                    Text(utxo.address.spacedOut())
+                        .truncationMode(.middle)
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .foregroundColor(.secondary)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(wm.displayAmount(utxo.amount))
+                    .font(.footnote)
+                    .fontWeight(.regular)
+
+                Text(utxo.date)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color.systemBackground)
+        .cornerRadius(10)
+        .contextMenu {
+            Button(action: {
+                UIPasteboard.general.string = utxo.address.toString()
+            }) {
+                Text("Copy Address")
+            }
+
+            Button(action: {
+                UIPasteboard.general.string = utxo.outpoint.txidStr()
+            }) {
+                Text("Copy Transaction ID")
+            }
+        } preview: {
+            UtxoRowPreview(displayAmount: wm.displayAmount, utxo: utxo)
+        }
+    }
+}
+
 #Preview {
     AsyncPreview {
         let wm = WalletManager(preview: "preview_only")
         let ap = AppManager.shared
         let presenter = SendFlowPresenter(app: ap, manager: wm)
         let sendFlowManager = ap.getSendFlowManager(wm, presenter: presenter)
+        let utxos = previewNewUtxoList(outputCount: 2, changeCount: 1)
 
-        SendFlowUtxoCustomAmountSheetView()
+        SendFlowUtxoCustomAmountSheetView(utxos: utxos)
             .environment(wm)
             .environment(ap)
             .environment(presenter)
