@@ -17,11 +17,36 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     let utxos: [Utxo]
 
+    // private
+    @State private var customAmount: Double = 0.0
+
+    var customAmountBinding: Binding<Double> {
+        Binding(
+            get: { customAmount },
+            set: {
+                customAmount = $0
+                manager.dispatch(.notifyCoinControlAmountChanged($0))
+            }
+        )
+    }
+
     @ViewBuilder
     private var divider: some View {
         Divider()
             .padding(.vertical, 28)
             .foregroundStyle(.red)
+    }
+
+    var maxSendSat: Double {
+        Double(Int(manager.rust.maxSendMinusFees()?.asSats() ?? 10000))
+    }
+
+    var maxSendBtc: Double {
+        manager.rust.maxSendMinusFees()?.asBtc() ?? 0.0001
+    }
+
+    var displayAmount: String {
+        manager.sendAmountBtc
     }
 
     var body: some View {
@@ -60,11 +85,38 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                     UtxoRow(utxo: utxo)
                 }
             }
+
+            Spacer()
+
+            VStack {
+                HStack {
+                    Text("Set Amount")
+                    Spacer()
+                    Text(displayAmount)
+                }
+
+                switch metadata.selectedUnit {
+                case .sat:
+                    Slider(value: $customAmount, in: 0 ... maxSendSat, step: 100)
+                case .btc:
+                    Slider(value: $customAmount, in: 0 ... maxSendBtc, step: 0.00000100)
+                }
+            }
         }
         .padding()
         .background(Color(UIColor.secondarySystemBackground))
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .onChange(of: metadata.selectedUnit, initial: true) { _, new in
+            if customAmount != maxSendSat, customAmount != maxSendBtc, customAmount > 0 {
+                return
+            }
+
+            switch new {
+            case .sat: customAmount = maxSendSat
+            case .btc: customAmount = maxSendBtc
+            }
+        }
     }
 }
 
@@ -147,5 +199,10 @@ private struct UtxoRow: View {
             .environment(ap)
             .environment(presenter)
             .environment(sendFlowManager)
+            .onAppear {
+                wm.dispatch(action: .updateUnit(.sat))
+                sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: .btc, new: .sat))
+                sendFlowManager.dispatch(.setCoinControlMode(utxos))
+            }
     }
 }

@@ -43,7 +43,7 @@ use state::{CoinControlMode, EnterMode, SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
 
 use super::{
-    deferred_sender::{self},
+    deferred_sender,
     wallet_manager::{RustWalletManager, actor::WalletActor},
 };
 
@@ -107,7 +107,7 @@ pub enum SendFlowManagerReconcileMessage {
     ClearAlert,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, uniffi::Enum)]
 pub enum SendFlowManagerAction {
     ChangeEnteringAddress(String),
 
@@ -137,6 +137,9 @@ pub enum SendFlowManagerAction {
     // starting with an amount and address from scan
     NotifyAddressChanged(Arc<Address>),
     NotifyAmountChanged(Arc<Amount>),
+
+    // notify coin control custom amount changed
+    NotifyCoinControlAmountChanged(f64),
 
     // custom fee selection
     ChangeFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
@@ -199,6 +202,11 @@ impl RustSendFlowManager {
     #[uniffi::method]
     pub fn entering_fiat_amount(&self) -> String {
         self.state.lock().entering_fiat_amount.clone()
+    }
+
+    #[uniffi::method(name = "maxSendMinusFees")]
+    pub fn ffi_max_send_minus_fees(&self) -> Option<Arc<Amount>> {
+        self.max_send_minus_fees().map(Arc::new)
     }
 
     #[uniffi::method]
@@ -528,8 +536,11 @@ impl RustSendFlowManager {
                 self.handle_entering_address_changed(string);
             }
 
-            Action::SetCoinControlMode(utxos) => self.set_coin_control_mode(utxos),
             Action::DisableCoinControlMode => self.disable_coin_control_mode(),
+            Action::SetCoinControlMode(utxos) => self.set_coin_control_mode(utxos),
+            Action::NotifyCoinControlAmountChanged(amount) => {
+                self.handle_coin_control_amount_changed(amount);
+            }
         }
     }
 }
@@ -537,26 +548,27 @@ impl RustSendFlowManager {
 // MARK: Private getters
 impl RustSendFlowManager {
     pub fn send_amount(&self) -> Option<Amount> {
-        let (amount_sats, is_coin_control, total_fee_sats) = {
-            let state = self.state.lock();
-
-            let is_coin_control = state.mode.is_coin_control();
-
-            let total_fee_sats = state
-                .selected_fee_rate
-                .as_ref()
-                .map(|fee_rate| fee_rate.total_fee.as_sats())
-                .unwrap_or(0);
-
-            (state.amount_sats?, is_coin_control, total_fee_sats)
-        };
-
-        let amount_sats = match is_coin_control {
-            true => amount_sats.saturating_sub(total_fee_sats),
-            false => amount_sats,
-        };
-
+        let amount_sats = self.state.lock().amount_sats?;
         Some(Amount::from_sat(amount_sats))
+    }
+
+    pub fn max_send_minus_fees(&self) -> Option<Amount> {
+        let max_send = match self.state.lock().mode {
+            EnterMode::SetAmount => return None,
+            EnterMode::CoinControl(ref mode) => mode.max_send(),
+        };
+
+        let total_fee_sats = self
+            .state
+            .lock()
+            .selected_fee_rate
+            .as_ref()
+            .map(|f| f.total_fee.as_sats())
+            .unwrap_or(1000);
+
+        let max_send_without_fees = max_send.as_sats() - total_fee_sats;
+
+        Some(Amount::from_sat(max_send_without_fees))
     }
 }
 
@@ -773,6 +785,18 @@ impl RustSendFlowManager {
             self.state.lock().focus_field = None;
             sender.queue(Message::UpdateFocusField(None));
         }
+
+        // if we are in coin control mode max mode, change the amount when fee changes
+        let mode = self.state.lock().mode.clone();
+        match mode {
+            EnterMode::CoinControl(cc) if cc.is_max_selected => {
+                let max_amount = cc.max_send();
+                let total_fee = fee_rate.total_fee;
+                let amount = max_amount - total_fee;
+                self.handle_amount_changed(amount);
+            }
+            _ => {}
+        };
     }
 
     /// When amount is changed, we will need to update the entering and fiat amounts
@@ -898,17 +922,65 @@ impl RustSendFlowManager {
         sender.queue(Message::UpdateFocusField(new));
     }
 
+    fn handle_coin_control_amount_changed(self: &Arc<Self>, amount: f64) -> Option<()> {
+        let mut coin_control_mode = match self.state.lock().mode {
+            EnterMode::CoinControl(ref coin_control_mode) => coin_control_mode.clone(),
+            _ => return None,
+        };
+
+        let unit = self.state.lock().metadata.selected_unit;
+        let amount = match unit {
+            Unit::Btc => Amount::from_btc(amount).ok()?,
+            Unit::Sat => Amount::from_sat(amount as u64),
+        };
+
+        // if the amount we are selecting is within 1000 sats of the max send, then select the max send
+        let max_send_without_fees_and_small_utxo =
+            self.max_send_minus_fees()? - Amount::from_sat(1000);
+
+        if amount >= max_send_without_fees_and_small_utxo {
+            let max_send = coin_control_mode.max_send();
+            coin_control_mode.is_max_selected = true;
+
+            self.state.lock().mode = EnterMode::CoinControl(coin_control_mode);
+            self.handle_amount_changed(max_send);
+            return Some(());
+        }
+
+        // update the state, remove the max selected flag and set the amount
+        {
+            let mut state = self.state.lock();
+            coin_control_mode.is_max_selected = false;
+            state.mode = EnterMode::CoinControl(coin_control_mode);
+            state.amount_sats = Some(amount.as_sats());
+        }
+
+        self.handle_amount_changed(amount);
+
+        Some(())
+    }
+
     fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {
         if self.state.lock().mode.is_coin_control() {
             warn!("already in coin control mode");
             return;
         }
 
-        {
-            let utxo_list = UtxoList::from(utxos);
-            self.handle_amount_changed(utxo_list.total);
-            self.state.lock().mode = EnterMode::coin_control(utxo_list);
-        }
+        let utxo_list = Arc::new(UtxoList::from(utxos));
+
+        let total_minus_fees = {
+            let mut state = self.state.lock();
+            let total_fee_sats =
+                state.selected_fee_rate.as_ref().map(|fee_rate| fee_rate.total_fee.as_sats());
+
+            state.mode = EnterMode::coin_control(utxo_list.clone());
+
+            let total_minus_fees = utxo_list.total.as_sats() - total_fee_sats.unwrap_or(1000);
+            Amount::from_sat(total_minus_fees)
+        };
+
+        // update the amount
+        self.handle_amount_changed(total_minus_fees);
 
         // update the fee rate options for utxos
         let me = self.clone();

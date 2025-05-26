@@ -66,6 +66,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
+    
 
     public func setAddress(_ address: Address) {
         self._enteringAddress = address.string()
