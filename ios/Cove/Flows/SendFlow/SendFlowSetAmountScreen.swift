@@ -166,24 +166,29 @@ struct SendFlowSetAmountScreen: View {
         }
 
         .task {
-            Task {
-                await MainActor.run {
-                    withAnimation(
-                        .easeInOut(duration: 1.5).delay(0.4),
-                        completionCriteria: .removed
-                    ) {
-                        loadingOpacity = 0
-                    } completion: {
-                        isLoading = false
+            let isAlreadyValid = validate()
+
+            if !isAlreadyValid {
+                Task {
+                    await MainActor.run {
+                        withAnimation(
+                            .easeInOut(duration: 1.5).delay(0.4),
+                            completionCriteria: .removed
+                        ) {
+                            loadingOpacity = 0
+                        } completion: {
+                            isLoading = false
+                        }
                     }
                 }
             }
 
             // HACK: Bug in SwiftUI where keyboard toolbar is broken
-            try? await Task.sleep(for: .milliseconds(700))
+            if !isAlreadyValid { try? await Task.sleep(for: .milliseconds(700)) }
 
             await MainActor.run {
-                Log.debug("SendFlowSetAmountScreen: onAppear \(sendFlowManager.amount)")
+                Log.debug("SendFlowSetAmountScreen: onAppear \(String(describing: sendFlowManager.amount))")
+
                 if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 {
                     presenter.focusField = .amount
                 } else if address.wrappedValue.isEmpty {
@@ -201,6 +206,12 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
+            if validate() {
+                isLoading = false
+                loadingOpacity = 0
+                presenter.focusField = .none
+            }
+
             sendFlowManager.dispatch(action: .disableCoinControlMode)
             if metadata.walletType == .watchOnly {
                 app.alertState = .init(.cantSendOnWatchOnlyWallet)

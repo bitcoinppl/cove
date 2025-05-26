@@ -31,12 +31,12 @@ struct SendFlowCoinControlSetAmountScreen: View {
     // fees
     @State private var selectedPresentationDetent: PresentationDetent = .height(440)
 
+    // loading
+    @State private var isLoading: Bool = true
+    @State private var loadingOpacity: CGFloat = 1
+
     private var metadata: WalletMetadata {
         manager.walletMetadata
-    }
-
-    private var address: Binding<String> {
-        sendFlowManager.enteringAddress
     }
 
     private var network: Network {
@@ -208,6 +208,18 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 .frame(maxWidth: .infinity)
                 .background(colorScheme == .light ? .white : .black)
                 .scrollIndicators(.hidden)
+
+                if isLoading {
+                    ZStack {
+                        Rectangle()
+                            .fill(.black)
+                            .opacity(loadingOpacity)
+                            .ignoresSafeArea()
+
+                        ProgressView().tint(.white)
+                            .opacity(loadingOpacity)
+                    }
+                }
             }
         }
         .padding(.top, 0)
@@ -220,9 +232,40 @@ struct SendFlowCoinControlSetAmountScreen: View {
             guard let prices = newPrices else { return }
             sendFlowManager.dispatch(.notifyPricesChanged(prices))
         }
+        .task {
+            let isAlreadyValid = validate()
+            if !isAlreadyValid {
+                Task {
+                    await MainActor.run {
+                        withAnimation(
+                            .easeInOut(duration: 1.5).delay(0.4),
+                            completionCriteria: .removed
+                        ) { loadingOpacity = 0 }
+                            completion: { isLoading = false }
+                    }
+                }
+            }
 
+            // HACK: Bug in SwiftUI where keyboard toolbar is broken
+            if !isAlreadyValid { try? await Task.sleep(for: .milliseconds(700)) }
+
+            await MainActor.run {
+                if !isAlreadyValid { presenter.focusField = .address }
+
+                Log.debug("SendFlowCoinControlSetAmount: onAppear \(sendFlowManager.amount?.asSats() ?? 0) sats")
+                if sendFlowManager.address != nil {
+                    let _ = self.validateAddress(displayAlert: true)
+                }
+            }
+        }
         .onAppear {
-            presenter.focusField = .address
+            if validate() {
+                isLoading = false
+                loadingOpacity = 0
+                presenter.focusField = .none
+            } else {
+                presenter.focusField = .address
+            }
 
             if metadata.walletType == .watchOnly {
                 app.alertState = .init(.cantSendOnWatchOnlyWallet)
@@ -288,7 +331,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
     var AddressKeyboardToolbar: some View {
         HStack {
             Group {
-                if address.wrappedValue.isEmpty || !validateAddress() {
+                if sendFlowManager.enteringAddress.wrappedValue.isEmpty || !validateAddress() {
                     Button(action: {
                         let address = UIPasteboard.general.string ?? ""
                         sendFlowManager.dispatch(action: .changeEnteringAddress(address))
