@@ -1593,11 +1593,17 @@ impl RustSendFlowManager {
             }
         };
 
-        let address = Arc::unwrap_or_clone(address);
-        let amount_sats = amount_sats.unwrap_or(10_000);
-        let amount = Amount::from_sat(amount_sats);
-
         let mode = self.state.lock().mode.clone();
+        let address = Arc::unwrap_or_clone(address);
+
+        let amount_sats = match &mode {
+            EnterMode::CoinControl(coin_control) if coin_control.is_max_selected => {
+                coin_control.max_send().to_sat()
+            }
+            _ => amount_sats.unwrap_or(10_000),
+        };
+
+        let amount = Amount::from_sat(amount_sats);
         let max_selected = self.state.lock().max_selected.clone();
 
         let new_fee_rate_options = match (max_selected, mode) {
@@ -1615,6 +1621,11 @@ impl RustSendFlowManager {
                 ))
             }
             (None, EnterMode::CoinControl(coin_control)) => {
+                let amount = match coin_control.is_max_selected {
+                    true => coin_control.max_send(),
+                    false => amount,
+                };
+
                 call!(wallet_actor.fee_rate_options_with_total_fee_for_manual(
                     coin_control.utxo_list(),
                     fee_rate_options_base,

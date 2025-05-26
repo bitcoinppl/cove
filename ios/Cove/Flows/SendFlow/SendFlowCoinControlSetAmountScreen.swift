@@ -35,6 +35,9 @@ struct SendFlowCoinControlSetAmountScreen: View {
     @State private var isLoading: Bool = true
     @State private var loadingOpacity: CGFloat = 1
 
+    // custom utxo amount
+    @State private var customAmountSheetIsPresented: Bool = false
+
     private var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -104,6 +107,10 @@ struct SendFlowCoinControlSetAmountScreen: View {
                     .offset(x: offset)
                     .padding(.horizontal, 30)
                     .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
+                    .onTapGesture {
+                        guard selectedFeeRate != nil else { return }
+                        customAmountSheetIsPresented = true
+                    }
 
                 HStack(spacing: 0) {
                     Menu {
@@ -276,6 +283,9 @@ struct SendFlowCoinControlSetAmountScreen: View {
             sendFlowManager.dispatch(.setCoinControlMode(utxos))
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
+        .sheet(isPresented: $customAmountSheetIsPresented) {
+            SendFlowUtxoCustomAmountSheetView(utxos: utxos)
+        }
         .alert(
             presenter.alertTitle,
             isPresented: presenter.showingAlert,
