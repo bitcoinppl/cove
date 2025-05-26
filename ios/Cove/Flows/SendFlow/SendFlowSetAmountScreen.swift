@@ -201,6 +201,7 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .onAppear {
+            sendFlowManager.dispatch(action: .disableCoinControlMode)
             if metadata.walletType == .watchOnly {
                 app.alertState = .init(.cantSendOnWatchOnlyWallet)
                 app.popRoute()

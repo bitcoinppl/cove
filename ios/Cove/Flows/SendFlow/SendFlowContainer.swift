@@ -28,18 +28,17 @@ public struct SendFlowContainer: View {
             Log.debug("Getting wallet for SendRoute \(id)")
             let manager = try app.getWalletManager(id: id)
             let presenter = SendFlowPresenter(app: app, manager: manager)
-            let sendFlowManager = SendFlowManager(manager.rust.newSendFlowManager(), presenter: presenter)
+            let sendFlowManager = app.getSendFlowManager(manager, presenter: presenter)
 
             switch sendRoute {
             case let .setAmount(id: _, address: address, amount: amount):
-                self.initCompleted = false
                 if let address { sendFlowManager.setAddress(address) }
                 if let amount { sendFlowManager.setAmount(amount) }
-                waitForInit()
             default:
-                self.initCompleted = true
+                ()
             }
 
+            waitForInit()
             self.manager = manager
             self.sendFlowManager = sendFlowManager
             self.presenter = presenter

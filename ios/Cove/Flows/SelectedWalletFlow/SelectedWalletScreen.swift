@@ -294,7 +294,12 @@ struct SelectedWalletScreen: View {
                 let _ = try? await manager.rust.forceUpdateHeight()
                 await manager.updateWalletBalance()
             }
-            .onAppear { UIRefreshControl.appearance().tintColor = UIColor.white }
+            .onAppear {
+                // Reset SendFlowManager so new send flow is fresh
+                app.sendFlowManager = nil
+
+                UIRefreshControl.appearance().tintColor = UIColor.white
+            }
             .scrollIndicators(.hidden)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentOffset.y > (geometry.contentInsets.top + safeAreaInsets.top - 5)

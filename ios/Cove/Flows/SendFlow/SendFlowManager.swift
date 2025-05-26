@@ -15,7 +15,11 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     typealias Action = SendFlowManagerAction
 
     private let logger = Log(id: "SendFlowManager")
+    @ObservationIgnored
     var rust: RustSendFlowManager
+
+    @ObservationIgnored
+    var id: WalletId
 
     var enteringBtcAmount: String = ""
     var enteringFiatAmount: String = ""
@@ -52,6 +56,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.rust = rust
         self.presenter = presenter
 
+        self.id = rust.walletId()
         self.enteringFiatAmount = rust.enteringFiatAmount()
         self.sendAmountFiat = rust.sendAmountFiat()
         self.sendAmountBtc = rust.sendAmountBtc()

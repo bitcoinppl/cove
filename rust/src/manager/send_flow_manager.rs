@@ -26,6 +26,7 @@ use amount_or_max::AmountOrMax;
 use btc_on_change::BtcOnChangeHandler;
 use cove_macros::impl_manager_message_send;
 use cove_types::{
+    WalletId,
     address::AddressWithNetwork,
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
@@ -117,6 +118,7 @@ pub enum SendFlowManagerAction {
     ClearAddress,
 
     SetCoinControlMode(Vec<Utxo>),
+    DisableCoinControlMode,
 
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
@@ -184,6 +186,11 @@ impl RustSendFlowManager {
     }
 
     // MARK: read only methods
+    #[uniffi::method]
+    pub fn wallet_id(&self) -> WalletId {
+        self.state.lock().metadata.id.clone()
+    }
+
     #[uniffi::method]
     pub fn amount(&self) -> Arc<Amount> {
         Arc::new(Amount::from_sat(self.amount_sats()))
@@ -442,8 +449,7 @@ impl RustSendFlowManager {
         let total_fee =
             psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))?;
 
-        let fee_rate_option =
-            FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee };
+        let fee_rate_option = FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee };
 
         Ok(fee_rate_option.into())
     }
@@ -466,7 +472,7 @@ impl RustSendFlowManager {
             }
 
             Action::NotifyEnteringAddressChanged(address) => {
-                self.handle_entering_address_changed(address);
+                self.handle_entering_address_changed(address)
             }
 
             Action::ChangeSetAmountFocusField(set_amount_focus_field) => {
@@ -474,9 +480,7 @@ impl RustSendFlowManager {
                 self.send(Message::UpdateFocusField(set_amount_focus_field));
             }
 
-            Action::SelectFeeRate(fee_rate) => {
-                self.selected_fee_rate_changed(fee_rate);
-            }
+            Action::SelectFeeRate(fee_rate) => self.selected_fee_rate_changed(fee_rate),
 
             Action::SelectMaxSend => {
                 let me = self.clone();
@@ -498,13 +502,9 @@ impl RustSendFlowManager {
                 self.handle_btc_or_fiat_changed(old, new);
             }
 
-            Action::NotifyPricesChanged(prices) => {
-                self.handle_prices_changed(prices);
-            }
+            Action::NotifyPricesChanged(prices) => self.handle_prices_changed(prices),
 
-            Action::FinalizeAndGoToNextScreen => {
-                self.finalize_and_go_to_next_screen();
-            }
+            Action::FinalizeAndGoToNextScreen => self.finalize_and_go_to_next_screen(),
 
             Action::NotifyAddressChanged(address) => {
                 let mut state = self.state.lock();
@@ -512,12 +512,10 @@ impl RustSendFlowManager {
                 state.entering_address = address.to_string();
             }
 
-            Action::NotifyAmountChanged(amount) => {
-                self.handle_amount_changed(*amount);
-            }
+            Action::NotifyAmountChanged(amount) => self.handle_amount_changed(*amount),
 
             Action::NotifyFocusFieldChanged { old, new } => {
-                self.handle_focus_field_changed(old, new);
+                self.handle_focus_field_changed(old, new)
             }
 
             Action::ChangeFeeRateOptions(fee_options) => {
@@ -530,9 +528,8 @@ impl RustSendFlowManager {
                 self.handle_entering_address_changed(string);
             }
 
-            Action::SetCoinControlMode(utxos) => {
-                self.set_coin_control_mode(utxos);
-            }
+            Action::SetCoinControlMode(utxos) => self.set_coin_control_mode(utxos),
+            Action::DisableCoinControlMode => self.disable_coin_control_mode(),
         }
     }
 }
@@ -914,6 +911,21 @@ impl RustSendFlowManager {
         }
 
         // update the fee rate options for utxos
+        let me = self.clone();
+        task::spawn(async move {
+            me.get_or_update_fee_rate_options().await;
+        });
+    }
+
+    fn disable_coin_control_mode(self: &Arc<Self>) {
+        if !self.state.lock().mode.is_coin_control() {
+            debug!("coin control mode is already disabled");
+            return;
+        }
+
+        self.state.lock().mode = EnterMode::SetAmount;
+
+        // update the fee rate options
         let me = self.clone();
         task::spawn(async move {
             me.get_or_update_fee_rate_options().await;

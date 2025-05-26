@@ -35,7 +35,10 @@ import SwiftUI
     var routeId = UUID()
 
     @ObservationIgnored
-    weak var walletManager: WalletManager?
+    var walletManager: WalletManager?
+
+    @ObservationIgnored
+    var sendFlowManager: SendFlowManager?
 
     public var colorScheme: ColorScheme? {
         switch colorSchemeSelection {
@@ -77,6 +80,22 @@ import SwiftUI
         walletManager = walletvm
 
         return walletManager!
+    }
+
+    public func getSendFlowManager(_ wm: WalletManager, presenter: SendFlowPresenter) -> SendFlowManager {
+        let id = wm.id
+
+        if let manager = sendFlowManager, wm.id == manager.id {
+            logger.debug("found and using sendflow manager for \(wm.id)")
+            manager.presenter = presenter
+            return manager
+        }
+
+        let sendFlowManager = SendFlowManager(wm.rust.newSendFlowManager(), presenter: presenter)
+        logger.debug("did not find SendFlowManager for \(id), creating new")
+
+        self.sendFlowManager = sendFlowManager
+        return sendFlowManager
     }
 
     public var fullVersionId: String {

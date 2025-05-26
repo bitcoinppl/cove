@@ -66,16 +66,15 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
 #Preview {
     AsyncPreview {
-        SendFlowUtxoCustomAmountSheetView(
-            manager: WalletManager(preview: "preview_only"),
-            details: ConfirmDetails.previewNew()
-        )
-        .environment(AppManager.shared)
-        .environment(
-            SendFlowPresenter(
-                app: AppManager.shared,
-                manager: WalletManager(preview: "preview_only"),
-            )
-        )
+        let wm = WalletManager(preview: "preview_only")
+        let ap = AppManager.shared
+        let presenter = SendFlowPresenter(app: ap, manager: wm)
+        let sendFlowManager = ap.getSendFlowManager(wm, presenter: presenter)
+
+        SendFlowUtxoCustomAmountSheetView()
+            .environment(wm)
+            .environment(ap)
+            .environment(presenter)
+            .environment(sendFlowManager)
     }
 }
