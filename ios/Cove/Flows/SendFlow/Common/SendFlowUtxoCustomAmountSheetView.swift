@@ -97,9 +97,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
                 switch metadata.selectedUnit {
                 case .sat:
-                    Slider(value: $customAmount, in: 0 ... maxSendSat, step: 100)
+                    Slider(value: customAmountBinding, in: 10000 ... maxSendSat, step: 100)
                 case .btc:
-                    Slider(value: $customAmount, in: 0 ... maxSendBtc, step: 0.00000100)
+                    Slider(value: customAmountBinding, in: 0.000010000 ... maxSendBtc, step: 0.00000100)
                 }
             }
         }

@@ -923,8 +923,10 @@ impl RustSendFlowManager {
     }
 
     fn handle_coin_control_amount_changed(self: &Arc<Self>, amount: f64) -> Option<()> {
-        let mut coin_control_mode = match self.state.lock().mode {
-            EnterMode::CoinControl(ref coin_control_mode) => coin_control_mode.clone(),
+        debug!("handle_coin_control_amount_changed: {amount}");
+
+        let mut coin_control_mode = match self.state.lock().mode.clone() {
+            EnterMode::CoinControl(coin_control_mode) => coin_control_mode,
             _ => return None,
         };
 
