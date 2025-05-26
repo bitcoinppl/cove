@@ -961,13 +961,7 @@ impl RustSendFlowManager {
     }
 
     fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {
-        if self.state.lock().mode.is_coin_control() {
-            warn!("already in coin control mode");
-            return;
-        }
-
         let utxo_list = Arc::new(UtxoList::from(utxos));
-
         let total_minus_fees = {
             let mut state = self.state.lock();
             let total_fee_sats =
@@ -1596,17 +1590,15 @@ impl RustSendFlowManager {
         let mode = self.state.lock().mode.clone();
         let address = Arc::unwrap_or_clone(address);
 
-        let amount_sats = match &mode {
-            EnterMode::CoinControl(coin_control) if coin_control.is_max_selected => {
-                coin_control.max_send().to_sat()
-            }
+        let amount_sats_for_fee_calc = match &mode {
+            EnterMode::CoinControl(cc) if cc.is_max_selected => cc.max_send().to_sat(),
             _ => amount_sats.unwrap_or(10_000),
         };
 
-        let amount = Amount::from_sat(amount_sats);
+        let amount_for_fee_calc = Amount::from_sat(amount_sats_for_fee_calc);
         let max_selected = self.state.lock().max_selected.clone();
 
-        let new_fee_rate_options = match (max_selected, mode) {
+        let new_fee_rate_options = match (max_selected, &mode) {
             (Some(_), _) => {
                 call!(wallet_actor.fee_rate_options_with_total_fee_for_drain(
                     fee_rate_options_base,
@@ -1616,20 +1608,15 @@ impl RustSendFlowManager {
             (None, EnterMode::SetAmount) => {
                 call!(wallet_actor.fee_rate_options_with_total_fee(
                     fee_rate_options_base,
-                    amount.into(),
+                    amount_for_fee_calc.into(),
                     address.clone()
                 ))
             }
-            (None, EnterMode::CoinControl(coin_control)) => {
-                let amount = match coin_control.is_max_selected {
-                    true => coin_control.max_send(),
-                    false => amount,
-                };
-
+            (None, EnterMode::CoinControl(cc)) => {
                 call!(wallet_actor.fee_rate_options_with_total_fee_for_manual(
-                    coin_control.utxo_list(),
+                    cc.utxo_list(),
                     fee_rate_options_base,
-                    amount.into(),
+                    amount_for_fee_calc.into(),
                     address.clone()
                 ))
             }
@@ -1645,7 +1632,12 @@ impl RustSendFlowManager {
         // if user had a custom speed selected, re-apply it
         let selected_fee_rate = state.lock().selected_fee_rate.clone();
         if let Some(updated_options) = self
-            .updated_custom_fee_option(address.clone(), amount, fee_rate_options, selected_fee_rate)
+            .updated_custom_fee_option(
+                address.clone(),
+                amount_for_fee_calc,
+                fee_rate_options,
+                selected_fee_rate,
+            )
             .await
         {
             fee_rate_options = updated_options;
@@ -1657,7 +1649,7 @@ impl RustSendFlowManager {
 
         // if no fee rate is selected, then set the default to medium
         let selected_fee_rate = self.state.lock().selected_fee_rate.clone();
-        match selected_fee_rate {
+        match selected_fee_rate.clone() {
             Some(selected_fee_rate) => {
                 let new_selected_fee_rate = match selected_fee_rate.fee_speed {
                     FeeSpeed::Custom { .. } => {
@@ -1678,6 +1670,23 @@ impl RustSendFlowManager {
                 self.state.lock().selected_fee_rate = Some(medium.clone());
                 sender.queue(Message::UpdateSelectedFeeRate(medium));
             }
+        }
+
+        // update the amount if in coin control max send
+        match &mode {
+            EnterMode::CoinControl(cc) if cc.is_max_selected => {
+                let max = cc.max_send();
+                let total_fee = selected_fee_rate
+                    .as_ref()
+                    .map(|fee_rate| fee_rate.total_fee.as_sats())
+                    .unwrap_or(fee_rate_options_with_total_fee.medium.total_fee.as_sats());
+
+                let send_amount = max.as_sats() - total_fee;
+                if Some(send_amount) != amount_sats {
+                    self.handle_amount_changed(Amount::from_sat(send_amount));
+                }
+            }
+            _ => {}
         }
 
         sender.queue(Message::UpdateFeeRateOptions(fee_rate_options_with_total_fee));

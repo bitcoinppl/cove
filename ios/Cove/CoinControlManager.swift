@@ -80,9 +80,16 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     }
 
     public var totalSelectedAmount: String {
+        displayAmount(self.totalSelected)
+    }
+
+    public var totalSelected: Amount {
         let _ = self.selected
-        let total = rust.totalSelectedAmount()
-        return displayAmount(total)
+        return rust.totalSelectedAmount()
+    }
+
+    public var totalSelectedSats: Int {
+        Int(self.totalSelected.asSats())
     }
 
     private func apply(_ message: Message) {

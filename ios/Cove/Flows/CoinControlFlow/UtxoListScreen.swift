@@ -225,7 +225,7 @@ struct UtxoListScreen: View {
                     )
                 }
                 .buttonStyle(
-                    manager.selected.isEmpty
+                    manager.totalSelectedSats < 10000
                         ? DarkButtonStyle(
                             backgroundColor: .systemGray4, foregroundColor: .secondary
                         )
@@ -235,7 +235,7 @@ struct UtxoListScreen: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal)
                 .padding(.bottom, 4)
-                .disabled(manager.selected.isEmpty)
+                .disabled(manager.totalSelectedSats < 10000)
                 .contentTransition(.interpolate)
             }
         }
