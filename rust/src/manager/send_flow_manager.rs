@@ -223,6 +223,15 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method]
+    pub fn utxos(&self) -> Option<Vec<Utxo>> {
+        let mode = self.state.lock().mode.clone();
+        match mode {
+            EnterMode::CoinControl(cc) => Some(cc.utxo_list.utxos.clone()),
+            _ => None,
+        }
+    }
+
+    #[uniffi::method]
     pub async fn wait_for_init(&self) {
         let mut times = 0;
         loop {
@@ -1007,6 +1016,10 @@ impl RustSendFlowManager {
     }
 
     fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {
+        if utxos.is_empty() {
+            return;
+        }
+
         match self.state.lock().mode.clone() {
             // already in coin control mode with the same utxos, so do nothing
             EnterMode::CoinControl(cc) if cc.utxo_list.utxos == utxos => {
@@ -1027,14 +1040,14 @@ impl RustSendFlowManager {
             Amount::from_sat(total_minus_fees)
         };
 
-        // update the amount
-        self.handle_amount_changed(total_minus_fees);
-
         // update the fee rate options for utxos
         let me = self.clone();
         task::spawn(async move {
             me.get_or_update_fee_rate_options().await;
         });
+
+        // update the amount
+        self.handle_amount_changed(total_minus_fees);
     }
 
     fn disable_coin_control_mode(self: &Arc<Self>) {

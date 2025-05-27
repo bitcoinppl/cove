@@ -17,6 +17,8 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     var utxos: [Utxo]
     var unit: Unit = .sat
 
+    private var updateSendFlowManagerTask: Task<Void, Never>? = nil
+
     @ObservationIgnored
     var searchBinding: Binding<String> {
         Binding(
@@ -88,6 +90,17 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         Int(self.totalSelected.asSats())
     }
 
+    private func updateSendFlowManager() {
+        guard let sfm = AppManager.shared.sendFlowManager else { return }
+        self.updateSendFlowManagerTask?.cancel()
+        self.updateSendFlowManagerTask = Task {
+            try? await Task.sleep(for: .milliseconds(33))
+            guard !Task.isCancelled else { return }
+            let selectedUtxos = self.utxos.filter { self.selected.contains($0.id) }
+            sfm.dispatch(.setCoinControlMode(selectedUtxos))
+        }
+    }
+
     private func apply(_ message: Message) {
         switch message {
         case let .updateSort(sort):
@@ -99,11 +112,13 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         case let .updateSearch(search):
             withAnimation { self.search = search }
         case let .updateSelectedUtxos(utxos: selected, totalSelected):
+            updateSendFlowManager()
             self.selected = Set(selected)
             withAnimation { self.totalSelected = totalSelected }
         case let .updateUnit(unit):
             withAnimation { self.unit = unit }
         case let .updateTotalSelectedAmount(amount):
+            updateSendFlowManager()
             withAnimation { self.totalSelected = amount }
         }
     }

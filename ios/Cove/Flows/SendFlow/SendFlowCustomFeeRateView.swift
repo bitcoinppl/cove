@@ -93,7 +93,7 @@ struct SendFlowCustomFeeRateView: View {
 
         // if there is an non custom fee option for the same fee rate select it and remove the custom fee option
         if let newSelectedOption = feeOptions.getFeeRateWith(feeRate: feeRate),
-            !newSelectedOption.isCustom()
+           !newSelectedOption.isCustom()
         {
             Log.debug(
                 "removing custom fee option (fee rate: \(feeRate)), selected: \(newSelectedOption.feeSpeed().string)"
@@ -152,7 +152,7 @@ struct SendFlowCustomFeeRateView: View {
                 }
 
                 HStack {
-                    Slider(value: sliderBinding, in: 1...feeOptions.fast().satPerVb() * 2)
+                    Slider(value: sliderBinding, in: 1 ... feeOptions.fast().satPerVb() * 2)
                 }
 
                 HStack {

@@ -223,7 +223,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
         }
         .task {
             let isAlreadyValid = validate()
-            if !isAlreadyValid {
+            if !isAlreadyValid || utxos == sendFlowManager.rust.utxos() {
                 Task {
                     await MainActor.run {
                         withAnimation(
@@ -241,20 +241,21 @@ struct SendFlowCoinControlSetAmountScreen: View {
             }
 
             // HACK: Bug in SwiftUI where keyboard toolbar is broken
-            if !isAlreadyValid { try? await Task.sleep(for: .milliseconds(700)) }
+            if !isAlreadyValid || utxos == sendFlowManager.rust.utxos() {
+                try? await Task.sleep(for: .milliseconds(700))
+            }
 
             await MainActor.run {
                 if !isAlreadyValid { presenter.focusField = .address }
                 if validate() { presenter.focusField = .none }
-
-                Log.debug("SendFlowCoinControlSetAmount: onAppear \(sendFlowManager.amount?.asSats() ?? 0) sats")
                 if sendFlowManager.address != nil {
                     let _ = self.validateAddress(displayAlert: true)
                 }
             }
         }
         .onAppear {
-            if validate() {
+            sendFlowManager.dispatch(.setCoinControlMode(utxos))
+            if validate(), utxos == sendFlowManager.rust.utxos() {
                 isLoading = false
                 loadingOpacity = 0
                 presenter.focusField = .none
@@ -267,8 +268,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 app.popRoute()
                 return
             }
-
-            sendFlowManager.dispatch(.setCoinControlMode(utxos))
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
         .sheet(isPresented: $customAmountSheetIsPresented) {

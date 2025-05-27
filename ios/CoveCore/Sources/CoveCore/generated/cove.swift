@@ -7403,6 +7403,8 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func totalSpentInFiat()  -> String
     
+    func utxos()  -> [Utxo]?
+    
     func validateAddress(displayAlert: Bool)  -> Bool
     
     func validateAmount(displayAlert: Bool)  -> Bool
@@ -7594,6 +7596,13 @@ open func totalSpentInBtc() -> String  {
 open func totalSpentInFiat() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_fiat(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func utxos() -> [Utxo]?  {
+    return try!  FfiConverterOptionSequenceTypeUtxo.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_utxos(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -25367,6 +25376,30 @@ fileprivate struct FfiConverterOptionTypeTapSignerResponse: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceTypeUtxo: FfiConverterRustBuffer {
+    typealias SwiftType = [Utxo]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeUtxo.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeUtxo.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionSequenceSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [[String]]?
 
@@ -27268,6 +27301,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_total_spent_in_fiat() != 50902) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_utxos() != 37154) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustsendflowmanager_validate_address() != 61046) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27765,9 +27801,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

@@ -73,8 +73,8 @@ struct UtxoListScreen: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .padding(.top, -35)  // undo list default padding top
-            .padding(.horizontal, -16)  // undo default padding horizontal
+            .padding(.top, -35) // undo list default padding top
+            .padding(.horizontal, -16) // undo default padding horizontal
             .environment(\.editMode, .constant(.active))
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
@@ -159,12 +159,12 @@ struct UtxoListScreen: View {
                     .contentShape(
                         Rectangle().inset(
                             by:
-                                EdgeInsets(
-                                    top: -15,
-                                    leading: -35,
-                                    bottom: -10,
-                                    trailing: -35
-                                ))
+                            EdgeInsets(
+                                top: -15,
+                                leading: -35,
+                                bottom: -10,
+                                trailing: -35
+                            ))
                     )
                     .onTapGesture { manager.dispatch(.toggleSelectAll) }
                 }
