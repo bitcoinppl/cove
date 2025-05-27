@@ -121,7 +121,12 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     private var displayAmountBinding: Binding<String> {
         Binding(
             get: { displayAmount },
-            set: { manager.dispatch(.notifyCoinControlEnteredAmountChanged($0, isFocused)) }
+            set: {
+                manager.deboucedDispatch(
+                    .notifyCoinControlEnteredAmountChanged($0, isFocused),
+                    for: .milliseconds(60)
+                )
+            }
         )
     }
 

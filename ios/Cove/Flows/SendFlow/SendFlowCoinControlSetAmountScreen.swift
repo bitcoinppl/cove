@@ -70,9 +70,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     private func dismissIfValid() {
-        if validate(true) {
-            presenter.focusField = .none
-        }
+        if validate(true) { presenter.focusField = .none }
     }
 
     // doing it this way prevents an alert popping up when the user just goes back
@@ -248,9 +246,14 @@ struct SendFlowCoinControlSetAmountScreen: View {
                             .easeInOut(duration: 1.5).delay(0.4),
                             completionCriteria: .removed
                         ) { loadingOpacity = 0 }
-                            completion: { isLoading = false }
+                            completion: {
+                                isLoading = false
+                                if validate() { presenter.focusField = .none }
+                            }
                     }
                 }
+            } else {
+                presenter.focusField = .none
             }
 
             // HACK: Bug in SwiftUI where keyboard toolbar is broken
@@ -258,6 +261,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
             await MainActor.run {
                 if !isAlreadyValid { presenter.focusField = .address }
+                if validate() { presenter.focusField = .none }
 
                 Log.debug("SendFlowCoinControlSetAmount: onAppear \(sendFlowManager.amount?.asSats() ?? 0) sats")
                 if sendFlowManager.address != nil {
@@ -347,11 +351,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
                         sendFlowManager.dispatch(action: .changeEnteringAddress(address))
                         if address.isEmpty { return }
                         if !validateAddress() { return }
-                        if !validateAmount() {
-                            presenter.focusField = .amount
-                            return
-                        }
-
                         presenter.focusField = .none
                     }) {
                         Text("Paste")
@@ -499,9 +498,20 @@ struct SendFlowCoinControlSetAmountScreen: View {
     var TotalSpendingSection: some View {
         VStack {
             HStack {
-                Text("Total Spending")
-                    .font(.footnote)
-                    .fontWeight(.semibold)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Total Spending")
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+
+                    HStack {
+                        Button(action: { self.customAmountSheetIsPresented = true }) {
+                            Text(utxos.count > 1 ? "Spending \(utxos.count) UTXOs" : "Spending 1 UTXO")
+                                .font(.caption2)
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.blue.opacity(0.8))
+                    }
+                }
 
                 Spacer()
 
