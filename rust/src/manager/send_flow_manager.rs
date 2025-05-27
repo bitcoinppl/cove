@@ -6,7 +6,10 @@ pub mod fiat_on_change;
 mod sanitize;
 pub mod state;
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use crate::{
     app::{App, AppAction, FfiApp},
@@ -79,6 +82,8 @@ pub struct RustSendFlowManager {
 
     reconciler: Sender<SingleOrMany>,
     reconcile_receiver: Arc<Receiver<SingleOrMany>>,
+
+    checking_fees: AtomicBool,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -158,6 +163,7 @@ impl RustSendFlowManager {
             wallet_manager,
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
+            checking_fees: AtomicBool::new(false),
         }
         .into();
 
@@ -207,6 +213,11 @@ impl RustSendFlowManager {
     #[uniffi::method(name = "maxSendMinusFees")]
     pub fn ffi_max_send_minus_fees(&self) -> Option<Arc<Amount>> {
         self.max_send_minus_fees().map(Arc::new)
+    }
+
+    #[uniffi::method(name = "maxSendMinusFeesAndSmallUtxo")]
+    pub fn ffi_max_send_minus_fees_and_small_utxo(&self) -> Option<Arc<Amount>> {
+        self.max_send_minus_fees_and_small_utxo().map(Arc::new)
     }
 
     #[uniffi::method]
@@ -569,6 +580,13 @@ impl RustSendFlowManager {
         let max_send_without_fees = max_send.as_sats() - total_fee_sats;
 
         Some(Amount::from_sat(max_send_without_fees))
+    }
+
+    pub fn max_send_minus_fees_and_small_utxo(&self) -> Option<Amount> {
+        static SMALL_UTXO: u64 = 600;
+        let max_send = self.max_send_minus_fees()?;
+        let amount = max_send - Amount::from_sat(SMALL_UTXO);
+        Some(amount)
     }
 }
 
@@ -937,10 +955,15 @@ impl RustSendFlowManager {
         };
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
-        let max_send_without_fees_and_small_utxo =
-            self.max_send_minus_fees()? - Amount::from_sat(1000);
+        let max_send_without_fees_and_small_utxo = self.max_send_minus_fees_and_small_utxo()?;
 
         if amount >= max_send_without_fees_and_small_utxo {
+            debug!(
+                "setting coin control to max amount close to max {} {}",
+                amount.as_sats(),
+                max_send_without_fees_and_small_utxo.as_sats()
+            );
+
             let max_send = coin_control_mode.max_send();
             coin_control_mode.is_max_selected = true;
 
@@ -954,7 +977,6 @@ impl RustSendFlowManager {
             let mut state = self.state.lock();
             coin_control_mode.is_max_selected = false;
             state.mode = EnterMode::CoinControl(coin_control_mode);
-            state.amount_sats = Some(amount.as_sats());
         }
 
         self.handle_amount_changed(amount);
@@ -1541,6 +1563,10 @@ impl RustSendFlowManager {
     }
 
     fn sync_wrap_get_or_update_fee_rate_options(self: &Arc<Self>) {
+        if self.checking_fees.load(Ordering::Relaxed) {
+            return;
+        }
+
         let me = self.clone();
         task::spawn(async move {
             me.get_or_update_fee_rate_options().await;
@@ -1548,6 +1574,16 @@ impl RustSendFlowManager {
     }
 
     async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
+        if self.checking_fees.load(Ordering::Relaxed) {
+            return;
+        }
+
+        self.checking_fees.store(true, Ordering::Relaxed);
+        self.do_get_or_update_fee_rate_options().await;
+        self.checking_fees.store(false, Ordering::Relaxed);
+    }
+
+    async fn do_get_or_update_fee_rate_options(self: &Arc<Self>) {
         debug!("get_or_update_fee_rate_options");
 
         let mut sender = DeferredSender::new(self.clone());
