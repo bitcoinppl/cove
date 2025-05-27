@@ -124,7 +124,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             set: {
                 manager.deboucedDispatch(
                     .notifyCoinControlEnteredAmountChanged($0, isFocused),
-                    for: .milliseconds(60)
+                    for: .milliseconds(650)
                 )
             }
         )

@@ -1006,6 +1006,14 @@ impl RustSendFlowManager {
     }
 
     fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {
+        match self.state.lock().mode.clone() {
+            // already in coin control mode with the same utxos, so do nothing
+            EnterMode::CoinControl(cc) if cc.utxo_list.utxos == utxos => {
+                return;
+            }
+            _ => {}
+        }
+
         let utxo_list = Arc::new(UtxoList::from(utxos));
         let total_minus_fees = {
             let mut state = self.state.lock();
