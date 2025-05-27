@@ -23,11 +23,12 @@ use bdk_wallet::{
         bitcoin::Psbt,
         spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
     },
+    error::CreateTxError,
 };
 use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
-use cove_bdk::coin_selection::{CoveDefaultCoinSelection, ManualUtxoSelection};
+use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::GAP_LIMIT;
 use cove_types::{
     address::AddressInfoWithDerivation,
@@ -238,9 +239,8 @@ impl WalletActor {
 
         let fee_rate = fee_rate.into();
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
-        debug!("build_manual_tx::send_amount: {send_amount:?}");
 
-        let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(ManualUtxoSelection);
+        let mut tx_builder = self.wallet.bdk.build_tx();
         tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
         tx_builder.manually_selected_only();
         tx_builder.ordering(TxOrdering::Untouched);
@@ -248,7 +248,6 @@ impl WalletActor {
         tx_builder.fee_rate(fee_rate);
 
         let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
-
         Ok(psbt)
     }
 
@@ -889,47 +888,74 @@ impl WalletActor {
         utxos: &[bitcoin::OutPoint],
     ) -> Result<Amount, Error> {
         let fee_rate = fee_rate.into();
-        let mut utxo_total_amount = Amount::ZERO;
-        let mut fee_amount = Amount::ZERO;
 
-        let weighted_utxos =
-            self.get_weighted_utxos(utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+        let (utxo_total_amount, fee_estimate) = {
+            let mut utxo_total_amount = Amount::ZERO;
+            let mut total_fee_amount = Amount::ZERO;
 
-        for weighted_utxo in weighted_utxos {
-            let weight = TxIn::default()
-                .segwit_weight()
-                .checked_add(weighted_utxo.satisfaction_weight)
-                .expect("`Weight` addition should not cause an integer overflow");
+            let weighted_utxos = self
+                .get_weighted_utxos(utxos)
+                .map_err(|err| Error::AddUtxosError(err.to_string()))?;
 
-            utxo_total_amount += weighted_utxo.utxo.txout().value;
-            fee_amount += fee_rate * weight;
-        }
+            for weighted_utxo in weighted_utxos {
+                let weight = TxIn::default()
+                    .segwit_weight()
+                    .checked_add(weighted_utxo.satisfaction_weight)
+                    .expect("`Weight` addition should not cause an integer overflow");
+
+                utxo_total_amount += weighted_utxo.utxo.txout().value;
+                total_fee_amount += fee_rate * weight;
+            }
+
+            (utxo_total_amount, total_fee_amount)
+        };
 
         if total_amount > utxo_total_amount {
             return Err(Error::InsufficientFunds(format!(
                 "custom amount {} is greater than the total amount available, total available: {}, fees: {}",
-                total_amount, utxo_total_amount, fee_amount,
+                total_amount, utxo_total_amount, fee_estimate,
             )));
         };
 
         let fee = {
-            let send_amount_estimate = total_amount.checked_sub(fee_amount).ok_or_else(|| {
-                Error::InsufficientFunds(format!(
-                    "no enough funds to cover the fees, total available: {}, fees: {}",
-                    total_amount, fee_amount,
-                ))
-            })?;
+            let mut max_send_estimate =
+                utxo_total_amount.checked_sub(fee_estimate).ok_or_else(|| {
+                    Error::InsufficientFunds(format!(
+                        "no enough funds to cover the fees, total available: {}, fees: {}",
+                        total_amount, fee_estimate,
+                    ))
+                })?;
 
-            let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(ManualUtxoSelection);
-            tx_builder.add_utxos(utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
-            tx_builder.manually_selected_only();
-            tx_builder.ordering(TxOrdering::Untouched);
-            tx_builder.add_recipient(address.script_pubkey(), send_amount_estimate);
-            tx_builder.fee_rate(fee_rate);
+            let mut fee_psbt = None;
+            while fee_psbt.is_none() {
+                if max_send_estimate < Amount::from_sat(10_000) {
+                    return Err(Error::InsufficientFunds(format!(
+                        "no enough funds to cover the fees, total available: {}, fees: {}",
+                        total_amount, fee_estimate,
+                    )));
+                }
 
-            let fee_psbt =
-                tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
+                let mut tx_builder = self.wallet.bdk.build_tx();
+                tx_builder.add_utxos(utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+                tx_builder.manually_selected_only();
+                tx_builder.ordering(TxOrdering::Untouched);
+                tx_builder.add_recipient(address.script_pubkey(), max_send_estimate);
+                tx_builder.fee_rate(fee_rate);
+                let current_fee_psbt = tx_builder.finish();
 
+                match current_fee_psbt {
+                    Ok(psbt) => {
+                        fee_psbt = Some(psbt);
+                    }
+                    Err(CreateTxError::CoinSelection(result)) => {
+                        let difference = result.needed - result.available;
+                        max_send_estimate -= difference;
+                    }
+                    Err(err) => return Err(Error::BuildTxError(err.to_string())),
+                }
+            }
+
+            let fee_psbt = fee_psbt.expect("unwrapped in while");
             self.wallet.bdk.cancel_tx(&fee_psbt.unsigned_tx);
             fee_psbt.fee().map_err(|err| Error::BuildTxError(err.to_string()))?
         };

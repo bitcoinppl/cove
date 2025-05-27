@@ -27748,9 +27748,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 
