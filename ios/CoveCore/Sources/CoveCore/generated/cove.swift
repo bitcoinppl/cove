@@ -7740,7 +7740,7 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
      */
     func dispatch(action: WalletManagerAction) 
     
-    func displayAmount(amount: Amount)  -> String
+    func displayAmount(amount: Amount, showUnit: Bool)  -> String
     
     func displayFiatAmount(amount: Double, withSuffix: Bool)  -> String
     
@@ -8083,10 +8083,11 @@ open func dispatch(action: WalletManagerAction)  {try! rustCall() {
 }
 }
     
-open func displayAmount(amount: Amount) -> String  {
+open func displayAmount(amount: Amount, showUnit: Bool = true) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_method_rustwalletmanager_display_amount(self.uniffiClonePointer(),
-        FfiConverterTypeAmount_lower(amount),$0
+        FfiConverterTypeAmount_lower(amount),
+        FfiConverterBool.lower(showUnit),$0
     )
 })
 }
@@ -19406,6 +19407,8 @@ public enum SendFlowManagerAction {
     )
     case notifyCoinControlAmountChanged(Double
     )
+    case notifyCoinControlEnteredAmountChanged(String,Bool
+    )
     case changeFeeRateOptions(FeeRateOptionsWithTotalFee
     )
     case finalizeAndGoToNextScreen
@@ -19479,10 +19482,13 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 19: return .notifyCoinControlAmountChanged(try FfiConverterDouble.read(from: &buf)
         )
         
-        case 20: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
+        case 20: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
         )
         
-        case 21: return .finalizeAndGoToNextScreen
+        case 21: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
+        )
+        
+        case 22: return .finalizeAndGoToNextScreen
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -19587,13 +19593,19 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterDouble.write(v1, into: &buf)
             
         
-        case let .changeFeeRateOptions(v1):
+        case let .notifyCoinControlEnteredAmountChanged(v1,v2):
             writeInt(&buf, Int32(20))
+            FfiConverterString.write(v1, into: &buf)
+            FfiConverterBool.write(v2, into: &buf)
+            
+        
+        case let .changeFeeRateOptions(v1):
+            writeInt(&buf, Int32(21))
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
             
         
         case .finalizeAndGoToNextScreen:
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(22))
         
         }
     }
@@ -27290,7 +27302,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 24198) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 21016) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_display_amount() != 5221) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_display_fiat_amount() != 39867) {
@@ -27735,10 +27747,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

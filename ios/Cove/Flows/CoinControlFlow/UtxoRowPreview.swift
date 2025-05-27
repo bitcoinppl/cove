@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct UtxoRowPreview: View {
-    let displayAmount: (Amount) -> String
+    let displayAmount: (Amount, Bool) -> String
     let utxo: Utxo
 
     var body: some View {
@@ -38,7 +38,7 @@ struct UtxoRowPreview: View {
             Spacer()
 
             HStack {
-                Text(displayAmount(utxo.amount))
+                Text(displayAmount(utxo.amount, true))
                 Spacer()
                 Text(utxo.date)
             }

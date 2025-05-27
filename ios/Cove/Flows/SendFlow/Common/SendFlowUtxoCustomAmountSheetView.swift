@@ -24,6 +24,8 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     @State private var pinState: PinState = .hard
     private enum PinState { case none, soft, hard }
 
+    @FocusState private var isFocused: Bool
+
     private var smartSnapBinding: Binding<Double> {
         Binding(
             get: { customAmount },
@@ -84,27 +86,28 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             .foregroundStyle(.red)
     }
 
-    var minSend: Double {
+    private var minSend: Double {
         satToDouble(10000)
     }
 
-    var step: Double {
+    private var step: Double {
         satToDouble(10)
     }
 
-    var maxSend: Double {
-        let amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: 10000)
+    private var maxSend: Double {
+        var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: 11000)
+        if amount.asSats() < 10000 { amount = Amount.fromSat(sats: 11000) }
         return amountToDouble(amount)
     }
 
     // softMaxSend is the next biggest amount below maxSend that can be selected
     // any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
-    var softMaxSend: Double {
+    private var softMaxSend: Double {
         let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? Amount.fromSat(sats: 10000)
         return amountToDouble(amount)
     }
 
-    var displayAmount: String {
+    private var displayAmount: String {
         let amountSats =
             switch metadata.selectedUnit {
             case .sat: customAmount
@@ -112,17 +115,31 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             }
 
         let amount = Amount.fromSat(sats: UInt64(amountSats))
-        return walletManager.displayAmount(amount)
+        return walletManager.displayAmount(amount, showUnit: false)
     }
 
-    func satToDouble(_ sats: Int) -> Double {
+    private var displayAmountBinding: Binding<String> {
+        Binding(
+            get: { displayAmount },
+            set: { manager.dispatch(.notifyCoinControlEnteredAmountChanged($0, isFocused)) }
+        )
+    }
+
+    private func satToDouble(_ sats: Int) -> Double {
         amountToDouble(Amount.fromSat(sats: UInt64(sats)))
     }
 
-    func amountToDouble(_ amount: Amount) -> Double {
+    private func amountToDouble(_ amount: Amount) -> Double {
         switch metadata.selectedUnit {
         case .sat: Double(amount.asSats())
         case .btc: amount.asBtc()
+        }
+    }
+
+    var selectedUnitSymbol: String {
+        switch metadata.selectedUnit {
+        case .sat: "SATS"
+        case .btc: "BTC"
         }
     }
 
@@ -152,6 +169,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .onTapGesture { isFocused = false }
 
             Divider()
                 .padding(.horizontal, -16)
@@ -162,6 +180,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                     UtxoRow(utxo: utxo)
                 }
             }
+            .onTapGesture { isFocused = false }
 
             Spacer()
 
@@ -169,8 +188,21 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 HStack {
                     Text("Set Amount")
                     Spacer()
-                    Text(displayAmount)
+                    TextField(displayAmount, text: displayAmountBinding).keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .focused($isFocused)
+
+                    Text(selectedUnitSymbol)
                 }
+                .font(.subheadline)
+                .fontWeight(.semibold)
+
+                HStack {
+                    Text("Use the slider to set the amount.")
+                    Spacer()
+                }
+                .foregroundStyle(.secondary)
+                .font(.caption2)
 
                 Slider(
                     value: smartSnapBinding,
@@ -185,9 +217,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .onChange(of: metadata.selectedUnit, initial: true) { _, _ in
-            // if the unit changes just default to the max send
-            if customAmount != maxSend, customAmount > 0 { return }
-            customAmount = maxSend
+            self.customAmount = manager.amount.map(amountToDouble) ?? maxSend
         }
         .onChange(of: isEditing) { old, new in
             Log.debug("isEditing changed from \(old) -> \(new)")
@@ -204,6 +234,12 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             switch metadata.selectedUnit {
             case .sat: customAmount = Double(newAmount.asSats())
             case .btc: customAmount = newAmount.asBtc()
+            }
+        }
+        .onChange(of: isFocused, initial: false) { old, new in
+            // lost focus
+            if old == true, new == false {
+                self.customAmount = manager.amount.map(amountToDouble) ?? maxSend
             }
         }
     }
@@ -288,10 +324,5 @@ private struct UtxoRow: View {
             .environment(ap)
             .environment(presenter)
             .environment(sendFlowManager)
-            .onAppear {
-                wm.dispatch(action: .updateUnit(.sat))
-                sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: .btc, new: .sat))
-                sendFlowManager.dispatch(.setCoinControlMode(utxos))
-            }
     }
 }

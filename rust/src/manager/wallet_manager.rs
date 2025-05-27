@@ -516,8 +516,8 @@ impl RustWalletManager {
         })
     }
 
-    #[uniffi::method]
-    pub fn display_amount(&self, amount: Arc<Amount>) -> String {
+    #[uniffi::method(default(show_unit = true))]
+    pub fn display_amount(&self, amount: Arc<Amount>, show_unit: bool) -> String {
         {
             let sensitive_visible = self.metadata.read().sensitive_visible;
             if !sensitive_visible {
@@ -526,7 +526,7 @@ impl RustWalletManager {
         }
 
         let unit = self.metadata.read().selected_unit;
-        amount.fmt_string_with_unit(unit)
+        if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
     }
 
     #[uniffi::method]

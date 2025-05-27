@@ -109,8 +109,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         }
     }
 
-    func displayAmount(_ amount: Amount) -> String {
-        self.rust.displayAmount(amount: amount)
+    func displayAmount(_ amount: Amount, showUnit: Bool = true) -> String {
+        self.rust.displayAmount(amount: amount, showUnit: showUnit)
     }
 
     func amountFmtUnit(_ amount: Amount) -> String {

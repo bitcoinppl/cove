@@ -109,12 +109,16 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         }
     }
 
-    func displayAmount(_ amount: Amount) -> String {
-        switch unit {
-        case .btc:
+    func displayAmount(_ amount: Amount, showUnit: Bool = true) -> String {
+        switch (unit, showUnit) {
+        case (.btc, true):
             amount.btcStringWithUnit()
-        case .sat:
+        case (.btc, false):
+            amount.btcString()
+        case (.sat, true):
             amount.satsStringWithUnit()
+        case (.sat, false):
+            amount.satsString()
         }
     }
 

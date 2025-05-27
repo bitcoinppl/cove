@@ -145,6 +145,7 @@ pub enum SendFlowManagerAction {
 
     // notify coin control custom amount changed
     NotifyCoinControlAmountChanged(f64),
+    NotifyCoinControlEnteredAmountChanged(String, bool),
 
     // custom fee selection
     ChangeFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
@@ -552,6 +553,9 @@ impl RustSendFlowManager {
             Action::NotifyCoinControlAmountChanged(amount) => {
                 self.handle_coin_control_amount_changed(amount);
             }
+            Action::NotifyCoinControlEnteredAmountChanged(amount, is_focused) => {
+                self.handle_coin_control_entered_amount_changed(amount, is_focused);
+            }
         }
     }
 }
@@ -952,7 +956,8 @@ impl RustSendFlowManager {
         let amount = match unit {
             Unit::Btc => Amount::from_btc(amount).ok()?,
             Unit::Sat => Amount::from_sat(amount as u64),
-        };
+        }
+        .max(Amount::from_sat(10_000));
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
         let max_send_without_fees_and_small_utxo = self.max_send_minus_fees_and_small_utxo()?;
@@ -982,6 +987,22 @@ impl RustSendFlowManager {
         self.handle_amount_changed(amount);
 
         Some(())
+    }
+
+    fn handle_coin_control_entered_amount_changed(
+        self: &Arc<Self>,
+        amount: String,
+        is_focused: bool,
+    ) -> Option<()> {
+        debug!("handle_coin_control_entered_amount_changed: {amount}");
+        let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
+        let amount_float = amount.parse::<f64>().ok()?;
+
+        if amount_float < 10_000.0 && is_focused {
+            return None;
+        }
+
+        self.handle_coin_control_amount_changed(amount_float)
     }
 
     fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {
