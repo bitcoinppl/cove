@@ -1060,11 +1060,8 @@ impl RustWalletManager {
 
         let psbt =
             call!(actor.build_manual_tx(outpoints, amount, address, fee_rate)).await.unwrap()?;
-        debug!("confirm_manual_txn psbt fee: {:?}", psbt.fee());
 
         let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
-        debug!("confirm_manual_txn details fee: {:?}", details);
-
         Ok(details)
     }
 }

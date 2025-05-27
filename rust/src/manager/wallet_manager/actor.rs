@@ -234,7 +234,7 @@ impl WalletActor {
         address: Address,
         fee_rate: impl Into<BdkFeeRate>,
     ) -> Result<Psbt, Error> {
-        debug!("build_manual_tx");
+        debug!("build_manual_tx: {total_amount:?}");
 
         let fee_rate = fee_rate.into();
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
@@ -933,7 +933,12 @@ impl WalletActor {
             fee_psbt.fee().map_err(|err| Error::BuildTxError(err.to_string()))?
         };
 
-        let send_amount = total_amount.checked_sub(fee).ok_or_else(|| {
+        // if the total amount is possible to send after fees, use it
+        if total_amount < utxo_total_amount.checked_add(fee).unwrap_or(Amount::ZERO) {
+            return Ok(total_amount);
+        }
+
+        let send_amount = utxo_total_amount.checked_sub(fee).ok_or_else(|| {
             Error::InsufficientFunds(format!(
                 "no enough funds to cover the fees, total available: {}, fees: {}",
                 total_amount, fee,
