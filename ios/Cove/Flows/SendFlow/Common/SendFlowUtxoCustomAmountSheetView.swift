@@ -10,7 +10,6 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(AppManager.self) private var app
     @Environment(WalletManager.self) private var walletManager
     @Environment(SendFlowManager.self) private var manager
-    @Environment(SendFlowPresenter.self) private var presenter
     @Environment(\.dismiss) private var dismiss
 
     var metadata: WalletMetadata { walletManager.walletMetadata }
@@ -19,13 +18,14 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     // private
     @State private var customAmount: Double = 0.0
-    @State private var previousAmount: Double = 10000
+    @State private var previousAmount: Double = .init(minSendSats)
     @State private var isEditing: Bool = false
     @State private var pinState: PinState = .hard
     private enum PinState { case none, soft, hard }
 
     @FocusState private var isFocused: Bool
 
+    private var presenter: SendFlowPresenter { manager.presenter }
     private var smartSnapBinding: Binding<Double> {
         Binding(
             get: { customAmount },
@@ -86,24 +86,19 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             .foregroundStyle(.red)
     }
 
-    private var minSend: Double {
-        satToDouble(10000)
-    }
-
-    private var step: Double {
-        satToDouble(10)
-    }
+    private var minSend: Double { satToDouble(minSendSats) }
+    private var step: Double { satToDouble(10) }
 
     private var maxSend: Double {
-        var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: 11000)
-        if amount.asSats() < 10000 { amount = Amount.fromSat(sats: 11000) }
+        var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: minSendSatsU + 1000)
+        if amount.asSats() < minSendSatsU { amount = Amount.fromSat(sats: minSendSatsU + 1000) }
         return amountToDouble(amount)
     }
 
     // softMaxSend is the next biggest amount below maxSend that can be selected
     // any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
     private var softMaxSend: Double {
-        let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? Amount.fromSat(sats: 10000)
+        let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? minSendAmount
         return amountToDouble(amount)
     }
 

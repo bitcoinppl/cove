@@ -27,6 +27,7 @@ use act_zero::{WeakAddr, call};
 use alert_state::SendFlowAlertState;
 use amount_or_max::AmountOrMax;
 use btc_on_change::BtcOnChangeHandler;
+use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
 use cove_macros::impl_manager_message_send;
 use cove_types::{
     WalletId,
@@ -380,7 +381,7 @@ impl RustSendFlowManager {
             return false;
         }
 
-        if amount < 5000 {
+        if amount < MIN_SEND_SATS {
             let msg = Message::SetAlert(SendFlowError::SendAmountToLow.into());
             if display_alert {
                 sender.queue(msg);
@@ -957,7 +958,7 @@ impl RustSendFlowManager {
             Unit::Btc => Amount::from_btc(amount).ok()?,
             Unit::Sat => Amount::from_sat(amount as u64),
         }
-        .max(Amount::from_sat(10_000));
+        .max(MIN_SEND_AMOUNT.into());
 
         // if the amount we are selecting is within 1000 sats of the max send, then select the max send
         let max_send_without_fees_and_small_utxo = self.max_send_minus_fees_and_small_utxo()?;
@@ -1659,7 +1660,7 @@ impl RustSendFlowManager {
 
         let amount_sats_for_fee_calc = match &mode {
             EnterMode::CoinControl(cc) if cc.is_max_selected => cc.max_send().to_sat(),
-            _ => amount_sats.unwrap_or(10_000),
+            _ => amount_sats.unwrap_or(MIN_SEND_SATS),
         };
 
         let amount_for_fee_calc = Amount::from_sat(amount_sats_for_fee_calc);

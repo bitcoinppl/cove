@@ -6827,8 +6827,6 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
     func selectedUtxos()  -> [Utxo]
     
-    func totalSelectedAmount()  -> Amount
-    
     func unit()  -> Unit
     
     func utxos()  -> [Utxo]
@@ -6930,13 +6928,6 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
 open func selectedUtxos() -> [Utxo]  {
     return try!  FfiConverterSequenceTypeUtxo.lift(try! rustCall() {
     uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func totalSelectedAmount() -> Amount  {
-    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
-    uniffi_cove_fn_method_rustcoincontrolmanager_total_selected_amount(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -14534,7 +14525,9 @@ public enum CoinControlManagerReconcileMessage {
     )
     case updateSearch(String
     )
-    case updateSelectedUtxos([OutPoint]
+    case updateSelectedUtxos(utxos: [OutPoint], totalValue: Amount
+    )
+    case updateTotalSelectedAmount(Amount
     )
     case updateUnit(Unit
     )
@@ -14566,10 +14559,13 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
         case 4: return .updateSearch(try FfiConverterString.read(from: &buf)
         )
         
-        case 5: return .updateSelectedUtxos(try FfiConverterSequenceTypeOutPoint.read(from: &buf)
+        case 5: return .updateSelectedUtxos(utxos: try FfiConverterSequenceTypeOutPoint.read(from: &buf), totalValue: try FfiConverterTypeAmount.read(from: &buf)
         )
         
-        case 6: return .updateUnit(try FfiConverterTypeUnit.read(from: &buf)
+        case 6: return .updateTotalSelectedAmount(try FfiConverterTypeAmount.read(from: &buf)
+        )
+        
+        case 7: return .updateUnit(try FfiConverterTypeUnit.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -14599,13 +14595,19 @@ public struct FfiConverterTypeCoinControlManagerReconcileMessage: FfiConverterRu
             FfiConverterString.write(v1, into: &buf)
             
         
-        case let .updateSelectedUtxos(v1):
+        case let .updateSelectedUtxos(utxos,totalValue):
             writeInt(&buf, Int32(5))
-            FfiConverterSequenceTypeOutPoint.write(v1, into: &buf)
+            FfiConverterSequenceTypeOutPoint.write(utxos, into: &buf)
+            FfiConverterTypeAmount.write(totalValue, into: &buf)
+            
+        
+        case let .updateTotalSelectedAmount(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeAmount.write(v1, into: &buf)
             
         
         case let .updateUnit(v1):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterTypeUnit.write(v1, into: &buf)
             
         }
@@ -26195,6 +26197,18 @@ public func discoveryStateIsEqual(lhs: DiscoveryState, rhs: DiscoveryState) -> B
     )
 })
 }
+public func ffiMinSendAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+    uniffi_cove_fn_func_ffi_min_send_amount($0
+    )
+})
+}
+public func ffiMinSendSats() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_fn_func_ffi_min_send_sats($0
+    )
+})
+}
 public func fiatAmountPreviewNew() -> FiatAmount  {
     return try!  FfiConverterTypeFiatAmount_lift(try! rustCall() {
     uniffi_cove_fn_func_fiat_amount_preview_new($0
@@ -26553,6 +26567,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_discovery_state_is_equal() != 12390) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_ffi_min_send_amount() != 9250) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_ffi_min_send_sats() != 5524) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_fiat_amount_preview_new() != 6422) {
@@ -27161,9 +27181,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos() != 6695) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcoincontrolmanager_total_selected_amount() != 8051) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_unit() != 56844) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27748,9 +27765,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

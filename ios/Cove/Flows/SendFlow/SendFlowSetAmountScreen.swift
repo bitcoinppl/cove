@@ -16,7 +16,6 @@ private typealias SheetState = SendFlowPresenter.SheetState
 private typealias AlertState = SendFlowAlertState
 
 struct SendFlowSetAmountScreen: View {
-    @Environment(SendFlowPresenter.self) private var presenter
     @Environment(AppManager.self) private var app
     @Environment(SendFlowManager.self) private var sendFlowManager
     @Environment(WalletManager.self) private var manager
@@ -38,6 +37,10 @@ struct SendFlowSetAmountScreen: View {
 
     // fees
     @State private var selectedPresentationDetent: PresentationDetent = .height(440)
+
+    private var presenter: SendFlowPresenter {
+        sendFlowManager.presenter
+    }
 
     private var metadata: WalletMetadata {
         manager.walletMetadata

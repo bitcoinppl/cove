@@ -1,11 +1,15 @@
 use std::path::PathBuf;
 
+use bitcoin::Amount;
 use eyre::Context as _;
 use once_cell::sync::Lazy;
 
 pub static ROOT_DATA_DIR: Lazy<PathBuf> = Lazy::new(data_dir_init);
 pub static WALLET_DATA_DIR: Lazy<PathBuf> = Lazy::new(wallet_data_dir_init);
 pub static GAP_LIMIT: u8 = 30;
+
+pub static MIN_SEND_SATS: u64 = 5000;
+pub static MIN_SEND_AMOUNT: Amount = Amount::from_sat(MIN_SEND_SATS);
 
 fn data_dir_init() -> PathBuf {
     let dir = dirs::home_dir()

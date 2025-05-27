@@ -16,7 +16,6 @@ public struct SendFlowContainer: View {
 
     // private
     @State private var manager: WalletManager? = nil
-    @State private var presenter: SendFlowPresenter? = nil
     @State private var sendFlowManager: SendFlowManager? = nil
     @State private var initCompleted: Bool = false
 
@@ -27,6 +26,7 @@ public struct SendFlowContainer: View {
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
             let manager = try app.getWalletManager(id: id)
+
             let presenter = SendFlowPresenter(app: app, manager: manager)
             let sendFlowManager = app.getSendFlowManager(manager, presenter: presenter)
 
@@ -41,7 +41,6 @@ public struct SendFlowContainer: View {
             waitForInit()
             self.manager = manager
             self.sendFlowManager = sendFlowManager
-            self.presenter = presenter
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -75,7 +74,9 @@ public struct SendFlowContainer: View {
     }
 
     public var body: some View {
-        if let manager, let presenter, let sendFlowManager, initCompleted {
+        if let manager, let sendFlowManager, initCompleted {
+            let presenter = sendFlowManager.presenter
+
             Group {
                 sendRouteToScreen(sendRoute: sendRoute, manager: manager, sendFlowManager: sendFlowManager)
             }

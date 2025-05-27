@@ -16,7 +16,6 @@ private typealias SheetState = SendFlowPresenter.SheetState
 private typealias AlertState = SendFlowAlertState
 
 struct SendFlowCoinControlSetAmountScreen: View {
-    @Environment(SendFlowPresenter.self) private var presenter
     @Environment(AppManager.self) private var app
     @Environment(SendFlowManager.self) private var sendFlowManager
     @Environment(WalletManager.self) private var manager
@@ -38,29 +37,14 @@ struct SendFlowCoinControlSetAmountScreen: View {
     // custom utxo amount
     @State private var customAmountSheetIsPresented: Bool = false
 
-    private var metadata: WalletMetadata {
-        manager.walletMetadata
-    }
+    private var presenter: SendFlowPresenter { sendFlowManager.presenter }
+    private var metadata: WalletMetadata { manager.walletMetadata }
+    private var network: Network { metadata.network }
 
-    private var network: Network {
-        metadata.network
-    }
-
-    private var totalSpentInFiat: String {
-        sendFlowManager.totalSpentInFiat
-    }
-
-    private var totalFeeString: String {
-        sendFlowManager.totalFeeString
-    }
-
-    private var totalSpentBtc: String {
-        sendFlowManager.totalSpentInBtc
-    }
-
-    private var totalSending: String {
-        sendFlowManager.sendAmountBtc
-    }
+    private var totalSpentInFiat: String { sendFlowManager.totalSpentInFiat }
+    private var totalFeeString: String { sendFlowManager.totalFeeString }
+    private var totalSpentBtc: String { sendFlowManager.totalSpentInBtc }
+    private var totalSending: String { sendFlowManager.sendAmountBtc }
 
     // MARK: Actions
 
