@@ -238,6 +238,7 @@ impl WalletActor {
 
         let fee_rate = fee_rate.into();
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
+        debug!("build_manual_tx::send_amount: {send_amount:?}");
 
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(ManualUtxoSelection);
         tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
@@ -933,19 +934,19 @@ impl WalletActor {
             fee_psbt.fee().map_err(|err| Error::BuildTxError(err.to_string()))?
         };
 
-        // if the total amount is possible to send after fees, use it
-        if total_amount < utxo_total_amount.checked_add(fee).unwrap_or(Amount::ZERO) {
-            return Ok(total_amount);
-        }
-
-        let send_amount = utxo_total_amount.checked_sub(fee).ok_or_else(|| {
+        let max_send_amount = utxo_total_amount.checked_sub(fee).ok_or_else(|| {
             Error::InsufficientFunds(format!(
                 "no enough funds to cover the fees, total available: {}, fees: {}",
                 total_amount, fee,
             ))
         })?;
 
-        Ok(send_amount)
+        debug!("getting_max::send_amount: {max_send_amount:?}");
+        if total_amount < max_send_amount {
+            return Ok(total_amount);
+        }
+
+        Ok(max_send_amount)
     }
 
     fn get_weighted_utxos(
