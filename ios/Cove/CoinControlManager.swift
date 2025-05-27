@@ -12,6 +12,7 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     private var sort: CoinControlListSort? = .some(.date(.descending))
 
     var search: String = ""
+    var totalSelected = Amount.fromSat(sats: 0)
     var selected: Set<Utxo.ID> = []
     var utxos: [Utxo]
     var unit: Unit = .sat
@@ -83,11 +84,6 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         displayAmount(self.totalSelected)
     }
 
-    public var totalSelected: Amount {
-        let _ = self.selected
-        return rust.totalSelectedAmount()
-    }
-
     public var totalSelectedSats: Int {
         Int(self.totalSelected.asSats())
     }
@@ -102,10 +98,13 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
             withAnimation { self.utxos = utxos }
         case let .updateSearch(search):
             withAnimation { self.search = search }
-        case let .updateSelectedUtxos(selected):
+        case let .updateSelectedUtxos(utxos: selected, totalSelected):
             self.selected = Set(selected)
+            withAnimation { self.totalSelected = totalSelected }
         case let .updateUnit(unit):
             withAnimation { self.unit = unit }
+        case let .updateTotalSelectedAmount(amount):
+            withAnimation { self.totalSelected = amount }
         }
     }
 

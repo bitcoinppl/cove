@@ -50,7 +50,8 @@ pub enum CoinControlManagerReconcileMessage {
     UpdateSort(CoinControlListSort),
     UpdateUtxos(Vec<Utxo>),
     UpdateSearch(String),
-    UpdateSelectedUtxos(Vec<Arc<OutPoint>>),
+    UpdateSelectedUtxos { utxos: Vec<Arc<OutPoint>>, total_value: Arc<Amount> },
+    UpdateTotalSelectedAmount(Arc<Amount>),
     UpdateUnit(Unit),
 }
 
@@ -87,21 +88,6 @@ impl RustCoinControlManager {
     #[uniffi::method]
     pub fn id(&self) -> WalletId {
         self.state.lock().wallet_id.clone()
-    }
-
-    #[uniffi::method]
-    pub fn total_selected_amount(&self) -> Amount {
-        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
-            self.state.lock().selected_utxos.iter().cloned().collect();
-
-        let final_amount_sats = self
-            .utxos()
-            .into_iter()
-            .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
-            .map(|utxo| utxo.amount.as_sats())
-            .sum();
-
-        Amount::from_sat(final_amount_sats)
     }
 
     #[uniffi::method]
@@ -184,7 +170,7 @@ impl RustCoinControlManager {
                 self.send(Message::UpdateUnit(new_unit));
             }
             Action::NotifySelectedUtxosChanged(selected_utxos) => {
-                self.state.lock().selected_utxos = selected_utxos;
+                self.notify_selected_utxos_changed(selected_utxos);
             }
         }
     }
@@ -204,6 +190,20 @@ impl RustCoinControlManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
+    }
+
+    pub fn total_value_of_utxos(&self, selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
+        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
+            selected_utxo_ids.iter().cloned().collect();
+
+        let final_amount_sats = self
+            .utxos()
+            .into_iter()
+            .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
+            .map(|utxo| utxo.amount.as_sats())
+            .sum();
+
+        Amount::from_sat(final_amount_sats)
     }
 
     fn sort_button_pressed(self: Arc<Self>, sort_button_pressed: CoinControlListSortKey) {
@@ -256,8 +256,17 @@ impl RustCoinControlManager {
 
         let new_selected = &self.state.lock().selected_utxos;
         if new_selected != &selected_utxos {
-            sender.queue(Message::UpdateSelectedUtxos(new_selected.clone()));
+            sender.queue(Message::UpdateSelectedUtxos {
+                utxos: new_selected.clone(),
+                total_value: self.total_value_of_utxos(&new_selected).into(),
+            })
         }
+    }
+
+    fn notify_selected_utxos_changed(self: Arc<Self>, selected_utxos: Vec<Arc<OutPoint>>) {
+        let total_value = self.total_value_of_utxos(&selected_utxos).into();
+        self.state.lock().selected_utxos = selected_utxos;
+        self.send(Message::UpdateTotalSelectedAmount(total_value));
     }
 
     fn notify_search_changed(self: Arc<Self>, search: String) {
