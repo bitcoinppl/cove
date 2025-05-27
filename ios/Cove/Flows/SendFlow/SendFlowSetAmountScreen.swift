@@ -401,8 +401,9 @@ struct SendFlowSetAmountScreen: View {
     @ViewBuilder
     var ToolBarView: some View {
         switch presenter.focusField {
-        case .amount, .none: AmountKeyboardToolbar
+        case .amount: AmountKeyboardToolbar
         case .address: AddressKeyboardToolbar
+        case .none: EmptyView()
         }
     }
 

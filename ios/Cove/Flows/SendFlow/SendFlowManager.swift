@@ -16,10 +16,10 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
     private let logger = Log(id: "SendFlowManager")
     @ObservationIgnored
-    var rust: RustSendFlowManager
+    let rust: RustSendFlowManager
 
     @ObservationIgnored
-    var id: WalletId
+    let id: WalletId
 
     var enteringBtcAmount: String = ""
     var enteringFiatAmount: String = ""
@@ -52,6 +52,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         )
     }
 
+    // private
+    private var deboucedTask: Task<Void, Never>? = nil
+
     public init(_ rust: RustSendFlowManager, presenter: SendFlowPresenter) {
         self.rust = rust
         self.presenter = presenter
@@ -66,7 +69,6 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
-    
 
     public func setAddress(_ address: Address) {
         self._enteringAddress = address.string()
@@ -182,6 +184,19 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         rustBridge.async {
             self.logger.debug("dispatch: \(action)")
             self.rust.dispatch(action: action)
+        }
+    }
+
+    public func deboucedDispatch(_ action: Action, for debounceDelay: Duration = .milliseconds(66)) {
+        deboucedTask?.cancel()
+
+        self.deboucedTask = Task {
+            do {
+                try await Task.sleep(for: debounceDelay)
+                self.dispatch(action)
+            } catch {
+                // task was cancelled, do nothing
+            }
         }
     }
 }

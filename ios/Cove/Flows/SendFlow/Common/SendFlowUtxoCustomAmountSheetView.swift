@@ -19,13 +19,60 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     // private
     @State private var customAmount: Double = 0.0
+    @State private var previousAmount: Double = 10000
+    @State private var isEditing: Bool = false
+    @State private var pinState: PinState = .hard
+    private enum PinState { case none, soft, hard }
 
-    var customAmountBinding: Binding<Double> {
+    private var smartSnapBinding: Binding<Double> {
         Binding(
             get: { customAmount },
-            set: {
-                customAmount = $0
-                manager.dispatch(.notifyCoinControlAmountChanged($0))
+            set: { raw in
+                let goingUp = raw > previousAmount
+                let goingDown = raw < previousAmount
+                var adjusted = raw
+
+                switch pinState {
+                case .hard:
+                    if goingDown {
+                        pinState = .soft
+                        adjusted = softMaxSend
+                    } else {
+                        // hold at pin
+                        adjusted = maxSend
+                    }
+
+                case .soft:
+                    // crossing upward → snap to hard
+                    if goingUp {
+                        pinState = .hard
+                        adjusted = maxSend
+                    } else if raw < softMaxSend - step {
+                        // pulled a full step below band → release pin
+                        pinState = .none
+                        adjusted = raw
+                    } else {
+                        // hold at pin
+                        adjusted = softMaxSend
+                    }
+
+                case .none:
+                    if raw >= softMaxSend {
+                        pinState = goingUp ? .hard : .soft
+                        adjusted = goingUp ? maxSend : softMaxSend
+                    }
+                }
+
+                // update model only on real change
+                if customAmount != adjusted {
+                    customAmount = adjusted
+                    manager.deboucedDispatch(
+                        .notifyCoinControlAmountChanged(adjusted),
+                        for: .milliseconds(200)
+                    )
+                }
+
+                previousAmount = raw
             }
         )
     }
@@ -37,16 +84,46 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             .foregroundStyle(.red)
     }
 
-    var maxSendSat: Double {
-        Double(Int(manager.rust.maxSendMinusFees()?.asSats() ?? 10000))
+    var minSend: Double {
+        satToDouble(10000)
     }
 
-    var maxSendBtc: Double {
-        manager.rust.maxSendMinusFees()?.asBtc() ?? 0.0001
+    var step: Double {
+        satToDouble(10)
+    }
+
+    var maxSend: Double {
+        let amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: 10000)
+        return amountToDouble(amount)
+    }
+
+    // softMaxSend is the next biggest amount below maxSend that can be selected
+    // any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
+    var softMaxSend: Double {
+        let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? Amount.fromSat(sats: 10000)
+        return amountToDouble(amount)
     }
 
     var displayAmount: String {
-        manager.sendAmountBtc
+        let amountSats =
+            switch metadata.selectedUnit {
+            case .sat: customAmount
+            case .btc: customAmount * 100_000_000
+            }
+
+        let amount = Amount.fromSat(sats: UInt64(amountSats))
+        return walletManager.displayAmount(amount)
+    }
+
+    func satToDouble(_ sats: Int) -> Double {
+        amountToDouble(Amount.fromSat(sats: UInt64(sats)))
+    }
+
+    func amountToDouble(_ amount: Amount) -> Double {
+        switch metadata.selectedUnit {
+        case .sat: Double(amount.asSats())
+        case .btc: amount.asBtc()
+        }
     }
 
     var body: some View {
@@ -95,26 +172,38 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                     Text(displayAmount)
                 }
 
-                switch metadata.selectedUnit {
-                case .sat:
-                    Slider(value: customAmountBinding, in: 10000 ... maxSendSat, step: 100)
-                case .btc:
-                    Slider(value: customAmountBinding, in: 0.000010000 ... maxSendBtc, step: 0.00000100)
-                }
+                Slider(
+                    value: smartSnapBinding,
+                    in: minSend ... maxSend,
+                    step: step,
+                    onEditingChanged: { isEditing = $0 }
+                )
             }
         }
         .padding()
         .background(Color(UIColor.secondarySystemBackground))
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .onChange(of: metadata.selectedUnit, initial: true) { _, new in
-            if customAmount != maxSendSat, customAmount != maxSendBtc, customAmount > 0 {
-                return
-            }
+        .onChange(of: metadata.selectedUnit, initial: true) { _, _ in
+            // if the unit changes just default to the max send
+            if customAmount != maxSend, customAmount > 0 { return }
+            customAmount = maxSend
+        }
+        .onChange(of: isEditing) { old, new in
+            Log.debug("isEditing changed from \(old) -> \(new)")
 
-            switch new {
-            case .sat: customAmount = maxSendSat
-            case .btc: customAmount = maxSendBtc
+            // stopped editing dispatch the amount
+            if old == true, new == false {
+                manager.dispatch(.notifyCoinControlAmountChanged(customAmount))
+            }
+        }
+        .onChange(of: manager.amount) { _, new in
+            guard let newAmount = new else { return }
+            if isEditing { return }
+
+            switch metadata.selectedUnit {
+            case .sat: customAmount = Double(newAmount.asSats())
+            case .btc: customAmount = newAmount.asBtc()
             }
         }
     }

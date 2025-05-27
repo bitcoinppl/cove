@@ -7396,6 +7396,8 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func maxSendMinusFees()  -> Amount?
     
+    func maxSendMinusFeesAndSmallUtxo()  -> Amount?
+    
     func sanitizeBtcEnteringAmount(oldValue: String, newValue: String)  -> String?
     
     func sanitizeFiatEnteringAmount(oldValue: String, newValue: String)  -> String?
@@ -7541,6 +7543,13 @@ open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCal
 open func maxSendMinusFees() -> Amount?  {
     return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
     uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfees(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func maxSendMinusFeesAndSmallUtxo() -> Amount?  {
+    return try!  FfiConverterOptionTypeAmount.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_maxsendminusfeesandsmallutxo(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -27206,6 +27215,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfees() != 54180) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_maxsendminusfeesandsmallutxo() != 14164) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 24133) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27725,8 +27737,8 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 
