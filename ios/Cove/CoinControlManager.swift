@@ -90,11 +90,20 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
         Int(self.totalSelected.asSats())
     }
 
+    public func continuePressed() {
+        guard let sfm = AppManager.shared.sendFlowManager else { return }
+        self.updateSendFlowManagerTask?.cancel()
+        self.updateSendFlowManagerTask = nil
+
+        let selectedUtxos = self.utxos.filter { self.selected.contains($0.id) }
+        sfm.dispatch(.setCoinControlMode(selectedUtxos))
+    }
+
     private func updateSendFlowManager() {
         guard let sfm = AppManager.shared.sendFlowManager else { return }
         self.updateSendFlowManagerTask?.cancel()
         self.updateSendFlowManagerTask = Task {
-            try? await Task.sleep(for: .milliseconds(33))
+            try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
             let selectedUtxos = self.utxos.filter { self.selected.contains($0.id) }
             sfm.dispatch(.setCoinControlMode(selectedUtxos))

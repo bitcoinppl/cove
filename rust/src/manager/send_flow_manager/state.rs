@@ -85,7 +85,7 @@ impl CoinControlMode {
     }
 
     pub fn max_send(&self) -> Amount {
-        self.utxo_list.total.into()
+        self.utxo_list.total
     }
 
     pub fn utxo_list(&self) -> Arc<UtxoList> {

@@ -258,7 +258,7 @@ impl RustCoinControlManager {
         if new_selected != &selected_utxos {
             sender.queue(Message::UpdateSelectedUtxos {
                 utxos: new_selected.clone(),
-                total_value: self.total_value_of_utxos(&new_selected).into(),
+                total_value: self.total_value_of_utxos(new_selected).into(),
             })
         }
     }

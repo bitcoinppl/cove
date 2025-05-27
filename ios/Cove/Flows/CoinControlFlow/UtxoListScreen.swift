@@ -216,6 +216,7 @@ struct UtxoListScreen: View {
 
                 // ─ Action buttons ─
                 Button(continueText) {
+                    manager.continuePressed()
                     navigate(
                         RouteFactory()
                             .coinControlSend(
