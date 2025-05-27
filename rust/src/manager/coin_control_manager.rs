@@ -246,20 +246,20 @@ impl RustCoinControlManager {
     fn toggle_select_all(self: Arc<Self>) {
         let mut sender = DeferredSender::new(self.clone());
 
-        let selected_utxos = self.state.lock().selected_utxos.clone();
-        if selected_utxos.is_empty() {
-            let selected = self.utxos().into_iter().map(|utxo| utxo.outpoint).collect();
-            self.state.lock().selected_utxos = selected;
-        } else {
-            self.state.lock().selected_utxos = vec![];
-        }
+        let old_selected_utxos = self.state.lock().selected_utxos.clone();
 
-        let new_selected = &self.state.lock().selected_utxos;
-        if new_selected != &selected_utxos {
-            sender.queue(Message::UpdateSelectedUtxos {
-                utxos: new_selected.clone(),
-                total_value: self.total_value_of_utxos(new_selected).into(),
-            })
+        let new_selected_utxos = if old_selected_utxos.is_empty() {
+            self.utxos().into_iter().map(|utxo| utxo.outpoint).collect()
+        } else {
+            vec![]
+        };
+
+        if new_selected_utxos == old_selected_utxos {
+            self.state.lock().selected_utxos = new_selected_utxos;
+        } else {
+            self.state.lock().selected_utxos = new_selected_utxos.clone();
+            let total_value = self.total_value_of_utxos(&new_selected_utxos).into();
+            sender.queue(Message::UpdateSelectedUtxos { utxos: new_selected_utxos, total_value })
         }
     }
 

@@ -591,15 +591,20 @@ impl RustSendFlowManager {
             .map(|f| f.total_fee.as_sats())
             .unwrap_or(1000);
 
-        let max_send_without_fees = max_send.as_sats() - total_fee_sats;
-
+        let max_send_without_fees = max_send.as_sats().saturating_sub(total_fee_sats);
         Some(Amount::from_sat(max_send_without_fees))
     }
 
     pub fn max_send_minus_fees_and_small_utxo(&self) -> Option<Amount> {
         static SMALL_UTXO: u64 = 600;
         let max_send = self.max_send_minus_fees()?;
-        let amount = max_send - Amount::from_sat(SMALL_UTXO);
+
+        let small_utxo_amount = Amount::from_sat(SMALL_UTXO);
+        if max_send <= small_utxo_amount {
+            return None;
+        }
+
+        let amount = max_send - small_utxo_amount;
         Some(amount)
     }
 }
@@ -1034,8 +1039,7 @@ impl RustSendFlowManager {
             let total_fee_sats =
                 state.selected_fee_rate.as_ref().map(|fee_rate| fee_rate.total_fee.as_sats());
 
-            state.mode = EnterMode::coin_control(utxo_list.clone());
-
+            state.mode = EnterMode::coin_control_max(utxo_list.clone());
             let total_minus_fees = utxo_list.total.as_sats() - total_fee_sats.unwrap_or(1000);
             Amount::from_sat(total_minus_fees)
         };

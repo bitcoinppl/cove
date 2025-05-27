@@ -187,7 +187,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
-    public func deboucedDispatch(_ action: Action, for debounceDelay: Duration = .milliseconds(66)) {
+    public func debouncedDispatch(_ action: Action, for debounceDelay: Duration = .milliseconds(66)) {
         deboucedTask?.cancel()
 
         self.deboucedTask = Task {

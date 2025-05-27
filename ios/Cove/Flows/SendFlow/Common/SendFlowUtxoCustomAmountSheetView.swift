@@ -1,10 +1,5 @@
 import SwiftUI
 
-private struct TxRowModel: Identifiable {
-    let id = UUID()
-    let address: Address
-    let amount: String
-}
 
 struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(AppManager.self) private var app
@@ -68,7 +63,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 // update model only on real change
                 if customAmount != adjusted {
                     customAmount = adjusted
-                    manager.deboucedDispatch(
+                    manager.debouncedDispatch(
                         .notifyCoinControlAmountChanged(adjusted),
                         for: .milliseconds(200)
                     )
@@ -117,7 +112,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         Binding(
             get: { displayAmount },
             set: {
-                manager.deboucedDispatch(
+                manager.debouncedDispatch(
                     .notifyCoinControlEnteredAmountChanged($0, isFocused),
                     for: .milliseconds(600)
                 )

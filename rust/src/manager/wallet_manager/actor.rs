@@ -29,7 +29,7 @@ use bdk_wallet::{KeychainKind, LocalOutput, SignOptions, TxOrdering};
 use bitcoin::{Amount, FeeRate as BdkFeeRate, OutPoint, TxIn, Txid};
 use bitcoin::{Transaction as BdkTransaction, params::Params};
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
-use cove_common::consts::GAP_LIMIT;
+use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
 use cove_types::{
     address::AddressInfoWithDerivation,
     confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
@@ -928,7 +928,7 @@ impl WalletActor {
 
             let mut fee_psbt = None;
             while fee_psbt.is_none() {
-                if max_send_estimate < Amount::from_sat(10_000) {
+                if max_send_estimate < MIN_SEND_AMOUNT {
                     return Err(Error::InsufficientFunds(format!(
                         "no enough funds to cover the fees, total available: {}, fees: {}",
                         total_amount, fee_estimate,

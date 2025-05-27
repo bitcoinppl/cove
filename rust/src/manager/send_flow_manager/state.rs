@@ -70,7 +70,7 @@ mod internal {
 }
 
 impl EnterMode {
-    pub fn coin_control(utxos: impl Into<Arc<UtxoList>>) -> Self {
+    pub fn coin_control_max(utxos: impl Into<Arc<UtxoList>>) -> Self {
         Self::CoinControl(CoinControlMode::new(utxos, true))
     }
 

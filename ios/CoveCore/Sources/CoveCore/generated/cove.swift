@@ -18915,6 +18915,8 @@ public enum SendFlowAlertState {
     
     case error(SendFlowError
     )
+    case general(title: String, message: String
+    )
 }
 
 
@@ -18935,6 +18937,9 @@ public struct FfiConverterTypeSendFlowAlertState: FfiConverterRustBuffer {
         case 1: return .error(try FfiConverterTypeSendFlowError.read(from: &buf)
         )
         
+        case 2: return .general(title: try FfiConverterString.read(from: &buf), message: try FfiConverterString.read(from: &buf)
+        )
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -18946,6 +18951,12 @@ public struct FfiConverterTypeSendFlowAlertState: FfiConverterRustBuffer {
         case let .error(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeSendFlowError.write(v1, into: &buf)
+            
+        
+        case let .general(title,message):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(title, into: &buf)
+            FfiConverterString.write(message, into: &buf)
             
         }
     }
@@ -27800,9 +27811,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()

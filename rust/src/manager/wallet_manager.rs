@@ -219,7 +219,7 @@ pub enum WalletManagerError {
     #[error("Unable to create report CSV: {0}")]
     CsvCreationError(String),
 
-    #[error("Unable to add UTXOs to PSBT")]
+    #[error("Unable to add UTXOs to PSBT: {0}")]
     AddUtxosError(String),
 }
 

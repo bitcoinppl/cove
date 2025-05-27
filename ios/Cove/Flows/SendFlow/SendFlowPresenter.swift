@@ -22,6 +22,9 @@ import SwiftUI
     var sheetState: TaggedItem<SheetState>? = .none
     var alertState: TaggedItem<SendFlowAlertState>? = .none
 
+    var lastWorkingFeeRate: Float?
+    var erroredFeeRate: Float?
+
     init(app: AppManager, manager: WalletManager) {
         self.app = app
         self.manager = manager
@@ -56,6 +59,8 @@ import SwiftUI
         switch alertState?.item {
         case let .error(error):
             errorAlertTitle(error)
+        case let .some(.general(title: title, message: _)):
+            title
         case .none:
             ""
         }
@@ -86,6 +91,8 @@ import SwiftUI
         switch alert.item {
         case let .error(error):
             Text(errorAlertMessage(error))
+        case let .general(title: _, message: message):
+            Text(message)
         }
     }
 
@@ -127,6 +134,8 @@ import SwiftUI
         switch alert.item {
         case let .error(error):
             errorAlertButtons(error)
+        case .general:
+            Button("OK") { self.alertState = .none }
         }
     }
 
