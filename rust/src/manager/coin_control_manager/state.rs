@@ -142,7 +142,7 @@ impl State {
         // if search looks like a number, search by amount
         let mut filtered_utxos = match search.parse::<f64>().ok() {
             Some(search_number) => {
-                let amount_sats = Amount::from_sat(search_number.trunc() as u64).to_sat();
+                let amount_sats = search_number.trunc() as u64;
                 let amount_btc = Amount::from_btc(search_number).ok().map(|btc| btc.to_sat());
                 self.utxos
                     .iter()
