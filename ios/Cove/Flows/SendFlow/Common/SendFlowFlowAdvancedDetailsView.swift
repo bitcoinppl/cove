@@ -197,8 +197,7 @@ private struct TxRow: View {
             }
             .foregroundStyle(.primary)
 
-            Spacer(minLength: 12)
-
+            Spacer(minLength: 18)
             Text(model.amount)
                 .font(.footnote)
         }
