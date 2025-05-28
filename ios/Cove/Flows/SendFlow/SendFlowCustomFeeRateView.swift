@@ -26,13 +26,28 @@ struct SendFlowCustomFeeRateView: View {
     @State private var totalSats: Int? = nil
     @State private var totalSatsTask: Task<Void, Never>?
 
+    var erroredFeeRate: Float? {
+        presenter.erroredFeeRate
+    }
+
+    var lastWorkingFeeRate: Float? {
+        presenter.lastWorkingFeeRate
+    }
+
     var sliderBinding: Binding<Float> {
         Binding(
             get: {
-                Float(feeRate) ?? selectedOption.satPerVb()
+                let feeRate = Float(feeRate) ?? selectedOption.satPerVb()
+                let clampedFeeRate = (feeRate * 100).rounded() / 100
+                return clampedFeeRate
             },
             set: {
-                feeRate = String(format: "%.2f", $0)
+                var feeRate = $0
+                if let erroredFeeRate, feeRate > erroredFeeRate {
+                    feeRate = max(erroredFeeRate - 0.02, lastWorkingFeeRate.map { $0 - 0.01 } ?? 1, 1)
+                }
+
+                self.feeRate = String(format: "%.2f", feeRate)
             }
         )
     }
@@ -61,11 +76,10 @@ struct SendFlowCustomFeeRateView: View {
     }
 
     func getTotalSatsDeduped(for feeRate: Float) {
-        guard let address = sendFlowManager.address else { return }
-        guard let amount = sendFlowManager.amount else { return }
+        if sendFlowManager.amount == nil { return }
+        if sendFlowManager.address == nil { return }
 
         let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
-        let isMaxSelected = sendFlowManager.maxSelected != nil
 
         if let totalSatsTask { totalSatsTask.cancel() }
         totalSatsTask = Task {
@@ -73,28 +87,30 @@ struct SendFlowCustomFeeRateView: View {
             if Task.isCancelled { return }
 
             do {
-                let psbt =
-                    if isMaxSelected {
-                        try await manager.rust.buildDrainTransaction(address: address, fee: feeRate)
-                    } else {
-                        try await manager.rust.buildTransactionWithFeeRate(
-                            amount: amount, address: address, feeRate: feeRate
-                        )
-                    }
-
-                let totalFee = try psbt.fee()
-                let totalFeeSats = totalFee.asSats()
-                totalSats = Int(totalFeeSats)
-
-                let feeRateOption = FeeRateOptionWithTotalFee(
-                    feeSpeed: feeSpeed, feeRate: feeRate, totalFee: totalFee
+                let feeRateOption = try await sendFlowManager.getNewCustomFeeRateWithTotal(
+                    feeRate: feeRate, feeSpeed: feeSpeed
                 )
 
+                self.totalSats = Int(feeRateOption.totalFee().asSats())
                 await MainActor.run {
                     let feeOptions = feeOptions.addCustomFeeRate(feeRate: feeRateOption)
                     self.feeOptions = feeOptions
+                    presenter.lastWorkingFeeRate = feeRate.satPerVb()
                 }
+            } catch let SendFlowError.WalletManagerError(.InsufficientFunds(error)) {
+                Log.error("Unable to get accurate total sats \(error), setting max fee rate to \(feeRate.satPerVb())")
+                let feeRate = feeRate.satPerVb()
 
+                await MainActor.run { presenter.erroredFeeRate = feeRate }
+
+                guard lastWorkingFeeRate != nil else { return }
+                await MainActor.run { presenter.sheetState = .none }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(850))
+                    await MainActor.run {
+                        presenter.alertState = .init(.general(title: "Fee too high!", message: "The fee rate you entered is too high, we automatically selected a lower fee"))
+                    }
+                }
             } catch {
                 Log.error("Unable to get accurate total sats \(error)")
             }
@@ -165,7 +181,12 @@ struct SendFlowCustomFeeRateView: View {
                 }
 
                 HStack {
-                    Slider(value: sliderBinding, in: 1 ... feeOptions.fast().satPerVb() * 2)
+                    let fast3 = feeOptions.fast().satPerVb() * 3
+                    if let erroredFeeRate {
+                        Slider(value: sliderBinding, in: 1 ... min(erroredFeeRate + 0.01, fast3), step: 0.01)
+                    } else {
+                        Slider(value: sliderBinding, in: 1 ... fast3, step: 0.01)
+                    }
                 }
 
                 HStack {

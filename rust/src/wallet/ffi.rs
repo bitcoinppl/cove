@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
+use cove_types::amount::Amount;
+
 use crate::hardware_export::HardwareExport;
 
 use super::{
@@ -58,4 +61,14 @@ fn preview_new_wrapped_found_address() -> FoundAddress {
         type_: WalletAddressType::WrappedSegwit,
         first_address: "31h1vZy7PMtGu5ddtxyirrfr8CRPkd8QJF".to_string(),
     }
+}
+
+#[uniffi::export]
+fn ffi_min_send_sats() -> u64 {
+    MIN_SEND_SATS
+}
+
+#[uniffi::export]
+fn ffi_min_send_amount() -> Arc<Amount> {
+    Arc::new(MIN_SEND_AMOUNT.into())
 }

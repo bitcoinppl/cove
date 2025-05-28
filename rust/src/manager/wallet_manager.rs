@@ -218,6 +218,9 @@ pub enum WalletManagerError {
 
     #[error("Unable to create report CSV: {0}")]
     CsvCreationError(String),
+
+    #[error("Unable to add UTXOs to PSBT: {0}")]
+    AddUtxosError(String),
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -513,8 +516,8 @@ impl RustWalletManager {
         })
     }
 
-    #[uniffi::method]
-    pub fn display_amount(&self, amount: Arc<Amount>) -> String {
+    #[uniffi::method(default(show_unit = true))]
+    pub fn display_amount(&self, amount: Arc<Amount>, show_unit: bool) -> String {
         {
             let sensitive_visible = self.metadata.read().sensitive_visible;
             if !sensitive_visible {
@@ -523,7 +526,7 @@ impl RustWalletManager {
         }
 
         let unit = self.metadata.read().selected_unit;
-        amount.fmt_string_with_unit(unit)
+        if show_unit { amount.fmt_string_with_unit(unit) } else { amount.fmt_string(unit) }
     }
 
     #[uniffi::method]
@@ -816,50 +819,6 @@ impl RustWalletManager {
         Ok(fees.into())
     }
 
-    pub async fn build_drain_transaction(
-        &self,
-        address: Arc<Address>,
-        fee: Arc<FeeRate>,
-    ) -> Result<Psbt, Error> {
-        let address = Arc::unwrap_or_clone(address);
-        let fee = Arc::unwrap_or_clone(fee);
-
-        let psbt: Psbt =
-            call!(self.actor.build_ephemeral_drain_tx(address, fee)).await.unwrap()?.into();
-
-        Ok(psbt)
-    }
-
-    pub async fn build_transaction(
-        &self,
-        amount: Arc<Amount>,
-        address: Arc<Address>,
-    ) -> Result<Psbt, Error> {
-        let medium_fee = self
-            .fees()
-            .map(|fees| FeeRateOptions::from(fees).medium.fee_rate)
-            .unwrap_or_else(|| FeeRate::from_sat_per_vb(10.0));
-
-        self.build_transaction_with_fee_rate(amount, address, Arc::new(medium_fee)).await
-    }
-
-    pub async fn build_transaction_with_fee_rate(
-        &self,
-        amount: Arc<Amount>,
-        address: Arc<Address>,
-        fee_rate: Arc<FeeRate>,
-    ) -> Result<Psbt, Error> {
-        let actor = self.actor.clone();
-
-        let amount = Arc::unwrap_or_clone(amount).into();
-        let address = Arc::unwrap_or_clone(address);
-        let fee_rate = Arc::unwrap_or_clone(fee_rate).into();
-
-        let psbt = call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()?;
-
-        Ok(psbt.into())
-    }
-
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
         let reconcile_receiver = self.reconcile_receiver.clone();
@@ -1082,6 +1041,27 @@ impl RustWalletManager {
         let psbt = call!(actor.build_tx(amount, address, fee_rate)).await.unwrap()?;
         let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
 
+        Ok(details)
+    }
+
+    pub async fn confirm_manual_txn(
+        &self,
+        outpoints: Vec<bitcoin::OutPoint>,
+        amount: Amount,
+        address: Arc<Address>,
+        fee_rate: FeeRate,
+    ) -> Result<ConfirmDetails, Error> {
+        debug!("confirm_manual_txn amount: {amount:?}  fee_rate: {:?}", fee_rate.sat_per_vb());
+        let actor = self.actor.clone();
+
+        let amount = amount.into();
+        let fee_rate = fee_rate.into();
+        let address = Arc::unwrap_or_clone(address);
+
+        let psbt =
+            call!(actor.build_manual_tx(outpoints, amount, address, fee_rate)).await.unwrap()?;
+
+        let details = call!(self.actor.get_confirm_details(psbt, fee_rate)).await.unwrap()?;
         Ok(details)
     }
 }

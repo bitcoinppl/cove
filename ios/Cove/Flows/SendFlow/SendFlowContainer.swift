@@ -16,7 +16,6 @@ public struct SendFlowContainer: View {
 
     // private
     @State private var manager: WalletManager? = nil
-    @State private var presenter: SendFlowPresenter? = nil
     @State private var sendFlowManager: SendFlowManager? = nil
     @State private var initCompleted: Bool = false
 
@@ -27,22 +26,21 @@ public struct SendFlowContainer: View {
         do {
             Log.debug("Getting wallet for SendRoute \(id)")
             let manager = try app.getWalletManager(id: id)
+
             let presenter = SendFlowPresenter(app: app, manager: manager)
-            let sendFlowManager = SendFlowManager(manager.rust.newSendFlowManager(), presenter: presenter)
+            let sendFlowManager = app.getSendFlowManager(manager, presenter: presenter)
 
             switch sendRoute {
             case let .setAmount(id: _, address: address, amount: amount):
-                self.initCompleted = false
                 if let address { sendFlowManager.setAddress(address) }
                 if let amount { sendFlowManager.setAmount(amount) }
-                waitForInit()
             default:
-                self.initCompleted = true
+                ()
             }
 
+            waitForInit()
             self.manager = manager
             self.sendFlowManager = sendFlowManager
-            self.presenter = presenter
         } catch {
             Log.error("Something went very wrong: \(error)")
             navigate(Route.listWallets)
@@ -61,6 +59,8 @@ public struct SendFlowContainer: View {
         switch sendRoute {
         case let .setAmount(id: id, address: _, amount: amount):
             SendFlowSetAmountScreen(id: id, amount: amount)
+        case let .coinControlSetAmount(id: id, utxos: utxos):
+            SendFlowCoinControlSetAmountScreen(id: id, utxos: utxos)
         case let .confirm(confirm):
             SendFlowConfirmScreen(
                 id: confirm.id, manager: manager,
@@ -74,7 +74,9 @@ public struct SendFlowContainer: View {
     }
 
     public var body: some View {
-        if let manager, let presenter, let sendFlowManager, initCompleted {
+        if let manager, let sendFlowManager, initCompleted {
+            let presenter = sendFlowManager.presenter
+
             Group {
                 sendRouteToScreen(sendRoute: sendRoute, manager: manager, sendFlowManager: sendFlowManager)
             }
@@ -82,8 +84,6 @@ public struct SendFlowContainer: View {
             .environment(presenter)
             .environment(sendFlowManager)
             .onAppear {
-                presenter.disappearing = false
-
                 // if zero balance, show alert and send back
                 if manager.balance.total().asSats() == 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -103,7 +103,7 @@ public struct SendFlowContainer: View {
                 message: { MyAlert($0).message }
             )
             .onDisappear {
-                presenter.disappearing = true
+                presenter.setDisappearing()
             }
 
         } else {

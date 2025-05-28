@@ -1,6 +1,8 @@
 use cove_types::{Network, address::AddressError};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
+use crate::manager::wallet_manager::WalletManagerError;
+
+#[derive(Debug, Clone, Eq, PartialEq, uniffi::Error, thiserror::Error)]
 pub enum SendFlowError {
     #[error("empty address")]
     EmptyAddress,
@@ -37,6 +39,12 @@ pub enum SendFlowError {
 
     #[error("unable to save unsigned transaction")]
     UnableToSaveUnsignedTransaction(String),
+
+    #[error(transparent)]
+    WalletManagerError(#[from] WalletManagerError),
+
+    #[error("unable to get fee details: {0}")]
+    UnableToGetFeeDetails(String),
 }
 
 impl SendFlowError {

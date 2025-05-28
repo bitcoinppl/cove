@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ahash::HashSet;
 use bdk_wallet::LocalOutput;
 use cove_types::{
-    OutPoint,
+    OutPoint, WalletId,
     amount::Amount,
     unit::Unit,
     utxo::{Utxo, UtxoType},
@@ -50,7 +50,8 @@ pub enum CoinControlManagerReconcileMessage {
     UpdateSort(CoinControlListSort),
     UpdateUtxos(Vec<Utxo>),
     UpdateSearch(String),
-    UpdateSelectedUtxos(Vec<Arc<OutPoint>>),
+    UpdateSelectedUtxos { utxos: Vec<Arc<OutPoint>>, total_value: Arc<Amount> },
+    UpdateTotalSelectedAmount(Arc<Amount>),
     UpdateUnit(Unit),
 }
 
@@ -85,18 +86,19 @@ impl RustCoinControlManager {
     }
 
     #[uniffi::method]
-    pub fn total_selected_amount(&self) -> Amount {
+    pub fn id(&self) -> WalletId {
+        self.state.lock().wallet_id.clone()
+    }
+
+    #[uniffi::method]
+    pub fn selected_utxos(&self) -> Vec<Utxo> {
         let selected_utxos_ids: HashSet<Arc<OutPoint>> =
             self.state.lock().selected_utxos.iter().cloned().collect();
 
-        let final_amount_sats = self
-            .utxos()
+        self.utxos()
             .into_iter()
             .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
-            .map(|utxo| utxo.amount.as_sats())
-            .sum();
-
-        Amount::from_sat(final_amount_sats)
+            .collect()
     }
 
     #[uniffi::method]
@@ -168,7 +170,7 @@ impl RustCoinControlManager {
                 self.send(Message::UpdateUnit(new_unit));
             }
             Action::NotifySelectedUtxosChanged(selected_utxos) => {
-                self.state.lock().selected_utxos = selected_utxos;
+                self.notify_selected_utxos_changed(selected_utxos);
             }
         }
     }
@@ -188,6 +190,20 @@ impl RustCoinControlManager {
             reconciler: sender,
             reconcile_receiver: Arc::new(receiver),
         }
+    }
+
+    pub fn total_value_of_utxos(&self, selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
+        let selected_utxos_ids: HashSet<Arc<OutPoint>> =
+            selected_utxo_ids.iter().cloned().collect();
+
+        let final_amount_sats = self
+            .utxos()
+            .into_iter()
+            .filter(|utxo| selected_utxos_ids.contains(&utxo.outpoint))
+            .map(|utxo| utxo.amount.as_sats())
+            .sum();
+
+        Amount::from_sat(final_amount_sats)
     }
 
     fn sort_button_pressed(self: Arc<Self>, sort_button_pressed: CoinControlListSortKey) {
@@ -230,18 +246,27 @@ impl RustCoinControlManager {
     fn toggle_select_all(self: Arc<Self>) {
         let mut sender = DeferredSender::new(self.clone());
 
-        let selected_utxos = self.state.lock().selected_utxos.clone();
-        if selected_utxos.is_empty() {
-            let selected = self.utxos().into_iter().map(|utxo| utxo.outpoint).collect();
-            self.state.lock().selected_utxos = selected;
-        } else {
-            self.state.lock().selected_utxos = vec![];
-        }
+        let old_selected_utxos = self.state.lock().selected_utxos.clone();
 
-        let new_selected = &self.state.lock().selected_utxos;
-        if new_selected != &selected_utxos {
-            sender.queue(Message::UpdateSelectedUtxos(new_selected.clone()));
+        let new_selected_utxos = if old_selected_utxos.is_empty() {
+            self.utxos().into_iter().map(|utxo| utxo.outpoint).collect()
+        } else {
+            vec![]
+        };
+
+        if new_selected_utxos == old_selected_utxos {
+            self.state.lock().selected_utxos = new_selected_utxos;
+        } else {
+            self.state.lock().selected_utxos = new_selected_utxos.clone();
+            let total_value = self.total_value_of_utxos(&new_selected_utxos).into();
+            sender.queue(Message::UpdateSelectedUtxos { utxos: new_selected_utxos, total_value })
         }
+    }
+
+    fn notify_selected_utxos_changed(self: Arc<Self>, selected_utxos: Vec<Arc<OutPoint>>) {
+        let total_value = self.total_value_of_utxos(&selected_utxos).into();
+        self.state.lock().selected_utxos = selected_utxos;
+        self.send(Message::UpdateTotalSelectedAmount(total_value));
     }
 
     fn notify_search_changed(self: Arc<Self>, search: String) {

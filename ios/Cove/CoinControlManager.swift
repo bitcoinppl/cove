@@ -12,9 +12,12 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     private var sort: CoinControlListSort? = .some(.date(.descending))
 
     var search: String = ""
+    var totalSelected = Amount.fromSat(sats: 0)
     var selected: Set<Utxo.ID> = []
     var utxos: [Utxo]
     var unit: Unit = .sat
+
+    private var updateSendFlowManagerTask: Task<Void, Never>? = nil
 
     @ObservationIgnored
     var searchBinding: Binding<String> {
@@ -80,9 +83,31 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     }
 
     public var totalSelectedAmount: String {
-        let _ = self.selected
-        let total = rust.totalSelectedAmount()
-        return displayAmount(total)
+        displayAmount(self.totalSelected)
+    }
+
+    public var totalSelectedSats: Int {
+        Int(self.totalSelected.asSats())
+    }
+
+    public func continuePressed() {
+        guard let sfm = AppManager.shared.sendFlowManager else { return }
+        self.updateSendFlowManagerTask?.cancel()
+        self.updateSendFlowManagerTask = nil
+
+        let selectedUtxos = self.utxos.filter { self.selected.contains($0.id) }
+        sfm.dispatch(.setCoinControlMode(selectedUtxos))
+    }
+
+    private func updateSendFlowManager() {
+        guard let sfm = AppManager.shared.sendFlowManager else { return }
+        self.updateSendFlowManagerTask?.cancel()
+        self.updateSendFlowManagerTask = Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            guard !Task.isCancelled else { return }
+            let selectedUtxos = self.utxos.filter { self.selected.contains($0.id) }
+            sfm.dispatch(.setCoinControlMode(selectedUtxos))
+        }
     }
 
     private func apply(_ message: Message) {
@@ -95,19 +120,28 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
             withAnimation { self.utxos = utxos }
         case let .updateSearch(search):
             withAnimation { self.search = search }
-        case let .updateSelectedUtxos(selected):
+        case let .updateSelectedUtxos(utxos: selected, totalSelected):
+            updateSendFlowManager()
             self.selected = Set(selected)
+            withAnimation { self.totalSelected = totalSelected }
         case let .updateUnit(unit):
             withAnimation { self.unit = unit }
+        case let .updateTotalSelectedAmount(amount):
+            updateSendFlowManager()
+            withAnimation { self.totalSelected = amount }
         }
     }
 
-    func displayAmount(_ amount: Amount) -> String {
-        switch unit {
-        case .btc:
+    func displayAmount(_ amount: Amount, showUnit: Bool = true) -> String {
+        switch (unit, showUnit) {
+        case (.btc, true):
             amount.btcStringWithUnit()
-        case .sat:
+        case (.btc, false):
+            amount.btcString()
+        case (.sat, true):
             amount.satsStringWithUnit()
+        case (.sat, false):
+            amount.satsString()
         }
     }
 

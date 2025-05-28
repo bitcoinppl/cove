@@ -15,7 +15,11 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
     typealias Action = SendFlowManagerAction
 
     private let logger = Log(id: "SendFlowManager")
-    var rust: RustSendFlowManager
+    @ObservationIgnored
+    let rust: RustSendFlowManager
+
+    @ObservationIgnored
+    let id: WalletId
 
     var enteringBtcAmount: String = ""
     var enteringFiatAmount: String = ""
@@ -48,10 +52,32 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         )
     }
 
+    func validate(displayAlert: Bool = false) -> Bool {
+        validateAmount(displayAlert: displayAlert)
+            && validateAddress(displayAlert: displayAlert)
+            && validateFeePercentage(displayAlert: displayAlert)
+    }
+
+    func validateAddress(displayAlert: Bool = false) -> Bool {
+        rust.validateAddress(displayAlert: displayAlert)
+    }
+
+    func validateAmount(displayAlert: Bool = false) -> Bool {
+        rust.validateAmount(displayAlert: displayAlert)
+    }
+
+    func validateFeePercentage(_: String? = nil, displayAlert: Bool = false) -> Bool {
+        rust.validateFeePercentage(displayAlert: displayAlert)
+    }
+
+    // private
+    private var deboucedTask: Task<Void, Never>? = nil
+
     public init(_ rust: RustSendFlowManager, presenter: SendFlowPresenter) {
         self.rust = rust
         self.presenter = presenter
 
+        self.id = rust.walletId()
         self.enteringFiatAmount = rust.enteringFiatAmount()
         self.sendAmountFiat = rust.sendAmountFiat()
         self.sendAmountBtc = rust.sendAmountBtc()
@@ -79,6 +105,14 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         self.totalFeeString = self.rust.totalFeeString()
         self.sendAmountBtc = self.rust.sendAmountBtc()
         self.sendAmountFiat = self.rust.sendAmountFiat()
+    }
+
+    public func getNewCustomFeeRateWithTotal(
+        feeRate: FeeRate, feeSpeed: FeeSpeed
+    ) async throws -> FeeRateOptionWithTotalFee {
+        try await self.rust.getCustomFeeOption(
+            feeRate: feeRate, feeSpeed: feeSpeed
+        )
     }
 
     private func apply(_ message: Message) {
@@ -114,7 +148,16 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             self.presenter.focusField = field
 
         case let .setAlert(alertState):
+            Log.warn("setAlert: \(alertState)")
             self.presenter.alertState = .init(alertState)
+
+            if self.presenter.sheetState != .none || self.presenter.alertState != .none {
+                self.presenter.alertState = .none
+                self.presenter.sheetState = .none
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    self.presenter.alertState = .init(alertState)
+                }
+            }
 
         case .clearAlert:
             self.presenter.alertState = .none
@@ -130,7 +173,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
-    private let rustBridge = DispatchQueue(label: "cove.SendFlowManager.rustbridge", qos: .userInitiated)
+    private let rustBridge = DispatchQueue(
+        label: "cove.SendFlowManager.rustbridge", qos: .userInitiated
+    )
     func reconcile(message: Message) {
         rustBridge.async { [weak self] in
             guard let self else {
@@ -166,6 +211,21 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         rustBridge.async {
             self.logger.debug("dispatch: \(action)")
             self.rust.dispatch(action: action)
+        }
+    }
+
+    public func debouncedDispatch(
+        _ action: Action, for debounceDelay: Duration? = .milliseconds(66)
+    ) {
+        deboucedTask?.cancel()
+        deboucedTask = nil
+
+        guard let debounceDelay else { return self.dispatch(action) }
+        self.deboucedTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: debounceDelay)
+            guard !Task.isCancelled else { return }
+            self.dispatch(action)
         }
     }
 }

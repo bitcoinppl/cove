@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+let minSendSatsU = ffiMinSendSats()
+let minSendAmount = ffiMinSendAmount()
+
+let minSendSats = Int(minSendSatsU)
+
 let screenHeight = UIScreen.main.bounds.height
 let screenWidth = UIScreen.main.bounds.width
 

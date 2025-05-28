@@ -102,7 +102,9 @@ private struct FeeOptionView: View {
 
     var strokeColor: Color {
         if colorScheme == .dark {
-            return if isSelected { Color.primary.opacity(0.75) } else { Color(UIColor.tertiaryLabel).opacity(0.6) }
+            return if isSelected { Color.primary.opacity(0.75) } else {
+                Color(UIColor.tertiaryLabel).opacity(0.6)
+            }
         }
 
         // light
@@ -205,7 +207,9 @@ private struct FeeOptionView: View {
                 feeOptions: Binding.constant(
                     FeeRateOptionsWithTotalFee.previewNew().addCustomFeeRate(
                         feeRate: FeeRateOptionWithTotalFee(
-                            feeSpeed: FeeSpeed.custom(durationMins: 10), feeRate: FeeRate.fromSatPerVb(satPerVb: 143.00), totalFee: Amount.fromSat(sats: 3000)
+                            feeSpeed: FeeSpeed.custom(durationMins: 10),
+                            feeRate: FeeRate.fromSatPerVb(satPerVb: 143.00),
+                            totalFee: Amount.fromSat(sats: 3000)
                         ))),
                 selectedOption: Binding.constant(
                     FeeRateOptionsWithTotalFee.previewNew().medium()

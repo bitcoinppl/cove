@@ -1,3 +1,10 @@
+//
+//  UtxoListScreen.swift
+//  Cove
+//
+//  Created by Praveen Perera on 5/19/25.
+//
+
 import MijickPopupView
 import SwiftUI
 
@@ -38,11 +45,11 @@ struct UtxoListScreen: View {
     }
 
     @ViewBuilder
-    func UTXOList() -> some View {
+    func UtxoList() -> some View {
         VStack(spacing: 0) {
             List(selection: manager.selectedBinding) {
                 ForEach(manager.utxos) { utxo in
-                    UTXORow(manager: manager, utxo: utxo)
+                    UtxoRow(manager: manager, utxo: utxo)
                         .listRowBackground(Color.secondarySystemGroupedBackground)
                         .contextMenu {
                             Button(action: {
@@ -61,7 +68,7 @@ struct UtxoListScreen: View {
                                 Text("View Transaction Details")
                             }
                         } preview: {
-                            UTXORowPreview(manager: manager, utxo: utxo)
+                            UtxoRowPreview(displayAmount: manager.displayAmount, utxo: utxo)
                         }
                 }
             }
@@ -149,13 +156,15 @@ struct UtxoListScreen: View {
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundStyle(.blue)
-                    .contentShape(Rectangle().inset(by:
-                        EdgeInsets(
-                            top: -15,
-                            leading: -35,
-                            bottom: -10,
-                            trailing: -35
-                        ))
+                    .contentShape(
+                        Rectangle().inset(
+                            by:
+                            EdgeInsets(
+                                top: -15,
+                                leading: -35,
+                                bottom: -10,
+                                trailing: -35
+                            ))
                     )
                     .onTapGesture { manager.dispatch(.toggleSelectAll) }
                 }
@@ -165,7 +174,7 @@ struct UtxoListScreen: View {
 
                 // ─ UTXO list ─
                 VStack(spacing: 8) {
-                    UTXOList()
+                    UtxoList()
                     Text(manager.totalSelectedAmount)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -206,20 +215,29 @@ struct UtxoListScreen: View {
                 .padding(.horizontal)
 
                 // ─ Action buttons ─
-                Button(continueText) { /* … */ }
-                    .buttonStyle(
-                        manager.selected.isEmpty
-                            ? DarkButtonStyle(
-                                backgroundColor: .systemGray4, foregroundColor: .secondary
+                Button(continueText) {
+                    manager.continuePressed()
+                    navigate(
+                        RouteFactory()
+                            .coinControlSend(
+                                id: manager.rust.id(),
+                                utxos: manager.rust.selectedUtxos(),
                             )
-                            : DarkButtonStyle()
                     )
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
-                    .disabled(manager.selected.isEmpty)
-                    .contentTransition(.interpolate)
+                }
+                .buttonStyle(
+                    manager.totalSelectedSats < minSendSats
+                        ? DarkButtonStyle(
+                            backgroundColor: .systemGray4, foregroundColor: .secondary
+                        )
+                        : DarkButtonStyle()
+                )
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal)
+                .padding(.bottom, 4)
+                .disabled(manager.totalSelectedSats < minSendSats)
+                .contentTransition(.interpolate)
             }
         }
         .navigationTitle("Manage UTXOs")
@@ -287,7 +305,7 @@ struct UtxoListScreen: View {
 
 // MARK: - Row
 
-private struct UTXORow: View {
+private struct UtxoRow: View {
     var manager: CoinControlManager
     let utxo: Utxo
 
@@ -336,54 +354,6 @@ private struct UTXORow: View {
     }
 }
 
-private struct UTXORowPreview: View {
-    var manager: CoinControlManager
-    let utxo: Utxo
-
-    @State private var height: CGFloat = 200
-
-    var body: some View {
-        VStack {
-            Text(utxo.address.spacedOut())
-                .font(.footnote)
-                .fontWeight(.semibold)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                Text(utxo.name)
-                    .foregroundColor(.primary)
-                    .font(.body)
-                    .fontWeight(.medium)
-                    .multilineTextAlignment(.center)
-
-                if utxo.type == .change {
-                    Image(systemName: "circlebadge.2")
-                        .font(.caption)
-                        .foregroundColor(.orange.opacity(0.8))
-                }
-            }
-
-            Spacer()
-
-            // AM
-            HStack {
-                Text(manager.displayAmount(utxo.amount))
-                Spacer()
-                Text(utxo.date)
-            }
-            .foregroundColor(.secondary)
-            .font(.footnote)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 175)
-        .padding(.vertical, 20)
-        .padding(.horizontal)
-    }
-}
-
 // MARK: - Preview
 
 #Preview {
@@ -402,13 +372,5 @@ private struct UTXORowPreview: View {
                 RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0))
         )
         .environment(WalletManager(preview: "preview_only"))
-    }
-}
-
-#Preview("UTXORowPreview") {
-    AsyncPreview {
-        let manager = CoinControlManager(RustCoinControlManager.previewNew())
-        UTXORowPreview(manager: manager, utxo: manager.utxos[0])
-            .environment(WalletManager(preview: "preview_only"))
     }
 }

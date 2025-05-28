@@ -1,5 +1,5 @@
 //
-//  SendFlowSetAmountScreen.swift
+//  SendFlowCoinControlSetAmountScreen.swift
 //  Cove
 //
 //  Created by Praveen Perera on 10/29/24.
@@ -9,13 +9,13 @@ import CoveCore
 import Foundation
 import SwiftUI
 
-// MARK: SendFlowSetAmountScreen
+// MARK: SendFlowCoinControlSetAmountScreen
 
 private typealias FocusField = SendFlowPresenter.FocusField
 private typealias SheetState = SendFlowPresenter.SheetState
 private typealias AlertState = SendFlowAlertState
 
-struct SendFlowSetAmountScreen: View {
+struct SendFlowCoinControlSetAmountScreen: View {
     @Environment(AppManager.self) private var app
     @Environment(SendFlowManager.self) private var sendFlowManager
     @Environment(WalletManager.self) private var manager
@@ -23,44 +23,28 @@ struct SendFlowSetAmountScreen: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let id: WalletId
-
-    @State var amount: Amount? = nil
-
-    // private
-    @State private var isLoading: Bool = true
-    @State private var loadingOpacity: CGFloat = 1
-
-    @State private var scrollPosition: ScrollPosition = .init(
-        idType: SendFlowPresenter.FocusField.self)
+    let utxos: [Utxo]
 
     @State private var scannedCode: TaggedString? = .none
 
     // fees
     @State private var selectedPresentationDetent: PresentationDetent = .height(440)
 
-    private var presenter: SendFlowPresenter {
-        sendFlowManager.presenter
-    }
+    // loading
+    @State private var isLoading: Bool = true
+    @State private var loadingOpacity: CGFloat = 1
 
-    private var metadata: WalletMetadata {
-        manager.walletMetadata
-    }
+    // custom utxo amount
+    @State private var customAmountSheetIsPresented: Bool = false
 
-    private var network: Network {
-        metadata.network
-    }
+    private var presenter: SendFlowPresenter { sendFlowManager.presenter }
+    private var metadata: WalletMetadata { manager.walletMetadata }
+    private var network: Network { metadata.network }
 
-    private var totalSpentInFiat: String {
-        sendFlowManager.totalSpentInFiat
-    }
-
-    private var address: Binding<String> {
-        sendFlowManager.enteringAddress
-    }
-
-    private var totalSending: String {
-        sendFlowManager.sendAmountBtc
-    }
+    private var totalSpentInFiat: String { sendFlowManager.totalSpentInFiat }
+    private var totalFeeString: String { sendFlowManager.totalFeeString }
+    private var totalSpentBtc: String { sendFlowManager.totalSpentInBtc }
+    private var totalSending: String { sendFlowManager.sendAmountBtc }
 
     // MARK: Actions
 
@@ -70,9 +54,7 @@ struct SendFlowSetAmountScreen: View {
     }
 
     private func dismissIfValid() {
-        if validate(true) {
-            presenter.focusField = .none
-        }
+        if validate(true) { presenter.focusField = .none }
     }
 
     // doing it this way prevents an alert popping up when the user just goes back
@@ -86,6 +68,82 @@ struct SendFlowSetAmountScreen: View {
 
     var feeRateOptions: FeeRateOptionsWithTotalFee? {
         sendFlowManager.feeRateOptions
+    }
+
+    var offset: CGFloat {
+        if metadata.fiatOrBtc == .fiat { return 0 }
+        return metadata.selectedUnit == .btc ? screenWidth * 0.09 : screenWidth * 0.10
+    }
+
+    @ViewBuilder
+    var AmountSection: some View {
+        VStack(spacing: 8) {
+            HStack(alignment: .bottom) {
+                Text(totalSending)
+                    .font(.system(size: 48, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .keyboardType(.decimalPad)
+                    .minimumScaleFactor(0.01)
+                    .lineLimit(1)
+                    .scrollDisabled(true)
+                    .offset(x: offset)
+                    .padding(.horizontal, 30)
+                    .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
+                    .onTapGesture {
+                        guard selectedFeeRate != nil else { return }
+                        customAmountSheetIsPresented = true
+                    }
+
+                HStack(spacing: 0) {
+                    Menu {
+                        VStack(alignment: .center, spacing: 0) {
+                            Button(action: {
+                                manager.dispatch(action: .updateUnit(.sat))
+                            }) {
+                                Text("sats")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(12)
+                                    .background(Color.clear)
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
+
+                            Button(action: {
+                                manager.dispatch(action: .updateUnit(.btc))
+                            }) {
+                                Text("btc")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(12)
+                                    .background(Color.clear)
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
+                        }
+                        .foregroundStyle(.primary.opacity(0.8))
+                        .contentShape(Rectangle())
+                    } label: {
+                        HStack(spacing: 2) {
+                            Text(manager.unit)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 10)
+                                .fixedSize(horizontal: true, vertical: true)
+
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .padding(.top, 2)
+                        }
+                        .offset(y: -2)
+                    }
+                    .foregroundStyle(.primary)
+                }
+            }
+
+            Text(sendFlowManager.sendAmountFiat)
+                .contentTransition(.numericText())
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
     }
 
     var body: some View {
@@ -103,7 +161,7 @@ struct SendFlowSetAmountScreen: View {
                         AmountInfoSection
 
                         // Amount input
-                        EnterAmountView(sendFlowManager: sendFlowManager)
+                        AmountSection
 
                         // Address Section
                         VStack {
@@ -139,7 +197,6 @@ struct SendFlowSetAmountScreen: View {
                 .frame(maxWidth: .infinity)
                 .background(colorScheme == .light ? .white : .black)
                 .scrollIndicators(.hidden)
-                .scrollPosition($scrollPosition, anchor: .top)
 
                 if isLoading {
                     ZStack {
@@ -160,62 +217,52 @@ struct SendFlowSetAmountScreen: View {
         .onChange(of: metadata.selectedUnit, initial: false) { oldUnit, newUnit in
             sendFlowManager.dispatch(.notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
         }
-        .onChange(of: metadata.fiatOrBtc, initial: false) { old, new in
-            sendFlowManager.dispatch(.notifyBtcOrFiatChanged(old: old, new: new))
-        }
         .onChange(of: app.prices, initial: true) { _, newPrices in
             guard let prices = newPrices else { return }
             sendFlowManager.dispatch(.notifyPricesChanged(prices))
         }
-
         .task {
             let isAlreadyValid = validate()
-
-            if !isAlreadyValid {
+            if !isAlreadyValid || utxos == sendFlowManager.rust.utxos() {
                 Task {
                     await MainActor.run {
                         withAnimation(
                             .easeInOut(duration: 1.5).delay(0.4),
                             completionCriteria: .removed
-                        ) {
-                            loadingOpacity = 0
-                        } completion: {
-                            isLoading = false
-                        }
+                        ) { loadingOpacity = 0 }
+                            completion: {
+                                isLoading = false
+                                if validate() { presenter.focusField = .none }
+                            }
                     }
                 }
+            } else {
+                presenter.focusField = .none
             }
 
             // HACK: Bug in SwiftUI where keyboard toolbar is broken
-            if !isAlreadyValid { try? await Task.sleep(for: .milliseconds(700)) }
+            if !isAlreadyValid || utxos == sendFlowManager.rust.utxos() {
+                try? await Task.sleep(for: .milliseconds(700))
+            }
 
             await MainActor.run {
-                Log.debug("SendFlowSetAmountScreen: onAppear \(String(describing: sendFlowManager.amount))")
-
-                if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 {
-                    presenter.focusField = .amount
-                } else if address.wrappedValue.isEmpty {
-                    presenter.focusField = .address
-                }
-
-                // only display error if it was already loaded with amount and address
-                if let amount = sendFlowManager.amount, amount.asSats() != 0 {
-                    let _ = self.validateAmount(displayAlert: true)
-                }
-
+                if !isAlreadyValid { presenter.focusField = .address }
+                if validate() { presenter.focusField = .none }
                 if sendFlowManager.address != nil {
                     let _ = self.validateAddress(displayAlert: true)
                 }
             }
         }
         .onAppear {
-            if validate() {
+            sendFlowManager.dispatch(.setCoinControlMode(utxos))
+            if validate(), utxos == sendFlowManager.rust.utxos() {
                 isLoading = false
                 loadingOpacity = 0
                 presenter.focusField = .none
+            } else {
+                presenter.focusField = .address
             }
 
-            sendFlowManager.dispatch(action: .disableCoinControlMode)
             if metadata.walletType == .watchOnly {
                 app.alertState = .init(.cantSendOnWatchOnlyWallet)
                 app.popRoute()
@@ -223,6 +270,9 @@ struct SendFlowSetAmountScreen: View {
             }
         }
         .sheet(item: presenter.sheetStateBinding, content: SheetContent)
+        .sheet(isPresented: $customAmountSheetIsPresented) {
+            SendFlowUtxoCustomAmountSheetView(utxos: utxos)
+        }
         .alert(
             presenter.alertTitle,
             isPresented: presenter.showingAlert,
@@ -230,18 +280,6 @@ struct SendFlowSetAmountScreen: View {
             actions: presenter.alertButtons,
             message: presenter.alertMessage
         )
-    }
-
-    private var totalFeeString: String {
-        sendFlowManager.totalFeeString
-    }
-
-    private var totalSpentBtc: String {
-        sendFlowManager.totalSpentInBtc
-    }
-
-    private func clearSendAmount() {
-        sendFlowManager.dispatch(action: .clearSendAmount)
     }
 
     // MARK: Validation Functions
@@ -271,21 +309,6 @@ struct SendFlowSetAmountScreen: View {
             "focusFieldChanged \(String(describing: oldField)) -> \(String(describing: newField))")
 
         sendFlowManager.dispatch(action: .notifyFocusFieldChanged(old: oldField, new: newField))
-
-        guard let newField else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.easeInOut(duration: 0.4)) {
-                // if keyboard opening directly to amount, dont update scroll position
-                if newField == .amount, oldField == .none { return }
-                Log.debug("scrolling to \(String(describing: newField))")
-                scrollPosition.scrollTo(id: newField)
-            }
-        }
-    }
-
-    private func setMaxSelected() {
-        Log.debug("setMaxSelected")
-        sendFlowManager.dispatch(action: .selectMaxSend)
     }
 
     private func clearAddress() {
@@ -303,62 +326,15 @@ struct SendFlowSetAmountScreen: View {
     }
 
     @ViewBuilder
-    var AmountKeyboardToolbar: some View {
-        HStack {
-            Group {
-                if address.wrappedValue.isEmpty {
-                    Button(action: { presenter.focusField = .address }) {
-                        Text("Next")
-                    }
-                } else {
-                    Button(action: dismissIfValid) {
-                        Text("Done")
-                    }
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Spacer()
-
-            Button(action: { setMaxSelected() }) {
-                Text("Max")
-                    .font(.callout)
-            }
-            .tint(.primary)
-            .buttonStyle(.bordered)
-
-            Button(action: { clearSendAmount() }) {
-                Label("Clear", systemImage: "xmark.circle")
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-
-            Button(action: dismissIfValid) {
-                Label("Done", systemImage: "keyboard.chevron.compact.down")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.bordered)
-            .tint(.primary)
-        }
-    }
-
-    @ViewBuilder
     var AddressKeyboardToolbar: some View {
         HStack {
             Group {
-                if address.wrappedValue.isEmpty || !validateAddress() {
+                if sendFlowManager.enteringAddress.wrappedValue.isEmpty || !validateAddress() {
                     Button(action: {
                         let address = UIPasteboard.general.string ?? ""
                         sendFlowManager.dispatch(action: .changeEnteringAddress(address))
                         if address.isEmpty { return }
                         if !validateAddress() { return }
-                        if !validateAmount() {
-                            presenter.focusField = .amount
-                            return
-                        }
-
                         presenter.focusField = .none
                     }) {
                         Text("Paste")
@@ -405,9 +381,8 @@ struct SendFlowSetAmountScreen: View {
     @ViewBuilder
     var ToolBarView: some View {
         switch presenter.focusField {
-        case .amount: AmountKeyboardToolbar
         case .address: AddressKeyboardToolbar
-        case .none: EmptyView()
+        case .amount, .none: EmptyView()
         }
     }
 
@@ -507,9 +482,20 @@ struct SendFlowSetAmountScreen: View {
     var TotalSpendingSection: some View {
         VStack {
             HStack {
-                Text("Total Spending")
-                    .font(.footnote)
-                    .fontWeight(.semibold)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Total Spending")
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+
+                    HStack {
+                        Button(action: { self.customAmountSheetIsPresented = true }) {
+                            Text(utxos.count > 1 ? "Spending \(utxos.count) UTXOs" : "Spending 1 UTXO")
+                                .font(.caption2)
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.blue.opacity(0.8))
+                    }
+                }
 
                 Spacer()
 
@@ -582,32 +568,23 @@ struct SendFlowSetAmountScreen: View {
     }
 }
 
-#Preview("with address") {
+#Preview {
     AsyncPreview {
         NavigationStack {
             let manager = WalletManager(preview: "preview_only")
+            let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
+            let sendFlowManager = SendFlowManager(
+                manager.rust.newSendFlowManager(),
+                presenter: presenter
+            )
 
-            SendFlowSetAmountScreen(
-                id: WalletId(),
+            SendFlowCoinControlSetAmountScreen(
+                id: WalletId(), utxos: previewNewUtxoList(outputCount: 15, changeCount: 3)
             )
             .environment(manager)
             .environment(AppManager.shared)
-            .environment(SendFlowPresenter(app: AppManager.shared, manager: manager))
-        }
-    }
-}
-
-#Preview("no address") {
-    AsyncPreview {
-        NavigationStack {
-            let manager = WalletManager(preview: "preview_only")
-
-            SendFlowSetAmountScreen(
-                id: WalletId(),
-            )
-            .environment(manager)
-            .environment(AppManager.shared)
-            .environment(SendFlowPresenter(app: AppManager.shared, manager: manager))
+            .environment(presenter)
+            .environment(sendFlowManager)
         }
     }
 }

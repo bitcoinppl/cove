@@ -16,11 +16,14 @@ import SwiftUI
     @ObservationIgnored
     let manager: WalletManager
 
-    var disappearing: Bool = false
+    private var disappearing: Bool = false
 
     var focusField: SetAmountFocusField?
     var sheetState: TaggedItem<SheetState>? = .none
     var alertState: TaggedItem<SendFlowAlertState>? = .none
+
+    var lastWorkingFeeRate: Float?
+    var erroredFeeRate: Float?
 
     init(app: AppManager, manager: WalletManager) {
         self.app = app
@@ -35,11 +38,7 @@ import SwiftUI
     var showingAlert: Binding<Bool> {
         Binding(
             get: { self.alertState != nil && !self.disappearing },
-            set: { newValue in
-                if !newValue {
-                    self.alertState = .none
-                }
-            }
+            set: { if !$0 { self.alertState = .none }}
         )
     }
 
@@ -56,8 +55,17 @@ import SwiftUI
         switch alertState?.item {
         case let .error(error):
             errorAlertTitle(error)
+        case let .some(.general(title: title, message: _)):
+            title
         case .none:
             ""
+        }
+    }
+
+    public func setDisappearing() {
+        self.disappearing = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.disappearing = false
         }
     }
 
@@ -74,6 +82,10 @@ import SwiftUI
             "Unable to get max send"
         case .UnableToSaveUnsignedTransaction:
             "Unable to Save Unsigned Transaction"
+        case .WalletManagerError:
+            "Error"
+        case .UnableToGetFeeDetails:
+            "Fee Details Error"
         }
     }
 
@@ -82,6 +94,8 @@ import SwiftUI
         switch alert.item {
         case let .error(error):
             Text(errorAlertMessage(error))
+        case let .general(title: _, message: message):
+            Text(message)
         }
     }
 
@@ -105,6 +119,10 @@ import SwiftUI
             "Send amount is too low. Please send atleast 5000 sats"
         case .UnableToGetFeeRate:
             "Are you connected to the internet?"
+        case let .WalletManagerError(msg):
+            msg.describe
+        case let .UnableToGetFeeDetails(msg):
+            msg
         case let .UnableToBuildTxn(msg):
             msg
         case let .UnableToGetMaxSend(msg):
@@ -119,6 +137,8 @@ import SwiftUI
         switch alert.item {
         case let .error(error):
             errorAlertButtons(error)
+        case .general:
+            Button("OK") { self.alertState = .none }
         }
     }
 
@@ -135,7 +155,7 @@ import SwiftUI
                 self.alertState = .none
                 self.app.popRoute()
             }
-        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount:
+        case .InvalidNumber, .InsufficientFunds, .SendAmountToLow, .ZeroAmount, .WalletManagerError, .UnableToGetFeeDetails:
             Button("OK") {
                 self.focusField = .amount
                 self.alertState = .none

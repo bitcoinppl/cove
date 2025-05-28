@@ -11,7 +11,7 @@ use crate::{
 };
 
 use cove_macros::impl_default_for;
-use cove_types::{ConfirmDetails, WalletId};
+use cove_types::{ConfirmDetails, WalletId, utxo::Utxo};
 use derive_more::From;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -85,6 +85,7 @@ pub enum WalletSettingsRoute {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendRoute {
     SetAmount { id: WalletId, address: Option<Arc<Address>>, amount: Option<Arc<Amount>> },
+    CoinControlSetAmount { id: WalletId, utxos: Vec<Utxo> },
     HardwareExport { id: WalletId, details: Arc<ConfirmDetails> },
     Confirm(SendRouteConfirmArgs),
 }
@@ -344,6 +345,11 @@ impl RouteFactory {
 
     pub fn send_hardware_export(&self, id: WalletId, details: Arc<ConfirmDetails>) -> Route {
         let send = SendRoute::HardwareExport { id, details };
+        Route::Send(send)
+    }
+
+    pub fn coin_control_send(&self, id: WalletId, utxos: Vec<Utxo>) -> Route {
+        let send = SendRoute::CoinControlSetAmount { id, utxos };
         Route::Send(send)
     }
 

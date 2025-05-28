@@ -78,16 +78,17 @@ impl Amount {
     }
 
     pub fn btc_string(&self) -> String {
-        format!("{:.8}", self.as_btc())
+        let mut f = Formatter::new().separator(',').unwrap().precision(Precision::Decimals(8));
+        f.fmt(self.as_btc()).to_string()
     }
 
     pub fn btc_string_with_unit(&self) -> String {
-        format!("{:.8} BTC", self.as_btc())
+        let mut f = Formatter::new().separator(',').unwrap().precision(Precision::Decimals(8));
+        format!("{} BTC", f.fmt(self.as_btc()))
     }
 
     pub fn sats_string(&self) -> String {
         let mut f = Formatter::new().separator(',').unwrap().precision(Precision::Decimals(0));
-
         f.fmt(self.as_sats() as f64).to_string()
     }
 

@@ -1,3 +1,4 @@
+use super::DeterministicRandomDraw;
 use bdk_wallet::{
     WeightedUtxo,
     bitcoin::{Amount, FeeRate, Script, key::rand::RngCore},
@@ -5,8 +6,6 @@ use bdk_wallet::{
         BranchAndBoundCoinSelection, CoinSelectionAlgorithm, CoinSelectionResult, InsufficientFunds,
     },
 };
-
-use super::DeterministicRandomDraw;
 
 #[derive(Debug, Clone, Default)]
 pub struct CoveDefaultCoinSelection(BranchAndBoundCoinSelection<DeterministicRandomDraw>);
