@@ -4,7 +4,14 @@
 
 ### Features
 
+**Coin Control**
+
 - New UTXO list screen to search, filter, sort and select individual UTXOs
+- Select individual UTXOs to send from
+- Set a custom amount to send from a UTXO list (the rest will be sent to change)
+
+- Add warning if fee is more than 20% of the amount you are sending
+- Disallow sending if the fee is more than 100% of the amount you are sending
 
 ## [0.4.1] - 2025-05-12
 
