@@ -3775,12 +3775,16 @@ public func FfiConverterTypeUtxoList_lower(_ value: UtxoList) -> UnsafeMutableRa
 
 
 public struct AddressAndAmount {
+    public var label: String?
+    public var utxoType: UtxoType?
     public var address: Address
     public var amount: Amount
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(address: Address, amount: Amount) {
+    public init(label: String?, utxoType: UtxoType?, address: Address, amount: Amount) {
+        self.label = label
+        self.utxoType = utxoType
         self.address = address
         self.amount = amount
     }
@@ -3799,12 +3803,16 @@ public struct FfiConverterTypeAddressAndAmount: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddressAndAmount {
         return
             try AddressAndAmount(
+                label: FfiConverterOptionString.read(from: &buf), 
+                utxoType: FfiConverterOptionTypeUtxoType.read(from: &buf), 
                 address: FfiConverterTypeAddress.read(from: &buf), 
                 amount: FfiConverterTypeAmount.read(from: &buf)
         )
     }
 
     public static func write(_ value: AddressAndAmount, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.label, into: &buf)
+        FfiConverterOptionTypeUtxoType.write(value.utxoType, into: &buf)
         FfiConverterTypeAddress.write(value.address, into: &buf)
         FfiConverterTypeAmount.write(value.amount, into: &buf)
     }
@@ -5225,6 +5233,30 @@ fileprivate struct FfiConverterOptionTypeFeeRateOptionWithTotalFee: FfiConverter
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeUtxoType: FfiConverterRustBuffer {
+    typealias SwiftType = UtxoType?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeUtxoType.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeUtxoType.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }

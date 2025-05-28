@@ -4,7 +4,10 @@ use bitcoin::params::Params;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{BdkTxId, Network, TxId, address::Address, amount::Amount, fees::FeeRate, psbt::Psbt};
+use crate::{
+    BdkTxId, Network, TxId, address::Address, amount::Amount, fees::FeeRate, psbt::Psbt,
+    utxo::UtxoType,
+};
 use bitcoin::{FeeRate as BdkFeeRate, TxOut};
 
 use ahash::AHashMap as HashMap;
@@ -30,6 +33,9 @@ pub struct ConfirmDetails {
 pub struct AddressAndAmount {
     #[serde(default)]
     pub label: Option<String>,
+    #[serde(default)]
+    pub utxo_type: Option<UtxoType>,
+
     pub address: Arc<Address>,
     pub amount: Arc<Amount>,
 }
@@ -50,6 +56,12 @@ pub struct SplitOutput {
 pub enum ConfirmDetailsError {
     #[error("unable to represent PSBT as QR code: {0}")]
     QrCodeCreation(String),
+}
+
+#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
+pub struct ExtraItem {
+    pub label: Option<String>,
+    pub utxo_type: Option<UtxoType>,
 }
 
 #[uniffi::export]
@@ -142,30 +154,32 @@ impl AddressAndAmount {
         let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
         Ok(Self {
             label: None,
+            utxo_type: None,
             address: Arc::new(address.into()),
             amount: Arc::new(tx_out.value.into()),
         })
     }
 
-    pub fn try_new_with_label_opt(
+    pub fn try_new_with_extra_opt(
         tx_out: &TxOut,
         network: Network,
-        label: Option<String>,
+        extra: Option<ExtraItem>,
     ) -> eyre::Result<Self> {
-        match label {
-            Some(label) => Self::try_new_with_label(tx_out, network, label),
+        match extra {
+            Some(extra) => Self::try_new_with_extra(tx_out, network, extra),
             None => Self::try_new(tx_out, network),
         }
     }
 
-    pub fn try_new_with_label(
+    pub fn try_new_with_extra(
         tx_out: &TxOut,
         network: Network,
-        label: String,
+        extra: ExtraItem,
     ) -> eyre::Result<Self> {
         let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
         Ok(Self {
-            label: Some(label),
+            label: extra.label,
+            utxo_type: extra.utxo_type,
             address: Arc::new(address.into()),
             amount: Arc::new(tx_out.value.into()),
         })
@@ -180,28 +194,28 @@ impl InputOutputDetails {
     pub fn new_with_labels(
         psbt: &Psbt,
         network: Network,
-        labels: HashMap<&BdkTxId, String>,
+        extra: HashMap<&BdkTxId, ExtraItem>,
     ) -> Self {
-        Self::new_with_labels_opt(psbt, network, Some(labels))
+        Self::new_with_labels_opt(psbt, network, Some(extra))
     }
 
     fn new_with_labels_opt(
         psbt: &Psbt,
         network: Network,
-        labels: Option<HashMap<&BdkTxId, String>>,
+        extra_map: Option<HashMap<&BdkTxId, ExtraItem>>,
     ) -> Self {
-        let mut labels = labels;
+        let mut extra_map = extra_map;
 
         let inputs = psbt
             .utxos()
             .iter()
             .map(|(tx_in, tx_out)| {
-                let label = match &mut labels {
-                    Some(labels) => labels.remove(&tx_in.previous_output.txid),
-                    None => None,
-                };
+                let extra = extra_map
+                    .as_mut()
+                    .and_then(|extras| extras.remove(&tx_in.previous_output.txid))
+                    .unwrap_or_default();
 
-                AddressAndAmount::try_new_with_label_opt(tx_out, network, label)
+                AddressAndAmount::try_new_with_extra(tx_out, network, extra)
             })
             .filter_map(Result::ok)
             .collect();
@@ -215,6 +229,12 @@ impl InputOutputDetails {
             .collect();
 
         Self { inputs, outputs }
+    }
+}
+
+impl ExtraItem {
+    pub fn new(label: Option<String>, utxo_type: Option<UtxoType>) -> Self {
+        Self { label, utxo_type }
     }
 }
 

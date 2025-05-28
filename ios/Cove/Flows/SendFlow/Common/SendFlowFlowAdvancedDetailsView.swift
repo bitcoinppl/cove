@@ -2,6 +2,8 @@ import SwiftUI
 
 private struct TxRowModel: Identifiable {
     let id = UUID()
+    let label: String?
+    let utxoType: UtxoType?
     let address: Address
     let amount: String
 }
@@ -48,7 +50,10 @@ struct SendFlowAdvancedDetailsView: View {
     private func toTxRows(_ addressAndAmount: [AddressAndAmount]) -> [TxRowModel] {
         addressAndAmount.map {
             TxRowModel(
-                address: $0.address, amount: self.displayFiatOrBtcAmount($0.amount)
+                label: $0.label,
+                utxoType: $0.utxoType,
+                address: $0.address,
+                amount: self.displayFiatOrBtcAmount($0.amount)
             )
         }
     }
@@ -146,6 +151,18 @@ struct SendFlowAdvancedDetailsView: View {
 private struct TxRow: View {
     let model: TxRowModel
 
+    var label: String? {
+        if let label = model.label { return label }
+        if let utxoType = model.utxoType {
+            switch utxoType {
+            case .output: return "Receive Address"
+            case .change: return "Change Address"
+            }
+        }
+
+        return .none
+    }
+
     var body: some View {
         HStack(alignment: .top) {
             Menu {
@@ -153,11 +170,30 @@ private struct TxRow: View {
                     UIPasteboard.general.string = model.address.unformatted()
                 }
             } label: {
-                Text(model.address.spacedOut())
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading)
+                VStack(alignment: .leading, spacing: 6) {
+                    if let label {
+                        HStack {
+                            Text(label)
+                                .font(.footnote)
+                                .truncationMode(.middle)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.leading)
+
+                            if case .some(.change) = model.utxoType {
+                                Image(systemName: "circlebadge.2")
+                                    .font(.caption)
+                                    .foregroundColor(.orange.opacity(0.8))
+                            }
+                        }
+                    }
+
+                    Text(model.address.spacedOut())
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
+                }
             }
             .foregroundStyle(.primary)
 
