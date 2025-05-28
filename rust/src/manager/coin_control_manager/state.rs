@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bdk_wallet::LocalOutput;
+use bitcoin::Amount;
 use cove_types::{
     Network, OutPoint, WalletId,
     unit::Unit,
@@ -138,20 +139,41 @@ impl State {
     pub fn filter_utxos(&mut self, search: &str) {
         let search = &search.to_ascii_lowercase();
 
-        let mut filtered_utxos = self
-            .utxos
-            .iter()
-            .filter_map(|utxo| {
-                let utxo_name = utxo.name().to_ascii_lowercase();
-                let distance = strsim::normalized_damerau_levenshtein(&utxo_name, search);
+        // if search looks like a number, search by amount
+        let mut filtered_utxos = match search.parse::<f64>().ok() {
+            Some(search_number) => {
+                let amount_sats = Amount::from_sat(search_number.trunc() as u64).to_sat();
+                let amount_btc = Amount::from_btc(search_number).ok().map(|btc| btc.to_sat());
+                self.utxos
+                    .iter()
+                    .filter_map(|utxo| {
+                        let utxo_amount = utxo.amount.as_sats();
+                        if utxo_amount == amount_sats || Some(utxo_amount) == amount_btc {
+                            return Some((utxo, 1.0));
+                        }
 
-                if distance >= 0.20 || utxo_name.contains(search) || utxo_name.starts_with(search) {
-                    Some((utxo, distance))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+                        None
+                    })
+                    .collect::<Vec<_>>()
+            }
+            None => self
+                .utxos
+                .iter()
+                .filter_map(|utxo| {
+                    let utxo_name = utxo.name().to_ascii_lowercase();
+                    let distance = strsim::normalized_damerau_levenshtein(&utxo_name, search);
+
+                    if distance >= 0.20
+                        || utxo_name.contains(search)
+                        || utxo_name.starts_with(search)
+                    {
+                        Some((utxo, distance))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>(),
+        };
 
         filtered_utxos.sort_unstable_by(|a, b| {
             a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).reverse()
