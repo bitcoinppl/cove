@@ -1,6 +1,5 @@
 import SwiftUI
 
-
 struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(AppManager.self) private var app
     @Environment(WalletManager.self) private var walletManager
@@ -18,6 +17,8 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     @State private var pinState: PinState = .hard
     private enum PinState { case none, soft, hard }
 
+    @State private var enteringAmount: String? = nil
+
     @FocusState private var isFocused: Bool
 
     private var presenter: SendFlowPresenter { manager.presenter }
@@ -25,6 +26,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         Binding(
             get: { customAmount },
             set: { raw in
+                enteringAmount = nil
                 let goingUp = raw > previousAmount
                 let goingDown = raw < previousAmount
                 var adjusted = raw
@@ -97,25 +99,29 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         return amountToDouble(amount)
     }
 
-    private var displayAmount: String {
-        let amountSats =
-            switch metadata.selectedUnit {
-            case .sat: customAmount
-            case .btc: customAmount * 100_000_000
+    private func displayAmount(_ amount: String? = nil) -> String {
+        let amountDouble = amount.flatMap { manager.rust.sanitizeBtcEnteringAmount(oldValue: enteringAmount ?? "", newValue: $0) }.map { $0.replacingOccurrences(of: ",", with: "") }.flatMap { Double($0) }
+        let amount =
+            switch (metadata.selectedUnit, amountDouble) {
+            case let (.sat, .some(amount)):
+                Amount.fromSat(sats: UInt64(amount))
+            case let (.btc, .some(amount)):
+                Amount.fromSat(sats: UInt64(amount * 100_000_000))
+            case (.sat, nil):
+                Amount.fromSat(sats: UInt64(customAmount))
+            case (.btc, nil):
+                Amount.fromSat(sats: UInt64(customAmount * 100_000_000))
             }
 
-        let amount = Amount.fromSat(sats: UInt64(amountSats))
         return walletManager.displayAmount(amount, showUnit: false)
     }
 
     private var displayAmountBinding: Binding<String> {
         Binding(
-            get: { displayAmount },
+            get: { displayAmount(enteringAmount) },
             set: {
-                manager.debouncedDispatch(
-                    .notifyCoinControlEnteredAmountChanged($0, isFocused),
-                    for: .milliseconds(600)
-                )
+                enteringAmount = $0
+                manager.dispatch(.notifyCoinControlEnteredAmountChanged($0, isFocused))
             }
         )
     }
@@ -183,7 +189,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 HStack {
                     Text("Set Amount")
                     Spacer()
-                    TextField(displayAmount, text: displayAmountBinding).keyboardType(.decimalPad)
+                    TextField(displayAmount(), text: displayAmountBinding).keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                         .focused($isFocused)
 

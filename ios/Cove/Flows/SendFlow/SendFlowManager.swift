@@ -54,7 +54,8 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
     func validate(displayAlert: Bool = false) -> Bool {
         validateAmount(displayAlert: displayAlert)
-            && validateAddress(displayAlert: displayAlert) && validateFeePercentage(displayAlert: displayAlert)
+            && validateAddress(displayAlert: displayAlert)
+            && validateFeePercentage(displayAlert: displayAlert)
     }
 
     func validateAddress(displayAlert: Bool = false) -> Bool {
@@ -213,10 +214,15 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         }
     }
 
-    public func debouncedDispatch(_ action: Action, for debounceDelay: Duration = .milliseconds(66)) {
+    public func debouncedDispatch(
+        _ action: Action, for debounceDelay: Duration? = .milliseconds(66)
+    ) {
         deboucedTask?.cancel()
+        deboucedTask = nil
 
-        self.deboucedTask = Task {
+        guard let debounceDelay else { return self.dispatch(action) }
+        self.deboucedTask = Task { [weak self] in
+            guard let self else { return }
             try? await Task.sleep(for: debounceDelay)
             guard !Task.isCancelled else { return }
             self.dispatch(action)

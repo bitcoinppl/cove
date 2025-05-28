@@ -382,7 +382,7 @@ impl RustSendFlowManager {
             };
 
             if display_alert {
-                self.send(Message::SetAlert(error.into()));
+                self.send(Message::SetAlert(error));
             }
 
             return false;
@@ -395,7 +395,7 @@ impl RustSendFlowManager {
             };
 
             if display_alert {
-                self.send(Message::SetAlert(error.into()));
+                self.send(Message::SetAlert(error));
             }
 
             // just a warning not a error
@@ -1054,7 +1054,7 @@ impl RustSendFlowManager {
         let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
         let amount_float = amount.parse::<f64>().ok()?;
 
-        if amount_float < 10_000.0 && is_focused {
+        if amount_float < MIN_SEND_SATS as f64 && is_focused {
             return None;
         }
 
