@@ -13,6 +13,8 @@
 - Add warning if fee is more than 20% of the amount you are sending
 - Disallow sending if the fee is more than 100% of the amount you are sending
 
+- Show UTXO labels on the confirm screen
+
 ## [0.4.1] - 2025-05-12
 
 ### Changes

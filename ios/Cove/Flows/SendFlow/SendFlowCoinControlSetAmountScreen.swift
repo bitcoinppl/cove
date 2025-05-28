@@ -480,22 +480,11 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     @ViewBuilder
     var TotalSpendingSection: some View {
-        VStack {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Total Spending")
-                        .font(.footnote)
-                        .fontWeight(.semibold)
-
-                    HStack {
-                        Button(action: { self.customAmountSheetIsPresented = true }) {
-                            Text(utxos.count > 1 ? "Spending \(utxos.count) UTXOs" : "Spending 1 UTXO")
-                                .font(.caption2)
-                        }
-                        .font(.caption2)
-                        .foregroundColor(.blue.opacity(0.8))
-                    }
-                }
+                Text("Total Spending")
+                    .font(.footnote)
+                    .fontWeight(.semibold)
 
                 Spacer()
 
@@ -506,12 +495,19 @@ struct SendFlowCoinControlSetAmountScreen: View {
             }
 
             HStack {
+                Button(action: { self.customAmountSheetIsPresented = true }) {
+                    Text(utxos.count > 1 ? "Spending \(utxos.count) UTXOs" : "Spending 1 UTXO")
+                        .font(.caption2)
+                }
+                .font(.caption2)
+                .foregroundColor(.blue.opacity(0.8))
+
                 Spacer()
+
                 Text(totalSpentInFiat)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 1)
         }
     }
 

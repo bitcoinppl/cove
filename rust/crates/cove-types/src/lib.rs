@@ -21,9 +21,7 @@ pub mod utxo;
 // export the types
 pub use address_index::AddressIndex;
 pub use block_size::BlockSizeLast;
-pub use confirm::{
-    AddressAndAmount, ConfirmDetails, ConfirmDetailsError, InputOutputDetails, SplitOutput,
-};
+pub use confirm::{ConfirmDetails, ConfirmDetailsError, InputOutputDetails, SplitOutput};
 
 pub use chain_position::ChainPosition;
 pub use network::Network;
@@ -33,3 +31,5 @@ pub use transaction::out_point::OutPoint;
 pub use transaction::tx_id::TxId;
 pub use transaction::tx_in::TxIn;
 pub use transaction::tx_out::TxOut;
+
+pub use bitcoin::Txid as BdkTxId;

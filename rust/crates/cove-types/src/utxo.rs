@@ -11,7 +11,19 @@ use bitcoin::{address::FromScriptError, params::Params};
 
 use crate::{Network, OutPoint, address::Address, amount::Amount};
 
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Hash,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    uniffi::Enum,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum UtxoType {
     Output,
     Change,

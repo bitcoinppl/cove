@@ -838,6 +838,7 @@ dependencies = [
 name = "cove-types"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "bbqr",
  "bdk_wallet",
  "bitcoin",

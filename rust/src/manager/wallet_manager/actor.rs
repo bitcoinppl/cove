@@ -32,9 +32,9 @@ use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_common::consts::{GAP_LIMIT, MIN_SEND_AMOUNT};
 use cove_types::{
     address::AddressInfoWithDerivation,
-    confirm::{AddressAndAmount, ConfirmDetails, InputOutputDetails, SplitOutput},
+    confirm::{AddressAndAmount, ConfirmDetails, ExtraItem, InputOutputDetails, SplitOutput},
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
-    utxo::UtxoList,
+    utxo::{UtxoList, UtxoType},
 };
 use eyre::Result;
 use flume::Sender;
@@ -506,8 +506,42 @@ impl WalletActor {
             .checked_add(fee)
             .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
 
-        let psbt = psbt.into();
-        let more_details = InputOutputDetails::new(&psbt, network.into());
+        let psbt = cove_types::psbt::Psbt::from(psbt);
+        let labels_db = self.db.labels.clone();
+
+        let extras = psbt
+            .utxos_iter()
+            .map(|(tx_in, tx_out)| {
+                let outpoint = &tx_in.previous_output;
+                let utxo_type = self.wallet.bdk.get_utxo(*outpoint).map(|x| match x.keychain {
+                    KeychainKind::External => UtxoType::Output,
+                    KeychainKind::Internal => UtxoType::Change,
+                });
+
+                let address =
+                    bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))
+                        .ok();
+
+                let label = labels_db
+                    .get_txn_label_record(outpoint.txid)
+                    .ok()
+                    .flatten()
+                    .map(|record| record.item.label)
+                    .unwrap_or_else(|| match address {
+                        Some(address) => labels_db
+                            .get_address_record(address.into_unchecked())
+                            .ok()
+                            .flatten()
+                            .and_then(|record| record.item.label),
+                        None => None,
+                    });
+
+                let extra = ExtraItem::new(label, utxo_type);
+                (&outpoint.txid, extra)
+            })
+            .collect();
+
+        let more_details = InputOutputDetails::new_with_labels(&psbt, network.into(), extras);
         let fee_percentage = fee.to_sat() * 100 / sending_amount.to_sat();
 
         let details = ConfirmDetails {
