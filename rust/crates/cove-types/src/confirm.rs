@@ -19,6 +19,7 @@ pub struct ConfirmDetails {
     pub sending_amount: Amount,
     pub fee_total: Amount,
     pub fee_rate: FeeRate,
+    pub fee_percentage: u64,
     pub sending_to: Address,
     pub psbt: Psbt,
     pub more_details: InputOutputDetails,
@@ -64,6 +65,10 @@ impl ConfirmDetails {
 
     pub fn spending_amount(&self) -> Amount {
         self.spending_amount
+    }
+
+    pub fn fee_percentage(&self) -> u64 {
+        self.fee_percentage
     }
 
     pub fn sending_amount(&self) -> Amount {
@@ -176,6 +181,7 @@ mod ffi_preview {
                 sending_amount: Amount::from_sat(amount - 658),
                 fee_total: Amount::from_sat(658),
                 fee_rate: BdkFeeRate::from_sat_per_vb_unchecked(3).into(),
+                fee_percentage: 3,
                 sending_to: Address::preview_new(),
                 psbt,
                 more_details,

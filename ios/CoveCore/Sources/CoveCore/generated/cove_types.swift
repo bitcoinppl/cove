@@ -1552,6 +1552,8 @@ public func FfiConverterTypeChainPosition_lower(_ value: ChainPosition) -> Unsaf
 
 public protocol ConfirmDetailsProtocol: AnyObject, Sendable {
     
+    func feePercentage()  -> UInt64
+    
     func feeRate()  -> FeeRate
     
     func feeTotal()  -> Amount
@@ -1640,6 +1642,13 @@ public static func previewNew(amount: UInt64 = UInt64(20448)) -> ConfirmDetails 
 }
     
 
+    
+open func feePercentage() -> UInt64  {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_cove_types_fn_method_confirmdetails_fee_percentage(self.uniffiClonePointer(),$0
+    )
+})
+}
     
 open func feeRate() -> FeeRate  {
     return try!  FfiConverterTypeFeeRate_lift(try! rustCall() {
@@ -5748,6 +5757,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_amount_sats_string_with_unit() != 41252) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_confirmdetails_fee_percentage() != 36424) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_confirmdetails_fee_rate() != 64136) {

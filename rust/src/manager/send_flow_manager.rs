@@ -372,10 +372,10 @@ impl RustSendFlowManager {
         let Some(fee_rate) = self.state.lock().selected_fee_rate.clone() else { return false };
 
         let fee_sats = fee_rate.total_fee().as_sats();
-        let fee_percentage = fee_sats as f64 / amount as f64;
+        let fee_percentage = fee_sats * 100 / amount;
 
         debug!("validate_fee_percentage: {fee_sats} / {amount} = {fee_percentage} ");
-        if fee_percentage > 1.0 {
+        if fee_percentage > 100 {
             let error = SendFlowAlertState::General {
                 title: "Fee Too High!".to_string(),
                 message: "The fee is higher than the amount you are sending".to_string(),
@@ -388,10 +388,10 @@ impl RustSendFlowManager {
             return false;
         }
 
-        if fee_percentage > 0.25 {
+        if fee_percentage > 20 {
             let error = SendFlowAlertState::General {
                 title: "Warning, High Fee!".to_string(),
-                message: "The fee is higher than 25% of the amount you are sending".to_string(),
+                message: "The fee is higher than 20% of the amount you are sending".to_string(),
             };
 
             if display_alert {

@@ -503,11 +503,13 @@ impl WalletActor {
 
         let psbt = psbt.into();
         let more_details = InputOutputDetails::new(&psbt, network.into());
+        let fee_percentage = fee.to_sat() * 100 / sending_amount.to_sat();
         let details = ConfirmDetails {
             spending_amount: spending_amount.into(),
             sending_amount: sending_amount.into(),
             fee_total: fee.into(),
             fee_rate: fee_rate.into(),
+            fee_percentage,
             sending_to: sending_to.into(),
             psbt,
             more_details,

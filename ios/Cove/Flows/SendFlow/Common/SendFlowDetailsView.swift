@@ -81,8 +81,8 @@ struct SendFlowDetailsView: View {
 
                     Text(displayFiatOrBtcAmount(details.feeTotal()))
                         .font(.footnote)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
+                        .fontWeight(details.feePercentage() > 20 ? .bold : .medium)
+                        .foregroundStyle(details.feePercentage() > 20 ? .red : .secondary)
                         .padding(.vertical, 10)
                 }
 
