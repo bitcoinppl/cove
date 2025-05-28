@@ -506,8 +506,36 @@ impl WalletActor {
             .checked_add(fee)
             .ok_or_else(|| error("fee overflow, cannot calculate spending amount"))?;
 
-        let psbt = psbt.into();
-        let more_details = InputOutputDetails::new(&psbt, network.into());
+        let psbt = cove_types::psbt::Psbt::from(psbt);
+        let labels_db = self.db.labels.clone();
+
+        let labels = psbt
+            .utxos_iter()
+            .filter_map(|(tx_in, tx_out)| {
+                let outpoint = &tx_in.previous_output;
+                let address =
+                    bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))
+                        .ok();
+
+                let label = labels_db
+                    .get_txn_label_record(outpoint.txid)
+                    .ok()
+                    .flatten()
+                    .map(|record| record.item.label)
+                    .unwrap_or_else(|| match address {
+                        Some(address) => labels_db
+                            .get_address_record(address.into_unchecked())
+                            .ok()
+                            .flatten()
+                            .and_then(|record| record.item.label),
+                        None => None,
+                    })?;
+
+                Some((&outpoint.txid, label))
+            })
+            .collect();
+
+        let more_details = InputOutputDetails::new_with_labels(&psbt, network.into(), labels);
         let fee_percentage = fee.to_sat() * 100 / sending_amount.to_sat();
 
         let details = ConfirmDetails {

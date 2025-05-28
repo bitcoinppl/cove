@@ -62,5 +62,9 @@ rand = { workspace = true, features = ["std_rng"] }
 # encoding
 hex = { workspace = true }
 
+
+# util
+ahash = { workspace = true }
+
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }

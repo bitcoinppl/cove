@@ -44,11 +44,11 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use cove_types::fees::FeeRateOptions;
 use cove_types::{
     address::AddressInfoWithDerivation,
-    confirm::{AddressAndAmount, ConfirmDetails, SplitOutput},
+    confirm::{ConfirmDetails, SplitOutput},
 };
+use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
     coin_control_manager::RustCoinControlManager, deferred_sender,

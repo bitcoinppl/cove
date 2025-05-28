@@ -1,5 +1,5 @@
 use bdk_wallet::psbt::PsbtUtils as _;
-use bitcoin::{Amount as BdkAmount, TxOut};
+use bitcoin::{Amount as BdkAmount, TxIn, TxOut};
 use derive_more::{AsRef, Deref, From, Into};
 use std::fmt::Debug;
 
@@ -81,9 +81,16 @@ impl Psbt {
 
 impl Psbt {
     /// Get all UTXOs
-    pub fn utxos(&self) -> Option<Vec<TxOut>> {
+    pub fn utxos(&self) -> Vec<(TxIn, TxOut)> {
+        self.utxos_iter().map(|(tx_in, tx_out)| (tx_in.clone(), tx_out)).collect()
+    }
+
+    pub fn utxos_iter(&self) -> impl Iterator<Item = (&TxIn, TxOut)> {
         let tx = &self.unsigned_tx;
-        (0..tx.input.len()).map(|i| self.0.get_utxo_for(i)).collect()
+        tx.input.iter().enumerate().filter_map(|(i, tx_in)| {
+            let tx_out = self.0.get_utxo_for(i)?;
+            Some((tx_in, tx_out))
+        })
     }
 }
 

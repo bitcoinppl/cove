@@ -51,7 +51,6 @@ impl State {
             wallet_id,
             unit,
             network,
-
             utxos,
             sort,
             selected_utxos,

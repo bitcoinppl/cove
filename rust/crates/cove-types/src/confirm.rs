@@ -4,9 +4,10 @@ use bitcoin::params::Params;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::fees::FeeRate;
-use crate::{Network, TxId, address::Address, amount::Amount, psbt::Psbt};
+use crate::{BdkTxId, Network, TxId, address::Address, amount::Amount, fees::FeeRate, psbt::Psbt};
 use bitcoin::{FeeRate as BdkFeeRate, TxOut};
+
+use ahash::AHashMap as HashMap;
 
 type Error = ConfirmDetailsError;
 type Result<T, E = Error> = std::result::Result<T, E>;
@@ -27,6 +28,8 @@ pub struct ConfirmDetails {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record, Serialize, Deserialize)]
 pub struct AddressAndAmount {
+    #[serde(default)]
+    pub label: Option<String>,
     pub address: Arc<Address>,
     pub amount: Arc<Amount>,
 }
@@ -137,17 +140,69 @@ impl ConfirmDetails {
 impl AddressAndAmount {
     pub fn try_new(tx_out: &TxOut, network: Network) -> eyre::Result<Self> {
         let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
-        Ok(Self { address: Arc::new(address.into()), amount: Arc::new(tx_out.value.into()) })
+        Ok(Self {
+            label: None,
+            address: Arc::new(address.into()),
+            amount: Arc::new(tx_out.value.into()),
+        })
+    }
+
+    pub fn try_new_with_label_opt(
+        tx_out: &TxOut,
+        network: Network,
+        label: Option<String>,
+    ) -> eyre::Result<Self> {
+        match label {
+            Some(label) => Self::try_new_with_label(tx_out, network, label),
+            None => Self::try_new(tx_out, network),
+        }
+    }
+
+    pub fn try_new_with_label(
+        tx_out: &TxOut,
+        network: Network,
+        label: String,
+    ) -> eyre::Result<Self> {
+        let address = bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))?;
+        Ok(Self {
+            label: Some(label),
+            address: Arc::new(address.into()),
+            amount: Arc::new(tx_out.value.into()),
+        })
     }
 }
 
 impl InputOutputDetails {
     pub fn new(psbt: &Psbt, network: Network) -> Self {
-        let utxos = psbt.utxos().unwrap_or_default();
+        Self::new_with_labels_opt(psbt, network, None)
+    }
 
-        let inputs = utxos
+    pub fn new_with_labels(
+        psbt: &Psbt,
+        network: Network,
+        labels: HashMap<&BdkTxId, String>,
+    ) -> Self {
+        Self::new_with_labels_opt(psbt, network, Some(labels))
+    }
+
+    fn new_with_labels_opt(
+        psbt: &Psbt,
+        network: Network,
+        labels: Option<HashMap<&BdkTxId, String>>,
+    ) -> Self {
+        let mut labels = labels;
+
+        let inputs = psbt
+            .utxos()
             .iter()
-            .map(|input| AddressAndAmount::try_new(input, network))
+            .map(|(tx_in, tx_out)| {
+                let label = match &mut labels {
+                    Some(labels) => labels.remove(&tx_in.previous_output.txid),
+                    None => None,
+                };
+
+                AddressAndAmount::try_new_with_label_opt(tx_out, network, label)
+            })
             .filter_map(Result::ok)
             .collect();
 
