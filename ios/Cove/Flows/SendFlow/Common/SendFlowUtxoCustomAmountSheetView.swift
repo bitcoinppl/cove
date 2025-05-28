@@ -100,7 +100,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     }
 
     private func displayAmount(_ amount: String? = nil) -> String {
-        let amountDouble = amount.flatMap { manager.rust.sanitizeBtcEnteringAmount(oldValue: enteringAmount ?? "", newValue: $0) }.map { $0.replacingOccurrences(of: ",", with: "") }.flatMap { Double($0) }
+        let amountDouble = amount.flatMap {
+            manager.rust.sanitizeBtcEnteringAmount(oldValue: enteringAmount ?? "", newValue: $0)
+        }.map { $0.replacingOccurrences(of: ",", with: "") }.flatMap { Double($0) }
         let amount =
             switch (metadata.selectedUnit, amountDouble) {
             case let (.sat, .some(amount)):
@@ -211,6 +213,8 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                     step: step,
                     onEditingChanged: { isEditing = $0 }
                 )
+                .accessibilityLabel("Send amount slider")
+                .accessibilityValue("\(displayAmount()) \(selectedUnitSymbol)")
             }
         }
         .padding()
@@ -270,7 +274,6 @@ private struct UtxoRow: View {
                 // Address (semi-bold caption)
                 HStack {
                     Text(utxo.address.spacedOut())
-                        .truncationMode(.middle)
                         .font(.caption2)
                         .fontWeight(.semibold)
                         .lineLimit(1)

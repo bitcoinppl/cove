@@ -495,6 +495,11 @@ impl WalletActor {
             .map_err(|err| err_fmt("unable to get address from script", err))?;
 
         let sending_amount = output.value;
+
+        if sending_amount == Amount::ZERO {
+            return Err(error("zero amount"));
+        }
+
         let fee = psbt.fee().map_err(|err| err_fmt("unable to get fee", err))?;
 
         let spending_amount = sending_amount
@@ -504,6 +509,7 @@ impl WalletActor {
         let psbt = psbt.into();
         let more_details = InputOutputDetails::new(&psbt, network.into());
         let fee_percentage = fee.to_sat() * 100 / sending_amount.to_sat();
+
         let details = ConfirmDetails {
             spending_amount: spending_amount.into(),
             sending_amount: sending_amount.into(),

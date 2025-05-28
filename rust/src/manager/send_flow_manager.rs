@@ -1081,7 +1081,9 @@ impl RustSendFlowManager {
                 state.selected_fee_rate.as_ref().map(|fee_rate| fee_rate.total_fee.as_sats());
 
             state.mode = EnterMode::coin_control_max(utxo_list.clone());
-            let total_minus_fees = utxo_list.total.as_sats() - total_fee_sats.unwrap_or(1000);
+            let total_minus_fees =
+                utxo_list.total.as_sats().saturating_sub(total_fee_sats.unwrap_or(1000));
+
             Amount::from_sat(total_minus_fees)
         };
 
@@ -1662,11 +1664,15 @@ impl RustSendFlowManager {
     }
 
     async fn get_or_update_fee_rate_options(self: &Arc<Self>) {
-        if self.checking_fees.load(Ordering::Relaxed) {
+        if self
+            .checking_fees
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
+            // another check is running
             return;
         }
 
-        self.checking_fees.store(true, Ordering::Relaxed);
         self.do_get_or_update_fee_rate_options().await;
         self.checking_fees.store(false, Ordering::Relaxed);
     }
