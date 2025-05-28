@@ -7409,6 +7409,8 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
     
     func validateAmount(displayAlert: Bool)  -> Bool
     
+    func validateFeePercentage(displayAlert: Bool)  -> Bool
+    
     func waitForInit() async 
     
     func walletId()  -> WalletId
@@ -7618,6 +7620,14 @@ open func validateAddress(displayAlert: Bool = false) -> Bool  {
 open func validateAmount(displayAlert: Bool = false) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_cove_fn_method_rustsendflowmanager_validate_amount(self.uniffiClonePointer(),
+        FfiConverterBool.lower(displayAlert),$0
+    )
+})
+}
+    
+open func validateFeePercentage(displayAlert: Bool = false) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_rustsendflowmanager_validate_fee_percentage(self.uniffiClonePointer(),
         FfiConverterBool.lower(displayAlert),$0
     )
 })
@@ -27321,6 +27331,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_validate_amount() != 25988) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_validate_fee_percentage() != 2780) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init() != 16306) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27812,9 +27825,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

@@ -367,6 +367,45 @@ impl RustSendFlowManager {
     }
 
     #[uniffi::method(default(display_alert = false))]
+    pub fn validate_fee_percentage(self: &Arc<Self>, display_alert: bool) -> bool {
+        let Some(amount) = self.state.lock().amount_sats else { return false };
+        let Some(fee_rate) = self.state.lock().selected_fee_rate.clone() else { return false };
+
+        let fee_sats = fee_rate.total_fee().as_sats();
+        let fee_percentage = fee_sats as f64 / amount as f64;
+
+        debug!("validate_fee_percentage: {fee_sats} / {amount} = {fee_percentage} ");
+        if fee_percentage > 1.0 {
+            let error = SendFlowAlertState::General {
+                title: "Fee Too High!".to_string(),
+                message: "The fee is higher than the amount you are sending".to_string(),
+            };
+
+            if display_alert {
+                self.send(Message::SetAlert(error.into()));
+            }
+
+            return false;
+        }
+
+        if fee_percentage > 0.25 {
+            let error = SendFlowAlertState::General {
+                title: "Warning, High Fee!".to_string(),
+                message: "The fee is higher than 25% of the amount you are sending".to_string(),
+            };
+
+            if display_alert {
+                self.send(Message::SetAlert(error.into()));
+            }
+
+            // just a warning not a error
+            return true;
+        }
+
+        true
+    }
+
+    #[uniffi::method(default(display_alert = false))]
     pub fn validate_amount(self: &Arc<Self>, display_alert: bool) -> bool {
         let mut sender = DeferredSender::new(self.clone());
         let Some(amount) = self.state.lock().amount_sats else {
@@ -834,6 +873,8 @@ impl RustSendFlowManager {
             }
             _ => {}
         };
+
+        self.validate_fee_percentage(true);
     }
 
     /// When amount is changed, we will need to update the entering and fiat amounts

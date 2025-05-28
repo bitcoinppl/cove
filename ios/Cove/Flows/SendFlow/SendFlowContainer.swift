@@ -84,8 +84,6 @@ public struct SendFlowContainer: View {
             .environment(presenter)
             .environment(sendFlowManager)
             .onAppear {
-                presenter.disappearing = false
-
                 // if zero balance, show alert and send back
                 if manager.balance.total().asSats() == 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -105,7 +103,7 @@ public struct SendFlowContainer: View {
                 message: { MyAlert($0).message }
             )
             .onDisappear {
-                presenter.disappearing = true
+                presenter.setDisappearing()
             }
 
         } else {

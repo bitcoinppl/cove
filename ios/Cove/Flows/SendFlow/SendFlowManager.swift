@@ -52,6 +52,23 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         )
     }
 
+    func validate(displayAlert: Bool = false) -> Bool {
+        validateAmount(displayAlert: displayAlert)
+            && validateAddress(displayAlert: displayAlert) && validateFeePercentage(displayAlert: displayAlert)
+    }
+
+    func validateAddress(displayAlert: Bool = false) -> Bool {
+        rust.validateAddress(displayAlert: displayAlert)
+    }
+
+    func validateAmount(displayAlert: Bool = false) -> Bool {
+        rust.validateAmount(displayAlert: displayAlert)
+    }
+
+    func validateFeePercentage(_: String? = nil, displayAlert: Bool = false) -> Bool {
+        rust.validateFeePercentage(displayAlert: displayAlert)
+    }
+
     // private
     private var deboucedTask: Task<Void, Never>? = nil
 
@@ -130,7 +147,16 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
             self.presenter.focusField = field
 
         case let .setAlert(alertState):
+            Log.warn("setAlert: \(alertState)")
             self.presenter.alertState = .init(alertState)
+
+            if self.presenter.sheetState != .none || self.presenter.alertState != .none {
+                self.presenter.alertState = .none
+                self.presenter.sheetState = .none
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    self.presenter.alertState = .init(alertState)
+                }
+            }
 
         case .clearAlert:
             self.presenter.alertState = .none
@@ -191,12 +217,9 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
         deboucedTask?.cancel()
 
         self.deboucedTask = Task {
-            do {
-                try await Task.sleep(for: debounceDelay)
-                self.dispatch(action)
-            } catch {
-                // task was cancelled, do nothing
-            }
+            try? await Task.sleep(for: debounceDelay)
+            guard !Task.isCancelled else { return }
+            self.dispatch(action)
         }
     }
 }

@@ -16,7 +16,7 @@ import SwiftUI
     @ObservationIgnored
     let manager: WalletManager
 
-    var disappearing: Bool = false
+    private var disappearing: Bool = false
 
     var focusField: SetAmountFocusField?
     var sheetState: TaggedItem<SheetState>? = .none
@@ -38,11 +38,7 @@ import SwiftUI
     var showingAlert: Binding<Bool> {
         Binding(
             get: { self.alertState != nil && !self.disappearing },
-            set: { newValue in
-                if !newValue {
-                    self.alertState = .none
-                }
-            }
+            set: { if !$0 { self.alertState = .none }}
         )
     }
 
@@ -63,6 +59,13 @@ import SwiftUI
             title
         case .none:
             ""
+        }
+    }
+
+    public func setDisappearing() {
+        self.disappearing = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.disappearing = false
         }
     }
 

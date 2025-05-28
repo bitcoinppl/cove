@@ -50,7 +50,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     // validate, create final psbt and send to next screen
     private func next() {
-        sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen)
+        if validate(true) { sendFlowManager.dispatch(action: .finalizeAndGoToNextScreen) }
     }
 
     private func dismissIfValid() {
@@ -282,17 +282,18 @@ struct SendFlowCoinControlSetAmountScreen: View {
         )
     }
 
+    // MARK: Validation Functions
+
     private func validate(_ displayAlert: Bool = false) -> Bool {
-        validateAmount(displayAlert: displayAlert)
-            && validateAddress(displayAlert: displayAlert)
+        sendFlowManager.validate(displayAlert: displayAlert)
     }
 
-    private func validateAddress(_: String? = nil, displayAlert: Bool = false) -> Bool {
-        sendFlowManager.rust.validateAddress(displayAlert: displayAlert)
+    private func validateAmount(displayAlert: Bool = false) -> Bool {
+        sendFlowManager.validateAmount(displayAlert: displayAlert)
     }
 
-    private func validateAmount(_: String? = nil, displayAlert: Bool = false) -> Bool {
-        sendFlowManager.rust.validateAmount(displayAlert: displayAlert)
+    private func validateAddress(displayAlert: Bool = false) -> Bool {
+        sendFlowManager.validateAddress(displayAlert: displayAlert)
     }
 
     // MARK: OnChange Functions
@@ -525,7 +526,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
                 .background(Color.midnightBtn)
                 .foregroundColor(.white)
                 .cornerRadius(10)
-                .disabled(!validate())
         }
         .padding(.vertical, 10)
     }
