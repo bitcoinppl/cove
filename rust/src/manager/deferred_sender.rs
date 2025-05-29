@@ -5,6 +5,9 @@ use tracing::{debug, error, warn};
 
 use crate::task;
 
+pub(crate) trait DebugSend: Debug + Send + Sync + 'static {}
+impl<T> DebugSend for T where T: Debug + Send + Sync + 'static {}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SingleOrMany<T> {
     Single(T),
@@ -24,18 +27,12 @@ impl<T> From<Vec<T>> for SingleOrMany<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct DeferredSender<T>
-where
-    T: Debug + Send + Sync + 'static,
-{
+pub struct DeferredSender<T: DebugSend> {
     sender: MessageSender<T>,
     buffer: Vec<T>,
 }
 
-impl<T> DeferredSender<T>
-where
-    T: Debug + Send + Sync + 'static,
-{
+impl<T: DebugSend> DeferredSender<T> {
     pub fn new(sender: MessageSender<T>) -> Self {
         Self { sender, buffer: vec![] }
     }
@@ -56,10 +53,7 @@ impl<T> Clone for MessageSender<T> {
     }
 }
 
-impl<T> MessageSender<T>
-where
-    T: Debug + Send + Sync + 'static,
-{
+impl<T: DebugSend> MessageSender<T> {
     pub fn new(sender: Sender<SingleOrMany<T>>) -> Self {
         Self { sender }
     }
@@ -97,10 +91,7 @@ where
     }
 }
 
-impl<T> Drop for DeferredSender<T>
-where
-    T: Debug + Send + Sync + 'static,
-{
+impl<T: DebugSend> Drop for DeferredSender<T> {
     fn drop(&mut self) {
         let mut msgs = std::mem::take(&mut self.buffer);
         match msgs.len() {
