@@ -6825,6 +6825,8 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     
     func listenForUpdates(reconciler: CoinControlManagerReconciler) 
     
+    func reloadLabels() async 
+    
     func selectedUtxos()  -> [Utxo]
     
     func unit()  -> Unit
@@ -6923,6 +6925,24 @@ open func listenForUpdates(reconciler: CoinControlManagerReconciler)  {try! rust
         FfiConverterCallbackInterfaceCoinControlManagerReconciler_lower(reconciler),$0
     )
 }
+}
+    
+open func reloadLabels()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rustcoincontrolmanager_reload_labels(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_void,
+            completeFunc: ffi_cove_rust_future_complete_void,
+            freeFunc: ffi_cove_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
 }
     
 open func selectedUtxos() -> [Utxo]  {
@@ -27232,6 +27252,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_listen_for_updates() != 58980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels() != 40133) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos() != 6695) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27824,10 +27847,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

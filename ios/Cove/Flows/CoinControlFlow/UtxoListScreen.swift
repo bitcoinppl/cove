@@ -271,6 +271,7 @@ struct UtxoListScreen: View {
                 .ignoresSafeArea()
         )
         .environment(manager)
+        .task { await manager.rust.reloadLabels() }
     }
 
     // MARK: - Helpers

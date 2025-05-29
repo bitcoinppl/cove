@@ -75,13 +75,6 @@ impl<T: DebugSend> MessageSender<T> {
         }
     }
 
-    pub fn try_send(
-        &self,
-        message: impl Into<SingleOrMany<T>>,
-    ) -> Result<(), TrySendError<SingleOrMany<T>>> {
-        self.sender.try_send(message.into())
-    }
-
     pub async fn send_async(&self, message: impl Into<SingleOrMany<T>>) {
         let message = message.into();
         debug!("send_async: {message:?}");
