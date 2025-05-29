@@ -28,7 +28,6 @@ use alert_state::SendFlowAlertState;
 use amount_or_max::AmountOrMax;
 use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::{MIN_SEND_AMOUNT, MIN_SEND_SATS};
-use cove_macros::impl_manager_message_send;
 use cove_types::{
     WalletId,
     address::AddressWithNetwork,
@@ -41,13 +40,13 @@ use cove_types::{
 use cove_util::format::NumberFormatter as _;
 use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
-use flume::{Receiver, Sender, TrySendError};
+use flume::Receiver;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, SendFlowManagerState, State};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, trace, warn};
 
 use super::{
-    deferred_sender,
+    deferred_sender::{self, MessageSender},
     wallet_manager::{RustWalletManager, actor::WalletActor},
 };
 
@@ -58,8 +57,7 @@ type Action = SendFlowManagerAction;
 type Message = SendFlowManagerReconcileMessage;
 type Reconciler = dyn SendFlowManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
-type DeferredSender = deferred_sender::DeferredSender<Arc<RustSendFlowManager>, Message>;
-impl_manager_message_send!(RustSendFlowManager);
+type DeferredSender = deferred_sender::DeferredSender<Message>;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SetAmountFocusField {
@@ -81,7 +79,7 @@ pub struct RustSendFlowManager {
     wallet_manager: Arc<RustWalletManager>,
     pub state: Arc<Mutex<SendFlowManagerState>>,
 
-    reconciler: Sender<SingleOrMany>,
+    reconciler: MessageSender<Message>,
     reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 
     checking_fees: AtomicBool,
@@ -158,12 +156,13 @@ impl RustSendFlowManager {
     pub fn new(metadata: WalletMetadata, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
         let (sender, receiver) = flume::bounded(50);
         let state = State::new(metadata);
+        let message_sender = MessageSender::new(sender);
 
         let me: Arc<Self> = Self {
             app: App::global().clone(),
             state: state.into_inner(),
             wallet_manager,
-            reconciler: sender,
+            reconciler: message_sender,
             reconcile_receiver: Arc::new(receiver),
             checking_fees: AtomicBool::new(false),
         }
@@ -357,7 +356,7 @@ impl RustSendFlowManager {
             if display_alert {
                 let error =
                     SendFlowError::InvalidAddress(self.state.lock().entering_address.clone());
-                self.send(Message::SetAlert(error.into()));
+                self.reconciler.send(Message::SetAlert(error.into()));
             }
 
             return false;
@@ -382,7 +381,7 @@ impl RustSendFlowManager {
             };
 
             if display_alert {
-                self.send(Message::SetAlert(error));
+                self.reconciler.send(Message::SetAlert(error));
             }
 
             return false;
@@ -395,7 +394,7 @@ impl RustSendFlowManager {
             };
 
             if display_alert {
-                self.send(Message::SetAlert(error));
+                self.reconciler.send(Message::SetAlert(error));
             }
 
             // just a warning not a error
@@ -407,7 +406,7 @@ impl RustSendFlowManager {
 
     #[uniffi::method(default(display_alert = false))]
     pub fn validate_amount(self: &Arc<Self>, display_alert: bool) -> bool {
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         let Some(amount) = self.state.lock().amount_sats else {
             let msg = Message::SetAlert(SendFlowError::InvalidNumber.into());
             if display_alert {
@@ -546,7 +545,7 @@ impl RustSendFlowManager {
 
             Action::ChangeSetAmountFocusField(set_amount_focus_field) => {
                 self.state.lock().focus_field = set_amount_focus_field;
-                self.send(Message::UpdateFocusField(set_amount_focus_field));
+                self.reconciler.send(Message::UpdateFocusField(set_amount_focus_field));
             }
 
             Action::SelectFeeRate(fee_rate) => self.selected_fee_rate_changed(fee_rate),
@@ -589,11 +588,11 @@ impl RustSendFlowManager {
 
             Action::ChangeFeeRateOptions(fee_options) => {
                 self.state.lock().fee_rate_options = Some(fee_options.clone());
-                self.send(Message::UpdateFeeRateOptions(fee_options));
+                self.reconciler.send(Message::UpdateFeeRateOptions(fee_options));
             }
 
             Action::ChangeEnteringAddress(string) => {
-                self.send(Message::UpdateEnteringAddress(string.clone()));
+                self.reconciler.send(Message::UpdateEnteringAddress(string.clone()));
                 self.handle_entering_address_changed(string);
             }
 
@@ -657,7 +656,7 @@ impl RustSendFlowManager {
         }
 
         // update the state
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         self.state.lock().entering_btc_amount = new.clone();
 
         let state: State = self.state.clone().into();
@@ -725,7 +724,7 @@ impl RustSendFlowManager {
             return None;
         }
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         // update the state
         self.state.lock().entering_fiat_amount = new_value.clone();
@@ -778,7 +777,7 @@ impl RustSendFlowManager {
     fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
         debug!("handle_entering_address_changed: {address}");
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         // update the state
         self.state.lock().entering_address = address.clone();
@@ -817,7 +816,7 @@ impl RustSendFlowManager {
             state.amount_fiat = None;
         }
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         sender.queue(Message::UpdateAmountFiat(0.0));
         sender.queue(Message::UpdateAmountSats(0));
         self.sync_wrap_get_or_update_fee_rate_options();
@@ -837,7 +836,7 @@ impl RustSendFlowManager {
     }
 
     fn clear_address(self: &Arc<Self>) {
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         self.state.lock().address = None;
         sender.queue(Message::UpdateAddress(None));
 
@@ -847,7 +846,7 @@ impl RustSendFlowManager {
 
     fn selected_fee_rate_changed(self: &Arc<Self>, fee_rate: Arc<FeeRateOptionWithTotalFee>) {
         debug!("selected_fee_rate_changed: {fee_rate:?}");
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         self.state.lock().selected_fee_rate = Some(fee_rate.clone());
         sender.queue(Message::UpdateSelectedFeeRate(fee_rate.clone()));
 
@@ -881,7 +880,7 @@ impl RustSendFlowManager {
     fn handle_amount_changed(self: &Arc<Self>, amount: Amount) {
         debug!("handle_amount_changed: {amount:?}");
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         let (unit, fiat_or_btc, btc_price_in_fiat) = {
             let state = self.state.lock();
 
@@ -938,7 +937,7 @@ impl RustSendFlowManager {
     ) {
         debug!("handle_focus_field_changed: {old:?} --> {new:?}");
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         // most likely the first load, so ignore for now let front end handle it
         if old.is_none() && new.is_some() && self.state.lock().focus_field.is_none() {
@@ -1212,14 +1211,14 @@ impl RustSendFlowManager {
             Ok(_) => {}
             Err(error) => {
                 let error = SendFlowError::UnableToGetMaxSend(error.to_string());
-                self.send(Message::SetAlert(error.into()));
+                self.reconciler.send(Message::SetAlert(error.into()));
             }
         }
     }
 
     async fn select_max_send(self: &Arc<Self>) -> Result<()> {
         debug!("select_max_send");
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         // access the mutex once
         let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
@@ -1295,7 +1294,7 @@ impl RustSendFlowManager {
     }
 
     fn handle_selected_unit_changed(self: &Arc<Self>, old: Unit, new: Unit) {
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         self.state.lock().metadata.selected_unit = new;
 
         sender.queue(Message::RefreshPresenters);
@@ -1338,7 +1337,7 @@ impl RustSendFlowManager {
     }
 
     fn handle_btc_or_fiat_changed(self: &Arc<Self>, _old_value: FiatOrBtc, new_value: FiatOrBtc) {
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         self.state.lock().metadata.fiat_or_btc = new_value;
 
         sender.queue(Message::RefreshPresenters);
@@ -1382,12 +1381,12 @@ impl RustSendFlowManager {
 
         let amount_fiat = Amount::from_sat(amount).as_btc() * (btc_price_in_fiat as f64);
         self.state.lock().amount_fiat = Some(amount_fiat);
-        self.send(Message::UpdateAmountFiat(amount_fiat));
+        self.reconciler.send(Message::UpdateAmountFiat(amount_fiat));
     }
 
     fn handle_scan_code_changed(self: &Arc<Self>, _old_value: String, new_value: String) {
         debug!("handle_scan_code_changed {new_value}");
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         let network = self.state.lock().metadata.network;
         let address_with_network = {
@@ -1482,7 +1481,7 @@ impl RustSendFlowManager {
             return self.send_alert(SendFlowError::UnableToGetFeeRate);
         };
 
-        self.send(Message::UpdateFocusField(None));
+        self.reconciler.send(Message::UpdateFocusField(None));
 
         let (wallet_type, wallet_id) = {
             let state = self.state.lock();
@@ -1553,23 +1552,6 @@ impl RustSendFlowManager {
 
 /// MARK: helper method impls
 impl RustSendFlowManager {
-    fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
-        let message = message.into();
-        debug!("send: {message:?}");
-        match self.reconciler.try_send(message) {
-            Ok(_) => {}
-            Err(TrySendError::Full(message)) => {
-                warn!("[WARN] unable to send, queue is full, sending async");
-
-                let me = self.clone();
-                task::spawn(async move { me.send_async(message).await });
-            }
-            Err(e) => {
-                error!("unable to send message to send flow manager: {e:?}");
-            }
-        }
-    }
-
     fn set_and_send_entering_btc_amount(
         self: &Arc<Self>,
         new_entering_btc_amount: String,
@@ -1604,20 +1586,12 @@ impl RustSendFlowManager {
         }
     }
 
-    async fn send_async(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
-        let message = message.into();
-        debug!("send_async: {message:?}");
-        if let Err(err) = self.reconciler.send_async(message).await {
-            error!("unable to send message to send flow manager: {err}");
-        }
-    }
-
     fn send_alert(self: &Arc<Self>, alert: impl Into<SendFlowAlertState>) {
-        self.send(Message::SetAlert(alert.into()));
+        self.reconciler.send(Message::SetAlert(alert.into()));
     }
 
     async fn send_alert_async(self: &Arc<Self>, alert: impl Into<SendFlowAlertState>) {
-        self.send_async(Message::SetAlert(alert.into())).await;
+        self.reconciler.send_async(Message::SetAlert(alert.into())).await;
     }
 
     fn total_spent_btc_amount(self: &Arc<Self>) -> Option<Amount> {
@@ -1680,7 +1654,7 @@ impl RustSendFlowManager {
     async fn do_get_or_update_fee_rate_options(self: &Arc<Self>) {
         debug!("get_or_update_fee_rate_options");
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         let (address, amount_sats) = {
             let state = self.state.lock();
@@ -1851,7 +1825,7 @@ impl RustSendFlowManager {
             Ok(total_fee) => total_fee,
             Err(error) => {
                 let error = SendFlowError::UnableToGetMaxSend(error.to_string());
-                self.send_async(Message::SetAlert(error.into())).await;
+                self.reconciler.send_async(Message::SetAlert(error.into())).await;
                 return None;
             }
         };

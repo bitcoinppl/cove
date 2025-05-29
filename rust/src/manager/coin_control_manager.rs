@@ -17,9 +17,10 @@ use crate::{
     manager::deferred_sender::{self, DeferredSender},
     wallet::metadata::WalletMetadata,
 };
-use cove_macros::impl_manager_message_send;
-use flume::{Receiver, Sender, TrySendError};
+use flume::{Receiver, TrySendError};
 use tracing::{debug, error, trace, warn};
+
+use super::deferred_sender::MessageSender;
 
 #[allow(dead_code)]
 type Message = CoinControlManagerReconcileMessage;
@@ -28,7 +29,6 @@ type State = state::CoinControlManagerState;
 type SortState = CoinControlListSortState;
 type Reconciler = dyn CoinControlManagerReconciler;
 type SingleOrMany = deferred_sender::SingleOrMany<Message>;
-impl_manager_message_send!(RustCoinControlManager);
 
 #[uniffi::export(callback_interface)]
 pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
@@ -41,7 +41,7 @@ pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static 
 #[allow(dead_code)]
 pub struct RustCoinControlManager {
     pub state: Arc<Mutex<State>>,
-    pub reconciler: Sender<SingleOrMany>,
+    pub reconciler: MessageSender<Message>,
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 }
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -187,7 +187,7 @@ impl RustCoinControlManager {
 
         Self {
             state: Arc::new(Mutex::new(state)),
-            reconciler: sender,
+            reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
         }
     }
@@ -233,7 +233,7 @@ impl RustCoinControlManager {
             }
         }
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
         let sort = get_new_sort(current_sort, sort_button_pressed);
 
         self.state.lock().sort = SortState::Active(sort);
@@ -244,7 +244,7 @@ impl RustCoinControlManager {
     }
 
     fn toggle_select_all(self: Arc<Self>) {
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         let old_selected_utxos = self.state.lock().selected_utxos.clone();
 
@@ -274,7 +274,7 @@ impl RustCoinControlManager {
             return;
         }
 
-        let mut sender = DeferredSender::new(self.clone());
+        let mut sender = DeferredSender::new(self.reconciler.clone());
 
         // update the search state
         self.state.lock().search = search.clone();
@@ -326,11 +326,7 @@ impl RustCoinControlManager {
     }
 
     async fn send_async(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
-        let message = message.into();
-        debug!("send_async: {message:?}");
-        if let Err(err) = self.reconciler.send_async(message).await {
-            error!("unable to send message to send flow manager: {err}");
-        }
+        self.reconciler.send_async(message.into()).await;
     }
 }
 
@@ -428,7 +424,7 @@ mod ffi {
             let state = State::preview_new(output_count, change_count);
             Self {
                 state: Arc::new(Mutex::new(state)),
-                reconciler: sender,
+                reconciler: MessageSender::new(sender),
                 reconcile_receiver: Arc::new(receiver),
             }
         }
