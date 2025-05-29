@@ -14,6 +14,7 @@
 - Disallow sending if the fee is more than 100% of the amount you are sending
 
 - Show UTXO labels on the confirm screen
+- Search UTXOs by amount
 
 ## [0.4.1] - 2025-05-12
 
