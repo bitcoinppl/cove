@@ -139,41 +139,51 @@ impl State {
     pub fn filter_utxos(&mut self, search: &str) {
         let search = &search.to_ascii_lowercase();
 
-        // if search looks like a number, search by amount
-        let mut filtered_utxos = match search.parse::<f64>().ok() {
-            Some(search_number) => {
-                let amount_sats = search_number.trunc() as u64;
-                let amount_btc = Amount::from_btc(search_number).ok().map(|btc| btc.to_sat());
-                self.utxos
-                    .iter()
-                    .filter_map(|utxo| {
-                        let utxo_amount = utxo.amount.as_sats();
-                        if utxo_amount == amount_sats || Some(utxo_amount) == amount_btc {
-                            return Some((utxo, 1.0));
-                        }
-
-                        None
-                    })
-                    .collect::<Vec<_>>()
+        /// helper: assign to `self.filtered_utxos` and signal whether anything matched.
+        fn commit_if_any(me: &mut State, v: Vec<Utxo>) -> bool {
+            if v.is_empty() {
+                false
+            } else {
+                me.filtered_utxos = FilteredUtxos::Search(v);
+                true
             }
-            None => self
+        }
+
+        // 1. first check for an exact amount match if search is digits only
+        if let Ok(numeric) = search.parse::<f64>() {
+            let amount_sats = numeric.trunc() as u64;
+            let amount_btc_in_sats = Amount::from_btc(numeric).unwrap_or(Amount::ZERO).to_sat();
+
+            let filtered: Vec<_> = self
                 .utxos
                 .iter()
-                .filter_map(|utxo| {
-                    let utxo_name = utxo.name().to_ascii_lowercase();
-                    let distance = strsim::normalized_damerau_levenshtein(&utxo_name, search);
-
-                    if distance >= 0.20
-                        || utxo_name.contains(search)
-                        || utxo_name.starts_with(search)
-                    {
-                        Some((utxo, distance))
-                    } else {
-                        None
-                    }
+                .filter(|utxo| {
+                    let amount = utxo.amount.as_sats();
+                    amount == amount_sats || amount == amount_btc_in_sats
                 })
-                .collect::<Vec<_>>(),
-        };
+                .cloned()
+                .collect();
+
+            if commit_if_any(self, filtered) {
+                return;
+            }
+        }
+
+        // 2. next fuzzy match on utxo label name
+        let mut filtered_utxos = self
+            .utxos
+            .iter()
+            .filter_map(|utxo| {
+                let utxo_name = utxo.name().to_ascii_lowercase();
+                let distance = strsim::normalized_damerau_levenshtein(&utxo_name, search);
+
+                if distance >= 0.20 || utxo_name.contains(search) || utxo_name.starts_with(search) {
+                    Some((utxo, distance))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
 
         filtered_utxos.sort_unstable_by(|a, b| {
             a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).reverse()
@@ -182,12 +192,11 @@ impl State {
         let filtered_utxos =
             filtered_utxos.into_iter().map(|(utxo, _)| utxo.clone()).collect::<Vec<_>>();
 
-        // if we have filtered utxos, update the state and return
-        if !filtered_utxos.is_empty() {
-            return self.filtered_utxos = FilteredUtxos::Search(filtered_utxos);
+        if commit_if_any(self, filtered_utxos) {
+            return;
         }
 
-        // if no utxos found, and search looks like an address, search by address
+        // 3. if no utxos found, and search looks like an address, search by address
         if search.starts_with("bc1") || search.starts_with("tb1") {
             let filtered = self
                 .utxos
@@ -205,7 +214,7 @@ impl State {
             return self.filtered_utxos = FilteredUtxos::Search(filtered);
         }
 
-        // if no utxos found, search by txid
+        // 4. fallback search by txid
         let filtered = self
             .utxos
             .iter()
