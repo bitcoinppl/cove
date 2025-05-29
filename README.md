@@ -47,6 +47,7 @@ You can download the app from the [TestFlight Beta](https://testflight.apple.com
 - Connect your own node
 - Create Trick Pins (Wipe Data & Decoy PIN)
 - Use FaceID or PIN to lock your wallets
+- UTXO list and Coin Control (select individual UTXOs to spend)
 
 ## Demo Video
 
@@ -54,7 +55,6 @@ https://github.com/user-attachments/assets/9c933b90-a991-4c09-be29-2825d535bc1e
 
 ## Coming Soon...
 
-- UTXO list and Coin Control (select individual UTXOs to spend)
 - Lock and Unlock individual UTXOs
 - Support for SATSCARD
 - Android version
