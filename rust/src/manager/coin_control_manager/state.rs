@@ -139,37 +139,7 @@ impl State {
     pub fn filter_utxos(&mut self, search: &str) {
         let search = &search.to_ascii_lowercase();
 
-        /// helper: assign to `self.filtered_utxos` and signal whether anything matched.
-        fn commit_if_any(me: &mut State, v: Vec<Utxo>) -> bool {
-            if v.is_empty() {
-                false
-            } else {
-                me.filtered_utxos = FilteredUtxos::Search(v);
-                true
-            }
-        }
-
-        // 1. first check for an exact amount match if search is digits only
-        if let Ok(numeric) = search.parse::<f64>() {
-            let amount_sats = numeric.trunc() as u64;
-            let amount_btc_in_sats = Amount::from_btc(numeric).unwrap_or(Amount::ZERO).to_sat();
-
-            let filtered: Vec<_> = self
-                .utxos
-                .iter()
-                .filter(|utxo| {
-                    let amount = utxo.amount.as_sats();
-                    amount == amount_sats || amount == amount_btc_in_sats
-                })
-                .cloned()
-                .collect();
-
-            if commit_if_any(self, filtered) {
-                return;
-            }
-        }
-
-        // 2. next fuzzy match on utxo label name
+        // first fuzzy match on utxo label name
         let mut filtered_utxos = self
             .utxos
             .iter()
@@ -189,14 +159,36 @@ impl State {
             a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).reverse()
         });
 
-        let filtered_utxos =
+        let mut filtered_utxos =
             filtered_utxos.into_iter().map(|(utxo, _)| utxo.clone()).collect::<Vec<_>>();
 
-        if commit_if_any(self, filtered_utxos) {
-            return;
+        // next check for an exact amount match if search is digits only
+        if let Ok(numeric) = search.parse::<f64>() {
+            let amount_sats = numeric.trunc() as u64;
+            let amount_btc_in_sats = Amount::from_btc(numeric).unwrap_or(Amount::ZERO).to_sat();
+
+            let mut filtered_on_amount: Vec<_> = self
+                .utxos
+                .iter()
+                .filter(|utxo| {
+                    let amount = utxo.amount.as_sats();
+                    amount == amount_sats || amount == amount_btc_in_sats
+                })
+                .cloned()
+                .collect();
+
+            // add the exact amount matches to the front of the list
+            filtered_on_amount.extend(filtered_utxos);
+            filtered_utxos = filtered_on_amount;
         }
 
-        // 3. if no utxos found, and search looks like an address, search by address
+        // if we have any results, update the state and return
+        if !filtered_utxos.is_empty() {
+            return self.filtered_utxos = FilteredUtxos::Search(filtered_utxos);
+        }
+
+        // FALLBACK SEARCH
+        // 1. if no utxos found, and search looks like an address, search by address
         if search.starts_with("bc1") || search.starts_with("tb1") {
             let filtered = self
                 .utxos
@@ -214,7 +206,7 @@ impl State {
             return self.filtered_utxos = FilteredUtxos::Search(filtered);
         }
 
-        // 4. fallback search by txid
+        // 2.fallback search by txid
         let filtered = self
             .utxos
             .iter()
