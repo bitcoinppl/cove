@@ -102,9 +102,11 @@ where
     T: Debug + Send + Sync + 'static,
 {
     fn drop(&mut self) {
-        let msgs = std::mem::take(&mut self.buffer);
-        if !msgs.is_empty() {
-            self.sender.send(SingleOrMany::Many(msgs));
+        let mut msgs = std::mem::take(&mut self.buffer);
+        match msgs.len() {
+            0 => {}
+            1 => self.sender.send(SingleOrMany::Single(msgs.pop().expect("just checked len"))),
+            _ => self.sender.send(SingleOrMany::Many(msgs)),
         }
     }
 }
