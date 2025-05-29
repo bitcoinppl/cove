@@ -7,7 +7,7 @@ use std::{
 
 use act_zero::{Addr, call, send};
 use actor::WalletActor;
-use flume::{Receiver, Sender, TrySendError};
+use flume::Receiver;
 use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
@@ -51,7 +51,8 @@ use cove_types::{
 use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
-    coin_control_manager::RustCoinControlManager, deferred_sender,
+    coin_control_manager::RustCoinControlManager,
+    deferred_sender::{self, MessageSender},
     send_flow_manager::RustSendFlowManager,
 };
 
@@ -131,7 +132,7 @@ pub struct RustWalletManager {
     // faster to access, but adds complexity to the code because we have to make sure its updated
     // in all the places
     pub metadata: Arc<RwLock<WalletMetadata>>,
-    pub reconciler: Sender<SingleOrMany>,
+    pub reconciler: MessageSender<Message>,
     pub reconcile_receiver: Arc<Receiver<SingleOrMany>>,
 
     label_manager: Arc<LabelManager>,
@@ -252,7 +253,7 @@ impl RustWalletManager {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: sender,
+            reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             scanner,
@@ -312,7 +313,7 @@ impl RustWalletManager {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: sender,
+            reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             scanner,
@@ -339,7 +340,7 @@ impl RustWalletManager {
             id,
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: sender,
+            reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             label_manager,
             scanner: None,
@@ -410,7 +411,7 @@ impl RustWalletManager {
             .into(),
         )?;
 
-        self.send(Message::UnsignedTransactionsChanged);
+        self.reconciler.send(Message::UnsignedTransactionsChanged);
 
         Ok(())
     }
@@ -447,7 +448,7 @@ impl RustWalletManager {
     pub async fn get_transactions(&self) {
         let Ok(txns) = call!(self.actor.transactions()).await else { return };
 
-        self.send(Message::UpdatedTransactions(txns));
+        self.reconciler.send(Message::UpdatedTransactions(txns));
     }
 
     #[uniffi::method]
@@ -458,7 +459,7 @@ impl RustWalletManager {
         let txn = db.unsigned_transactions().delete_tx(tx_id.as_ref())?;
         send!(self.actor.cancel_txn(txn.confirm_details.psbt.0.unsigned_tx));
 
-        self.send(Message::UnsignedTransactionsChanged);
+        self.reconciler.send(Message::UnsignedTransactionsChanged);
 
         Ok(())
     }
@@ -740,7 +741,7 @@ impl RustWalletManager {
             let mut wallet_metadata = self.metadata.write();
             wallet_metadata.verified = true;
 
-            self.send(Message::WalletMetadataChanged(wallet_metadata.clone()));
+            self.reconciler.send(Message::WalletMetadataChanged(wallet_metadata.clone()));
         }
 
         let id = self.metadata.read().id.clone();
@@ -988,7 +989,7 @@ impl RustWalletManager {
 
         let metadata = self.metadata.read();
         let metadata_changed_msg = Message::WalletMetadataChanged(metadata.clone());
-        self.send(metadata_changed_msg);
+        self.reconciler.send(metadata_changed_msg);
 
         // update wallet_metadata in the database
         if let Err(error) =
@@ -1000,31 +1001,6 @@ impl RustWalletManager {
 }
 
 impl RustWalletManager {
-    fn send(&self, message: impl Into<SingleOrMany>) {
-        let message = message.into();
-        debug!("send: {message:?}");
-        match self.reconciler.try_send(message) {
-            Ok(_) => {}
-            Err(TrySendError::Full(message)) => {
-                warn!("[WARN] unable to send, queue is full, sending async");
-
-                let me = self.clone();
-                task::spawn(async move { me.send_async(message).await });
-            }
-            Err(e) => {
-                error!("unable to send message to send flow manager: {e:?}");
-            }
-        }
-    }
-
-    async fn send_async(&self, message: impl Into<SingleOrMany>) {
-        let message = message.into();
-        debug!("send_async: {message:?}");
-        if let Err(err) = self.reconciler.send_async(message).await {
-            error!("unable to send message to send flow manager: {err}");
-        }
-    }
-
     pub async fn confirm_txn(
         &self,
         amount: Amount,
@@ -1085,7 +1061,7 @@ impl RustWalletManager {
             id: metadata.id.clone(),
             actor,
             metadata: Arc::new(RwLock::new(metadata)),
-            reconciler: sender,
+            reconciler: MessageSender::new(sender),
             reconcile_receiver: Arc::new(receiver),
             scanner: None,
             label_manager,

@@ -17,8 +17,8 @@ use crate::{
     manager::deferred_sender::{self, DeferredSender},
     wallet::metadata::WalletMetadata,
 };
-use flume::{Receiver, TrySendError};
-use tracing::{debug, error, trace, warn};
+use flume::Receiver;
+use tracing::trace;
 
 use super::deferred_sender::MessageSender;
 
@@ -154,7 +154,7 @@ impl RustCoinControlManager {
             Action::NotifySearchChanged(search) => self.notify_search_changed(search),
             Action::ClearSearch => {
                 self.clone().notify_search_changed(String::new());
-                self.send(Message::UpdateSearch(String::new()));
+                self.reconciler.send(Message::UpdateSearch(String::new()));
             }
             Action::ToggleSelectAll => {
                 self.clone().toggle_select_all();
@@ -167,7 +167,7 @@ impl RustCoinControlManager {
                     new_unit
                 };
 
-                self.send(Message::UpdateUnit(new_unit));
+                self.reconciler.send(Message::UpdateUnit(new_unit));
             }
             Action::NotifySelectedUtxosChanged(selected_utxos) => {
                 self.notify_selected_utxos_changed(selected_utxos);
@@ -266,7 +266,7 @@ impl RustCoinControlManager {
     fn notify_selected_utxos_changed(self: Arc<Self>, selected_utxos: Vec<Arc<OutPoint>>) {
         let total_value = self.total_value_of_utxos(&selected_utxos).into();
         self.state.lock().selected_utxos = selected_utxos;
-        self.send(Message::UpdateTotalSelectedAmount(total_value));
+        self.reconciler.send(Message::UpdateTotalSelectedAmount(total_value));
     }
 
     fn notify_search_changed(self: Arc<Self>, search: String) {
@@ -306,27 +306,6 @@ impl RustCoinControlManager {
             self.state.lock().sort = SortState::Inactive(sort);
             sender.queue(Message::ClearSort);
         }
-    }
-
-    fn send(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
-        let message = message.into();
-        debug!("send: {message:?}");
-        match self.reconciler.try_send(message) {
-            Ok(_) => {}
-            Err(TrySendError::Full(message)) => {
-                warn!("[WARN] unable to send, queue is full sending async");
-
-                let me = self.clone();
-                task::spawn(async move { me.send_async(message).await });
-            }
-            Err(e) => {
-                error!("unable to send message to send flow manager: {e:?}");
-            }
-        }
-    }
-
-    async fn send_async(self: &Arc<Self>, message: impl Into<SingleOrMany>) {
-        self.reconciler.send_async(message.into()).await;
     }
 }
 
