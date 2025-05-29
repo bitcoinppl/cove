@@ -1,6 +1,9 @@
 mod state;
 
-use std::sync::Arc;
+use std::{
+    hash::{DefaultHasher, Hash, Hasher as _},
+    sync::Arc,
+};
 
 use ahash::HashSet;
 use bdk_wallet::LocalOutput;
@@ -83,6 +86,37 @@ impl RustCoinControlManager {
     #[uniffi::method]
     pub fn unit(&self) -> Unit {
         self.state.lock().unit
+    }
+
+    #[uniffi::method]
+    pub async fn reload_labels(&self) {
+        let utxos = {
+            let mut state = self.state.lock();
+
+            let old_utxos_hash = {
+                let mut hasher = DefaultHasher::new();
+                state.utxos.hash(&mut hasher);
+                hasher.finish()
+            };
+
+            state.load_utxo_labels();
+
+            let new_utxos = state.utxos.clone();
+
+            let new_utxos_hash = {
+                let mut hasher = DefaultHasher::new();
+                new_utxos.hash(&mut hasher);
+                hasher.finish()
+            };
+
+            if old_utxos_hash == new_utxos_hash {
+                return;
+            }
+
+            new_utxos
+        };
+
+        self.reconciler.send_async(Message::UpdateUtxos(utxos)).await;
     }
 
     #[uniffi::method]
