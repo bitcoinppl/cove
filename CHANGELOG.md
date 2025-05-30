@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-05-28
+
 ### Features
 
 **Coin Control**
