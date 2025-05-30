@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Show updated label on UTXO list screen
+- Show updated label on transaction details screen
+
 ## [0.5.0] - 2025-05-28
 
 ### Features

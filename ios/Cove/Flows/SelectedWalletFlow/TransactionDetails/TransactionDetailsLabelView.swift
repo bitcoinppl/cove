@@ -46,7 +46,10 @@ struct TransactionDetailsLabelView: View {
         Task {
             do {
                 let details = try await manager.rust.transactionDetails(txId: txId)
-                await MainActor.run { self.details = details }
+                await MainActor.run {
+                    self.details = details
+                    manager.transactionDetails[details.txId()] = details
+                }
             } catch {
                 await manager.rust.getTransactions()
                 Log.error("Error getting updated label: \(error)")
