@@ -6,6 +6,7 @@
 
 - Show updated label on UTXO list screen
 - Show updated label on transaction details screen
+- Hot wallet import flow where erasing to a correct word would not show the word as valid
 
 ## [0.5.0] - 2025-05-28
 

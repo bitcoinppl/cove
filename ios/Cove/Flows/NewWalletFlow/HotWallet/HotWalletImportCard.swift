@@ -241,7 +241,7 @@ private struct AutocompleteField: View {
                 }
             }
             .onSubmit { submitFocusField() }
-            .onChange(of: text) { oldText, newText in
+            .onChange(of: text, initial: false) { oldText, newText in
                 text = newText.trimmingCharacters(in: .whitespacesAndNewlines)
 
                 filteredSuggestions = autocomplete.autocomplete(
@@ -252,7 +252,10 @@ private struct AutocompleteField: View {
                 if newText.count > oldText.count { state = .typing }
 
                 // erasing, reset state to typing
-                if oldText.count > newText.count { return state = .typing }
+                if oldText.count > newText.count, !filteredSuggestions.contains(newText) { return state = .typing }
+
+                // set to valid if it matches a word
+                if filteredSuggestions.contains(newText) { state = .valid }
 
                 // empty is always initial, or typing
                 if newText.isEmpty, isFocused { return state = .typing }
