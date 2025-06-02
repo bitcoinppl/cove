@@ -206,7 +206,7 @@ extension Color {
     static let systemTeal = Color(UIColor.systemTeal)
     static let systemIndigo = Color(UIColor.systemIndigo)
 
-    fileprivate static let allColors: [(Self, String)] = [
+    static let allColors: [(Self, String)] = [
         // MARK: CustomColors
 
         (almostGray, "almostGray"),
@@ -217,6 +217,7 @@ extension Color {
         (coveBg, "coveBg"),
         (coveLightGray, "coveLightGray"),
         (lightGreen, "lightGreen"),
+        (duskBlue, "duskBlue"),
         (midnightBlue, "midnightBlue"),
         (midnightBtn, "midnightBtn"),
         (lightMint, "lightMint"),
