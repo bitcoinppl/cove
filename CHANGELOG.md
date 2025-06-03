@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Terms and Conditions popup, which is required to use the app
+
 ### Bug Fixes
 
 - Show updated label on UTXO list screen
