@@ -57,7 +57,7 @@ struct VerifyWordsContainer: View {
     var body: some View {
         Group {
             if let manager, let validator {
-                if sizeCategory > .extraExtraExtraLarge {
+                if sizeCategory > .extraExtraExtraLarge || isMiniDevice {
                     ScrollView {
                         LoadedScreen(manager: manager, validator: validator)
                             .frame(minHeight: screenHeight, maxHeight: .infinity)
@@ -76,7 +76,9 @@ struct VerifyWordsContainer: View {
             }
         }
         .toolbar {
-            if sizeCategory < .extraExtraLarge || sizeCategory > .extraExtraExtraLarge {
+            if sizeCategory < .extraExtraLarge || sizeCategory > .extraExtraExtraLarge,
+               !isMiniDevice
+            {
                 ToolbarItem(placement: .principal) {
                     Text("Verify Recovery Words")
                         .foregroundStyle(.white)

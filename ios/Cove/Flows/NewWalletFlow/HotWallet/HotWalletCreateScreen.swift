@@ -19,11 +19,8 @@ struct HotWalletCreateScreen: View {
     }
 }
 
-private let columns = [
-    GridItem(.flexible()),
-    GridItem(.flexible()),
-    GridItem(.flexible()),
-]
+private let columns =
+    Array(repeating: GridItem(.flexible()), count: 3)
 
 struct WordsView: View {
     @Environment(\.sizeCategory) var sizeCategory
@@ -42,7 +39,7 @@ struct WordsView: View {
 
     var body: some View {
         Group {
-            if sizeCategory >= .extraExtraLarge {
+            if sizeCategory >= .extraExtraLarge || isMiniDevice {
                 ScrollView {
                     MainContent
                         .frame(minHeight: screenHeight, maxHeight: .infinity)
@@ -214,9 +211,9 @@ struct WordCardView: View {
                         .foregroundColor(.black.opacity(0.5))
                         .multilineTextAlignment(.leading)
                         .frame(alignment: .leading)
-                        .minimumScaleFactor(0.40)
+                        .minimumScaleFactor(0.8)
                         .lineLimit(sizeCategory >= .extraExtraLarge ? 3 : 1)
-                        .font(sizeCategory >= .extraExtraLarge ? .caption2 : .caption)
+                        .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .caption)
 
                     Spacer()
 
@@ -225,9 +222,9 @@ struct WordCardView: View {
                         .foregroundStyle(.midnightBlue)
                         .multilineTextAlignment(.center)
                         .frame(alignment: .leading)
-                        .minimumScaleFactor(0.40)
+                        .minimumScaleFactor(0.30)
                         .lineLimit(sizeCategory >= .extraExtraLarge ? 5 : 1)
-                        .font(sizeCategory >= .extraExtraLarge ? .footnote : .callout)
+                        .font(isMiniDeviceOrLargeText(sizeCategory) ? .caption2 : .footnote)
 
                     Spacer()
                 }
@@ -236,8 +233,13 @@ struct WordCardView: View {
                 .frame(width: (screenWidth * 0.33) - 20)
                 .background(Color.btnPrimary)
                 .cornerRadius(10)
+                .contextMenu {
+                    isMiniDeviceOrLargeText(sizeCategory) ?
+                        Button(action: {}) {
+                            Text("\(String(format: "%d", group.number)). \(group.word)")
+                        } : nil
+                }
             }
-            .font(.caption)
         }
     }
 }
@@ -251,6 +253,8 @@ struct StyledWordCard<Content: View>: View {
             content.padding(.bottom, 20)
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+        .safeAreaPadding(.bottom, 34)
+        .frame(minHeight: isMiniDevice ? 350 : nil)
     }
 }
 

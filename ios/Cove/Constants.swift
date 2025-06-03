@@ -16,3 +16,7 @@ let screenHeight = UIScreen.main.bounds.height
 let screenWidth = UIScreen.main.bounds.width
 
 let isMiniDevice = screenHeight <= 812
+
+func isMiniDeviceOrLargeText(_ sizeCategory: ContentSizeCategory) -> Bool {
+    isMiniDevice || sizeCategory >= .extraExtraLarge
+}

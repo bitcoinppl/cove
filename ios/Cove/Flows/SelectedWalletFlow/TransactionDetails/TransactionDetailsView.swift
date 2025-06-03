@@ -49,10 +49,13 @@ struct TransactionDetailsView: View {
             headerIcon
 
             VStack(spacing: 4) {
-                Text(transactionDetails.isConfirmed() ? "Transaction Received" : "Transaction Pending")
-                    .font(.title)
-                    .fontWeight(.semibold)
-                    .padding(.top, 8)
+                Text(
+                    transactionDetails.isConfirmed()
+                        ? "Transaction Received" : "Transaction Pending"
+                )
+                .font(.title)
+                .fontWeight(.semibold)
+                .padding(.top, 8)
 
                 // add, edit, remove label
                 TransactionDetailsLabelView(details: transactionDetails, manager: manager)
@@ -202,7 +205,9 @@ struct TransactionDetailsView: View {
         }
 
         if metadata.detailsExpanded {
-            SentDetailsExpandedView(manager: manager, transactionDetails: transactionDetails, numberOfConfirmations: numberOfConfirmations)
+            SentDetailsExpandedView(
+                manager: manager, transactionDetails: transactionDetails,
+                numberOfConfirmations: numberOfConfirmations)
         }
     }
 
@@ -231,7 +236,7 @@ struct TransactionDetailsView: View {
     var body: some View {
         ContentScrollView {
             VStack(spacing: 24) {
-                if sizeCategory < .extraExtraExtraLarge { Spacer() }
+                if sizeCategory < .extraExtraExtraLarge || isMiniDevice { Spacer() }
 
                 Group {
                     if transactionDetails.isReceived() {
@@ -242,7 +247,7 @@ struct TransactionDetailsView: View {
                 }
 
                 Spacer()
-                if sizeCategory < .extraExtraLarge { Spacer() }
+                if sizeCategory < .extraExtraLarge || isMiniDevice { Spacer() }
                 if !isMiniDevice, sizeCategory < .extraLarge { Spacer() }
 
                 Button(action: {
@@ -318,7 +323,9 @@ struct TransactionDetailsView: View {
         var errors = 0
 
         while true {
-            Log.debug("checking for number of confirmations for txId: \(txId), currently: \(numberOfConfirmations ?? 0)")
+            Log.debug(
+                "checking for number of confirmations for txId: \(txId), currently: \(numberOfConfirmations ?? 0)"
+            )
 
             do {
                 if let details = try? await manager.rust.transactionDetails(txId: txId) {
@@ -329,7 +336,8 @@ struct TransactionDetailsView: View {
 
                 let numberOfConfirmations = await getAndSetNumberOfConfirmations()
                 if let numberOfConfirmations, numberOfConfirmations >= 3, needsFrequentCheck {
-                    Log.debug("transaction fully confirmed with \(needsFrequentCheck) confirmations")
+                    Log.debug(
+                        "transaction fully confirmed with \(needsFrequentCheck) confirmations")
                     needsFrequentCheck = false
                 }
 
