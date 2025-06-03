@@ -61,6 +61,10 @@ impl Database {
         self.global_config.clone()
     }
 
+    pub fn global_flag(&self) -> GlobalFlagTable {
+        self.global_flag.clone()
+    }
+
     pub fn unsigned_transactions(&self) -> UnsignedTransactionsTable {
         self.unsigned_transactions.clone()
     }

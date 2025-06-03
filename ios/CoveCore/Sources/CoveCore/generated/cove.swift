@@ -2710,6 +2710,8 @@ public protocol DatabaseProtocol: AnyObject, Sendable {
     
     func globalConfig()  -> GlobalConfigTable
     
+    func globalFlag()  -> GlobalFlagTable
+    
     func historicalPrices()  -> HistoricalPriceTable
     
     func unsignedTransactions()  -> UnsignedTransactionsTable
@@ -2785,6 +2787,13 @@ open func dangerousResetAllData()  {try! rustCall() {
 open func globalConfig() -> GlobalConfigTable  {
     return try!  FfiConverterTypeGlobalConfigTable_lift(try! rustCall() {
     uniffi_cove_fn_method_database_global_config(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func globalFlag() -> GlobalFlagTable  {
+    return try!  FfiConverterTypeGlobalFlagTable_lift(try! rustCall() {
+    uniffi_cove_fn_method_database_global_flag(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -4247,7 +4256,11 @@ public protocol GlobalFlagTableProtocol: AnyObject, Sendable {
     
     func getBoolConfig(key: GlobalFlagKey)  -> Bool
     
+    func isTermsAccepted()  -> Bool
+    
     func set(key: GlobalFlagKey, value: Bool) throws 
+    
+    func setBoolConfig(key: GlobalFlagKey, value: Bool) throws 
     
     func toggleBoolConfig(key: GlobalFlagKey) throws 
     
@@ -4320,8 +4333,23 @@ open func getBoolConfig(key: GlobalFlagKey) -> Bool  {
 })
 }
     
+open func isTermsAccepted() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_cove_fn_method_globalflagtable_is_terms_accepted(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
 open func set(key: GlobalFlagKey, value: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
     uniffi_cove_fn_method_globalflagtable_set(self.uniffiClonePointer(),
+        FfiConverterTypeGlobalFlagKey_lower(key),
+        FfiConverterBool.lower(value),$0
+    )
+}
+}
+    
+open func setBoolConfig(key: GlobalFlagKey, value: Bool)throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+    uniffi_cove_fn_method_globalflagtable_set_bool_config(self.uniffiClonePointer(),
         FfiConverterTypeGlobalFlagKey_lower(key),
         FfiConverterBool.lower(value),$0
     )
@@ -10852,11 +10880,13 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> Unsaf
 
 public struct AppState {
     public var router: Router
+    public var acceptedTerms: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(router: Router) {
+    public init(router: Router, acceptedTerms: Bool) {
         self.router = router
+        self.acceptedTerms = acceptedTerms
     }
 }
 
@@ -10873,12 +10903,14 @@ public struct FfiConverterTypeAppState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppState {
         return
             try AppState(
-                router: FfiConverterTypeRouter.read(from: &buf)
+                router: FfiConverterTypeRouter.read(from: &buf), 
+                acceptedTerms: FfiConverterBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: AppState, into buf: inout [UInt8]) {
         FfiConverterTypeRouter.write(value.router, into: &buf)
+        FfiConverterBool.write(value.acceptedTerms, into: &buf)
     }
 }
 
@@ -12879,6 +12911,7 @@ public enum AppAction {
     )
     case updateFiatPrices
     case updateFees
+    case acceptTerms
 }
 
 
@@ -12917,6 +12950,8 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 7: return .updateFiatPrices
         
         case 8: return .updateFees
+        
+        case 9: return .acceptTerms
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -12962,6 +12997,10 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         
         case .updateFees:
             writeInt(&buf, Int32(8))
+        
+        
+        case .acceptTerms:
+            writeInt(&buf, Int32(9))
         
         }
     }
@@ -13099,6 +13138,7 @@ public enum AppStateReconcileMessage {
     )
     case pushedRoute(Route
     )
+    case acceptedTerms
 }
 
 
@@ -13147,6 +13187,8 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         
         case 11: return .pushedRoute(try FfiConverterTypeRoute.read(from: &buf)
         )
+        
+        case 12: return .acceptedTerms
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -13210,6 +13252,10 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
             FfiConverterTypeRoute.write(v1, into: &buf)
             
+        
+        case .acceptedTerms:
+            writeInt(&buf, Int32(12))
+        
         }
     }
 }
@@ -16088,6 +16134,7 @@ extension GlobalConfigTableError: Foundation.LocalizedError {
 public enum GlobalFlagKey {
     
     case completedOnboarding
+    case acceptedTerms
 }
 
 
@@ -16107,6 +16154,8 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case 1: return .completedOnboarding
         
+        case 2: return .acceptedTerms
+        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -16117,6 +16166,10 @@ public struct FfiConverterTypeGlobalFlagKey: FfiConverterRustBuffer {
         
         case .completedOnboarding:
             writeInt(&buf, Int32(1))
+        
+        
+        case .acceptedTerms:
+            writeInt(&buf, Int32(2))
         
         }
     }
@@ -26877,6 +26930,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_database_global_config() != 4476) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_database_global_flag() != 4877) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_database_historical_prices() != 14167) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27036,7 +27092,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalflagtable_get_bool_config() != 34785) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalflagtable_is_terms_accepted() != 21446) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalflagtable_set() != 23016) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_globalflagtable_set_bool_config() != 3447) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalflagtable_toggle_bool_config() != 12062) {

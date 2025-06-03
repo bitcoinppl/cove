@@ -15,6 +15,7 @@ import SwiftUI
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
 
+    var isTermsAccepted: Bool = Database().globalFlag().isTermsAccepted()
     var selectedNetwork = Database().globalConfig().selectedNetwork()
     var previousSelectedNetwork: Network? = nil
 
@@ -248,6 +249,9 @@ import SwiftUI
                             await walletManager.updateWalletBalance()
                         }
                     }
+
+                case .acceptedTerms:
+                    self.isTermsAccepted = true
 
                 case .walletModeChanged:
                     self.isLoading = true
