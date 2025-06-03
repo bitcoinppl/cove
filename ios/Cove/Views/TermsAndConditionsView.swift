@@ -49,77 +49,76 @@ struct TermsAndConditionsView: View {
     private var allChecked: Bool { checks.allSatisfy(\.self) }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Title
-                    Text("Terms & Conditions")
-                        .font(.largeTitle.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Title
+                Text("Terms & Conditions")
+                    .font(.largeTitle.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Divider()
+                Divider()
 
-                    // Subtitle
-                    HStack {
-                        Spacer()
-                        Text("By continuing, you agree to the following")
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
-                        Spacer()
-                    }
-
-                    Divider()
-
-                    // Checkboxes
-                    VStack(spacing: 6) {
-                        Toggle(isOn: $checks[0]) {
-                            Text("I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.")
-                        }
-                        .toggleStyle(CheckboxToggleStyle())
-
-                        Toggle(isOn: $checks[1]) {
-                            Text("I understand that any unlawful use of Cove is strictly prohibited.")
-                        }
-                        .toggleStyle(CheckboxToggleStyle())
-
-                        Toggle(isOn: $checks[2]) {
-                            Text("I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.")
-                        }
-                        .toggleStyle(CheckboxToggleStyle())
-
-                        Toggle(isOn: $checks[3]) {
-                            Text("I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.")
-                        }
-                        .toggleStyle(CheckboxToggleStyle())
-
-                        Toggle(isOn: $checks[4]) {
-                            // Links to Privacy Policy & Terms using Markdown
-                            Text("I have read and agree to Cove’s **[Privacy Policy](https://covebitcoinwallet.com/privacy)** and **[Terms & Conditions](https://covebitcoinwallet.com/terms)** as a condition of use.")
-                        }
-                        .toggleStyle(CheckboxToggleStyle())
-                    }
-
-                    // Footnote
-                    Text("By checking these boxes, you accept and agree to the above terms.")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .padding(.top)
-
-                    Divider()
-
-                    // Primary action button
-                    Button("Agree and Continue") {
-                        if allChecked { app.agreeToTerms() }
-                    }
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .disabled(!allChecked)
+                // Subtitle
+                HStack {
+                    Spacer()
+                    Text("By continuing, you agree to the following")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                    Spacer()
                 }
-                .padding(24)
+
+                Divider()
+
+                // Checkboxes
+                VStack(spacing: 6) {
+                    Toggle(isOn: $checks[0]) {
+                        Text("I understand that I am responsible for securely managing and backing up my wallets. Cove does not store or recover wallet information.")
+                    }
+                    .toggleStyle(CheckboxToggleStyle())
+
+                    Toggle(isOn: $checks[1]) {
+                        Text("I understand that any unlawful use of Cove is strictly prohibited.")
+                    }
+                    .toggleStyle(CheckboxToggleStyle())
+
+                    Toggle(isOn: $checks[2]) {
+                        Text("I understand that Cove is not a bank, exchange, or licensed financial institution, and does not offer financial services.")
+                    }
+                    .toggleStyle(CheckboxToggleStyle())
+
+                    Toggle(isOn: $checks[3]) {
+                        Text("I understand that if I lose access to my wallet, Cove cannot recover my funds or credentials.")
+                    }
+                    .toggleStyle(CheckboxToggleStyle())
+
+                    Toggle(isOn: $checks[4]) {
+                        // Links to Privacy Policy & Terms using Markdown
+                        Text("I have read and agree to Cove’s **[Privacy Policy](https://covebitcoinwallet.com/privacy)** and **[Terms & Conditions](https://covebitcoinwallet.com/terms)** as a condition of use.")
+                    }
+                    .toggleStyle(CheckboxToggleStyle())
+                }
+
+                // Footnote
+                Text("By checking these boxes, you accept and agree to the above terms.")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .padding(.top)
+
+                Spacer()
+                Divider()
+
+                // Primary action button
+                Button("Agree and Continue") {
+                    if allChecked { app.agreeToTerms() }
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
+                .disabled(!allChecked)
             }
-            .background(Color.systemBackground)
+            .padding(24)
         }
+        .background(Color.systemBackground)
     }
 }
 
