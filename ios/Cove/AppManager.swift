@@ -201,6 +201,11 @@ import SwiftUI
         previousSelectedNetwork = nil
     }
 
+    func agreeToTerms() {
+        self.dispatch(action: .acceptTerms)
+        withAnimation { isTermsAccepted = true }
+    }
+
     func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {

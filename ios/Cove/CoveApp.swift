@@ -467,6 +467,13 @@ struct CoveApp: App {
         Group {
             if showCover {
                 CoverView()
+            } else if !app.isTermsAccepted {
+                CoverView()
+                    .sheet(isPresented: Binding.constant(!app.isTermsAccepted), onDismiss: {}) {
+                        TermsAndConditionsView(app: app)
+                            .interactiveDismissDisabled(true)
+                            .presentationDetents([.large])
+                    }
             } else if app.isLoading {
                 FullPageLoadingView()
             } else {
