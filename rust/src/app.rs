@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     auth::AuthType,
     color_scheme::ColorSchemeSelection,
-    database::{Database, error::DatabaseError},
+    database::{Database, error::DatabaseError, global_flag::GlobalFlagKey},
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::{
         FiatCurrency,
@@ -57,6 +57,7 @@ pub enum AppAction {
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
+    AcceptTerms,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Error, thiserror::Error)]
@@ -207,6 +208,17 @@ impl App {
                 self.state.write().router.routes.push(route);
                 let routes = self.state.read().router.routes.clone();
                 Updater::send_update(AppMessage::RouteUpdated(routes));
+            }
+
+            AppAction::AcceptTerms => {
+                if let Err(error) = Database::global()
+                    .global_flag
+                    .set_bool_config(GlobalFlagKey::AcceptedTerms, true)
+                {
+                    error!("unable to set accepted terms: {error}");
+                }
+
+                Updater::send_update(AppMessage::AcceptedTerms);
             }
         }
     }

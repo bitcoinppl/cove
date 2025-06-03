@@ -207,7 +207,8 @@ struct TransactionDetailsView: View {
         if metadata.detailsExpanded {
             SentDetailsExpandedView(
                 manager: manager, transactionDetails: transactionDetails,
-                numberOfConfirmations: numberOfConfirmations)
+                numberOfConfirmations: numberOfConfirmations
+            )
         }
     }
 

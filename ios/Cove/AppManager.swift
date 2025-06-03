@@ -15,6 +15,7 @@ import SwiftUI
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
 
+    var isTermsAccepted: Bool = Database().globalFlag().isTermsAccepted()
     var selectedNetwork = Database().globalConfig().selectedNetwork()
     var previousSelectedNetwork: Network? = nil
 
@@ -200,6 +201,11 @@ import SwiftUI
         previousSelectedNetwork = nil
     }
 
+    func agreeToTerms() {
+        self.dispatch(action: .acceptTerms)
+        withAnimation { isTermsAccepted = true }
+    }
+
     func reconcile(message: AppStateReconcileMessage) {
         Task {
             await MainActor.run {
@@ -248,6 +254,9 @@ import SwiftUI
                             await walletManager.updateWalletBalance()
                         }
                     }
+
+                case .acceptedTerms:
+                    self.isTermsAccepted = true
 
                 case .walletModeChanged:
                     self.isLoading = true

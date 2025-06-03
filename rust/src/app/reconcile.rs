@@ -29,6 +29,7 @@ pub enum AppStateReconcileMessage {
     FiatCurrencyChanged(FiatCurrency),
     WalletModeChanged(WalletMode),
     PushedRoute(Route),
+    AcceptedTerms,
 }
 
 // alias for easier imports on the rust side

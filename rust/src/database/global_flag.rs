@@ -12,6 +12,7 @@ pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("glo
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr, uniffi::Enum)]
 pub enum GlobalFlagKey {
     CompletedOnboarding,
+    AcceptedTerms,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -79,8 +80,16 @@ impl GlobalFlagTable {
         Ok(())
     }
 
+    pub fn is_terms_accepted(&self) -> bool {
+        self.get_bool_config(GlobalFlagKey::AcceptedTerms)
+    }
+
     pub fn get_bool_config(&self, key: GlobalFlagKey) -> bool {
         self.get(key).unwrap_or(false)
+    }
+
+    pub fn set_bool_config(&self, key: GlobalFlagKey, value: bool) -> Result<(), Error> {
+        self.set(key, value)
     }
 
     pub fn toggle_bool_config(&self, key: GlobalFlagKey) -> Result<(), Error> {
