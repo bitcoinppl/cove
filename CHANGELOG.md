@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2025-06-03
+
 ### Added
 
 - Terms and Conditions popup, which is required to use the app

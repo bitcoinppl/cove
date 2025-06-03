@@ -10880,13 +10880,11 @@ public func FfiConverterTypeWordValidator_lower(_ value: WordValidator) -> Unsaf
 
 public struct AppState {
     public var router: Router
-    public var acceptedTerms: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(router: Router, acceptedTerms: Bool) {
+    public init(router: Router) {
         self.router = router
-        self.acceptedTerms = acceptedTerms
     }
 }
 
@@ -10903,14 +10901,12 @@ public struct FfiConverterTypeAppState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppState {
         return
             try AppState(
-                router: FfiConverterTypeRouter.read(from: &buf), 
-                acceptedTerms: FfiConverterBool.read(from: &buf)
+                router: FfiConverterTypeRouter.read(from: &buf)
         )
     }
 
     public static func write(_ value: AppState, into buf: inout [UInt8]) {
         FfiConverterTypeRouter.write(value.router, into: &buf)
-        FfiConverterBool.write(value.acceptedTerms, into: &buf)
     }
 }
 
@@ -27909,10 +27905,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 
