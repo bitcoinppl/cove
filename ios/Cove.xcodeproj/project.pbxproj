@@ -307,7 +307,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
@@ -330,7 +330,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 1.0.0;
 				NEW_SETTING = "";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
@@ -354,7 +354,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
@@ -377,7 +377,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.1;
+				MARKETING_VERSION = 1.0.0;
 				NEW_SETTING = "";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = org.bitcoinppl.cove;
