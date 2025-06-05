@@ -9,6 +9,7 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 struct ReceiveView: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -61,68 +62,70 @@ struct ReceiveView: View {
             Spacer(minLength: 32)
 
             // ----- Card -----
-            VStack(spacing: 0) {
-                // Top section – QR code & title
-                VStack(spacing: 24) {
-                    Text(manager.walletMetadata.name)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-
-                    VStack {
-                        AddressView(addressInfo: addressInfo)
-
-                        if let path = addressInfo?.derivationPath() {
-                            Text("Derivation: \(path)")
-                                .font(.footnote)
-                                .foregroundStyle(.white.opacity(0.3))
-                                .padding(.top, 6)
+            DynamicHeightScrollView{
+                VStack(spacing: 0) {
+                    // Top section – QR code & title
+                    VStack(spacing: 24) {
+                        Text(manager.walletMetadata.name)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                        
+                        VStack {
+                            AddressView(addressInfo: addressInfo)
+                            
+                            if let path = addressInfo?.derivationPath() {
+                                Text("Derivation: \(path)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.white.opacity(0.3))
+                                    .padding(.top, 6)
+                            }
                         }
                     }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
-                .background(colorScheme == .light ? .duskBlue : .duskBlue.opacity(0.4))
-
-                // Bottom strip – Address text
-                VStack(alignment: .leading, spacing: 8) {
-                    if let address = addressInfo {
-                        Text("Wallet Address")
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.7))
-
-                        Text(address.addressSpacedOut())
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    colorScheme == .light ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4))
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .padding(.horizontal)
-
-            Spacer(minLength: 32)
-
-            // ----- Copy button -----
-            Button(action: copyText) {
-                Text("Copy Address")
-                    .font(.headline)
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+                    .background(colorScheme == .light ? .duskBlue : .duskBlue.opacity(0.4))
+                    
+                    // Bottom strip – Address text
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let address = addressInfo {
+                            Text("Wallet Address")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.7))
+                            
+                            Text(address.addressSpacedOut())
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                     .padding()
-                    .foregroundStyle(.white)
-                    .background(Color.midnightBtn)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        colorScheme == .light ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal)
+                
+                Spacer(minLength: 32)
+                
+                // ----- Copy button -----
+                Button(action: copyText) {
+                    Text("Copy Address")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .foregroundStyle(.white)
+                        .background(Color.midnightBtn)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .padding(.horizontal)
+                
+                // Secondary action
+                Button("Create New Address", action: nextAddressSync)
+                    .font(.footnote.weight(.semibold))
+                    .padding(.top, 8)
             }
-            .padding(.horizontal)
-
-            // Secondary action
-            Button("Create New Address", action: nextAddressSync)
-                .font(.footnote.weight(.semibold))
-                .padding(.top, 8)
         }
         .background(Color(.systemBackground))
         .task {
