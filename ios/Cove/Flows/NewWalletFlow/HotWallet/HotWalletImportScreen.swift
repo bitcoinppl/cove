@@ -364,7 +364,7 @@ struct HotWalletImportScreen: View {
             isPresented: showingAlert,
             presenting: alertState,
             actions: { MyAlert($0).actions },
-            message:  { MyAlert($0).message }
+            message: { MyAlert($0).message }
         )
         .tint(.blue)
         .onAppear(perform: initOnAppear)

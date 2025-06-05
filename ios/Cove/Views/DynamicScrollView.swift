@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 6/5/25.
 //
 
-
 import SwiftUI
 
 struct DynamicHeightScrollView<Content: View>: View {
