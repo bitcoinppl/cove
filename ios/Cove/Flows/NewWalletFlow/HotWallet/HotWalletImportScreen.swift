@@ -65,6 +65,8 @@ extension HotWalletImportScreen {
 }
 
 struct HotWalletImportScreen: View {
+    @Environment(\.sizeCategory) var sizeCategory
+
     // public
     let autocomplete = Bip39AutoComplete()
     @State var numberOfWords: NumberOfBip39Words
@@ -322,18 +324,29 @@ struct HotWalletImportScreen: View {
     }
 
     @ViewBuilder
+    var Card: some View {
+        HotWalletImportCard(
+            numberOfWords: numberOfWords,
+            tabIndex: $tabIndex,
+            enteredWords: $enteredWords,
+            filteredSuggestions: $filteredSuggestions,
+            focusField: $focusField
+        )
+    }
+
+    @ViewBuilder
     var MainContent: some View {
         VStack {
             Spacer()
 
-            ZStack {
-                HotWalletImportCard(
-                    numberOfWords: numberOfWords,
-                    tabIndex: $tabIndex,
-                    enteredWords: $enteredWords,
-                    filteredSuggestions: $filteredSuggestions,
-                    focusField: $focusField
-                )
+            if isMiniDeviceOrLargeText(sizeCategory) {
+                ScrollView {
+                    Card
+                        .frame(idealHeight: 300)
+                }
+                .scrollIndicators(.hidden)
+            } else {
+                Card
             }
 
             if numberOfWords == .twentyFour {
