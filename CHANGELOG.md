@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Fix HotWalletImportView cut off on smaller screens
+- Fix ReceiveView cut off on smaller screens
+- Fix not showing duplicate wallet error in HotWalletImport
+
 ## [0.5.1] - 2025-06-03
 
 ### Added
