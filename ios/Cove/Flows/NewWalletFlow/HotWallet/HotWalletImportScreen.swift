@@ -81,8 +81,6 @@ struct HotWalletImportScreen: View {
     @State private var showScreenOpacity: Double = 1
 
     @State private var tabIndex: Int = 0
-    @State private var duplicateWallet: DuplicateWalletItem? = .none
-
     @FocusState var focusField: ImportFieldNumber?
 
     @State var manager: ImportWalletManager = .init()
@@ -190,7 +188,7 @@ struct HotWalletImportScreen: View {
                 Log.debug("Invalid words: \(error)")
                 alertState = .init(.invalidWords)
             case let .WalletAlreadyExists(walletId):
-                duplicateWallet = DuplicateWalletItem(id: UUID(), walletId: walletId)
+                alertState = .init(.duplicateWallet(walletId))
             case let .WalletImportError(error):
                 Log.error("Import error: \(error)")
             case let .KeychainError(keychainError):
@@ -362,9 +360,13 @@ struct HotWalletImportScreen: View {
         .toolbar { ToolbarContent }
         .sheet(item: $sheetState, content: SheetContent)
         .alert(
-            alertTitle, isPresented: showingAlert, presenting: alertState,
-            actions: { MyAlert($0).actions }
+            alertTitle,
+            isPresented: showingAlert,
+            presenting: alertState,
+            actions: { MyAlert($0).actions },
+            message:  { MyAlert($0).message }
         )
+        .tint(.blue)
         .onAppear(perform: initOnAppear)
         .onChange(of: sheetState, initial: true) { oldState, newState in
             if oldState != nil, newState == nil {
