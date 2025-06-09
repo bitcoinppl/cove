@@ -36,7 +36,6 @@ struct SelectedWalletScreen: View {
 
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
-    @State private var isRefreshing = false
 
     // import / export
     @State var exportingBackup: ExportingBackup? = nil
@@ -44,6 +43,9 @@ struct SelectedWalletScreen: View {
 
     @State private var scannedLabels: TaggedString? = nil
     @State private var isImportingLabels = false
+
+    // private
+    @State private var runPostRefresh = false
 
     var metadata: WalletMetadata {
         manager.walletMetadata
@@ -72,12 +74,9 @@ struct SelectedWalletScreen: View {
     @ViewBuilder
     var Loading: some View {
         Spacer()
-        // hide loading indicator during refresh to prevent animation conflicts
-        if !isRefreshing {
-            ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
-                .frame(width: 30, height: 30)
-                .padding(.top, screenHeight / 6)
-        }
+        ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
+            .frame(width: 30, height: 30)
+            .padding(.top, screenHeight / 6)
         Spacer()
         Spacer()
     }
@@ -296,25 +295,28 @@ struct SelectedWalletScreen: View {
                     )
             }
             .refreshable {
-                isRefreshing = true
+                // nothing to do – let the indicator disappear right away
+                guard case .loaded = manager.loadState else { return }
+                let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
 
-                // to prevent multiple refreshes and animation glitches, do after the refresh animation is complete
-                defer {
-                    Task {
-                        await manager.rust.forceWalletScan()
-                        let _ = try? await manager.rust.forceUpdateHeight()
-                        await manager.updateWalletBalance()
-                        isRefreshing = false
-                    }
-                }
+                // wait for the task to complete
+                let _ = await task.result
+                runPostRefresh = true // mark for later
+            }
+            .task(id: runPostRefresh) {
+                // runs when the flag flips
+                guard case let .loaded(txns) = manager.loadState else { return }
+                guard runPostRefresh else { return }
+                runPostRefresh = false
 
-                try? await Task.sleep(for: .seconds(30))
-                isRefreshing = false
+                self.manager.loadState = .scanning(txns)
+                await manager.rust.forceWalletScan()
+                let _ = try? await manager.rust.forceUpdateHeight()
+                await manager.updateWalletBalance()
             }
             .onAppear {
                 // Reset SendFlowManager so new send flow is fresh
                 app.sendFlowManager = nil
-
                 UIRefreshControl.appearance().tintColor = UIColor.white
             }
             .scrollIndicators(.hidden)
