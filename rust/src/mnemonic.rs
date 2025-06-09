@@ -88,7 +88,7 @@ pub fn grouped_plain_words_of(
                 )
             })?;
 
-            Ok(seed_qr.mnemonic().grouped_plain_words_of(6))
+            Ok(seed_qr.mnemonic().grouped_plain_words_of(groups as usize))
         }
     }
 }

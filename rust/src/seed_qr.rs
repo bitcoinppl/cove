@@ -100,8 +100,8 @@ impl SeedQr {
     }
 
     #[uniffi::method]
-    pub fn grouped_plain_words(&self) -> Vec<Vec<String>> {
-        self.mnemonic().grouped_plain_words_of(6)
+    pub fn grouped_plain_words(&self, groups_of: u8) -> Vec<Vec<String>> {
+        self.mnemonic().grouped_plain_words_of(groups_of as usize)
     }
 }
 

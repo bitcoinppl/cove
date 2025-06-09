@@ -165,7 +165,7 @@ struct HotWalletImportScreen: View {
                     }()
 
             // see if its single qr or seed qr
-            if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(6)) {
+            if let words = try multiQr.getGroupedWords(qr: qr, groupsOf: UInt8(groupsOf)) {
                 setWords(words)
             }
         } catch {
@@ -491,7 +491,7 @@ struct HotWalletImportScreen: View {
         // try string first
         if let string = new?.string() {
             do {
-                let words = try groupedPlainWordsOf(mnemonic: string, groups: 6)
+                let words = try groupedPlainWordsOf(mnemonic: string, groups: UInt8(groupsOf))
                 return setWords(words)
             } catch {
                 Log.error("Error NFC word parsing: \(error)")
@@ -502,7 +502,7 @@ struct HotWalletImportScreen: View {
         guard let data = new?.data() else { return }
         do {
             let seedQR = try SeedQr.newFromData(data: data)
-            let words = seedQR.groupedPlainWords()
+            let words = seedQR.groupedPlainWords(groupsOf: UInt8(groupsOf))
             setWords(words)
         } catch {
             Log.error("Error NFC word parsing from data: \(error)")
