@@ -36,6 +36,7 @@ struct SelectedWalletScreen: View {
 
     @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
+    @State private var isRefreshing = false
 
     // import / export
     @State var exportingBackup: ExportingBackup? = nil
@@ -71,9 +72,12 @@ struct SelectedWalletScreen: View {
     @ViewBuilder
     var Loading: some View {
         Spacer()
-        ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
-            .frame(width: 30, height: 30)
-            .padding(.top, screenHeight / 6)
+        // hide loading indicator during refresh to prevent animation conflicts
+        if !isRefreshing {
+            ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
+                .frame(width: 30, height: 30)
+                .padding(.top, screenHeight / 6)
+        }
         Spacer()
         Spacer()
     }
@@ -292,9 +296,20 @@ struct SelectedWalletScreen: View {
                     )
             }
             .refreshable {
-                await manager.rust.forceWalletScan()
-                let _ = try? await manager.rust.forceUpdateHeight()
-                await manager.updateWalletBalance()
+                isRefreshing = true
+
+                // to prevent multiple refreshes and animation glitches, do after the refresh animation is complete
+                defer {
+                    Task {
+                        await manager.rust.forceWalletScan()
+                        let _ = try? await manager.rust.forceUpdateHeight()
+                        await manager.updateWalletBalance()
+                        isRefreshing = false
+                    }
+                }
+
+                try? await Task.sleep(for: .seconds(30))
+                isRefreshing = false
             }
             .onAppear {
                 // Reset SendFlowManager so new send flow is fresh
