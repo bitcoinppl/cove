@@ -62,7 +62,7 @@ struct ReceiveView: View {
             Spacer(minLength: 32)
 
             // ----- Card -----
-            DynamicHeightScrollView {
+            DynamicHeightScrollView(idealHeight: nil) {
                 VStack(spacing: 0) {
                     // Top section – QR code & title
                     VStack(spacing: 24) {

@@ -9,12 +9,21 @@ import SwiftUI
 
 struct DynamicHeightScrollView<Content: View>: View {
     @Environment(\.sizeCategory) var sizeCategory
+
+    var idealHeight: CGFloat? = screenHeight
+
     @ViewBuilder
     let content: Content
 
     var body: some View {
         if isMiniDeviceOrLargeText(sizeCategory) {
-            ScrollView { content.frame(idealHeight: screenHeight) }
+            ScrollView {
+                if let idealHeight {
+                    content.frame(idealHeight: idealHeight)
+                } else {
+                    content
+                }
+            }
         } else {
             content
         }
