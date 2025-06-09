@@ -44,6 +44,9 @@ struct SelectedWalletScreen: View {
     @State private var scannedLabels: TaggedString? = nil
     @State private var isImportingLabels = false
 
+    // private
+    @State private var runPostRefresh = false
+
     var metadata: WalletMetadata {
         manager.walletMetadata
     }
@@ -292,6 +295,21 @@ struct SelectedWalletScreen: View {
                     )
             }
             .refreshable {
+                // nothing to do – let the indicator disappear right away
+                guard case .loaded = manager.loadState else { return }
+                let task = Task.detached { try? await Task.sleep(for: .seconds(1.75)) }
+
+                // wait for the task to complete
+                let _ = await task.result
+                runPostRefresh = true // mark for later
+            }
+            .task(id: runPostRefresh) {
+                // runs when the flag flips
+                guard case let .loaded(txns) = manager.loadState else { return }
+                guard runPostRefresh else { return }
+                runPostRefresh = false
+
+                self.manager.loadState = .scanning(txns)
                 await manager.rust.forceWalletScan()
                 let _ = try? await manager.rust.forceUpdateHeight()
                 await manager.updateWalletBalance()
@@ -299,7 +317,6 @@ struct SelectedWalletScreen: View {
             .onAppear {
                 // Reset SendFlowManager so new send flow is fresh
                 app.sendFlowManager = nil
-
                 UIRefreshControl.appearance().tintColor = UIColor.white
             }
             .scrollIndicators(.hidden)
