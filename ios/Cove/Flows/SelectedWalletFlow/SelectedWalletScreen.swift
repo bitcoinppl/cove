@@ -207,7 +207,7 @@ struct SelectedWalletScreen: View {
     var MainContent: some View {
         VStack(spacing: 0) {
             WalletBalanceHeaderView(
-                balance: manager.balance.total(),
+                balance: manager.balance.spendable(),
                 metadata: manager.walletMetadata,
                 updater: updater,
                 showReceiveSheet: showReceiveSheet
@@ -222,7 +222,9 @@ struct SelectedWalletScreen: View {
             Transactions
                 .environment(manager)
 
-            SelctedWalletScreenExporterView(labelManager: labelManager, metadata: metadata, exporting: $exporting)
+            SelctedWalletScreenExporterView(
+                labelManager: labelManager, metadata: metadata, exporting: $exporting
+            )
         }
         .background(Color.coveBg)
         .toolbar { MainToolBar }
@@ -315,7 +317,9 @@ struct SelectedWalletScreen: View {
         .onAppear {
             // make sure the wallet is marked as selected
             if Database().globalConfig().selectedWallet() != metadata.id {
-                Log.warn("Wallet was not selected, but when to selected wallet screen, updating database")
+                Log.warn(
+                    "Wallet was not selected, but when to selected wallet screen, updating database"
+                )
                 try? Database().globalConfig().selectWallet(id: metadata.id)
             }
         }

@@ -1094,8 +1094,6 @@ public protocol BalanceProtocol: AnyObject, Sendable {
     
     func spendable()  -> Amount
     
-    func total()  -> Amount
-    
 }
 open class Balance: BalanceProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -1159,13 +1157,6 @@ public static func zero() -> Balance  {
 open func spendable() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
     uniffi_cove_fn_method_balance_spendable(self.uniffiClonePointer(),$0
-    )
-})
-}
-    
-open func total() -> Amount  {
-    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
-    uniffi_cove_fn_method_balance_total(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -26833,9 +26824,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_balance_spendable() != 18496) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_balance_total() != 44866) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_bbqrjoinresult_final_result() != 44157) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27905,10 +27893,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

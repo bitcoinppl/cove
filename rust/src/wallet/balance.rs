@@ -22,11 +22,6 @@ impl Balance {
     }
 
     #[uniffi::method]
-    pub fn total(&self) -> Amount {
-        self.0.total().into()
-    }
-
-    #[uniffi::method]
     pub fn spendable(&self) -> Amount {
         self.0.trusted_spendable().into()
     }

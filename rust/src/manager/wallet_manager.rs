@@ -504,7 +504,7 @@ impl RustWalletManager {
             .await
             .map_err(|_| Error::WalletBalanceError("unable to get balance".to_string()))?;
 
-        self.amount_in_fiat(balance.total().into()).await
+        self.amount_in_fiat(balance.spendable().into()).await
     }
 
     #[uniffi::method]

@@ -13,7 +13,7 @@ struct WalletBalanceHeaderView: View {
     @Environment(WalletManager.self) var manager
 
     // args
-    // confirmed balance
+    // trusted spendable balance
     let balance: Amount
     @State var fiatBalance: Double? = nil
     let metadata: WalletMetadata
