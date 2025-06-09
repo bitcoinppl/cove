@@ -11,6 +11,7 @@ struct DynamicHeightScrollView<Content: View>: View {
     @Environment(\.sizeCategory) var sizeCategory
 
     var idealHeight: CGFloat? = screenHeight
+    var scrollIndicators: ScrollIndicatorVisibility = .hidden
 
     @ViewBuilder
     let content: Content
@@ -24,6 +25,7 @@ struct DynamicHeightScrollView<Content: View>: View {
                     content
                 }
             }
+            .scrollIndicators(scrollIndicators)
         } else {
             content
         }
