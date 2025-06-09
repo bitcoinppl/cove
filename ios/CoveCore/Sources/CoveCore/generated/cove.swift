@@ -8610,7 +8610,7 @@ public protocol SeedQrProtocol: AnyObject, Sendable {
     
     func getWords()  -> [String]
     
-    func groupedPlainWords()  -> [[String]]
+    func groupedPlainWords(groupsOf: UInt8)  -> [[String]]
     
 }
 open class SeedQr: SeedQrProtocol, @unchecked Sendable {
@@ -8688,9 +8688,10 @@ open func getWords() -> [String]  {
 })
 }
     
-open func groupedPlainWords() -> [[String]]  {
+open func groupedPlainWords(groupsOf: UInt8) -> [[String]]  {
     return try!  FfiConverterSequenceSequenceString.lift(try! rustCall() {
-    uniffi_cove_fn_method_seedqr_grouped_plain_words(self.uniffiClonePointer(),$0
+    uniffi_cove_fn_method_seedqr_grouped_plain_words(self.uniffiClonePointer(),
+        FfiConverterUInt8.lower(groupsOf),$0
     )
 })
 }
@@ -27550,7 +27551,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_seedqr_get_words() != 64188) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_seedqr_grouped_plain_words() != 35569) {
+    if (uniffi_cove_checksum_method_seedqr_grouped_plain_words() != 5692) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 43346) {
@@ -27893,9 +27894,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
