@@ -323,8 +323,8 @@ mod tests {
 
         // Test with a known confirmed transaction
         let id = "79fd7b17741a33006bbbaeccc30f5f8eeb07745fd2e70e88ec3c392c264500a4";
-        let txid = Txid::from_str(id).unwrap();
-        let result = client.get_confirmed_transaction_fallback(txid).await;
+        let txid = Arc::new(Txid::from_str(id).unwrap());
+        let result = client.get_confirmed_transaction(txid.clone()).await;
 
         match result {
             Ok(Some(txn)) => assert_eq!(txn.compute_txid().to_string(), txid.to_string()),
