@@ -88,6 +88,9 @@ struct SelectedWalletContainer: View {
                 }
             }
         }
+        .onDisappear {
+            manager?.dispatch(.selectedWalletDisappeared)
+        }
         .onChange(of: manager?.loadState) { _, loadState in
             if case .loaded = loadState {
                 if let manager {

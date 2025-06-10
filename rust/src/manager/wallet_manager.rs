@@ -96,6 +96,7 @@ pub enum WalletManagerAction {
     ToggleShowLabels,
     SelectCurrentWalletAddressType,
     SelectDifferentWalletAddressType(WalletAddressType),
+    SelectedWalletDisappeared,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -984,6 +985,10 @@ impl RustWalletManager {
             Action::ToggleShowLabels => {
                 let mut metadata = self.metadata.write();
                 metadata.show_labels = !metadata.show_labels;
+            }
+
+            Action::SelectedWalletDisappeared => {
+                send!(self.actor.stop_all_scans());
             }
         }
 

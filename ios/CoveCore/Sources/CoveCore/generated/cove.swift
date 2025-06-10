@@ -22611,6 +22611,7 @@ public enum WalletManagerAction {
     case selectCurrentWalletAddressType
     case selectDifferentWalletAddressType(WalletAddressType
     )
+    case selectedWalletDisappeared
 }
 
 
@@ -22654,6 +22655,8 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
         
         case 11: return .selectDifferentWalletAddressType(try FfiConverterTypeWalletAddressType.read(from: &buf)
         )
+        
+        case 12: return .selectedWalletDisappeared
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22711,6 +22714,10 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
             
+        
+        case .selectedWalletDisappeared:
+            writeInt(&buf, Int32(12))
+        
         }
     }
 }
@@ -27894,10 +27901,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveNfcInitialized()
+    uniffiEnsureCoveTypesInitialized()
     return InitializationResult.ok
 }()
 

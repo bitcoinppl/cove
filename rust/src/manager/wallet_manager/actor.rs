@@ -880,6 +880,12 @@ impl WalletActor {
         Produces::ok(())
     }
 
+    pub async fn stop_all_scans(&mut self) {
+        debug!("stop_all_scans");
+        self.transaction_watchers = HashMap::default();
+        // TODO: stop the wallet scans too, need to save the task handle when we start the scan
+    }
+
     async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
         debug!("removing watcher for txn: {tx_id}");
         self.transaction_watchers.remove(&tx_id);
