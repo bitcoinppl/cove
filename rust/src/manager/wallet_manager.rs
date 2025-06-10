@@ -97,6 +97,7 @@ pub enum WalletManagerAction {
     SelectCurrentWalletAddressType,
     SelectDifferentWalletAddressType(WalletAddressType),
     SelectedWalletDisappeared,
+    StartTransactionWatcher(Arc<TxId>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -989,6 +990,11 @@ impl RustWalletManager {
 
             Action::SelectedWalletDisappeared => {
                 send!(self.actor.stop_all_scans());
+            }
+
+            Action::StartTransactionWatcher(tx_id) => {
+                let tx_id = tx_id.as_ref().0;
+                send!(self.actor.start_transaction_watcher(tx_id));
             }
         }
 
