@@ -4,11 +4,11 @@ use bdk_esplora::{
     EsploraAsyncExt as _,
     esplora_client::{self, r#async::AsyncClient},
 };
-use bdk_wallet::KeychainKind;
 use bdk_wallet::chain::{
     bitcoin::Address,
     spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
 };
+use bdk_wallet::{KeychainKind, chain::BlockId};
 use bitcoin::Txid;
 use tap::TapFallible as _;
 use tracing::debug;
@@ -61,6 +61,18 @@ impl EsploraClient {
             .map_err(Error::EsploraConnect)
     }
 
+    pub async fn get_block_id(&self) -> Result<BlockId, Error> {
+        let height = self.get_height().await?;
+        let hash = self
+            .client
+            .get_block_hash(height)
+            .await
+            .tap_err(|e| tracing::error!("Failed to get block hash: {e:?}"))
+            .map_err(Error::EsploraConnect)?;
+
+        Ok(BlockId { height, hash })
+    }
+
     pub async fn full_scan(
         &self,
         request: FullScanRequest<KeychainKind>,
@@ -81,11 +93,17 @@ impl EsploraClient {
         self.client.sync(request, self.options.batch_size).await.map_err(Error::EsploraScan)
     }
 
-    pub async fn get_transaction(
+    pub async fn get_confirmed_transaction(
         &self,
         txid: &Txid,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
-        self.client.get_tx(txid).await.map_err(Error::EsploraGetTransaction)
+        let status = self.client.get_tx_status(txid).await.map_err(Error::EsploraGetTransaction)?;
+        if !status.confirmed {
+            return Ok(None);
+        }
+
+        let tx = self.client.get_tx(txid).await.map_err(Error::EsploraGetTransaction)?;
+        Ok(tx)
     }
 
     pub async fn broadcast_transaction(&self, txn: bitcoin::Transaction) -> Result<Txid, Error> {

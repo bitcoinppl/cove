@@ -6,6 +6,7 @@ use std::sync::Arc;
 use bdk_electrum::electrum_client;
 use bdk_esplora::esplora_client;
 use bdk_wallet::chain::{
+    BlockId,
     bitcoin::Address,
     spk_client::{SyncRequest, SyncResponse},
 };
@@ -187,17 +188,23 @@ impl NodeClient {
             NodeClient::Esplora(client) => client.sync(scan_request).await?,
             NodeClient::Electrum(client) => client.sync(scan_request, tx_graph).await?,
         };
-
         Ok(scan_result)
     }
 
-    pub async fn get_transaction(
+    pub async fn get_confirmed_transaction(
         &self,
         txid: Arc<Txid>,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
         match self {
-            NodeClient::Esplora(client) => client.get_transaction(&txid).await,
-            NodeClient::Electrum(client) => client.get_transaction(txid).await,
+            NodeClient::Esplora(client) => client.get_confirmed_transaction(&txid).await,
+            NodeClient::Electrum(client) => client.get_confirmed_transaction(txid).await,
+        }
+    }
+
+    pub async fn get_block_id(&self) -> Result<BlockId, Error> {
+        match self {
+            NodeClient::Esplora(client) => client.get_block_id().await,
+            NodeClient::Electrum(client) => client.get_block_id().await,
         }
     }
 

@@ -5,7 +5,7 @@ use bdk_electrum::{
     electrum_client::{self, Client, ElectrumApi as _},
 };
 use bdk_wallet::chain::{
-    ConfirmationBlockTime, TxGraph,
+    BlockId, ConfirmationBlockTime, TxGraph,
     bitcoin::Address,
     spk_client::{SyncRequest, SyncResponse},
 };
@@ -68,7 +68,24 @@ impl ElectrumClient {
         Ok(header.height)
     }
 
-    pub async fn get_transaction(
+    pub async fn get_block_id(&self) -> Result<BlockId, Error> {
+        let client = self.client.clone();
+        let header_notification = crate::unblock::run_blocking(move || {
+            client
+                .inner
+                .block_headers_subscribe()
+                .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
+        })
+        .await
+        .map_err(Error::ElectrumConnect)?;
+
+        let height = header_notification.height as u32;
+        let block_hash = header_notification.header.block_hash();
+
+        Ok(BlockId { height, hash: block_hash })
+    }
+
+    pub async fn get_confirmed_transaction(
         &self,
         txid: Arc<Txid>,
     ) -> Result<Option<bitcoin::Transaction>, Error> {

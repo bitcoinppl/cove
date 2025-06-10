@@ -105,7 +105,7 @@ impl TransactionWatcher {
     }
 
     async fn check_txn(&mut self, client: Arc<NodeClient>) -> ActorResult<WatchResult> {
-        let txn = client.get_transaction(self.tx_id.clone()).await?;
+        let txn = client.get_confirmed_transaction(self.tx_id.clone()).await?;
         match txn {
             Some(txn) => Produces::ok(WatchResult::Found(txn)),
             None => Produces::ok(WatchResult::Continue),

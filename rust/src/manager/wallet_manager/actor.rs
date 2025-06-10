@@ -19,7 +19,7 @@ use ahash::HashMap;
 use bdk_wallet::{
     AddUtxoError, Utxo, WeightedUtxo,
     chain::{
-        TxGraph,
+        BlockId, TxGraph,
         bitcoin::Psbt,
         spk_client::{FullScanRequest, FullScanResponse, SyncRequestBuilder, SyncResponse},
     },
@@ -785,6 +785,18 @@ impl WalletActor {
         Produces::ok(block_height)
     }
 
+    async fn update_block_id(&mut self) -> eyre::Result<BlockId> {
+        debug!("actor update_block_id");
+        if self.check_node_connection().await.is_err() {
+            return Err(eyre::eyre!("node connection failed"));
+        }
+
+        let node_client = self.node_client().await?;
+        let block_id = node_client.get_block_id().await.map_err(|_| Error::GetHeightError)?;
+        self.save_last_height_fetched(block_id.height as usize);
+        Ok(block_id)
+    }
+
     #[into_actor_result]
     pub async fn txns_with_prices(&mut self) -> Result<Vec<(ConfirmedTransaction, Option<f32>)>> {
         let network = self.wallet.network;
@@ -849,18 +861,36 @@ impl WalletActor {
     pub async fn mark_transaction_found(&mut self, tx_id: Txid) -> ActorResult<()> {
         info!("marking transaction found: {tx_id}");
 
-        // remove the watcher
-        self.transaction_watchers.remove(&tx_id);
+        // update the height
+        self.update_block_id().await?;
 
-        // perform sync scan which will update the transactions
+        // update the height and perform sync scan which will update the transactions
         self.perform_scan_for_single_tx_id(tx_id).await?;
+
+        // wait 30 seconds run the scan again and then remove the watcher
+        let addr = self.addr.clone();
+        self.addr.send_fut(async move {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            send!(addr.perform_scan_for_single_tx_id(tx_id));
+            send!(addr.remove_watcher_for_txn(tx_id));
+        });
 
         Produces::ok(())
     }
 
+    async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
+        debug!("removing watcher for txn: {tx_id}");
+        self.transaction_watchers.remove(&tx_id);
+    }
+
     async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
-        let sync_request_builder = SyncRequestBuilder::default().txids(vec![tx_id]);
+        let _ = self.update_height().await?;
+
+        let chain_tip = self.wallet.bdk.local_chain().tip();
+        let sync_request_builder =
+            SyncRequestBuilder::default().txids(vec![tx_id]).chain_tip(chain_tip);
+
         let sync_request = sync_request_builder.build();
 
         let node_client = self.node_client().await?.clone();
