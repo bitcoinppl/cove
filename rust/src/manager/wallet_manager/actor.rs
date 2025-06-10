@@ -21,7 +21,7 @@ use bdk_wallet::{
     chain::{
         TxGraph,
         bitcoin::Psbt,
-        spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
+        spk_client::{FullScanRequest, FullScanResponse, SyncRequestBuilder, SyncResponse},
     },
     error::CreateTxError,
 };
@@ -74,7 +74,6 @@ pub enum ActorState {
     PerformingIncrementalScan,
     PerformingFullScan(FullScanType),
 
-    PerformingSyncScan,
     SyncScanComplete,
 
     FullScanComplete(FullScanType),
@@ -832,11 +831,12 @@ impl WalletActor {
             return Produces::ok(());
         }
 
+        let network = self.wallet.network;
         let node = Database::global().global_config.selected_node();
         let options = NodeClientOptions { batch_size: 1 };
         let client_builder = NodeClientBuilder { node, options };
 
-        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, client_builder);
+        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, client_builder, network);
         let addr = spawn_actor(watcher);
 
         self.transaction_watchers.insert(tx_id, addr);
@@ -852,37 +852,29 @@ impl WalletActor {
         // remove the watcher
         self.transaction_watchers.remove(&tx_id);
 
-        // sleep for 5 seconds before performing sync scan
-        let addr = self.addr.clone();
-        self.addr.send_fut(async move {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            send!(addr.perform_sync_scan());
-        });
+        // perform sync scan which will update the transactions
+        self.perform_scan_for_single_tx_id(tx_id).await?;
 
         Produces::ok(())
     }
 
-    pub async fn perform_sync_scan(&mut self) -> ActorResult<()> {
-        debug!("perform_sync_scan: {:?}", self.state);
-        if self.state == ActorState::PerformingSyncScan {
-            warn!("already performing sync scan, skipping");
-            return Produces::ok(());
-        }
-
-        debug!("starting sync scan");
-        self.state = ActorState::PerformingSyncScan;
+    async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        let sync_request_builder = SyncRequestBuilder::default().txids(vec![tx_id]);
+        let sync_request = sync_request_builder.build();
 
         let node_client = self.node_client().await?.clone();
-        let scan_request = self.wallet.bdk.start_sync_with_revealed_spks().build();
         let graph = self.wallet.bdk.tx_graph().clone();
+
+        let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        debug!("done scan for spk in {}s", now - start);
 
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
-            let scan_result = node_client.sync(&graph, scan_request).await;
+            let scan_result = node_client.sync(&graph, sync_request).await;
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("done sync scan in {}s", now - start);
+            debug!("done single txn id sync scan in {}s", now - start);
 
             // save updated txns and send to frontend
             send!(addr.update_sync_state_and_send_transactions(scan_result));
