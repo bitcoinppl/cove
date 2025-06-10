@@ -10,3 +10,4 @@ log.txt
 
 /rust/bindings
 /ios/CoveCore/Sources/cove_core_ffi.xcframework
+.claude/settings.local.json

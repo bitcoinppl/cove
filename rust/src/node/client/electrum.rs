@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bdk_electrum::{
     BdkElectrumClient,
-    electrum_client::{self, Client, ElectrumApi as _},
+    electrum_client::{self, Client, ElectrumApi as _, Param},
 };
 use bdk_wallet::chain::{
     BlockId, ConfirmationBlockTime, TxGraph,
@@ -13,7 +13,8 @@ use bdk_wallet::{
     KeychainKind,
     chain::spk_client::{FullScanRequest, FullScanResponse},
 };
-use bitcoin::{Transaction, Txid};
+use bitcoin::{Transaction, Txid, consensus::Decodable};
+use serde::Deserialize;
 use serde_json::Value;
 use tap::TapFallible as _;
 use tracing::debug;
@@ -22,6 +23,12 @@ use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
 use crate::node::Node;
 
 type ElectrumClientInner = BdkElectrumClient<Client>;
+
+#[derive(Debug, Deserialize)]
+struct ElectrumTransactionResponse {
+    hex: String,
+    confirmations: i64,
+}
 
 #[derive(Clone)]
 pub struct ElectrumClient {
@@ -90,19 +97,44 @@ impl ElectrumClient {
         txid: Arc<Txid>,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
         let client = self.client.clone();
-        let transaction = crate::unblock::run_blocking(move || {
+        let txid_string = txid.to_string();
+        let result = crate::unblock::run_blocking(move || {
             client
                 .inner
-                .transaction_get(&txid)
+                .raw_call(
+                    "blockchain.transaction.get",
+                    [Param::String(txid_string), Param::Bool(true)],
+                )
                 .tap_err(|error| tracing::error!("electrum failed to get transaction: {error:?}"))
         })
         .await;
 
-        match transaction {
-            Ok(txn) => Ok(Some(txn)),
-            Err(electrum_client::Error::InvalidResponse(Value::Null)) => Ok(None),
-            Err(error) => Err(Error::ElectrumGetTransaction(error)),
+        fn err(e: impl Into<String>) -> Error {
+            Error::ElectrumGetTransaction(electrum_client::Error::InvalidResponse(Value::String(
+                e.into(),
+            )))
         }
+
+        let response = match result {
+            Ok(response) => response,
+            Err(electrum_client::Error::InvalidResponse(Value::Null)) => return Ok(None),
+            Err(error) => return Err(Error::ElectrumGetTransaction(error)),
+        };
+
+        let tx_response: ElectrumTransactionResponse = serde_json::from_value(response.clone())
+            .map_err(|e| err(format!("failed to deserialize electrum response: {e:?}")))?;
+
+        if tx_response.confirmations < 1 {
+            return Ok(None);
+        }
+
+        let bytes = hex::decode(&tx_response.hex)
+            .map_err(|error| err(format!("failed to decode hex: {error:?}")))?;
+
+        let txn = Transaction::consensus_decode(&mut bytes.as_slice())
+            .map_err(|error| err(format!("failed to decode transaction: {error:?}")))?;
+
+        Ok(Some(txn))
     }
 
     pub async fn full_scan(
