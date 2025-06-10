@@ -167,7 +167,7 @@ impl ElectrumClient {
             crate::unblock::run_blocking(move || client.inner.transaction_get(&txid_clone))
                 .await
                 .tap_err(|error| error!("electrum failed to get transaction: {error:?}"))
-                .map_err(|error| Error::ElectrumGetTransaction(error))?;
+                .map_err(Error::ElectrumGetTransaction)?;
 
         let tip_height = self.get_height().await? as u32;
 
@@ -287,7 +287,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_confirmed_transaction_main() {
-        // Use bitcoind.aopp.sh which supports verbose transactions
         let client = ElectrumClient::new_from_node(&crate::node::Node {
             url: "ssl://electrum.diynodes.com:50022".to_string(),
             name: "mempool".to_string(),
@@ -313,6 +312,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_confirmed_transaction_fallback() {
+        // blockstream.info does not support verbose transactions
         let client = ElectrumClient::new_from_node(&crate::node::Node {
             url: "ssl://electrum.blockstream.info:50002".to_string(),
             name: "blockstream".to_string(),
@@ -324,7 +324,6 @@ mod tests {
         // Test with a known confirmed transaction
         let id = "79fd7b17741a33006bbbaeccc30f5f8eeb07745fd2e70e88ec3c392c264500a4";
         let txid = Txid::from_str(id).unwrap();
-
         let result = client.get_confirmed_transaction_fallback(txid).await;
 
         match result {

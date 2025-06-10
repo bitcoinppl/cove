@@ -868,6 +868,8 @@ impl WalletActor {
         self.perform_scan_for_single_tx_id(tx_id).await?;
 
         // wait 30 seconds run the scan again and then remove the watcher
+        // sanity check to make sure the transaction was picked up by the wallet
+        // and no extra watchers were created in the meantime
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
             tokio::time::sleep(Duration::from_secs(30)).await;
@@ -885,7 +887,7 @@ impl WalletActor {
 
     async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
-        let _ = self.update_height().await?;
+        let _ = self.update_height().await?.await;
 
         let chain_tip = self.wallet.bdk.local_chain().tip();
         let sync_request_builder =

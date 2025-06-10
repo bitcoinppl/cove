@@ -307,7 +307,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
@@ -354,7 +354,7 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
 				ENABLE_PREVIEWS = YES;
