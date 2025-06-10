@@ -9,7 +9,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
     private let logger = Log(id: "WalletManager")
 
     let id: WalletId
+    @ObservationIgnored
     var rust: RustWalletManager
+
     var walletMetadata: WalletMetadata
     var loadState: WalletLoadState = .loading
     var balance: Balance = .zero()
