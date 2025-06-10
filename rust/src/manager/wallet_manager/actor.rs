@@ -1384,6 +1384,6 @@ impl WalletActor {
 
 impl Drop for WalletActor {
     fn drop(&mut self) {
-        debug!("[DROP] Wallet Actor");
+        debug!("[DROP] Wallet Actor for {}", self.wallet.id);
     }
 }
