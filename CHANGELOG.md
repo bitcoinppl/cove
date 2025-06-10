@@ -5,6 +5,10 @@
 - Fix import words view being cut off on smaller screens and iPads
 - Fix receive view (receive address) being cut off on smaller screens and iPads
 - Fix not showing duplicate wallet error in HotWalletImport
+- Fix import seed view showing the wrong number for the seed words
+- Fix loading spinner glitch on the selected wallet screen
+- Always showing `spendable` balance on the selected wallet screen instead of `total`
+- Fix sometimes pending transactions would not show up as confirmed
 
 ## [0.5.1] - 2025-06-03
 
