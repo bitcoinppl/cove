@@ -245,9 +245,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
     public func dispatch(action: Action) { dispatch(action) }
     public func dispatch(_ action: Action) {
-        rustBridge.async {
-            self.logger.debug("dispatch: \(action)")
-            self.rust.dispatch(action: action)
+        rustBridge.async { [weak self] in
+            self?.logger.debug("dispatch: \(action)")
+            self?.rust.dispatch(action: action)
         }
     }
 
