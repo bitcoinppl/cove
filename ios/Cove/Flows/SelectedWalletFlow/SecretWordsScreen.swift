@@ -82,11 +82,13 @@ struct SecretWordsScreen: View {
                     }
 
                     HStack {
-                        Text("Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has you recovery words, controls your Bitcoin.")
-                            .multilineTextAlignment(.leading)
-                            .font(.footnote)
-                            .foregroundStyle(.coveLightGray.opacity(0.75))
-                            .fixedSize(horizontal: false, vertical: true)
+                        Text(
+                            "Your secret recovery words are the only way to recover your wallet if you lose your phone or switch to a different wallet. Whoever has your recovery words, controls your Bitcoin."
+                        )
+                        .multilineTextAlignment(.leading)
+                        .font(.footnote)
+                        .foregroundStyle(.coveLightGray.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
 
                         Spacer()
                     }
@@ -108,8 +110,7 @@ struct SecretWordsScreen: View {
         .onAppear {
             auth.lock()
             guard words == nil else { return }
-            do { words = try Mnemonic(id: id) }
-            catch { errorMessage = error.localizedDescription }
+            do { words = try Mnemonic(id: id) } catch { errorMessage = error.localizedDescription }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar {
