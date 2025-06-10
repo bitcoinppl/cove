@@ -35,7 +35,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = rust.walletMetadata()
         unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
 
-        Task { await updateFiatBalance() }
+        Task { [weak self] in await self?.updateFiatBalance() }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -47,7 +47,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
         walletMetadata = metadata
         id = metadata.id
 
-        Task { await updateFiatBalance() }
+        Task { [weak self] in await self?.updateFiatBalance() }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -175,7 +175,7 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         case let .walletBalanceChanged(balance):
             withAnimation { self.balance = balance }
-            Task { await self.updateFiatBalance() }
+            Task { [weak self] in await self?.updateFiatBalance() }
 
         case .unsignedTransactionsChanged:
             self.unsignedTransactions = (try? rust.getUnsignedTransactions()) ?? []
@@ -268,9 +268,13 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
 
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
+
+    deinit {
+        logger.debug("WalletManager deinit called for wallet \(id)")
+    }
 }
 
-extension WalletLoadState: Equatable {
+extension WalletLoadState: @retroactive Equatable {
     public static func == (lhs: WalletLoadState, rhs: WalletLoadState) -> Bool {
         walletStateIsEqual(lhs: lhs, rhs: rhs)
     }
