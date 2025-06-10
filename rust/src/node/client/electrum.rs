@@ -17,7 +17,7 @@ use bitcoin::{Transaction, Txid, consensus::Decodable};
 use serde::Deserialize;
 use serde_json::Value;
 use tap::TapFallible as _;
-use tracing::debug;
+use tracing::{debug, error, warn};
 
 use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
 use crate::node::Node;
@@ -67,7 +67,7 @@ impl ElectrumClient {
             client
                 .inner
                 .block_headers_subscribe()
-                .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
+                .tap_err(|error| error!("Failed to get height: {error:?}"))
         })
         .await
         .map_err(Error::ElectrumConnect)?;
@@ -81,7 +81,7 @@ impl ElectrumClient {
             client
                 .inner
                 .block_headers_subscribe()
-                .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
+                .tap_err(|error| error!("Failed to get height: {error:?}"))
         })
         .await
         .map_err(Error::ElectrumConnect)?;
@@ -105,7 +105,7 @@ impl ElectrumClient {
                     "blockchain.transaction.get",
                     [Param::String(txid_string), Param::Bool(true)],
                 )
-                .tap_err(|error| tracing::error!("electrum failed to get transaction: {error:?}"))
+                .tap_err(|error| error!("electrum failed to get transaction: {error:?}"))
         })
         .await;
 
@@ -118,6 +118,25 @@ impl ElectrumClient {
         let response = match result {
             Ok(response) => response,
             Err(electrum_client::Error::InvalidResponse(Value::Null)) => return Ok(None),
+            Err(electrum_client::Error::Protocol(error_value)) => {
+                // Check if this is an error related to verbose flag not being supported
+                let error_str = format!("{:?}", error_value);
+                if error_str.contains("verbose")
+                    || error_str.contains("invalid params")
+                    || error_str.contains("not supported")
+                {
+                    warn!(
+                        "Server doesn't support verbose transactions, falling back to script-hash method"
+                    );
+
+                    let txn = self.get_confirmed_transaction_fallback(*txid).await?;
+                    return Ok(txn);
+                } else {
+                    return Err(Error::ElectrumGetTransaction(electrum_client::Error::Protocol(
+                        error_value,
+                    )));
+                }
+            }
             Err(error) => return Err(Error::ElectrumGetTransaction(error)),
         };
 
@@ -135,6 +154,45 @@ impl ElectrumClient {
             .map_err(|error| err(format!("failed to decode transaction: {error:?}")))?;
 
         Ok(Some(txn))
+    }
+
+    async fn get_confirmed_transaction_fallback(
+        &self,
+        txid: Txid,
+    ) -> Result<Option<Transaction>, Error> {
+        let client = self.client.clone();
+        let txid_clone = txid;
+
+        let tx: Transaction =
+            crate::unblock::run_blocking(move || client.inner.transaction_get(&txid_clone))
+                .await
+                .tap_err(|error| error!("electrum failed to get transaction: {error:?}"))
+                .map_err(|error| Error::ElectrumGetTransaction(error))?;
+
+        let tip_height = self.get_height().await? as u32;
+
+        // Check every output script for its history
+        for output in &tx.output {
+            let client = self.client.clone();
+            let script = output.script_pubkey.clone();
+
+            let history =
+                crate::unblock::run_blocking(move || client.inner.script_get_history(&script))
+                    .await
+                    .map_err(Error::ElectrumGetTransaction)?;
+
+            // Find our transaction in the history
+            if let Some(hist_entry) = history.iter().find(|h| h.tx_hash == txid && h.height > 0) {
+                let block_height = hist_entry.height as u32;
+                let confirmations = tip_height - block_height + 1;
+
+                if confirmations >= 1 {
+                    return Ok(Some(tx));
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     pub async fn full_scan(
@@ -219,5 +277,60 @@ impl ElectrumClient {
 impl std::fmt::Debug for ElectrumClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ElectrumClient").field("options", &self.options).finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[tokio::test]
+    async fn test_get_confirmed_transaction_main() {
+        // Use bitcoind.aopp.sh which supports verbose transactions
+        let client = ElectrumClient::new_from_node(&crate::node::Node {
+            url: "ssl://electrum.diynodes.com:50022".to_string(),
+            name: "mempool".to_string(),
+            api_type: crate::node::ApiType::Electrum,
+            network: cove_types::network::Network::Bitcoin,
+        })
+        .unwrap();
+
+        let id = "79fd7b17741a33006bbbaeccc30f5f8eeb07745fd2e70e88ec3c392c264500a4";
+        let txid = Arc::new(Txid::from_str(id).unwrap());
+        let result = client.get_confirmed_transaction(txid).await;
+
+        match result {
+            Ok(Some(tx)) => {
+                assert_eq!(tx.compute_txid().to_string(), id);
+            }
+            Ok(None) => panic!(
+                "Transaction should be confirmed but got None - this indicates an error in confirmation logic"
+            ),
+            Err(e) => panic!("Failed to get transaction: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_confirmed_transaction_fallback() {
+        let client = ElectrumClient::new_from_node(&crate::node::Node {
+            url: "ssl://electrum.blockstream.info:50002".to_string(),
+            name: "blockstream".to_string(),
+            api_type: crate::node::ApiType::Electrum,
+            network: cove_types::network::Network::Bitcoin,
+        })
+        .unwrap();
+
+        // Test with a known confirmed transaction
+        let id = "79fd7b17741a33006bbbaeccc30f5f8eeb07745fd2e70e88ec3c392c264500a4";
+        let txid = Txid::from_str(id).unwrap();
+
+        let result = client.get_confirmed_transaction_fallback(txid).await;
+
+        match result {
+            Ok(Some(txn)) => assert_eq!(txn.compute_txid().to_string(), txid.to_string()),
+            Ok(None) => panic!("Expected confirmed transaction but got None"),
+            Err(e) => panic!("Fallback method failed: {:?}", e),
+        }
     }
 }
