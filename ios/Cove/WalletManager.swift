@@ -221,8 +221,8 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
             }
 
             logger.debug("reconcile: \(message)")
-            DispatchQueue.main.async { [self] in
-                self.apply(message)
+            DispatchQueue.main.async { [weak self] in
+                self?.apply(message)
             }
         }
     }
@@ -235,9 +235,9 @@ extension WeakReconciler: WalletManagerReconciler where Reconciler == WalletMana
             }
 
             logger.debug("reconcile_messages: \(messages)")
-            DispatchQueue.main.async { [self] in
+            DispatchQueue.main.async { [weak self] in
                 for message in messages {
-                    self.apply(message)
+                    self?.apply(message)
                 }
             }
         }
