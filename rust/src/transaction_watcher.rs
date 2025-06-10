@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use act_zero::*;
 use bitcoin::{Transaction, Txid};
+use cove_types::Network;
 use tracing::{debug, error, info};
 
 use crate::{
@@ -17,6 +18,7 @@ pub struct TransactionWatcher {
     addr: WeakAddr<Self>,
     tx_id: Arc<Txid>,
     client_builder: NodeClientBuilder,
+    network: Network,
 }
 
 /// If we should keep watching or stop
@@ -45,9 +47,16 @@ impl TransactionWatcher {
         wallet_actor: WeakAddr<WalletActor>,
         tx_id: Txid,
         client_builder: NodeClientBuilder,
+        network: Network,
     ) -> Self {
         debug!("creating transaction watcher for {tx_id}");
-        Self { wallet_actor, addr: Default::default(), tx_id: Arc::new(tx_id), client_builder }
+        Self {
+            wallet_actor,
+            addr: Default::default(),
+            tx_id: Arc::new(tx_id),
+            client_builder,
+            network,
+        }
     }
 
     pub async fn start_watching(&mut self) -> ActorResult<()> {
@@ -57,6 +66,12 @@ impl TransactionWatcher {
         let manager = self.wallet_actor.clone();
         let tx_id = self.tx_id.clone();
 
+        let normal_wait_time = match self.network {
+            Network::Bitcoin => Duration::from_secs(20),
+            Network::Testnet | Network::Testnet4 => Duration::from_secs(20),
+            Network::Signet => Duration::from_secs(10),
+        };
+
         self.addr.send_fut(async move {
             let client = client;
             loop {
@@ -65,18 +80,16 @@ impl TransactionWatcher {
 
                 match result {
                     Ok(WatchResult::Found(txn)) => {
-                        info!("found txn: {}", txn.compute_txid());
-                        let tx_id = Arc::unwrap_or_clone(tx_id);
-
+                        let tx_id = txn.compute_txid();
+                        info!("found txn: {}", tx_id);
                         send!(manager.mark_transaction_found(tx_id));
-
                         break;
                     }
 
                     // sleep for 10 seconds before checking again
                     Ok(WatchResult::Continue) => {
-                        debug!("continue watching");
-                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        debug!("continue watching, waiting for {}", normal_wait_time.as_secs());
+                        tokio::time::sleep(normal_wait_time).await;
                     }
 
                     // sleep for 30 seconds before checking again, if we get an error
@@ -92,7 +105,7 @@ impl TransactionWatcher {
     }
 
     async fn check_txn(&mut self, client: Arc<NodeClient>) -> ActorResult<WatchResult> {
-        let txn = client.get_transaction(self.tx_id.clone()).await?;
+        let txn = client.get_confirmed_transaction(self.tx_id.clone()).await?;
         match txn {
             Some(txn) => Produces::ok(WatchResult::Found(txn)),
             None => Produces::ok(WatchResult::Continue),

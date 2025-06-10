@@ -22611,6 +22611,9 @@ public enum WalletManagerAction {
     case selectCurrentWalletAddressType
     case selectDifferentWalletAddressType(WalletAddressType
     )
+    case selectedWalletDisappeared
+    case startTransactionWatcher(TxId
+    )
 }
 
 
@@ -22653,6 +22656,11 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
         case 10: return .selectCurrentWalletAddressType
         
         case 11: return .selectDifferentWalletAddressType(try FfiConverterTypeWalletAddressType.read(from: &buf)
+        )
+        
+        case 12: return .selectedWalletDisappeared
+        
+        case 13: return .startTransactionWatcher(try FfiConverterTypeTxId.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -22711,6 +22719,15 @@ public struct FfiConverterTypeWalletManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
             FfiConverterTypeWalletAddressType.write(v1, into: &buf)
             
+        
+        case .selectedWalletDisappeared:
+            writeInt(&buf, Int32(12))
+        
+        
+        case let .startTransactionWatcher(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeTxId.write(v1, into: &buf)
+            
         }
     }
 }
@@ -22729,9 +22746,6 @@ public func FfiConverterTypeWalletManagerAction_lift(_ buf: RustBuffer) throws -
 public func FfiConverterTypeWalletManagerAction_lower(_ value: WalletManagerAction) -> RustBuffer {
     return FfiConverterTypeWalletManagerAction.lower(value)
 }
-
-
-extension WalletManagerAction: Equatable, Hashable {}
 
 
 
@@ -27894,10 +27908,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
-    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 

@@ -283,6 +283,13 @@ struct TransactionDetailsView: View {
             }
         }
         .task {
+            // start watcher after a delay to avoid race condition with onDisappear
+            if !transactionDetails.isConfirmed() {
+                try? await Task.sleep(for: .seconds(2))
+                manager.dispatch(action: .startTransactionWatcher(transactionDetails.txId()))
+            }
+
+            // continues to check for confirmations
             await updateNumberOfConfirmations()
         }
         .background(
@@ -343,9 +350,9 @@ struct TransactionDetailsView: View {
                 }
 
                 if needsFrequentCheck {
-                    try await Task.sleep(for: .seconds(10))
-                } else {
                     try await Task.sleep(for: .seconds(30))
+                } else {
+                    try await Task.sleep(for: .seconds(60))
                 }
             } catch let error as CancellationError {
                 Log.debug("check for confirmation task cancelled: \(error)")

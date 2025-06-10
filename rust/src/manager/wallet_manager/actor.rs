@@ -19,9 +19,9 @@ use ahash::HashMap;
 use bdk_wallet::{
     AddUtxoError, Utxo, WeightedUtxo,
     chain::{
-        TxGraph,
+        BlockId, TxGraph,
         bitcoin::Psbt,
-        spk_client::{FullScanRequest, FullScanResponse, SyncResponse},
+        spk_client::{FullScanRequest, FullScanResponse, SyncRequestBuilder, SyncResponse},
     },
     error::CreateTxError,
 };
@@ -74,7 +74,6 @@ pub enum ActorState {
     PerformingIncrementalScan,
     PerformingFullScan(FullScanType),
 
-    PerformingSyncScan,
     SyncScanComplete,
 
     FullScanComplete(FullScanType),
@@ -786,6 +785,18 @@ impl WalletActor {
         Produces::ok(block_height)
     }
 
+    async fn update_block_id(&mut self) -> eyre::Result<BlockId> {
+        debug!("actor update_block_id");
+        if self.check_node_connection().await.is_err() {
+            return Err(eyre::eyre!("node connection failed"));
+        }
+
+        let node_client = self.node_client().await?;
+        let block_id = node_client.get_block_id().await.map_err(|_| Error::GetHeightError)?;
+        self.save_last_height_fetched(block_id.height as usize);
+        Ok(block_id)
+    }
+
     #[into_actor_result]
     pub async fn txns_with_prices(&mut self) -> Result<Vec<(ConfirmedTransaction, Option<f32>)>> {
         let network = self.wallet.network;
@@ -832,11 +843,12 @@ impl WalletActor {
             return Produces::ok(());
         }
 
+        let network = self.wallet.network;
         let node = Database::global().global_config.selected_node();
         let options = NodeClientOptions { batch_size: 1 };
         let client_builder = NodeClientBuilder { node, options };
 
-        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, client_builder);
+        let watcher = TransactionWatcher::new(self.addr.clone(), tx_id, client_builder, network);
         let addr = spawn_actor(watcher);
 
         self.transaction_watchers.insert(tx_id, addr);
@@ -849,40 +861,58 @@ impl WalletActor {
     pub async fn mark_transaction_found(&mut self, tx_id: Txid) -> ActorResult<()> {
         info!("marking transaction found: {tx_id}");
 
-        // remove the watcher
-        self.transaction_watchers.remove(&tx_id);
+        // update the height
+        self.update_block_id().await?;
 
-        // sleep for 5 seconds before performing sync scan
+        // update the height and perform sync scan which will update the transactions
+        self.perform_scan_for_single_tx_id(tx_id).await?;
+
+        // wait 30 seconds run the scan again and then remove the watcher
+        // sanity check to make sure the transaction was picked up by the wallet
+        // and no extra watchers were created in the meantime
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            send!(addr.perform_sync_scan());
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            send!(addr.perform_scan_for_single_tx_id(tx_id));
+            send!(addr.remove_watcher_for_txn(tx_id));
         });
 
         Produces::ok(())
     }
 
-    pub async fn perform_sync_scan(&mut self) -> ActorResult<()> {
-        debug!("perform_sync_scan: {:?}", self.state);
-        if self.state == ActorState::PerformingSyncScan {
-            warn!("already performing sync scan, skipping");
-            return Produces::ok(());
-        }
+    pub async fn stop_all_scans(&mut self) {
+        debug!("stop_all_scans");
+        self.transaction_watchers = HashMap::default();
+        // TODO: stop the wallet scans too, need to save the task handle when we start the scan
+    }
 
-        debug!("starting sync scan");
-        self.state = ActorState::PerformingSyncScan;
+    async fn remove_watcher_for_txn(&mut self, tx_id: Txid) {
+        debug!("removing watcher for txn: {tx_id}");
+        self.transaction_watchers.remove(&tx_id);
+    }
+
+    async fn perform_scan_for_single_tx_id(&mut self, tx_id: Txid) -> ActorResult<()> {
         let start = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        let _ = self.update_height().await?.await;
+
+        let chain_tip = self.wallet.bdk.local_chain().tip();
+        let sync_request_builder =
+            SyncRequestBuilder::default().txids(vec![tx_id]).chain_tip(chain_tip);
+
+        let sync_request = sync_request_builder.build();
 
         let node_client = self.node_client().await?.clone();
-        let scan_request = self.wallet.bdk.start_sync_with_revealed_spks().build();
         let graph = self.wallet.bdk.tx_graph().clone();
+
+        let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
+        debug!("done scan for spk in {}s", now - start);
 
         let addr = self.addr.clone();
         self.addr.send_fut(async move {
-            let scan_result = node_client.sync(&graph, scan_request).await;
+            let scan_result = node_client.sync(&graph, sync_request).await;
 
             let now = UNIX_EPOCH.elapsed().unwrap().as_secs();
-            debug!("done sync scan in {}s", now - start);
+            debug!("done single txn id sync scan in {}s", now - start);
 
             // save updated txns and send to frontend
             send!(addr.update_sync_state_and_send_transactions(scan_result));
@@ -1362,6 +1392,6 @@ impl WalletActor {
 
 impl Drop for WalletActor {
     fn drop(&mut self) {
-        debug!("[DROP] Wallet Actor");
+        debug!("[DROP] Wallet Actor for {}", self.wallet.id);
     }
 }

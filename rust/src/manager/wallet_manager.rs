@@ -96,6 +96,8 @@ pub enum WalletManagerAction {
     ToggleShowLabels,
     SelectCurrentWalletAddressType,
     SelectDifferentWalletAddressType(WalletAddressType),
+    SelectedWalletDisappeared,
+    StartTransactionWatcher(Arc<TxId>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
@@ -984,6 +986,15 @@ impl RustWalletManager {
             Action::ToggleShowLabels => {
                 let mut metadata = self.metadata.write();
                 metadata.show_labels = !metadata.show_labels;
+            }
+
+            Action::SelectedWalletDisappeared => {
+                send!(self.actor.stop_all_scans());
+            }
+
+            Action::StartTransactionWatcher(tx_id) => {
+                let tx_id = tx_id.as_ref().0;
+                send!(self.actor.start_transaction_watcher(tx_id));
             }
         }
 

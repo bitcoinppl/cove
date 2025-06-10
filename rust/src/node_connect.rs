@@ -27,6 +27,9 @@ pub const TESTNET_ELECTRUM: [(&str, &str); 1] =
 pub const TESTNET4_ESPLORA: [(&str, &str); 1] =
     [("mempool.space", "https://mempool.space/testnet4/api/")];
 
+pub const TESTNET4_ELECTRUM: [(&str, &str); 1] =
+    [("mempool.space electrum", "ssl://mempool.space:40002")];
+
 pub const SIGNET_ESPLORA: [(&str, &str); 1] = [("mutinynet", "https://mutinynet.com/api")];
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -217,10 +220,20 @@ fn node_list(network: Network) -> Vec<Node> {
             .map(|(name, url)| Node::new_esplora(name.to_string(), url.to_string(), network))
             .collect::<Vec<Node>>(),
 
-        Network::Testnet4 => TESTNET4_ESPLORA
-            .iter()
-            .map(|(name, url)| Node::new_esplora(name.to_string(), url.to_string(), network))
-            .collect::<Vec<Node>>(),
+        Network::Testnet4 => {
+            let mut nodes = TESTNET4_ESPLORA
+                .iter()
+                .map(|(name, url)| Node::new_esplora(name.to_string(), url.to_string(), network))
+                .collect::<Vec<Node>>();
+
+            nodes.extend(
+                TESTNET4_ELECTRUM.iter().map(|(name, url)| {
+                    Node::new_electrum(name.to_string(), url.to_string(), network)
+                }),
+            );
+
+            nodes
+        }
     }
 }
 
