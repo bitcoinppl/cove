@@ -33,7 +33,7 @@ Cove is currently in beta, be careful when using it with large amounts of Bitcoi
 
 ## Features
 
-![features list](images/features.jpg)
+![features list](images/features.png)
 
 - Import hardware wallet (xpub / public descriptor) using NFC, File & QR
 - Create hot wallet, and verify hot wallet backup
