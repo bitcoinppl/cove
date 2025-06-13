@@ -321,7 +321,7 @@ impl AddressInfoWithDerivation {
 
 impl AddressInfoWithDerivation {
     pub fn new(info: AddressInfo, derivation_path_prefix: Option<DerivationPath>) -> Self {
-        let derivation_path = derivation_path_prefix.map(|p| format!("{p}/{}", info.index));
+        let derivation_path = derivation_path_prefix.map(|p| format!("{p}/0/{}", info.index));
         Self { info, derivation_path }
     }
 }
