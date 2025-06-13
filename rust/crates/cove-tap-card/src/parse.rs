@@ -307,6 +307,13 @@ mod tests {
             _ => panic!("not a tap signer"),
         };
 
+        match ts.state {
+            TapSignerState::Sealed => {
+                assert!(true)
+            }
+            _ => panic!("not unused"),
+        }
+
         let readable_ident = &ts.full_card_ident();
         assert_eq!(readable_ident, "XUFC5-2SWY2-PX24Q-IZC7W")
     }
