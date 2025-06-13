@@ -360,9 +360,9 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(txn):
                 handleTransaction(txn)
-            case let .tapSignerInit(tapSigner):
+            case let .tapSignerUnused(tapSigner):
                 app.sheetState = .init(.tapSigner(TapSignerRoute.initSelect(tapSigner)))
-            case let .tapSigner(tapSigner):
+            case let .tapSignerReady(tapSigner):
                 let panic =
                     "TAPSIGNER not implemented \(tapSigner) doesn't make sense for file import"
                 Log.error(panic)
@@ -415,9 +415,9 @@ struct CoveApp: App {
                 handleAddress(addressWithNetwork)
             case let .transaction(transaction):
                 handleTransaction(transaction)
-            case let .tapSignerInit(tapSigner):
+            case let .tapSignerUnused(tapSigner):
                 app.alertState = .init(.uninitializedTapSigner(tapSigner))
-            case let .tapSigner(tapSigner):
+            case let .tapSignerReady(tapSigner):
                 if let wallet = app.findTapSignerWallet(tapSigner) {
                     app.alertState = .init(.tapSignerWalletFound(wallet.id))
                 } else {

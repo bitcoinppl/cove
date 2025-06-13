@@ -17509,12 +17509,12 @@ public enum MultiFormat {
     /**
      * TAPSIGNER has not been initialized yet
      */
-    case tapSigner(TapSigner
+    case tapSignerReady(TapSigner
     )
     /**
      * TAPSIGNER has not been initialized yet
      */
-    case tapSignerInit(TapSigner
+    case tapSignerUnused(TapSigner
     )
 }
 
@@ -17548,10 +17548,10 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
         case 5: return .bip329Labels(try FfiConverterTypeBip329Labels.read(from: &buf)
         )
         
-        case 6: return .tapSigner(try FfiConverterTypeTapSigner.read(from: &buf)
+        case 6: return .tapSignerReady(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
-        case 7: return .tapSignerInit(try FfiConverterTypeTapSigner.read(from: &buf)
+        case 7: return .tapSignerUnused(try FfiConverterTypeTapSigner.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -17587,12 +17587,12 @@ public struct FfiConverterTypeMultiFormat: FfiConverterRustBuffer {
             FfiConverterTypeBip329Labels.write(v1, into: &buf)
             
         
-        case let .tapSigner(v1):
+        case let .tapSignerReady(v1):
             writeInt(&buf, Int32(6))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
         
-        case let .tapSignerInit(v1):
+        case let .tapSignerUnused(v1):
             writeInt(&buf, Int32(7))
             FfiConverterTypeTapSigner.write(v1, into: &buf)
             
@@ -27909,9 +27909,9 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
-    uniffiEnsureCoveNfcInitialized()
     return InitializationResult.ok
 }()
 
