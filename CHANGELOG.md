@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-06-11
+
 - Fix import words view being cut off on smaller screens and iPads
 - Fix receive view (receive address) being cut off on smaller screens and iPads
 - Fix not showing duplicate wallet error in HotWalletImport
