@@ -25,9 +25,9 @@ pub enum MultiFormat {
     Transaction(Arc<crate::transaction::ffi::BitcoinTransaction>),
     Bip329Labels(Arc<Bip329Labels>),
     /// TAPSIGNER has not been initialized yet
-    TapSigner(Arc<cove_tap_card::TapSigner>),
+    TapSignerReady(Arc<cove_tap_card::TapSigner>),
     /// TAPSIGNER has not been initialized yet
-    TapSignerInit(Arc<cove_tap_card::TapSigner>),
+    TapSignerUnused(Arc<cove_tap_card::TapSigner>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
@@ -135,7 +135,7 @@ impl MultiFormat {
 
             match tap_card {
                 cove_tap_card::TapCard::TapSigner(card) => {
-                    return Ok(MultiFormat::TapSigner(card));
+                    return Ok(MultiFormat::from(card));
                 }
 
                 cove_tap_card::TapCard::SatsCard(_card) => {
@@ -206,10 +206,16 @@ pub struct Bip329Labels(pub bip329::Labels);
 
 impl From<cove_tap_card::TapSigner> for MultiFormat {
     fn from(tap_signer: cove_tap_card::TapSigner) -> Self {
+        Self::from(Arc::new(tap_signer))
+    }
+}
+
+impl From<Arc<cove_tap_card::TapSigner>> for MultiFormat {
+    fn from(tap_signer: Arc<cove_tap_card::TapSigner>) -> Self {
         if tap_signer.state == cove_tap_card::TapSignerState::Unused {
-            Self::TapSignerInit(Arc::new(tap_signer))
+            Self::TapSignerUnused(tap_signer)
         } else {
-            Self::TapSigner(Arc::new(tap_signer))
+            Self::TapSignerReady(tap_signer)
         }
     }
 }
