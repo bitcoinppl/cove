@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-@Observable class PendingWalletManager: PendingWalletManagerReconciler {
+@Observable final class PendingWalletManager: PendingWalletManagerReconciler {
     private let logger = Log(id: "PendingWalletManager")
     var rust: RustPendingWalletManager
     var numberOfWords: NumberOfBip39Words

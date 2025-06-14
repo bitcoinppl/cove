@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 11/28/24.
 //
 
-import ActivityIndicatorView
 import SwiftUI
 
 struct ExportingBackup: Equatable {
@@ -74,9 +73,9 @@ struct SelectedWalletScreen: View {
     @ViewBuilder
     var Loading: some View {
         Spacer()
-        ActivityIndicatorView(isVisible: Binding.constant(true), type: .default(count: 8))
-            .frame(width: 30, height: 30)
+        ProgressView()
             .padding(.top, screenHeight / 6)
+            .tint(.primary)
         Spacer()
         Spacer()
     }
@@ -301,7 +300,7 @@ struct SelectedWalletScreen: View {
 
                 // wait for the task to complete
                 let _ = await task.result
-                runPostRefresh = true // mark for later
+                runPostRefresh = true  // mark for later
             }
             .task(id: runPostRefresh) {
                 // runs when the flag flips
