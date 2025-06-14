@@ -21383,6 +21383,8 @@ public enum TransportError: Swift.Error {
     )
     case CvcChangeError(String
     )
+    case UnknownError(String
+    )
 }
 
 
@@ -21415,6 +21417,9 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 6: return .CvcChangeError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -21456,6 +21461,11 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
         
         case let .CvcChangeError(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .UnknownError(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -26304,6 +26314,13 @@ public func describeTapSignerReaderError(error: TapSignerReaderError) -> String 
     )
 })
 }
+public func describeTransportError(error: TransportError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_describe_transport_error(
+        FfiConverterTypeTransportError_lower(error),$0
+    )
+})
+}
 public func describeWalletError(error: WalletError) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_describe_wallet_error(
@@ -26687,6 +26704,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_describe_tap_signer_reader_error() != 18001) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_describe_transport_error() != 49523) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_describe_wallet_error() != 7428) {
@@ -27908,10 +27928,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 
