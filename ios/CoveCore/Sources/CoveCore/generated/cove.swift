@@ -26314,6 +26314,13 @@ public func describeTapSignerReaderError(error: TapSignerReaderError) -> String 
     )
 })
 }
+public func describeTransportError(error: TransportError) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_cove_fn_func_describe_transport_error(
+        FfiConverterTypeTransportError_lower(error),$0
+    )
+})
+}
 public func describeWalletError(error: WalletError) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_fn_func_describe_wallet_error(
@@ -26697,6 +26704,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_describe_tap_signer_reader_error() != 18001) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_describe_transport_error() != 49523) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_describe_wallet_error() != 7428) {
@@ -27918,10 +27928,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
-    uniffiEnsureCoveDeviceInitialized()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveDeviceInitialized()
     return InitializationResult.ok
 }()
 

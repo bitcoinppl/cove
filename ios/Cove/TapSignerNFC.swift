@@ -264,9 +264,6 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         tapSignerReader = nil
         tapSignerCmd = nil
 
-        //  self.satsCardReader = nil
-        //  self.satsCardReader = nil
-
         tag = nil
         session = nil
         transport = nil

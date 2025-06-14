@@ -27,6 +27,10 @@ extension TransportError {
     init(code: Int, message: String) {
         self = createTransportErrorFromCode(code: UInt16(code), message: message)
     }
+    
+    var describe: String {
+        describeTransportError(error: self)
+    }
 }
 
 extension TapSignerReaderError {

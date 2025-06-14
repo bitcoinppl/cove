@@ -180,3 +180,8 @@ pub fn is_valid_chain_code(chain_code: String) -> bool {
     let Ok(chain_code) = hex::decode(chain_code) else { return false };
     chain_code.len() == 32
 }
+
+#[uniffi::export]
+fn describe_transport_error(error: TransportError) -> String {
+    error.to_string()
+}
