@@ -465,17 +465,13 @@ struct CoveApp: App {
     @ViewBuilder
     var BodyView: some View {
         Group {
-            if showCover {
-                CoverView()
-            } else if !app.isTermsAccepted {
+            if !app.isTermsAccepted {
                 CoverView()
                     .sheet(isPresented: Binding.constant(!app.isTermsAccepted), onDismiss: {}) {
                         TermsAndConditionsView(app: app)
                             .interactiveDismissDisabled(true)
                             .presentationDetents([.large])
                     }
-            } else if app.isLoading {
-                FullPageLoadingView()
             } else {
                 LockView(
                     lockType: auth.type,
@@ -514,6 +510,12 @@ struct CoveApp: App {
                         }
                         .tint(routeToTint)
                     }
+                }
+                .fullScreenCover(isPresented: $app.isLoading) {
+                    FullPageLoadingView().interactiveDismissDisabled(true)
+                }
+                .fullScreenCover(isPresented: $showCover) {
+                    CoverView().interactiveDismissDisabled(true)
                 }
             }
         }

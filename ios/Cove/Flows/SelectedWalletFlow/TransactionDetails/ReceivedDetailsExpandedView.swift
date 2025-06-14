@@ -46,11 +46,15 @@ struct ReceivedDetailsExpandedView: View {
                             .contentTransition(.numericText())
                     } else {
                         ProgressView()
+                            .tint(.primary)
                     }
                 }
                 .padding(.bottom, 14)
 
-                expandedDetailsRow(header: "Block Number", content: String(transactionDetails.blockNumberFmt() ?? ""))
+                expandedDetailsRow(
+                    header: "Block Number",
+                    content: String(transactionDetails.blockNumberFmt() ?? "")
+                )
             }
 
             Text("Received At")

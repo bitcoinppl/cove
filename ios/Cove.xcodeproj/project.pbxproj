@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AC4B03772DEF6019006123F9 /* TermsAndConditionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC4B03762DEF6019006123F9 /* TermsAndConditionsView.swift */; };
-		AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */ = {isa = PBXBuildFile; productRef = AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */; };
 		AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
 		ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
 		ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */ = {isa = PBXBuildFile; productRef = ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */; };
@@ -29,7 +27,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AC4B03762DEF6019006123F9 /* TermsAndConditionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TermsAndConditionsView.swift; path = Cove/Views/TermsAndConditionsView.swift; sourceTree = "<group>"; };
 		AC9AB5782C34956C00BAE3BE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -54,7 +51,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AC8C1FB22C4E9E3800158283 /* ActivityIndicatorView in Frameworks */,
 				ACD0053C2DB5309A003DC493 /* CoveCore in Frameworks */,
 				ACA4CBEF2C2365430008F63E /* KeychainSwift in Frameworks */,
 				ACC1CD5D2C6D481400C7AD89 /* MijickPopupView in Frameworks */,
@@ -67,7 +63,6 @@
 		D0245F432C0F7B4E0042B447 = {
 			isa = PBXGroup;
 			children = (
-				AC4B03762DEF6019006123F9 /* TermsAndConditionsView.swift */,
 				AC9AB5782C34956C00BAE3BE /* Logger.swift */,
 				AC8CF66C2CF8C86600F02F5C /* CodeScanner */,
 				AC8CF6022CF8C7D300F02F5C /* Cove */,
@@ -106,7 +101,6 @@
 			name = Cove;
 			packageProductDependencies = (
 				ACA4CBEE2C2365430008F63E /* KeychainSwift */,
-				AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */,
 				ACC1CD5C2C6D481400C7AD89 /* MijickPopupView */,
 				ACD0053B2DB5309A003DC493 /* CoveCore */,
 			);
@@ -140,7 +134,6 @@
 			mainGroup = D0245F432C0F7B4E0042B447;
 			packageReferences = (
 				ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */,
-				AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */,
 				ACC1CD5B2C6D481400C7AD89 /* XCRemoteSwiftPackageReference "PopupView" */,
 				ACD0053A2DB5309A003DC493 /* XCLocalSwiftPackageReference "CoveCore" */,
 			);
@@ -168,7 +161,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AC4B03772DEF6019006123F9 /* TermsAndConditionsView.swift in Sources */,
 				AC9AB5792C34956C00BAE3BE /* Logger.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -424,14 +416,6 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/exyte/ActivityIndicatorView";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.1.1;
-			};
-		};
 		ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/evgenyneu/keychain-swift";
@@ -451,11 +435,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		AC8C1FB12C4E9E3800158283 /* ActivityIndicatorView */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = AC8C1FB02C4E9E3800158283 /* XCRemoteSwiftPackageReference "ActivityIndicatorView" */;
-			productName = ActivityIndicatorView;
-		};
 		ACA4CBEE2C2365430008F63E /* KeychainSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ACA4CBED2C2365430008F63E /* XCRemoteSwiftPackageReference "keychain-swift" */;

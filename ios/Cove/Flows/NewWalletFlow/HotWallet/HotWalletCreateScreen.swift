@@ -15,7 +15,7 @@ struct HotWalletCreateScreen: View {
     }
 
     var body: some View {
-        WordsView(manager: manager, groupedWords: manager.rust.bip39WordsGrouped())
+        WordsView(manager: manager)
     }
 }
 
@@ -26,12 +26,18 @@ struct WordsView: View {
     @Environment(\.sizeCategory) var sizeCategory
 
     var manager: PendingWalletManager
-    var groupedWords: [[GroupedWord]]
 
+    // private
+    @State private var groupedWords: [[GroupedWord]]
     @State private var tabIndex = 0
     @State private var showConfirmationAlert = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.navigate) private var navigate
+
+    init(manager: PendingWalletManager) {
+        self.manager = manager
+        self.groupedWords = manager.rust.bip39WordsGrouped()
+    }
 
     var lastIndex: Int {
         groupedWords.count - 1
@@ -64,7 +70,7 @@ struct WordsView: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 12)
 
             HStack {
                 DotMenuView(selected: 2, size: 5)
@@ -234,8 +240,8 @@ struct WordCardView: View {
                 .background(Color.btnPrimary)
                 .cornerRadius(10)
                 .contextMenu {
-                    isMiniDeviceOrLargeText(sizeCategory) ?
-                        Button(action: {}) {
+                    isMiniDeviceOrLargeText(sizeCategory)
+                        ? Button(action: {}) {
                             Text("\(String(format: "%d", group.number)). \(group.word)")
                         } : nil
                 }

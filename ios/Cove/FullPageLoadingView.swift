@@ -13,6 +13,7 @@ struct FullPageLoadingView: View {
             Color.coveBg.edgesIgnoringSafeArea(.all)
             ProgressView()
                 .frame(width: 100, height: 100)
+                .tint(.primary)
         }
     }
 }

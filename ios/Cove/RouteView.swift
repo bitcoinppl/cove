@@ -1,4 +1,3 @@
-import ActivityIndicatorView
 import SwiftUI
 
 struct RouteView: View {
@@ -17,12 +16,11 @@ struct RouteView: View {
                     .id(app.routeId)
             } else {
                 VStack {
-                    ActivityIndicatorView(
-                        isVisible: Binding.constant(true), type: .growingArc(.orange, lineWidth: 4)
-                    )
-                    .frame(width: 75, height: 75)
-                    .padding(.bottom, 100)
-                    .foregroundColor(.orange)
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(2)
+                        .frame(width: 100, height: 100)
+                        .tint(.primary)
                 }
             }
         }
