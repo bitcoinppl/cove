@@ -2,10 +2,17 @@
 
 ## [Unreleased]
 
+## Bug Fixes
+
 - Fixed unsealed TAPSIGNER being detected as already initialized
 - Show full address derivation path including the keychain index
-- Fix crashing on APDU NFC error
-- Fix verifying words flow not working if seed has a consecutive duplicate word
+- Fixed crashing on APDU NFC error
+- Fixed verifying words flow not working if seed has a consecutive duplicate word
+- Prevent words in "Backup Your Words" screen being reset when app goes in background
+
+## Changes
+
+- Only use the regular SwiftUI `ProgressView` for all loading indicators, instead of using the `ActivityIndicatorView` library and keep loading indicators color consistent
 
 ## [1.0.0] - 2025-06-11
 
