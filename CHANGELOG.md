@@ -4,6 +4,7 @@
 
 - Fixed unsealed TAPSIGNER being detected as already initialized
 - Show full address derivation path including the keychain index
+- Fix crashing on APDU NFC error
 
 ## [1.0.0] - 2025-06-11
 
