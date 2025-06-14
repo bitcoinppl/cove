@@ -55,7 +55,9 @@ public struct SendFlowContainer: View {
     }
 
     @ViewBuilder
-    func sendRouteToScreen(sendRoute: SendRoute, manager: WalletManager, sendFlowManager _: SendFlowManager) -> some View {
+    func sendRouteToScreen(
+        sendRoute: SendRoute, manager: WalletManager, sendFlowManager _: SendFlowManager
+    ) -> some View {
         switch sendRoute {
         case let .setAmount(id: id, address: _, amount: amount):
             SendFlowSetAmountScreen(id: id, amount: amount)
@@ -78,7 +80,9 @@ public struct SendFlowContainer: View {
             let presenter = sendFlowManager.presenter
 
             Group {
-                sendRouteToScreen(sendRoute: sendRoute, manager: manager, sendFlowManager: sendFlowManager)
+                sendRouteToScreen(
+                    sendRoute: sendRoute, manager: manager, sendFlowManager: sendFlowManager
+                )
             }
             .environment(manager)
             .environment(presenter)
@@ -92,7 +96,8 @@ public struct SendFlowContainer: View {
                         }
                     }
 
-                    return presenter.alertState = .init(.error(.NoBalance))
+                    presenter.alertState = .init(.error(.NoBalance))
+                    return
                 }
             }
             .alert(
@@ -108,6 +113,7 @@ public struct SendFlowContainer: View {
 
         } else {
             ProgressView()
+                .tint(.primary)
                 .onAppear(perform: initOnAppear)
         }
     }

@@ -148,7 +148,8 @@ struct SendFlowSetAmountScreen: View {
                             .opacity(loadingOpacity)
                             .ignoresSafeArea()
 
-                        ProgressView().tint(.white)
+                        ProgressView()
+                            .tint(.primary)
                             .opacity(loadingOpacity)
                     }
                 }
@@ -190,7 +191,9 @@ struct SendFlowSetAmountScreen: View {
             if !isAlreadyValid { try? await Task.sleep(for: .milliseconds(700)) }
 
             await MainActor.run {
-                Log.debug("SendFlowSetAmountScreen: onAppear \(String(describing: sendFlowManager.amount))")
+                Log.debug(
+                    "SendFlowSetAmountScreen: onAppear \(String(describing: sendFlowManager.amount))"
+                )
 
                 if sendFlowManager.amount == nil || sendFlowManager.amount?.asSats() == 0 {
                     presenter.focusField = .amount

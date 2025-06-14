@@ -73,16 +73,17 @@ struct MiddlePopupView: View {
     }
 
     var popupMessage: String {
-        let messageFromState = switch state {
-        case .initial:
-            ""
-        case .loading:
-            ""
-        case let .failure(string):
-            string
-        case let .success(string):
-            string
-        }
+        let messageFromState =
+            switch state {
+            case .initial:
+                ""
+            case .loading:
+                ""
+            case let .failure(string):
+                string
+            case let .success(string):
+                string
+            }
 
         return message ?? messageFromState
     }
@@ -125,6 +126,7 @@ struct MiddlePopupView: View {
                 })
                 .progressViewStyle(.circular)
                 .frame(minWidth: screenWidth * 0.65, minHeight: screenHeight * 0.1)
+                .tint(.primary)
             }
         }
         .padding(4)

@@ -20,7 +20,7 @@ struct RouteView: View {
                         .progressViewStyle(CircularProgressViewStyle())
                         .scaleEffect(2)
                         .frame(width: 100, height: 100)
-                        .foregroundColor(.orange)
+                        .tint(.primary)
                 }
             }
         }

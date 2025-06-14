@@ -300,7 +300,7 @@ struct SelectedWalletScreen: View {
 
                 // wait for the task to complete
                 let _ = await task.result
-                runPostRefresh = true  // mark for later
+                runPostRefresh = true // mark for later
             }
             .task(id: runPostRefresh) {
                 // runs when the flag flips

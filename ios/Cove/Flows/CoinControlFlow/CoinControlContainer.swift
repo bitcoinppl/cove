@@ -32,7 +32,10 @@ struct CoinControlContainer: View {
             self.manager = manager
         } catch {
             Log.error("[ERROR] Unable to get wallet \(error.localizedDescription)")
-            app.alertState = .init(.general(title: "Error!", message: "Unable to get wallet \(error.localizedDescription)"))
+            app.alertState = .init(
+                .general(
+                    title: "Error!", message: "Unable to get wallet \(error.localizedDescription)"
+                ))
         }
     }
 
@@ -45,6 +48,7 @@ struct CoinControlContainer: View {
             }
         } else {
             ProgressView()
+                .tint(.primary)
                 .task { await initOnAppear() }
         }
     }

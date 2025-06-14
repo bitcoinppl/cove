@@ -205,7 +205,8 @@ struct SendFlowCoinControlSetAmountScreen: View {
                             .opacity(loadingOpacity)
                             .ignoresSafeArea()
 
-                        ProgressView().tint(.white)
+                        ProgressView()
+                            .tint(.primary)
                             .opacity(loadingOpacity)
                     }
                 }
@@ -229,11 +230,12 @@ struct SendFlowCoinControlSetAmountScreen: View {
                         withAnimation(
                             .easeInOut(duration: 1.5).delay(0.4),
                             completionCriteria: .removed
-                        ) { loadingOpacity = 0 }
-                            completion: {
-                                isLoading = false
-                                if validate() { presenter.focusField = .none }
-                            }
+                        ) {
+                            loadingOpacity = 0
+                        } completion: {
+                            isLoading = false
+                            if validate() { presenter.focusField = .none }
+                        }
                     }
                 }
             } else {

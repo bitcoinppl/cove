@@ -102,7 +102,8 @@ struct ReceiveView: View {
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        colorScheme == .light ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4))
+                        colorScheme == .light
+                            ? Color(.midnightBlue).opacity(0.95) : .midnightBlue.opacity(0.4))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(.horizontal)
@@ -179,6 +180,7 @@ private struct AddressView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 })
+                .tint(.primary)
                 .progressViewStyle(.circular)
             }
         }
