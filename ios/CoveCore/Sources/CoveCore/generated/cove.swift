@@ -21383,6 +21383,8 @@ public enum TransportError: Swift.Error {
     )
     case CvcChangeError(String
     )
+    case UnknownError(String
+    )
 }
 
 
@@ -21415,6 +21417,9 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 6: return .CvcChangeError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .UnknownError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -21456,6 +21461,11 @@ public struct FfiConverterTypeTransportError: FfiConverterRustBuffer {
         
         case let .CvcChangeError(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .UnknownError(v1):
+            writeInt(&buf, Int32(7))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -27908,10 +27918,10 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
     uniffiCallbackInitWalletManagerReconciler()
-    uniffiEnsureCoveTapCardInitialized()
+    uniffiEnsureCoveTypesInitialized()
     uniffiEnsureCoveNfcInitialized()
     uniffiEnsureCoveDeviceInitialized()
-    uniffiEnsureCoveTypesInitialized()
+    uniffiEnsureCoveTapCardInitialized()
     return InitializationResult.ok
 }()
 

@@ -123,7 +123,7 @@ class TapSignerNFC {
                             return
                         }
 
-                        if let error = self.nfc.tapSignerError {
+                        if let error: TapSignerReaderError = self.nfc.tapSignerError {
                             continuation.resume(throwing: error)
                             return
                         }
@@ -418,7 +418,7 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
 
                 if let error {
                     logger.error("APDU error: \(error)")
-                    continuation.resume(throwing: error)
+                    continuation.resume(throwing: TransportError.UnknownError(error.localizedDescription))
                     return
                 }
 
