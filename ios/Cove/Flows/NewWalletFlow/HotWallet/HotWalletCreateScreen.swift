@@ -70,7 +70,7 @@ struct WordsView: View {
                 }
             }
 
-            Spacer(minLength: 12)
+            Spacer()
 
             HStack {
                 DotMenuView(selected: 2, size: 5)
@@ -256,10 +256,9 @@ struct StyledWordCard<Content: View>: View {
 
     var body: some View {
         TabView(selection: $tabIndex) {
-            content.padding(.bottom, 20)
+            content.padding(.bottom, 40)
         }
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-        .safeAreaPadding(.bottom, 34)
         .frame(minHeight: isMiniDevice ? 350 : nil)
     }
 }
