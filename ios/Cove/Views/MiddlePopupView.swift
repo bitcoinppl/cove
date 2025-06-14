@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 7/22/24.
 //
 
-import ActivityIndicatorView
 import SwiftUI
 
 enum PopupState: Equatable {
