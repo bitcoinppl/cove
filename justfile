@@ -6,6 +6,7 @@ alias xr := xcode-reset
 
 # watch aliases
 alias wt := watch-test
+alias wtest := watch-test
 alias wb := watch-build
 
 # build aliases
