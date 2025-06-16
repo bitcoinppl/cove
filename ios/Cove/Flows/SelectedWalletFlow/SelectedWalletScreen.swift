@@ -238,6 +238,13 @@ struct SelectedWalletScreen: View {
         ) { result in
             do {
                 let file = try result.get()
+                
+                // check if file should be opened with share sheet instead
+                if ShareSheetHandler.shouldUseShareSheet(for: file) {
+                    ShareSheetHandler.presentShareSheet(for: file)
+                    return
+                }
+                
                 let fileContents = try FileReader(for: file).read()
                 try labelManager.import(jsonl: fileContents)
 

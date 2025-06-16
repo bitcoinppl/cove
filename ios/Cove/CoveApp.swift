@@ -348,6 +348,12 @@ struct CoveApp: App {
     }
 
     func handleFileOpen(_ url: URL) {
+        // check if file should be opened with share sheet instead
+        if ShareSheetHandler.shouldUseShareSheet(for: url) {
+            ShareSheetHandler.presentShareSheet(for: url)
+            return
+        }
+        
         let fileHandler = FileHandler(filePath: url.absoluteString)
 
         do {
