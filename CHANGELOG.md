@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2025-06-16
+
 ## Bug Fixes
 
 - Fixed unsealed TAPSIGNER being detected as already initialized
