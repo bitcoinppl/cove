@@ -94,7 +94,7 @@ impl FiatClient {
         &self,
         timestamp: u64,
     ) -> Result<HistoricalPricesResponse, reqwest::Error> {
-        let url = format!("{}?timestamp={}", HISTORICAL_PRICES_URL, timestamp);
+        let url = format!("{HISTORICAL_PRICES_URL}?timestamp={timestamp}");
 
         let response = self.client.get(&url).send().await?;
         let historical_prices: HistoricalPricesResponse = response.json().await?;

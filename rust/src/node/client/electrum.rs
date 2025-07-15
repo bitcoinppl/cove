@@ -120,7 +120,7 @@ impl ElectrumClient {
             Err(electrum_client::Error::InvalidResponse(Value::Null)) => return Ok(None),
             Err(electrum_client::Error::Protocol(error_value)) => {
                 // Check if this is an error related to verbose flag not being supported
-                let error_str = format!("{:?}", error_value);
+                let error_str = format!("{error_value:?}");
                 if error_str.contains("verbose")
                     || error_str.contains("invalid params")
                     || error_str.contains("not supported")
@@ -306,7 +306,7 @@ mod tests {
             Ok(None) => panic!(
                 "Transaction should be confirmed but got None - this indicates an error in confirmation logic"
             ),
-            Err(e) => panic!("Failed to get transaction: {:?}", e),
+            Err(e) => panic!("Failed to get transaction: {e:?}"),
         }
     }
 
@@ -329,7 +329,7 @@ mod tests {
         match result {
             Ok(Some(txn)) => assert_eq!(txn.compute_txid().to_string(), txid.to_string()),
             Ok(None) => panic!("Expected confirmed transaction but got None"),
-            Err(e) => panic!("Fallback method failed: {:?}", e),
+            Err(e) => panic!("Fallback method failed: {e:?}"),
         }
     }
 }

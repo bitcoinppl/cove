@@ -1,3 +1,5 @@
 --exclude ios/CoveCore/Sources/CoveCore/generated
 --disable redundantSelf
+--disable redundantPublic
+--disable redundantNilInit
 --swiftversion 6.0

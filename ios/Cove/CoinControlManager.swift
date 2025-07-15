@@ -71,7 +71,7 @@ extension WeakReconciler: CoinControlManagerReconciler where Reconciler == CoinC
     }
 
     public func buttonArrow(_ key: CoinControlListSortKey) -> String? {
-        let _ = self.sort
+        _ = self.sort
         return switch self.rust.buttonPresentation(button: key) {
         case .selected(.ascending):
             "arrow.up"

@@ -11,7 +11,7 @@ fn main() {
     let profile =
         out_dir.split("/target/").nth(1).unwrap_or_default().split('/').nth(1).unwrap_or("unknown");
 
-    println!("cargo:rustc-env=BUILD_PROFILE={}", profile);
+    println!("cargo:rustc-env=BUILD_PROFILE={profile}");
 
     // Rebuild when Git changes
     println!("cargo:rerun-if-changed=.git/HEAD");

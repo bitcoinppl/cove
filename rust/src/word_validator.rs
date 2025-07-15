@@ -111,8 +111,7 @@ mod tests {
         let correct_word = validator.words[(word_position - 1) as usize];
         assert!(
             possible_words.contains(&correct_word.to_string()),
-            "Correct word '{}' should be in the possible words list",
-            correct_word
+            "Correct word '{correct_word}' should be in the possible words list"
         );
 
         let mut sorted_words = possible_words.clone();
@@ -203,14 +202,11 @@ mod tests {
             let word_position = (i + 1) as u8;
             assert!(
                 validator.is_word_correct(word.to_string(), word_position),
-                "Word '{}' should be correct for position {}",
-                word,
-                word_position
+                "Word '{word}' should be correct for position {word_position}"
             );
             assert!(
                 !validator.is_word_correct("wrongword".to_string(), word_position),
-                "Wrong word should not be correct for position {}",
-                word_position
+                "Wrong word should not be correct for position {word_position}"
             );
         }
     }
