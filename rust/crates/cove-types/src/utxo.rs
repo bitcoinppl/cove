@@ -71,7 +71,7 @@ impl Utxo {
     pub fn try_from_local(local: LocalOutput, network: Network) -> Result<Self, UtxoError> {
         let confirmed: &ConfirmationBlockTime = match &local.chain_position {
             ChainPosition::Confirmed { anchor: confirmed, .. } => confirmed,
-            ChainPosition::Unconfirmed { last_seen: _ } => {
+            ChainPosition::Unconfirmed { .. } => {
                 return Err(UtxoError::Unconfirmed);
             }
         };

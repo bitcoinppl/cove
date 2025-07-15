@@ -175,7 +175,7 @@ pub struct ConfirmedDetails {
 impl PendingOrConfirmed {
     pub fn new(chain_position: &BdkChainPosition<ConfirmationBlockTime>) -> Self {
         match chain_position {
-            BdkChainPosition::Unconfirmed { last_seen } => {
+            BdkChainPosition::Unconfirmed { last_seen, .. } => {
                 Self::Pending(PendingDetails { last_seen: (*last_seen).unwrap_or_default() })
             }
             BdkChainPosition::Confirmed { anchor: confirmation_blocktime, .. } => {
