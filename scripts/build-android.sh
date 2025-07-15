@@ -29,7 +29,7 @@ cp target/aarch64-linux-android/release/libcove.so ../android/app/src/main/jniLi
 cp target/x86_64-linux-android/release/libcove.so ../android/app/src/main/jniLibs/x86_64/libcoveffi.so
 
 # Create Kotlin bindings
-cargo run --bin uniffi-bindgen generate \
+cargo run -p uniffi_cli generate \
     --library target/aarch64-linux-android/release/libcove.so \
     --language kotlin \
     --out-dir ../android/app/src/main/java \

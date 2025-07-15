@@ -62,7 +62,8 @@ mkdir -p "$OUTPUT_DIR"
 
 echo "Running uniffi-bindgen for ${TARGETS[0]}, outputting to $OUTPUT_DIR"
 rm -rf $OUTPUT_DIR || true
-cargo run --bin uniffi-bindgen -- "$STATIC_LIB_PATH" "$OUTPUT_DIR" \
+cargo run -p uniffi_cli \
+    -- "$STATIC_LIB_PATH" "$OUTPUT_DIR" \
     --swift-sources --headers \
     --modulemap --module-name cove_core_ffi \
     --modulemap-filename module.modulemap
@@ -72,7 +73,6 @@ cargo run --bin uniffi-bindgen -- "$STATIC_LIB_PATH" "$OUTPUT_DIR" \
 SPM_PACKAGE="../ios/CoveCore/"
 XCFRAMEWORK_OUTPUT="$SPM_PACKAGE/Sources/cove_core_ffi.xcframework"
 GENERATED_SWIFT_SOURCES=$SPM_PACKAGE/Sources/CoveCore/generated
-
 
 rm -rf "$XCFRAMEWORK_OUTPUT" || true
 xcodebuild -create-xcframework \
