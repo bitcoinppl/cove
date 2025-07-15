@@ -257,21 +257,10 @@ version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e7e7c062f2229a767fe85062b8932352a7b8c1df586f91fae1017fd3dd281ef"
 dependencies = [
- "bdk_core 0.6.0",
+ "bdk_core",
  "bitcoin",
  "miniscript",
  "rusqlite",
- "serde",
-]
-
-[[package]]
-name = "bdk_core"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b545aea1efc090e4f71f1dd5468090d9f54c3de48002064c04895ef811fbe0b2"
-dependencies = [
- "bitcoin",
- "hashbrown 0.14.5",
  "serde",
 ]
 
@@ -292,7 +281,7 @@ version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28f25503fbb646a219a23145ca1a753f7e239232225c661df8353f05faf00116"
 dependencies = [
- "bdk_core 0.6.0",
+ "bdk_core",
  "electrum-client",
 ]
 
@@ -303,20 +292,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9bf0bcfc01d6d67f2515b1fd4eab77b220726ed2ade09f9b6c90c286e0b767"
 dependencies = [
  "async-trait",
- "bdk_core 0.6.0",
+ "bdk_core",
  "esplora-client",
  "futures",
-]
-
-[[package]]
-name = "bdk_file_store"
-version = "0.18.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2502fb75506a21d0b6e1b2002ecd9953ad1f70d82d4c3aaf812db1c028662ff1"
-dependencies = [
- "bdk_core 0.4.1",
- "bincode",
- "serde",
 ]
 
 [[package]]
@@ -325,7 +303,7 @@ version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc57201bbc43b2146b3355f43169b6c5254fb9e54c05e8d60ab4b9de9207dc60"
 dependencies = [
- "bdk_core 0.6.0",
+ "bdk_core",
  "bincode",
  "serde",
 ]
@@ -337,7 +315,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f278518ee6f2a17711fd4662dc34ce6153792a7a21575f05a9c8e2cb9ba36245"
 dependencies = [
  "bdk_chain",
- "bdk_file_store 0.21.0",
+ "bdk_file_store",
  "bip39",
  "bitcoin",
  "miniscript",
@@ -697,7 +675,7 @@ dependencies = [
  "bbqr",
  "bdk_electrum",
  "bdk_esplora",
- "bdk_file_store 0.18.1",
+ "bdk_file_store",
  "bdk_wallet",
  "bip329",
  "bip39",

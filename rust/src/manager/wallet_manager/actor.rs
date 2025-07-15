@@ -21,7 +21,7 @@ use bdk_wallet::{
     chain::{
         BlockId, TxGraph,
         bitcoin::Psbt,
-        spk_client::{FullScanRequest, FullScanResponse, SyncRequestBuilder, SyncResponse},
+        spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
     },
     error::CreateTxError,
 };
@@ -896,8 +896,7 @@ impl WalletActor {
         let _ = self.update_height().await?.await;
 
         let chain_tip = self.wallet.bdk.local_chain().tip();
-        let sync_request_builder =
-            SyncRequestBuilder::default().txids(vec![tx_id]).chain_tip(chain_tip);
+        let sync_request_builder = SyncRequest::builder().txids(vec![tx_id]).chain_tip(chain_tip);
 
         let sync_request = sync_request_builder.build();
 

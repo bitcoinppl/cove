@@ -101,7 +101,7 @@ cove-bdk = { path = "./crates/cove-bdk" }
 bitcoin = { workspace = true }
 bdk_wallet = { workspace = true }
 bip39 = { workspace = true }
-bdk_file_store = { version = "0.18.0" }
+bdk_file_store = { version = "0.21.0" }
 
 bdk_esplora = { version = "0.22", features = ["async-https", "tokio"] }
 bdk_electrum = { version = "0.23", features = ["use-rustls-ring"], default-features = false }

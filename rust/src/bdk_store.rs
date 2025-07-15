@@ -62,7 +62,7 @@ impl BdkStore {
         }
 
         warn!("{id} migrating wallet from file store");
-        let mut file_store_db = FileStore::<bdk_wallet::ChangeSet>::open(
+        let (mut file_store_db, _changeset) = FileStore::<bdk_wallet::ChangeSet>::load(
             id.to_string().as_bytes(),
             file_store_data_path(id),
         )
