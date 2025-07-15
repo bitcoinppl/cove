@@ -103,8 +103,8 @@ bdk_wallet = { workspace = true }
 bip39 = { workspace = true }
 bdk_file_store = { version = "0.18.0" }
 
-bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
-bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-features = false }
+bdk_esplora = { version = "0.22", features = ["async-https", "tokio"] }
+bdk_electrum = { version = "0.23", features = ["use-rustls-ring"], default-features = false }
 
 # import / export hardware wallet public keys
 pubport = { version = "0.4", features = [] }
