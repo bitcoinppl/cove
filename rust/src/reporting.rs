@@ -125,7 +125,7 @@ impl HistoricalFiatPriceReport {
             .map(|fiat_price| fiat_price * direction_multiplier)
             .map(|fiat_price| {
                 let rounded = (fiat_price * 100.0).round() / 100.0;
-                format!("{:.2}", rounded)
+                format!("{rounded:.2}")
             });
 
         let row = Row {

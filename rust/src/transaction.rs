@@ -78,7 +78,7 @@ impl Transaction {
         let labels = label_db.labels.all_labels_for_txn(tx.tx_node.txid).unwrap_or_default().into();
 
         match tx.chain_position {
-            BdkChainPosition::Unconfirmed { last_seen } => {
+            BdkChainPosition::Unconfirmed { last_seen, .. } => {
                 let unconfirmed = UnconfirmedTransaction {
                     txid,
                     sent_and_received,

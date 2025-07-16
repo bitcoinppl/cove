@@ -308,9 +308,7 @@ mod tests {
         };
 
         match ts.state {
-            TapSignerState::Sealed => {
-                assert!(true)
-            }
+            TapSignerState::Sealed => {}
             _ => panic!("not unused"),
         }
 

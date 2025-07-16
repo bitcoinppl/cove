@@ -57,7 +57,7 @@ impl TryFrom<u8> for Network {
             1 => Ok(Network::Testnet),
             4 => Ok(Network::Testnet4),
             2 => Ok(Network::Signet),
-            _ => Err(format!("Unknown network: {}", value)),
+            _ => Err(format!("Unknown network: {value}")),
         }
     }
 }
@@ -72,7 +72,7 @@ impl TryFrom<&str> for Network {
             "testnet4" | "Testnet4" => Ok(Network::Testnet4),
             "signet" | "Signet" => Ok(Network::Signet),
             "mutinynet" | "Mutinynet" => Ok(Network::Signet),
-            _ => Err(format!("Unknown network: {}", value)),
+            _ => Err(format!("Unknown network: {value}")),
         }
     }
 }

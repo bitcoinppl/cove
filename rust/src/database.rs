@@ -149,7 +149,7 @@ fn database_location() -> PathBuf {
 
     let mut rng = rand::rng();
     let random_string: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
-    let cove_db = format!("cove_{}.db", random_string);
+    let cove_db = format!("cove_{random_string}.db");
 
     let test_dir = ROOT_DATA_DIR.join("test");
     std::fs::create_dir_all(&test_dir).expect("failed to create test dir");

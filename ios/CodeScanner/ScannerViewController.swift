@@ -135,7 +135,8 @@
                     let button = UIButton(type: .system)
                     let image = UIImage(systemName: "photo.on.rectangle")
                     let background = UIImage(systemName: "capsule.fill")?.withTintColor(
-                        .systemBackground, renderingMode: .alwaysOriginal)
+                        .systemBackground, renderingMode: .alwaysOriginal
+                    )
                     button.setImage(image, for: .normal)
                     button.setBackgroundImage(background, for: .normal)
                     button.addTarget(

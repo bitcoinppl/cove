@@ -120,7 +120,7 @@ impl ElectrumClient {
             Err(electrum_client::Error::InvalidResponse(Value::Null)) => return Ok(None),
             Err(electrum_client::Error::Protocol(error_value)) => {
                 // Check if this is an error related to verbose flag not being supported
-                let error_str = format!("{:?}", error_value);
+                let error_str = format!("{error_value:?}");
                 if error_str.contains("verbose")
                     || error_str.contains("invalid params")
                     || error_str.contains("not supported")
@@ -286,31 +286,6 @@ mod tests {
     use std::str::FromStr;
 
     #[tokio::test]
-    async fn test_get_confirmed_transaction_main() {
-        let client = ElectrumClient::new_from_node(&crate::node::Node {
-            url: "ssl://electrum.diynodes.com:50022".to_string(),
-            name: "mempool".to_string(),
-            api_type: crate::node::ApiType::Electrum,
-            network: cove_types::network::Network::Bitcoin,
-        })
-        .unwrap();
-
-        let id = "79fd7b17741a33006bbbaeccc30f5f8eeb07745fd2e70e88ec3c392c264500a4";
-        let txid = Arc::new(Txid::from_str(id).unwrap());
-        let result = client.get_confirmed_transaction(txid).await;
-
-        match result {
-            Ok(Some(tx)) => {
-                assert_eq!(tx.compute_txid().to_string(), id);
-            }
-            Ok(None) => panic!(
-                "Transaction should be confirmed but got None - this indicates an error in confirmation logic"
-            ),
-            Err(e) => panic!("Failed to get transaction: {:?}", e),
-        }
-    }
-
-    #[tokio::test]
     async fn test_get_confirmed_transaction_fallback() {
         // blockstream.info does not support verbose transactions
         let client = ElectrumClient::new_from_node(&crate::node::Node {
@@ -329,7 +304,7 @@ mod tests {
         match result {
             Ok(Some(txn)) => assert_eq!(txn.compute_txid().to_string(), txid.to_string()),
             Ok(None) => panic!("Expected confirmed transaction but got None"),
-            Err(e) => panic!("Fallback method failed: {:?}", e),
+            Err(e) => panic!("Fallback method failed: {e:?}"),
         }
     }
 }

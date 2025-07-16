@@ -95,7 +95,7 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
 
         let origin = self.origin()?;
         let (fingerprint, path) = origin;
-        let origin = format!("{}([{}/{}])", desc_type_str, fingerprint, path);
+        let origin = format!("{desc_type_str}([{fingerprint}/{path}])");
         Ok(origin)
     }
 }

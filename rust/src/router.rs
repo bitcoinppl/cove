@@ -377,8 +377,8 @@ impl RouteFactory {
 impl Route {
     pub fn to_debug_log(&self) -> String {
         match self {
-            Self::Send(send_route) => format!("SendRoute: {:?}", send_route),
-            other => format!("{:?}", other),
+            Self::Send(send_route) => format!("SendRoute: {send_route:?}"),
+            other => format!("{other:?}"),
         }
     }
 }

@@ -21,7 +21,7 @@ use bdk_wallet::{
     chain::{
         BlockId, TxGraph,
         bitcoin::Psbt,
-        spk_client::{FullScanRequest, FullScanResponse, SyncRequestBuilder, SyncResponse},
+        spk_client::{FullScanRequest, FullScanResponse, SyncRequest, SyncResponse},
     },
     error::CreateTxError,
 };
@@ -896,8 +896,7 @@ impl WalletActor {
         let _ = self.update_height().await?.await;
 
         let chain_tip = self.wallet.bdk.local_chain().tip();
-        let sync_request_builder =
-            SyncRequestBuilder::default().txids(vec![tx_id]).chain_tip(chain_tip);
+        let sync_request_builder = SyncRequest::builder().txids(vec![tx_id]).chain_tip(chain_tip);
 
         let sync_request = sync_request_builder.build();
 
@@ -984,8 +983,7 @@ impl WalletActor {
 
         if total_amount > utxo_total_amount {
             return Err(Error::InsufficientFunds(format!(
-                "custom amount {} is greater than the total amount available, total available: {}, fees: {}",
-                total_amount, utxo_total_amount, fee_estimate,
+                "custom amount {total_amount} is greater than the total amount available, total available: {utxo_total_amount}, fees: {fee_estimate}",
             )));
         };
 
@@ -993,8 +991,7 @@ impl WalletActor {
             let mut max_send_estimate =
                 utxo_total_amount.checked_sub(fee_estimate).ok_or_else(|| {
                     Error::InsufficientFunds(format!(
-                        "no enough funds to cover the fees, total available: {}, fees: {}",
-                        total_amount, fee_estimate,
+                        "no enough funds to cover the fees, total available: {total_amount}, fees: {fee_estimate}",
                     ))
                 })?;
 
@@ -1002,8 +999,7 @@ impl WalletActor {
             while fee_psbt.is_none() {
                 if max_send_estimate < MIN_SEND_AMOUNT {
                     return Err(Error::InsufficientFunds(format!(
-                        "no enough funds to cover the fees, total available: {}, fees: {}",
-                        total_amount, fee_estimate,
+                        "no enough funds to cover the fees, total available: {total_amount}, fees: {fee_estimate}",
                     )));
                 }
 
@@ -1034,8 +1030,7 @@ impl WalletActor {
 
         let max_send_amount = utxo_total_amount.checked_sub(fee).ok_or_else(|| {
             Error::InsufficientFunds(format!(
-                "no enough funds to cover the fees, total available: {}, fees: {}",
-                total_amount, fee,
+                "no enough funds to cover the fees, total available: {total_amount}, fees: {fee}",
             ))
         })?;
 

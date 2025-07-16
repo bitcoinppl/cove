@@ -274,7 +274,7 @@ impl TapSignerReader {
         let mut auth_delay = self.reader.lock().await.auth_delay;
 
         while let Some(delay) = auth_delay {
-            let message = format!("Too many PIN attempts, waiting for {} seconds...", delay);
+            let message = format!("Too many PIN attempts, waiting for {delay} seconds...");
 
             self.reader.lock().await.wait(None).await.map_err(TransportError::from)?;
 

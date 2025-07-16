@@ -37,13 +37,13 @@ rand = "0.9"
 
 # bdk / bitcoin
 bitcoin = { version = "0.32" }
-bdk_wallet = { version = "1.2", features = ["keys-bip39", "file_store", "rusqlite"] }
+bdk_wallet = { version = "2.0", features = ["keys-bip39", "file_store", "rusqlite"] }
 bip39 = { version = "2.0.0", features = ["zeroize"] }
 bip329 = { version = "0.4.0" }
 
 # bitcoin nodes
-bdk_esplora = { version = "0.21", features = ["async-https", "tokio"] }
-bdk_electrum = { version = "0.22", features = ["use-rustls-ring"], default-features = false }
+bdk_esplora = { version = "0.22", features = ["async-https", "tokio"] }
+bdk_electrum = { version = "0.23", features = ["use-rustls-ring"], default-features = false }
 # bdk_bitcoind_rpc = { version = "0.12", features = [] }
 
 # fast hashmap
@@ -101,10 +101,10 @@ cove-bdk = { path = "./crates/cove-bdk" }
 bitcoin = { workspace = true }
 bdk_wallet = { workspace = true }
 bip39 = { workspace = true }
-bdk_file_store = { version = "0.18.0" }
+bdk_file_store = { version = "0.21.0" }
 
-bdk_esplora = { version = "0.20", features = ["async-https", "tokio"] }
-bdk_electrum = { version = "0.21", features = ["use-rustls-ring"], default-features = false }
+bdk_esplora = { version = "0.22", features = ["async-https", "tokio"] }
+bdk_electrum = { version = "0.23", features = ["use-rustls-ring"], default-features = false }
 
 # import / export hardware wallet public keys
 pubport = { version = "0.4", features = [] }

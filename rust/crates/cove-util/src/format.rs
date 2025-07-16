@@ -50,14 +50,14 @@ impl<T: Numeric> NumberFormatter for T {
             Some(decimal_index) => {
                 let decimals = last_index - decimal_index;
                 match decimals {
-                    0 => format!("{}00", fmt),
-                    1 => format!("{}0", fmt),
+                    0 => format!("{fmt}00"),
+                    1 => format!("{fmt}0"),
                     2 => fmt.to_string(),
                     _ => fmt[0..decimal_index + 2].to_string(),
                 }
             }
 
-            None => format!("{}.00", fmt),
+            None => format!("{fmt}.00"),
         }
     }
 }
@@ -77,7 +77,7 @@ pub fn btc_typing(amount: &str) -> Option<String> {
     let max_decimal_places_to_take = after_decimal.len().min(8);
     let decimal_places = &after_decimal[..max_decimal_places_to_take];
 
-    let final_string = format!("{}{}{}", int_part_string, decimal, decimal_places);
+    let final_string = format!("{int_part_string}{decimal}{decimal_places}");
 
     Some(final_string)
 }

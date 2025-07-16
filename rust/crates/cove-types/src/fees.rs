@@ -160,7 +160,7 @@ impl FeeSpeed {
             FeeSpeed::Custom { duration_mins } => {
                 let duration_mins = *duration_mins;
                 if duration_mins < 60_u32 {
-                    return format!("{} minutes", duration_mins);
+                    return format!("{duration_mins} minutes");
                 }
 
                 let hours = duration_mins / 60;

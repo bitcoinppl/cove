@@ -10,7 +10,7 @@ pub enum ChainPosition {
 impl From<BdkChainPosition<&ConfirmationBlockTime>> for ChainPosition {
     fn from(chain_position: BdkChainPosition<&ConfirmationBlockTime>) -> Self {
         match chain_position {
-            BdkChainPosition::Unconfirmed { last_seen } => {
+            BdkChainPosition::Unconfirmed { last_seen, .. } => {
                 Self::Unconfirmed(last_seen.unwrap_or_default())
             }
             BdkChainPosition::Confirmed { anchor: confirmation_blocktime, .. } => {
