@@ -17,7 +17,7 @@ pub enum FileHandlerError {
     #[error("Unable to open file {0}")]
     OpenFile(String),
 
-    #[error("Unable to to read file {0}")]
+    #[error("Unable to read file {0}")]
     ReadFile(String),
 
     #[error("File is not a recognized format: {0:?}")]

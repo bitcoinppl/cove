@@ -52,7 +52,7 @@ pub enum MultiQrError {
     #[error("Cannot add binary data to BBQR")]
     CannotAddBinaryDataToBbqr,
 
-    #[error("BBQr did not container seed words, found: {0}")]
+    #[error("BBQR did not contain seed words, found: {0}")]
     BbqrDidNotContainSeedWords(String),
 
     #[error(transparent)]

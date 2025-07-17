@@ -7,7 +7,7 @@ pub trait ResultExt<T, InitialError> {
     /// that takes a String, using the Display implementation of InitialError.
     ///
     /// # Example
-    /// ```
+    /// ```rust
     /// use cove_util::result_ext::ResultExt;
     ///
     /// #[derive(Debug, thiserror::Error)]

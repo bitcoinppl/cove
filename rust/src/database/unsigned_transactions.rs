@@ -131,9 +131,7 @@ impl UnsignedTransactionsTable {
     fn get(&self, key: &TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
         let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
-        let table = read_txn
-            .open_table(MAIN_TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
 
         let value = table
             .get(key)
@@ -146,9 +144,7 @@ impl UnsignedTransactionsTable {
     fn get_tx_ids_for_wallet_id(&self, key: &WalletId) -> Result<Vec<TxId>, Error> {
         let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
-        let table = read_txn
-            .open_table(BY_WALLET_TABLE)
-            .map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(BY_WALLET_TABLE).map_err_str(Error::TableAccess)?;
 
         let ids = table
             .get(key)
