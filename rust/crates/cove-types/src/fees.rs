@@ -251,10 +251,10 @@ impl FeeRateOptionsWithTotalFee {
     #[uniffi::method]
     pub fn get_fee_rate_with(&self, fee_rate: f32) -> Option<Arc<FeeRateOptionWithTotalFee>> {
         debug!("get_fee_rate_with: {fee_rate}");
-        if let Some(custom) = self.custom {
-            if custom.fee_rate.sat_per_vb() == fee_rate {
-                return Some(custom.into());
-            }
+        if let Some(custom) = self.custom
+            && custom.fee_rate.sat_per_vb() == fee_rate
+        {
+            return Some(custom.into());
         }
 
         if self.fast.fee_rate.sat_per_vb() == fee_rate {

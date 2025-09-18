@@ -126,11 +126,11 @@ impl BtcOnChangeHandler {
         // ---------------------------------------------------------------------
         // 4. apply rules
         // ---------------------------------------------------------------------
-        if let Some(max) = &self.max_selected {
-            if &amount < max {
-                // clear the max selected
-                changeset.max_selected = Some(None);
-            }
+        if let Some(max) = &self.max_selected
+            && &amount < max
+        {
+            // clear the max selected
+            changeset.max_selected = Some(None);
         }
 
         // set the amount
@@ -146,10 +146,10 @@ impl BtcOnChangeHandler {
             Unit::Btc => format::btc_typing(&unformatted),
         };
 
-        if let Some(entering_amount_btc) = entering_amount_btc {
-            if entering_amount_btc != new_value {
-                changeset.entering_amount_btc = Some(entering_amount_btc);
-            }
+        if let Some(entering_amount_btc) = entering_amount_btc
+            && entering_amount_btc != new_value
+        {
+            changeset.entering_amount_btc = Some(entering_amount_btc);
         }
 
         changeset

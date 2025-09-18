@@ -454,7 +454,7 @@ impl WalletScanWorker {
                     debug!("checked {current_address} addresses for {wallet_type}");
 
                     // every 5 addresses, save the scan state
-                    if current_address % 5 == 0 {
+                    if current_address.is_multiple_of(5) {
                         let scan_state =
                             ScanningInfo { address_type: wallet_type, count: current_address };
 

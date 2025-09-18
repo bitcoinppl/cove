@@ -19,16 +19,16 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 impl NfcMessage {
     #[uniffi::constructor(default(string = None, data = None))]
     pub fn try_new(mut string: Option<String>, mut data: Option<Vec<u8>>) -> Result<Self> {
-        if let Some(str) = &string {
-            if str.is_empty() {
-                string = None;
-            }
+        if let Some(str) = &string
+            && str.is_empty()
+        {
+            string = None;
         }
 
-        if let Some(d) = &data {
-            if d.is_empty() {
-                data = None;
-            }
+        if let Some(d) = &data
+            && d.is_empty()
+        {
+            data = None;
         }
 
         match (string, data) {

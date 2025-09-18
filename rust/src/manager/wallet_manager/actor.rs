@@ -711,11 +711,12 @@ impl WalletActor {
     pub async fn start_wallet_scan_in_task(&mut self, force_scan: bool) -> ActorResult<()> {
         debug!("start_wallet_scan");
 
-        if let Some(last_scan) = self.last_scan_finished() {
-            if elapsed_secs_since(last_scan) < 15 && !force_scan {
-                debug!("skipping wallet scan, last scan was less than 15 seconds ago");
-                return Produces::ok(());
-            }
+        if let Some(last_scan) = self.last_scan_finished()
+            && elapsed_secs_since(last_scan) < 15
+            && !force_scan
+        {
+            debug!("skipping wallet scan, last scan was less than 15 seconds ago");
+            return Produces::ok(());
         }
 
         // check the node connection, and send frontend the error if it fails

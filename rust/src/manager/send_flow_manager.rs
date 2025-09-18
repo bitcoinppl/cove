@@ -1423,16 +1423,16 @@ impl RustSendFlowManager {
 
         // set amount if its valid
         let is_coin_control = self.state.lock().mode.is_coin_control();
-        if let Some(amount) = address_with_network.amount {
-            if !is_coin_control {
-                let max_was_selected = self.state.lock().max_selected.take().is_some();
-                if max_was_selected {
-                    sender.queue(Message::UnsetMaxSelected)
-                }
-
-                should_show_amount_error = true;
-                self.handle_amount_changed(amount);
+        if let Some(amount) = address_with_network.amount
+            && !is_coin_control
+        {
+            let max_was_selected = self.state.lock().max_selected.take().is_some();
+            if max_was_selected {
+                sender.queue(Message::UnsetMaxSelected)
             }
+
+            should_show_amount_error = true;
+            self.handle_amount_changed(amount);
         }
 
         // if amount is invalid, go to amount field
@@ -1525,11 +1525,11 @@ impl RustSendFlowManager {
             let details = Arc::new(details);
 
             // save the unsigned transaction if its a cold wallet
-            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly) {
-                if let Err(e) = manager.save_unsigned_transaction(details.clone()) {
-                    let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
-                    me.send_alert_async(error).await;
-                }
+            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
+                && let Err(e) = manager.save_unsigned_transaction(details.clone())
+            {
+                let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
+                me.send_alert_async(error).await;
             }
 
             // update the route send the frontend to the proper next screen

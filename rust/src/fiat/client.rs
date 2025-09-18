@@ -132,10 +132,10 @@ impl FiatClient {
         let prices: PriceResponse = response.json().await?;
 
         // saved prices are the same as the new ones don't need to update
-        if let Some(saved_prices) = *PRICES.load().as_ref() {
-            if prices == saved_prices {
-                return Ok(saved_prices);
-            }
+        if let Some(saved_prices) = *PRICES.load().as_ref()
+            && prices == saved_prices
+        {
+            return Ok(saved_prices);
         }
 
         // update global prices
@@ -239,10 +239,10 @@ pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
         .await?;
 
     // saved prices are the same as the new ones don't need to update
-    if let Some(saved_prices) = *PRICES.load().as_ref() {
-        if prices == saved_prices {
-            return Ok(());
-        }
+    if let Some(saved_prices) = *PRICES.load().as_ref()
+        && prices == saved_prices
+    {
+        return Ok(());
     }
 
     update_prices(prices)?;
