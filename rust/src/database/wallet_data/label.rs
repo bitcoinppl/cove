@@ -3,6 +3,7 @@ use std::{borrow::Borrow, fmt::Debug, sync::Arc};
 use crate::database::{Record, error::DatabaseError, record::Timestamps};
 use bip329::{AddressRecord, InputRecord, Label, Labels, OutputRecord, TransactionRecord};
 use bitcoin::{Address, address::NetworkUnchecked};
+use cove_util::result_ext::ResultExt as _;
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata as _, TableDefinition};
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -254,16 +255,13 @@ impl LabelsTable {
         labels: impl IntoIterator<Item = Label>,
         timestamp: Timestamps,
     ) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
         labels
             .into_iter()
             .try_for_each(|l| self.insert_label_with_write_txn(l, timestamp, &write_txn))?;
 
-        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
     }
@@ -294,14 +292,11 @@ impl LabelsTable {
         timestamps: Timestamps,
     ) -> Result<(), Error> {
         let label: Label = label.into();
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
         self.insert_label_with_write_txn(label, timestamps, &write_txn)?;
 
-        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
     }
@@ -310,16 +305,13 @@ impl LabelsTable {
         &self,
         records: impl IntoIterator<Item = Record<Label>>,
     ) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
         records.into_iter().try_for_each(|record| {
             self.insert_label_with_write_txn(record.item, record.timestamps, &write_txn)
         })?;
 
-        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
     }
@@ -369,14 +361,11 @@ impl LabelsTable {
 
     // MARK: DELETE
     pub fn delete_labels(&self, labels: impl IntoIterator<Item = Label>) -> Result<(), Error> {
-        let write_txn = self
-            .db
-            .begin_write()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
         labels.into_iter().try_for_each(|l| self.delete_label_with_write_txn(l, &write_txn))?;
 
-        write_txn.commit().map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
     }
@@ -423,14 +412,9 @@ impl LabelsTable {
         K: redb::Key + Debug + Clone + Send + Sync + 'static,
         V: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + 'static,
     {
-        let read_txn = self
-            .db
-            .begin_read()
-            .map_err(|error| DatabaseError::DatabaseAccess(error.to_string()))?;
+        let read_txn = self.db.begin_read().map_err_str(DatabaseError::DatabaseAccess)?;
 
-        let table = read_txn
-            .open_table(table)
-            .map_err(|error| DatabaseError::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(table).map_err_str(DatabaseError::TableAccess)?;
 
         Ok(table)
     }

@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
-use cove_util::format::NumberFormatter as _;
+use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 
 use crate::{
     app::FfiApp,
@@ -237,7 +237,7 @@ impl RustWalletManager {
         let metadata = Database::global()
             .wallets
             .get(&id, network, mode)
-            .map_err(|e| Error::GetSelectedWalletError(e.to_string()))?
+            .map_err_str(Error::GetSelectedWalletError)?
             .ok_or(Error::WalletDoesNotExist)?;
 
         let id = metadata.id.clone();
@@ -357,10 +357,7 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
-        let fees = fee_client
-            .fetch_and_get_fees()
-            .await
-            .map_err(|error| Error::FeesError(error.to_string()))?;
+        let fees = fee_client.fetch_and_get_fees().await.map_err_str(Error::FeesError)?;
 
         Ok(fees.into())
     }
@@ -372,7 +369,7 @@ impl RustWalletManager {
         let txns_with_prices = call!(self.actor.txns_with_prices()).await.unwrap().unwrap();
 
         let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
-        let csv = report.create_csv().map_err(|e| Error::CsvCreationError(e.to_string()))?;
+        let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
 
         Ok(csv.into_string())
     }
@@ -626,7 +623,7 @@ impl RustWalletManager {
         let details = task::spawn(async move {
             call!(actor.transaction_details(tx_id))
                 .await
-                .map_err(|error| Error::TransactionDetailsError(error.to_string()))
+                .map_err_str(Error::TransactionDetailsError)
         })
         .await
         .unwrap()?;
@@ -649,9 +646,8 @@ impl RustWalletManager {
     /// Get the next address for the wallet
     #[uniffi::method]
     pub async fn next_address(&self) -> Result<AddressInfoWithDerivation, Error> {
-        let address = call!(self.actor.next_address())
-            .await
-            .map_err(|error| Error::NextAddressError(error.to_string()))?;
+        let address =
+            call!(self.actor.next_address()).await.map_err_str(Error::NextAddressError)?;
 
         Ok(address)
     }
@@ -813,10 +809,7 @@ impl RustWalletManager {
 
     pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
         let fee_client = &FEE_CLIENT;
-        let fees = fee_client
-            .fetch_and_get_fees()
-            .await
-            .map_err(|error| Error::FeesError(error.to_string()))?;
+        let fees = fee_client.fetch_and_get_fees().await.map_err_str(Error::FeesError)?;
 
         Ok(fees.into())
     }

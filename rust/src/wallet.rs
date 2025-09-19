@@ -22,6 +22,7 @@ use bip39::Mnemonic;
 use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_common::consts::GAP_LIMIT;
 use cove_types::{Network, address::AddressInfoWithDerivation};
+use cove_util::result_ext::ResultExt as _;
 use eyre::Context as _;
 use fingerprint::Fingerprint;
 use metadata::{DiscoveryState, HardwareWalletMetadata, WalletId, WalletMetadata, WalletType};
@@ -184,11 +185,11 @@ impl Wallet {
         let mode = Database::global().global_config.wallet_mode();
 
         let mut store = crate::bdk_store::BdkStore::try_new(&id, network)
-            .map_err(|e| WalletError::LoadError(e.to_string()))?;
+            .map_err_str(WalletError::LoadError)?;
 
         let wallet = bdk_wallet::Wallet::load()
             .load_wallet(&mut store.conn)
-            .map_err(|error| WalletError::LoadError(error.to_string()))?
+            .map_err_str(WalletError::LoadError)?
             .ok_or(WalletError::WalletNotFound)?;
 
         let mut metadata = Database::global()
@@ -248,8 +249,7 @@ impl Wallet {
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
 
-        let mut store =
-            BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
+        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
 
         let pubport_descriptors = match pubport {
             Format::Descriptor(descriptors) => descriptors,
@@ -306,7 +306,7 @@ impl Wallet {
             .into_create_params()
             .network(network.into())
             .create_wallet(&mut store.conn)
-            .map_err(|error| WalletError::BdkError(error.to_string()))?;
+            .map_err_str(WalletError::BdkError)?;
 
         // save public key in keychain too
         keychain.save_wallet_xpub(&id, xpub)?;
@@ -336,11 +336,10 @@ impl Wallet {
 
         let id = WalletId::new();
 
-        let mut store =
-            BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
+        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
 
         let descriptors = Descriptors::new_from_tap_signer(&derive)
-            .map_err(|error| WalletError::DescriptorKeyParseError(error.to_string()))?;
+            .map_err_str(WalletError::DescriptorKeyParseError)?;
 
         let fingerprint = Fingerprint::from(derive.master_fingerprint());
 
@@ -364,7 +363,7 @@ impl Wallet {
             .into_create_params()
             .network(network.into())
             .create_wallet(&mut store.conn)
-            .map_err(|error| WalletError::BdkError(error.to_string()))?;
+            .map_err_str(WalletError::BdkError)?;
 
         // save public key in keychain too
         keychain.save_wallet_xpub(&id, xpub)?;
@@ -402,14 +401,14 @@ impl Wallet {
         })?;
 
         let store = BdkStore::try_new(&id, self.network);
-        let mut db = store.map_err(|e| WalletError::LoadError(e.to_string()))?.conn;
+        let mut db = store.map_err_str(WalletError::LoadError)?.conn;
 
         let descriptors: Descriptors = descriptors.into();
         let wallet = descriptors
             .into_create_params()
             .network(self.network.into())
             .create_wallet(&mut db)
-            .map_err(|error| WalletError::BdkError(error.to_string()))?;
+            .map_err_str(WalletError::BdkError)?;
 
         // switch db and wallet
         self.bdk = wallet;
@@ -474,8 +473,7 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
 
         let id = metadata.id.clone();
-        let mut store =
-            BdkStore::try_new(&id, network).map_err(|e| WalletError::LoadError(e.to_string()))?;
+        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
         let origin = descriptors.origin().ok();
@@ -487,7 +485,7 @@ impl Wallet {
             .into_create_params()
             .network(network.into())
             .create_wallet(&mut store.conn)
-            .map_err(|error| WalletError::BdkError(error.to_string()))?;
+            .map_err_str(WalletError::BdkError)?;
 
         Ok(Self { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
     }
@@ -587,9 +585,7 @@ impl Wallet {
     }
 
     pub fn persist(&mut self) -> Result<(), WalletError> {
-        self.bdk
-            .persist(&mut self.db.lock())
-            .map_err(|error| WalletError::PersistError(error.to_string()))?;
+        self.bdk.persist(&mut self.db.lock()).map_err_str(WalletError::PersistError)?;
 
         Ok(())
     }

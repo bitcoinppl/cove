@@ -3,6 +3,8 @@ use std::sync::Arc;
 use redb::TableDefinition;
 use tracing::debug;
 
+use cove_util::result_ext::ResultExt as _;
+
 use crate::{
     app::reconcile::{Update, Updater},
     fiat::client::PriceResponse,
@@ -68,38 +70,29 @@ impl GlobalCacheTable {
 
 impl GlobalCacheTable {
     pub fn get(&self, key: GlobalCacheKey) -> Result<Option<GlobalCacheData>, Error> {
-        let read_txn =
-            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
-        let table =
-            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
         let key: &'static str = key.into();
-        let value = table
-            .get(key)
-            .map_err(|error| GlobalCacheTableError::Read(error.to_string()))?
-            .map(|value| value.value());
+        let value =
+            table.get(key).map_err_str(GlobalCacheTableError::Read)?.map(|value| value.value());
 
         Ok(value)
     }
 
     pub fn set(&self, key: GlobalCacheKey, value: GlobalCacheData) -> Result<(), Error> {
         debug!("set global cache: {key:?} -> {value:?}");
-        let write_txn =
-            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
         {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
             let key: &'static str = key.into();
-            table
-                .insert(key, value)
-                .map_err(|error| GlobalCacheTableError::Save(error.to_string()))?;
+            table.insert(key, value).map_err_str(GlobalCacheTableError::Save)?;
         }
 
-        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Updater::send_update(Update::DatabaseUpdated);
 

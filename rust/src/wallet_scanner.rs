@@ -6,6 +6,7 @@ use bdk_wallet::{
     bitcoin::{Address, Network},
 };
 use bip39::Mnemonic;
+use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
 use flume::Sender;
 use pubport::formats::Json;
@@ -454,7 +455,7 @@ impl WalletScanWorker {
                     debug!("checked {current_address} addresses for {wallet_type}");
 
                     // every 5 addresses, save the scan state
-                    if current_address % 5 == 0 {
+                    if current_address.is_multiple_of(5) {
                         let scan_state =
                             ScanningInfo { address_type: wallet_type, count: current_address };
 
@@ -519,8 +520,8 @@ impl Wallets {
                 let params = BdkWallet::create(json.external.clone(), json.internal.clone())
                     .network(network);
 
-                let wallet = BdkWallet::create_with_params(params)
-                    .map_err(|error| WalletError::BdkError(error.to_string()))?;
+                let wallet =
+                    BdkWallet::create_with_params(params).map_err_str(WalletError::BdkError)?;
 
                 wallets[index(type_)] = Some((type_, wallet));
             }

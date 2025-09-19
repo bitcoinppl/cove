@@ -3,6 +3,8 @@ pub mod record;
 
 use std::sync::Arc;
 
+use cove_util::result_ext::ResultExt as _;
+
 use ahash::AHashMap as HashMap;
 use network_block_height::NetworkBlockHeight;
 use record::HistoricalPriceRecord;
@@ -48,16 +50,12 @@ impl HistoricalPriceTable {
     ) -> Result<Option<HistoricalPriceRecord>, Error> {
         let key = NetworkBlockHeight::new(network, block_height);
 
-        let read_txn =
-            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
-        let table =
-            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
-        let value = table
-            .get(key)
-            .map_err(|error| HistoricalPriceTableError::Read(error.to_string()))?
-            .map(|value| value.value());
+        let value =
+            table.get(key).map_err_str(HistoricalPriceTableError::Read)?.map(|value| value.value());
 
         Ok(value)
     }
@@ -74,20 +72,15 @@ impl HistoricalPriceTable {
         // convert to the more compact record format
         let price_record: HistoricalPriceRecord = price.into();
 
-        let write_txn =
-            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
         {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
-            table
-                .insert(key, &price_record)
-                .map_err(|error| HistoricalPriceTableError::Save(error.to_string()))?;
+            table.insert(key, &price_record).map_err_str(HistoricalPriceTableError::Save)?;
         }
 
-        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Ok(())
     }
@@ -99,11 +92,9 @@ impl HistoricalPriceTable {
         network: Network,
         block_heights: &[u32],
     ) -> Result<HashMap<u32, Option<HistoricalPrice>>, Error> {
-        let read_txn =
-            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
-        let table =
-            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
         let mut prices = HashMap::with_capacity(block_heights.len());
 
@@ -112,7 +103,7 @@ impl HistoricalPriceTable {
             let key = NetworkBlockHeight::new(network, block_height);
             let value = table
                 .get(key)
-                .map_err(|error| HistoricalPriceTableError::Read(error.to_string()))?
+                .map_err_str(HistoricalPriceTableError::Read)?
                 .map(|value| value.value());
 
             prices.insert(block_height, value.map(HistoricalPrice::from));
@@ -124,19 +115,16 @@ impl HistoricalPriceTable {
     /// DANGEROUS: Deletes all prices from the table.
     #[allow(dead_code)]
     fn clear(&self) -> Result<(), Error> {
-        let write_txn =
-            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
         {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
             // delete all the records
-            table.retain(|_, _| false).map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+            table.retain(|_, _| false).map_err_str(Error::DatabaseAccess)?;
         }
 
-        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
         Ok(())
     }
 }

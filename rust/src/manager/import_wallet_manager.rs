@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bip39::{Language, Mnemonic};
+use cove_util::result_ext::ResultExt as _;
 use flume::{Receiver, Sender};
 use parking_lot::RwLock;
 
@@ -100,7 +101,7 @@ impl RustImportWalletManager {
         let words = entered_words.into_iter().flatten().collect::<Vec<String>>().join(" ");
 
         let mnemonic = Mnemonic::parse_in_normalized(Language::English, &words)
-            .map_err(|e| ImportWalletError::InvalidWordGroup(e.to_string()))?;
+            .map_err_str(ImportWalletError::InvalidWordGroup)?;
 
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
@@ -133,7 +134,7 @@ impl RustImportWalletManager {
             WalletMetadata::new_imported_from_mnemonic(name, network, fingerprint);
 
         Wallet::try_new_persisted_and_selected(wallet_metadata.clone(), mnemonic.clone(), None)
-            .map_err(|e| ImportWalletError::WalletImportError(e.to_string()))?;
+            .map_err_str(ImportWalletError::WalletImportError)?;
 
         Ok(wallet_metadata)
     }

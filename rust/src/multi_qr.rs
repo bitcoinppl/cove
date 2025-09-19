@@ -14,6 +14,7 @@ use crate::{
     multi_format::StringOrData,
     seed_qr::{SeedQr, SeedQrError},
 };
+use cove_util::result_ext::ResultExt as _;
 
 #[derive(uniffi::Object)]
 #[allow(dead_code)]
@@ -114,10 +115,8 @@ impl MultiQr {
             (Self::SeedQr(seed_qr), _) => MultiQrScanResult::SeedQr(Arc::new(seed_qr.clone())),
             (Self::Single(_), R::String(qr)) => MultiQrScanResult::Single(qr),
             (Self::Bbqr(_, joiner), R::String(qr)) => {
-                let join_result = joiner
-                    .lock()
-                    .add_part(qr)
-                    .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+                let join_result =
+                    joiner.lock().add_part(qr).map_err_str(MultiQrError::ParseError)?;
 
                 match join_result {
                     ContinuousJoinResult::Complete(result) => {
@@ -193,10 +192,8 @@ impl MultiQr {
     pub fn add_part(&self, qr: String) -> Result<BbqrJoinResult, MultiQrError> {
         match self {
             MultiQr::Bbqr(_, continuous_joiner) => {
-                let join_result = continuous_joiner
-                    .lock()
-                    .add_part(qr)
-                    .map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+                let join_result =
+                    continuous_joiner.lock().add_part(qr).map_err_str(MultiQrError::ParseError)?;
 
                 Ok(BbqrJoinResult(join_result))
             }
@@ -248,8 +245,7 @@ impl BbqrJoinResult {
 impl BbqrJoined {
     pub fn get_seed_words(&self) -> Result<Vec<String>, Error> {
         let words_str = str::from_utf8(&self.0.data).map_err(|_| MultiQrError::InvalidUtf8)?;
-        let mnemonic =
-            words_str.parse_mnemonic().map_err(|e| MultiQrError::ParseError(e.to_string()))?;
+        let mnemonic = words_str.parse_mnemonic().map_err_str(MultiQrError::ParseError)?;
 
         Ok(mnemonic.words().map(ToString::to_string).collect())
     }

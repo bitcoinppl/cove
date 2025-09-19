@@ -3,6 +3,8 @@ use std::{fmt::Display, sync::Arc, time::Duration};
 use redb::{ReadOnlyTable, ReadableTableMetadata, TableDefinition};
 use tracing::debug;
 
+use cove_util::result_ext::ResultExt as _;
+
 use crate::{
     app::reconcile::{AppStateReconcileMessage, Update, Updater},
     network::Network,
@@ -153,7 +155,7 @@ impl WalletsTable {
 
         let value = table
             .get(key.as_str())
-            .map_err(|error| WalletTableError::ReadError(error.to_string()))?
+            .map_err_str(WalletTableError::ReadError)?
             .map(|value| value.value())
             .unwrap_or(vec![]);
 
@@ -255,12 +257,10 @@ impl WalletsTable {
             let mut table = write_txn.open_table(TABLE)?;
             let key = WalletKey::from((network, mode)).to_string();
 
-            table
-                .insert(&*key, wallets)
-                .map_err(|error| WalletTableError::SaveError(error.to_string()))?;
+            table.insert(&*key, wallets).map_err_str(WalletTableError::SaveError)?;
         }
 
-        write_txn.commit().map_err(|error| WalletTableError::SaveError(error.to_string()))?;
+        write_txn.commit().map_err_str(WalletTableError::SaveError)?;
 
         Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
 
@@ -289,11 +289,9 @@ impl WalletsTable {
     }
 
     fn read_table<'a>(&self) -> Result<ReadOnlyTable<&'a str, Json<Vec<WalletMetadata>>>, Error> {
-        let read_txn =
-            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
-        let table =
-            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
         Ok(table)
     }

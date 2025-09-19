@@ -11,6 +11,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use cove_util::result_ext::ResultExt as _;
+
 use crate::{
     app::{App, AppAction, FfiApp},
     fee_client::FEE_CLIENT,
@@ -514,8 +516,7 @@ impl RustSendFlowManager {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let psbt = self.build_psbt(None, None, fee_rate).await?;
 
-        let total_fee =
-            psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))?;
+        let total_fee = psbt.fee().map_err_str(Error::UnableToGetFeeDetails)?;
 
         let fee_rate_option = FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee };
 
@@ -1202,7 +1203,7 @@ impl RustSendFlowManager {
         let psbt =
             call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate)).await;
 
-        let psbt = psbt.map_err(|error| SendFlowError::UnableToBuildTxn(error.to_string()))??;
+        let psbt = psbt.map_err_str(SendFlowError::UnableToBuildTxn)??;
         Ok(psbt.into())
     }
 
@@ -1261,7 +1262,7 @@ impl RustSendFlowManager {
         let psbt: Psbt = call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate))
             .await
             .unwrap()
-            .map_err(|error| Error::UnableToGetMaxSend(error.to_string()))?
+            .map_err_str(Error::UnableToGetMaxSend)?
             .into();
 
         let total = Arc::new(psbt.output_total_amount());
@@ -1423,16 +1424,16 @@ impl RustSendFlowManager {
 
         // set amount if its valid
         let is_coin_control = self.state.lock().mode.is_coin_control();
-        if let Some(amount) = address_with_network.amount {
-            if !is_coin_control {
-                let max_was_selected = self.state.lock().max_selected.take().is_some();
-                if max_was_selected {
-                    sender.queue(Message::UnsetMaxSelected)
-                }
-
-                should_show_amount_error = true;
-                self.handle_amount_changed(amount);
+        if let Some(amount) = address_with_network.amount
+            && !is_coin_control
+        {
+            let max_was_selected = self.state.lock().max_selected.take().is_some();
+            if max_was_selected {
+                sender.queue(Message::UnsetMaxSelected)
             }
+
+            should_show_amount_error = true;
+            self.handle_amount_changed(amount);
         }
 
         // if amount is invalid, go to amount field
@@ -1525,11 +1526,11 @@ impl RustSendFlowManager {
             let details = Arc::new(details);
 
             // save the unsigned transaction if its a cold wallet
-            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly) {
-                if let Err(e) = manager.save_unsigned_transaction(details.clone()) {
-                    let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
-                    me.send_alert_async(error).await;
-                }
+            if matches!(wallet_type, WalletType::Cold | WalletType::XpubOnly)
+                && let Err(e) = manager.save_unsigned_transaction(details.clone())
+            {
+                let error = SendFlowError::UnableToSaveUnsignedTransaction(e.to_string());
+                me.send_alert_async(error).await;
             }
 
             // update the route send the frontend to the proper next screen
@@ -1815,11 +1816,9 @@ impl RustSendFlowManager {
         let psbt = self
             .build_psbt(Some(address), Some(amount), selected_fee_rate.fee_rate)
             .await
-            .map_err(|error| Error::UnableToGetFeeDetails(error.to_string()));
+            .map_err_str(Error::UnableToGetFeeDetails);
 
-        let total_fee = psbt.and_then(|psbt| {
-            psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))
-        });
+        let total_fee = psbt.and_then(|psbt| psbt.fee().map_err_str(Error::UnableToGetFeeDetails));
 
         let total_fee = match total_fee {
             Ok(total_fee) => total_fee,

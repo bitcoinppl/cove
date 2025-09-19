@@ -7,7 +7,7 @@ pub fn new(b: &[u8]) -> Stream<'_> {
 
 pub trait StreamExt {
     fn len(&self) -> usize;
-    fn to_stream(&self) -> Stream;
+    fn to_stream(&self) -> Stream<'_>;
     fn to_vec(self) -> Vec<u8>;
     fn is_empty(&self) -> bool {
         self.len() == 0
@@ -19,7 +19,7 @@ impl StreamExt for Stream<'_> {
         self.as_ref().len()
     }
 
-    fn to_stream(&self) -> Stream {
+    fn to_stream(&self) -> Stream<'_> {
         *self
     }
 
@@ -33,7 +33,7 @@ impl StreamExt for Vec<u8> {
         self.len()
     }
 
-    fn to_stream(&self) -> Stream {
+    fn to_stream(&self) -> Stream<'_> {
         new(self)
     }
 
