@@ -19,7 +19,7 @@ pub struct Csv(Vec<u8>);
 
 #[derive(Debug, thiserror::Error)]
 pub enum CsvCreationError {
-    #[error("failed to fianlize csv: {0}")]
+    #[error("failed to finalize csv: {0}")]
     FinalizeCsv(String),
 
     #[error("failed to write csv row: {0}")]
@@ -32,7 +32,7 @@ impl Csv {
     }
 
     pub fn into_string(self) -> String {
-        String::from_utf8(self.into_bytes()).expect("we only create rows with valid uft8 strings")
+        String::from_utf8(self.into_bytes()).expect("we only create rows with valid utf8 strings")
     }
 }
 type Row = TxnWithHistoricalPrice;

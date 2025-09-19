@@ -634,7 +634,7 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn number_of_confirmations(&self, block_height: u32) -> Result<u32, Error> {
         let current_height = self.current_block_height().await?;
-        Ok(current_height - block_height + 1)
+        if block_height > current_height { Ok(0) } else { Ok(current_height - block_height + 1) }
     }
 
     #[uniffi::method]
@@ -850,7 +850,7 @@ impl RustWalletManager {
                     WalletAddressType::WrappedSegwit => json.bip49.clone(),
                     WalletAddressType::Legacy => json.bip44.clone(),
                     _ => {
-                        error!("trying to swtich to native segwit, but already segwit");
+                        error!("trying to switch to native segwit, but already segwit");
                         return Ok(());
                     }
                 };

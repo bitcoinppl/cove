@@ -2,6 +2,8 @@ pub mod encryption;
 pub mod format;
 pub mod result_ext;
 
+pub use result_ext::ResultExt;
+
 use bitcoin::secp256k1::hashes::sha256::Hash as Sha256Hash;
 use std::hash::{DefaultHasher, Hasher as _};
 
