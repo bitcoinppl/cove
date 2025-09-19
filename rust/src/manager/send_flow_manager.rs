@@ -11,6 +11,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use cove_util::result_ext::ResultExt as _;
+
 use crate::{
     app::{App, AppAction, FfiApp},
     fee_client::FEE_CLIENT,
@@ -514,8 +516,7 @@ impl RustSendFlowManager {
         let fee_rate = Arc::unwrap_or_clone(fee_rate);
         let psbt = self.build_psbt(None, None, fee_rate).await?;
 
-        let total_fee =
-            psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))?;
+        let total_fee = psbt.fee().map_err_str(Error::UnableToGetFeeDetails)?;
 
         let fee_rate_option = FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee };
 
@@ -1202,7 +1203,7 @@ impl RustSendFlowManager {
         let psbt =
             call!(actor.build_manual_ephemeral_tx(outpoints, amount, address, fee_rate)).await;
 
-        let psbt = psbt.map_err(|error| SendFlowError::UnableToBuildTxn(error.to_string()))??;
+        let psbt = psbt.map_err_str(SendFlowError::UnableToBuildTxn)??;
         Ok(psbt.into())
     }
 
@@ -1261,7 +1262,7 @@ impl RustSendFlowManager {
         let psbt: Psbt = call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate))
             .await
             .unwrap()
-            .map_err(|error| Error::UnableToGetMaxSend(error.to_string()))?
+            .map_err_str(Error::UnableToGetMaxSend)?
             .into();
 
         let total = Arc::new(psbt.output_total_amount());
@@ -1815,11 +1816,9 @@ impl RustSendFlowManager {
         let psbt = self
             .build_psbt(Some(address), Some(amount), selected_fee_rate.fee_rate)
             .await
-            .map_err(|error| Error::UnableToGetFeeDetails(error.to_string()));
+            .map_err_str(Error::UnableToGetFeeDetails);
 
-        let total_fee = psbt.and_then(|psbt| {
-            psbt.fee().map_err(|error| Error::UnableToGetFeeDetails(error.to_string()))
-        });
+        let total_fee = psbt.and_then(|psbt| psbt.fee().map_err_str(Error::UnableToGetFeeDetails));
 
         let total_fee = match total_fee {
             Ok(total_fee) => total_fee,

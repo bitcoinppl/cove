@@ -36,6 +36,7 @@ use cove_types::{
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     utxo::{UtxoList, UtxoType},
 };
+use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
 use flume::Sender;
 use rand::Rng as _;
@@ -182,7 +183,7 @@ impl WalletActor {
         let mut tx_builder = self.wallet.bdk.build_tx();
 
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
-        let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
+        let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
         self.wallet.bdk.cancel_tx(&psbt.unsigned_tx);
 
         Ok(psbt)
@@ -207,7 +208,7 @@ impl WalletActor {
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
+        let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
         Ok(psbt)
     }
 
@@ -240,13 +241,13 @@ impl WalletActor {
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
 
         let mut tx_builder = self.wallet.bdk.build_tx();
-        tx_builder.add_utxos(&utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+        tx_builder.add_utxos(&utxos).map_err_str(Error::AddUtxosError)?;
         tx_builder.manually_selected_only();
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(address.script_pubkey(), send_amount);
         tx_builder.fee_rate(fee_rate);
 
-        let psbt = tx_builder.finish().map_err(|err| Error::BuildTxError(err.to_string()))?;
+        let psbt = tx_builder.finish().map_err_str(Error::BuildTxError)?;
         Ok(psbt)
     }
 
@@ -339,15 +340,15 @@ impl WalletActor {
         let options = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.fast,
-                fast_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                fast_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             medium: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.medium,
-                medium_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                medium_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             slow: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.slow,
-                slow_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                slow_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             custom: None,
         };
@@ -398,15 +399,15 @@ impl WalletActor {
         let options = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.fast,
-                fast_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                fast_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             medium: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.medium,
-                medium_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                medium_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             slow: FeeRateOptionWithTotalFee::new(
                 fee_rate_options.slow,
-                slow_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                slow_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             custom: None,
         };
@@ -437,15 +438,15 @@ impl WalletActor {
         let options_with_fee = FeeRateOptionsWithTotalFee {
             fast: FeeRateOptionWithTotalFee::new(
                 options.fast,
-                fast_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                fast_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             medium: FeeRateOptionWithTotalFee::new(
                 options.medium,
-                medium_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                medium_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             slow: FeeRateOptionWithTotalFee::new(
                 options.slow,
-                slow_psbt.fee().map_err(|e| Error::FeesError(e.to_string()))?,
+                slow_psbt.fee().map_err_str(Error::FeesError)?,
             ),
             custom: None,
         };
@@ -642,7 +643,7 @@ impl WalletActor {
             .wallet
             .bdk
             .finalize_psbt(&mut psbt, SignOptions::default())
-            .map_err(|e| Error::PsbtFinalizeError(e.to_string()))?;
+            .map_err_str(Error::PsbtFinalizeError)?;
 
         if !finalized {
             return Err(Error::PsbtFinalizeError("Failed to finalize PSBT".to_string()));
@@ -667,11 +668,7 @@ impl WalletActor {
     }
 
     pub async fn check_node_connection(&mut self) -> ActorResult<()> {
-        self.node_client()
-            .await?
-            .check_url()
-            .await
-            .map_err(|error| Error::NodeConnectionFailed(error.to_string()))?;
+        self.node_client().await?.check_url().await.map_err_str(Error::NodeConnectionFailed)?;
 
         Produces::ok(())
     }
@@ -682,19 +679,13 @@ impl WalletActor {
 
         // get the initial balance and transactions
         {
-            let initial_balance = self
-                .balance()
-                .await?
-                .await
-                .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
+            let initial_balance =
+                self.balance().await?.await.map_err_str(Error::WalletBalanceError)?;
 
             self.send(Msg::WalletBalanceChanged(initial_balance.into()));
 
-            let initial_transactions = self
-                .transactions()
-                .await?
-                .await
-                .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?;
+            let initial_transactions =
+                self.transactions().await?.await.map_err_str(Error::TransactionsRetrievalError)?;
 
             self.send(Msg::AvailableTransactions(initial_transactions))
         }
@@ -703,7 +694,7 @@ impl WalletActor {
         self.start_wallet_scan_in_task(force_scan)
             .await?
             .await
-            .map_err(|error| Error::WalletScanError(error.to_string()))?;
+            .map_err_str(Error::WalletScanError)?;
 
         Produces::ok(())
     }
@@ -818,7 +809,7 @@ impl WalletActor {
         let txns_with_prices = historical_prices_service
             .get_prices_for_transactions(network, fiat_currency, confirmed_transactions)
             .await
-            .map_err(|error| Error::GetHistoricalPricesError(error.to_string()))?;
+            .map_err_str(Error::GetHistoricalPricesError)?;
 
         Ok(txns_with_prices)
     }
@@ -832,7 +823,7 @@ impl WalletActor {
 
         let labels = self.db.labels.all_labels_for_txn(tx.tx_node.txid)?;
         let details = TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into())
-            .map_err(|error| Error::TransactionDetailsError(error.to_string()))?;
+            .map_err_str(Error::TransactionDetailsError)?;
 
         Produces::ok(details)
     }
@@ -965,9 +956,8 @@ impl WalletActor {
             let mut utxo_total_amount = Amount::ZERO;
             let mut total_fee_amount = Amount::ZERO;
 
-            let weighted_utxos = self
-                .get_weighted_utxos(utxos)
-                .map_err(|err| Error::AddUtxosError(err.to_string()))?;
+            let weighted_utxos =
+                self.get_weighted_utxos(utxos).map_err_str(Error::AddUtxosError)?;
 
             for weighted_utxo in weighted_utxos {
                 let weight = TxIn::default()
@@ -1005,7 +995,7 @@ impl WalletActor {
                 }
 
                 let mut tx_builder = self.wallet.bdk.build_tx();
-                tx_builder.add_utxos(utxos).map_err(|err| Error::AddUtxosError(err.to_string()))?;
+                tx_builder.add_utxos(utxos).map_err_str(Error::AddUtxosError)?;
                 tx_builder.manually_selected_only();
                 tx_builder.ordering(TxOrdering::Untouched);
                 tx_builder.add_recipient(address.script_pubkey(), max_send_estimate);
@@ -1026,7 +1016,7 @@ impl WalletActor {
 
             let fee_psbt = fee_psbt.expect("unwrapped in while");
             self.wallet.bdk.cancel_tx(&fee_psbt.unsigned_tx);
-            fee_psbt.fee().map_err(|err| Error::BuildTxError(err.to_string()))?
+            fee_psbt.fee().map_err_str(Error::BuildTxError)?
         };
 
         let max_send_amount = utxo_total_amount.checked_sub(fee).ok_or_else(|| {
@@ -1262,21 +1252,14 @@ impl WalletActor {
         self.reload_wallet();
 
         // get and send wallet balance
-        let balance = self
-            .balance()
-            .await?
-            .await
-            .map_err(|error| Error::WalletBalanceError(error.to_string()))?;
+        let balance = self.balance().await?.await.map_err_str(Error::WalletBalanceError)?;
 
         debug!("sending wallet balance: {balance:?}");
         self.send(Msg::WalletBalanceChanged(balance.into()));
 
         // get and send transactions
-        let transactions: Vec<Transaction> = self
-            .transactions()
-            .await?
-            .await
-            .map_err(|error| Error::TransactionsRetrievalError(error.to_string()))?;
+        let transactions: Vec<Transaction> =
+            self.transactions().await?.await.map_err_str(Error::TransactionsRetrievalError)?;
 
         self.send(Msg::ScanComplete(transactions));
 

@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::{database::Database, network::Network, psbt::Psbt};
+use cove_util::result_ext::ResultExt as _;
 
 use super::{CkTapError, TapcardTransport, TapcardTransportProtocol, TransportError};
 
@@ -255,7 +256,7 @@ impl TapSignerReader {
             .await
             .sign_psbt(psbt.into(), pin)
             .await
-            .map_err(|e| Error::PsbtSignError(e.to_string()))?;
+            .map_err_str(Error::PsbtSignError)?;
 
         Ok(psbt.into())
     }

@@ -1,5 +1,7 @@
 use std::{io::Read as _, path::PathBuf};
 
+use cove_util::result_ext::ResultExt as _;
+
 use crate::multi_format::{MultiFormat, MultiFormatError};
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -35,11 +37,11 @@ impl FileHandler {
             return Err(FileHandlerError::FileNotFound);
         }
 
-        let mut file = std::fs::File::open(&self.file_path)
-            .map_err(|e| FileHandlerError::OpenFile(e.to_string()))?;
+        let mut file =
+            std::fs::File::open(&self.file_path).map_err_str(FileHandlerError::OpenFile)?;
 
         let mut data = Vec::with_capacity(1024 * 128);
-        file.read_to_end(&mut data).map_err(|e| FileHandlerError::ReadFile(e.to_string()))?;
+        file.read_to_end(&mut data).map_err_str(FileHandlerError::ReadFile)?;
 
         let string_or_data = crate::multi_format::StringOrData::new(data);
 

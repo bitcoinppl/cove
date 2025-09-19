@@ -6,6 +6,7 @@ use crate::{
     fiat::FiatCurrency,
     transaction::{ConfirmedTransaction, TransactionDirection, TxId},
 };
+use cove_util::result_ext::ResultExt as _;
 
 pub struct HistoricalFiatPriceReport {
     currency: FiatCurrency,
@@ -83,7 +84,7 @@ impl HistoricalFiatPriceReport {
             csv.serialize(row)?;
         }
 
-        let csv = csv.into_inner().map_err(|e| CsvCreationError::FinalizeCsv(e.to_string()))?;
+        let csv = csv.into_inner().map_err_str(CsvCreationError::FinalizeCsv)?;
 
         Ok(Csv(csv))
     }
