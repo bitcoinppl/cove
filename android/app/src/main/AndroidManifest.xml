@@ -13,7 +13,7 @@
         android:theme="@style/Theme.Cove"
         tools:targetApi="31">
         <activity
-            android:name=".MainActivity"
+            android:name="org.bitcoinppl.cove.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.Cove">
