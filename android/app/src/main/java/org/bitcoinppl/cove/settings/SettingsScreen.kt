@@ -102,7 +102,7 @@ fun SettingsScreen() {
                         Spacer()
                         SettingsItem(
                             stringResource(R.string.title_settings_currency),
-                            iconResId = R.drawable.icon_currecncy,
+                            iconResId = R.drawable.icon_currency,
                             onClick = {
                                 //TODO:Navigate to currency Settings screen
                             })
