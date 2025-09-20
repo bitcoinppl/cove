@@ -34,7 +34,8 @@ clean:
 
 fmt:
     cd rust && cargo fmt --all
-    swiftformat . --swiftversion 6 
+    swiftformat . --swiftversion 6
+    cd android && ./gradlew ktlintFormat || echo "ktlint not configured" 
 
 clippy *flags="":
     cd rust && cargo clippy {{flags}}
