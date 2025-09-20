@@ -1,10 +1,10 @@
-package com.example.cove
+package org.bitcoinppl.cove
 
 import CoveApp
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.example.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove.ui.theme.CoveTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

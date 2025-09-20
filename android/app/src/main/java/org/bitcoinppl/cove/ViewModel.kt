@@ -1,5 +1,5 @@
 package com.example.cove
 
-import androidx.lifecycle.Manager
+//import androidx.lifecycle.Manager
 
-class Manager : Manager()
+class Manager()// : Manager()
