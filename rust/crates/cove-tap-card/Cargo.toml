@@ -8,16 +8,15 @@ edition = "2024"
 bitcoin = { workspace = true, features = ["serde"] }
 
 # Serialization/Deserialization
-serde = { version = "1.0", features = ["derive"] }
-serde_urlencoded = "0.7"
+serde = { workspace = true, features = ["derive"] }
+serde_urlencoded = { workspace = true }
 
 # Utilities
-tracing = "0.1"
-thiserror = "2.0"
-data-encoding = "2.8.0"
+tracing = { workspace = true }
+thiserror = { workspace = true }
+data-encoding = { workspace = true }
 hex = { workspace = true }
-derive_more = { version = "2.0", features = ["display"] }
+derive_more = { workspace = true, features = ["display"] }
 
 # Uniffi for FFI
 uniffi = { workspace = true, features = ["tokio"] }
-
