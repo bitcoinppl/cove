@@ -185,34 +185,21 @@ fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
         .unwrap_or(false);
 
     let normalized = if has_scheme { input.to_string() } else { format!("bitcoin:{input}") };
-
     let url = Url::parse(&normalized).map_err(|_| Error::InvalidAddress)?;
 
     if !url.scheme().eq_ignore_ascii_case("bitcoin") {
         return Err(Error::InvalidAddress);
     }
 
-    let mut address = String::new();
-
-    if let Some(host) = url.host_str() {
-        address.push_str(host);
-    }
-
-    let path = url.path();
-    if !path.is_empty() && path != "/" {
-        let trimmed_path = path.trim_start_matches('/');
-        if !trimmed_path.is_empty() {
-            if !address.is_empty() && !address.ends_with('/') {
-                address.push('/');
-            }
-            address.push_str(trimmed_path);
+    let address = match (url.path(), url.host_str()) {
+        (address, None) if !address.is_empty() => String::from(address),
+        ("", Some(address)) if !address.is_empty() => String::from(address),
+        _ => {
+            return Err(Error::EmptyAddress);
         }
-    }
+    };
 
-    if address.is_empty() {
-        return Err(Error::EmptyAddress);
-    }
-
+    // take amount from query params
     let amount = url.query_pairs().find(|(key, _)| key == "amount").and_then(|(_, value)| {
         let value = value.trim();
         value.parse::<f64>().ok().and_then(|btc| Amount::from_btc(btc).ok())
@@ -543,5 +530,31 @@ mod tests {
         );
         assert_eq!(address_with_network.network, Network::Bitcoin);
         assert_eq!(address_with_network.amount, None);
+    }
+
+    #[test]
+    fn test_works_with_bitcoin_scheme() {
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.002&foo=bar",
+        );
+
+        assert!(address_with_network.is_ok());
+        let address_with_network = address_with_network.unwrap().clone();
+
+        assert_eq!(
+            address_with_network.address.to_string(),
+            "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm"
+        );
+        assert_eq!(address_with_network.clone().network, Network::Bitcoin);
+        assert_eq!(address_with_network.amount, Some(Amount::from_btc(0.002).unwrap()));
+
+        assert_eq!(
+            AddressWithNetwork::try_new(
+                "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.002&foo=bar",
+            ),
+            AddressWithNetwork::try_new(
+                "bitcoin://bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.002&foo=bar",
+            )
+        )
     }
 }
