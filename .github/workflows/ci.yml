@@ -18,6 +18,9 @@ jobs:
 
       - name: Install stable toolchain with rustfmt available
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
 
       - name: Run rustfmt
         run: cd rust && cargo fmt --all -- --check
