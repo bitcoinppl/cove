@@ -55,4 +55,19 @@
     <string name="label_network_fee">Network Fee</string>
     <string name="label_recipient_receives">Recipient Receives</string>
     <string name="label_total_spent">Total Spent</string>
+    <string name="title_manage_utxos">Manage UTXOs</string>
+    <string name="search_utxos">Search UTXOs</string>
+    <string name="sort_date">Date</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_amount">Amount</string>
+    <string name="sort_change">Change</string>
+    <string name="list_of_utxos">LIST OF UTXOS</string>
+    <string name="select_all">Select All</string>
+    <string name="deselect_all">Deselect All</string>
+    <string name="change_address">Change Address</string>
+    <string name="receive_address">Receive Address</string>
+    <string name="utxo_description">Select UTXOs to manage or send. Unspent outputs will remain in your wallet for future use.</string>
+    <string name="denotes_utxo_change">Denotes UTXO change</string>
+    <string name="continue_button">Continue</string>
+    <string name="continue_with_count">Continue (%1$d)</string>
 </resources>
