@@ -47,6 +47,12 @@
     <string name="btn_add_label">Add label</string>
     <string name="btn_view_in_explorer">View in Explorer</string>
     <string name="btn_show_details">Show Details</string>
+    <string name="btn_hide_details">Hide Details</string>
     <string name="label_transaction_sent_on">Your transaction was sent on\n%1$s</string>
     <string name="label_transaction_received_on">Your transaction was received on\n%1$s</string>
+    <string name="label_sent_to">Sent to</string>
+    <string name="label_received_from">Received from</string>
+    <string name="label_network_fee">Network Fee</string>
+    <string name="label_recipient_receives">Recipient Receives</string>
+    <string name="label_total_spent">Total Spent</string>
 </resources>

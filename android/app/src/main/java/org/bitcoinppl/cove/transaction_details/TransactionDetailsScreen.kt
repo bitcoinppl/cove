@@ -15,14 +15,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.SouthWest
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -67,6 +72,58 @@ enum class TxType { Sent, Received }
 
 @Preview(showBackground = true)
 @Composable
+private fun TxDetailsSentLightPreview() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+    ) {
+        TransactionDetailsWidget(
+            txType = TxType.Sent,
+            isDark = false,
+            address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
+            addressExtra = "2,194,934 | 251,357",
+            networkFeePrimary = "2,724 SATS",
+            networkFeeSecondary = "≈ $3.15",
+            recipientReceivesPrimary = "150,000 SATS",
+            recipientReceivesSecondary = "≈ $173.86",
+            totalSpentPrimary = "-152,724 SATS",
+            totalSpentSecondary = "≈ $177.02",
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun TxDetailsReceivedDarkPreview() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF000000))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+        ) {
+            TransactionDetailsWidget(
+                txType = TxType.Received,
+                isDark = true,
+                address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
+                addressExtra = "2,194,934 | 251,357",
+                networkFeePrimary = "2,724 SATS",
+                networkFeeSecondary = "≈ $3.15",
+                recipientReceivesPrimary = "150,000 SATS",
+                recipientReceivesSecondary = "≈ $173.86",
+                totalSpentPrimary = "-152,724 SATS",
+                totalSpentSecondary = "≈ $177.02",
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
 private fun TransactionSentLightPreview() {
     TransactionDetailsScreen(
         onBack = {},
@@ -97,6 +154,56 @@ private fun TransactionReceivedDarkPreview() {
     )
 }
 
+@Preview(showBackground = true)
+@Composable
+private fun TransactionSentLightExpandedPreview() {
+    TransactionDetailsScreen(
+        onBack = {},
+        onAddLabel = {},
+        onViewInExplorer = {},
+        onShowDetails = {},
+        isDark = false,
+        txType = TxType.Sent,
+        txAmountPrimary = "152,724 SATS",
+        txAmountSecondary = "≈ $177.02",
+        date = Date(),
+        isExpanded = true,
+        address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
+        addressExtra = "2,194,934 | 251,357",
+        networkFeePrimary = "2,724 SATS",
+        networkFeeSecondary = "≈ $3.15",
+        recipientReceivesPrimary = "150,000 SATS",
+        recipientReceivesSecondary = "≈ $173.86",
+        totalSpentPrimary = "-152,724 SATS",
+        totalSpentSecondary = "≈ $177.02",
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun TransactionReceivedDarkExpandedPreview() {
+    TransactionDetailsScreen(
+        onBack = {},
+        onAddLabel = {},
+        onViewInExplorer = {},
+        onShowDetails = {},
+        isDark = true,
+        txType = TxType.Received,
+        txAmountPrimary = "152,724 SATS",
+        txAmountSecondary = "≈ $177.02",
+        date = Date(),
+        isExpanded = true,
+        address = "tb1qc39qku u3epx ww8th xmh7 qsw04 p3jgp kj3a he",
+        addressExtra = "2,194,934 | 251,357",
+        networkFeePrimary = "2,724 SATS",
+        networkFeeSecondary = "≈ $3.15",
+        recipientReceivesPrimary = "150,000 SATS",
+        recipientReceivesSecondary = "≈ $173.86",
+        totalSpentPrimary = "-152,724 SATS",
+        totalSpentSecondary = "≈ $177.02",
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionDetailsScreen(
@@ -104,6 +211,7 @@ fun TransactionDetailsScreen(
     onAddLabel: () -> Unit,
     onViewInExplorer: () -> Unit,
     onShowDetails: () -> Unit,
+    onNetworkFeeInfo: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     isDark: Boolean = false,
     txType: TxType = TxType.Sent,
@@ -111,6 +219,15 @@ fun TransactionDetailsScreen(
     txAmountPrimary: String = "",
     txAmountSecondary: String = "",
     date: Date? = null,
+    isExpanded: Boolean = false,
+    address: String = "",
+    addressExtra: String? = null,
+    networkFeePrimary: String? = null,
+    networkFeeSecondary: String? = null,
+    recipientReceivesPrimary: String? = null,
+    recipientReceivesSecondary: String? = null,
+    totalSpentPrimary: String? = null,
+    totalSpentSecondary: String? = null,
 ) {
     val bg = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
     val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
@@ -191,7 +308,8 @@ fun TransactionDetailsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(16.dp))
@@ -311,8 +429,23 @@ fun TransactionDetailsScreen(
                     }
                 }
 
-
-                Spacer(modifier = Modifier.weight(1f))
+                if (isExpanded) {
+                    TransactionDetailsWidget(
+                        txType = txType,
+                        isDark = isDark,
+                        address = address,
+                        addressExtra = addressExtra,
+                        networkFeePrimary = networkFeePrimary,
+                        networkFeeSecondary = networkFeeSecondary,
+                        recipientReceivesPrimary = recipientReceivesPrimary,
+                        recipientReceivesSecondary = recipientReceivesSecondary,
+                        totalSpentPrimary = totalSpentPrimary,
+                        totalSpentSecondary = totalSpentSecondary,
+                        onNetworkFeeInfo = onNetworkFeeInfo,
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
 
                 Column(
                     modifier = Modifier
@@ -338,7 +471,7 @@ fun TransactionDetailsScreen(
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
                         Text(
-                            text = stringResource(R.string.btn_show_details),
+                            text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
                             color = sub,
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center,
@@ -350,6 +483,181 @@ fun TransactionDetailsScreen(
         }
     }
 }
+
+@Composable
+private fun TransactionDetailsWidget(
+    txType: TxType,
+    isDark: Boolean,
+    address: String,
+    addressExtra: String?,
+    networkFeePrimary: String?,
+    networkFeeSecondary: String?,
+    recipientReceivesPrimary: String?,
+    recipientReceivesSecondary: String?,
+    totalSpentPrimary: String?,
+    totalSpentSecondary: String?,
+    onNetworkFeeInfo: () -> Unit = {},
+) {
+    val dividerColor = if (isDark) Color(0xFF222428) else Color(0xFFE4E5E7)
+    val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
+    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+
+    Spacer(Modifier.height(48.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(dividerColor)
+    )
+    Spacer(Modifier.height(24.dp))
+
+    val addressLabel =
+        stringResource(if (txType == TxType.Sent) R.string.label_sent_to else R.string.label_received_from)
+    if (address.isNotEmpty()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                addressLabel,
+                color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
+                fontSize = 16.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                address,
+                color = fg,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 24.sp
+            )
+            if (!addressExtra.isNullOrEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(addressExtra, color = sub, fontSize = 14.sp)
+                    Spacer(Modifier.size(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF1FC35C)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(10.dp)
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(dividerColor)
+        )
+        Spacer(Modifier.height(24.dp))
+    }
+
+    DetailsWidget(
+        label = stringResource(R.string.label_network_fee),
+        primary = networkFeePrimary,
+        secondary = networkFeeSecondary,
+        isDark = isDark,
+        showInfoIcon = true,
+        onInfoClick = onNetworkFeeInfo
+    )
+    Spacer(Modifier.height(24.dp))
+
+    DetailsWidget(
+        label = stringResource(R.string.label_recipient_receives),
+        primary = recipientReceivesPrimary,
+        secondary = recipientReceivesSecondary,
+        isDark = isDark
+    )
+    Spacer(Modifier.height(24.dp))
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(dividerColor)
+    )
+    Spacer(Modifier.height(24.dp))
+
+    DetailsWidget(
+        label = stringResource(R.string.label_total_spent),
+        primary = totalSpentPrimary,
+        secondary = totalSpentSecondary,
+        isDark = isDark,
+        isTotal = true
+    )
+    Spacer(Modifier.height(72.dp))
+}
+
+@Composable
+private fun DetailsWidget(
+    label: String,
+    primary: String?,
+    secondary: String?,
+    isDark: Boolean,
+    isTotal: Boolean = false,
+    showInfoIcon: Boolean = false,
+    onInfoClick: () -> Unit = {},
+) {
+    if (primary == null) return
+    val sub = if (isDark) Color(0xFF8F8F95) else Color(0xFF6F6F75)
+    val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+
+    val labelColor = if (isTotal) {
+        if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+    } else {
+        if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
+    }
+
+    val primaryColor = if (isTotal) {
+        fg
+    } else {
+        if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
+    }
+
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                label,
+                color = labelColor,
+                fontSize = 18.sp
+            )
+            if (showInfoIcon) {
+                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    onClick = onInfoClick,
+                    modifier = Modifier.size(24.dp),
+                    content = {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                )
+            }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(primary, color = primaryColor, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            if (!secondary.isNullOrEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(secondary, color = sub, fontSize = 14.sp)
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun CheckWithRingsWidget(
