@@ -65,6 +65,7 @@ hex = { workspace = true }
 
 # util
 ahash = { workspace = true }
+url = { workspace = true }
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
