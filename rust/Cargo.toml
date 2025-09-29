@@ -18,6 +18,9 @@ uniffi = { git = "https://github.com/mozilla/uniffi-rs", features = ["tokio"] }
 # sync
 parking_lot = { version = "0.12.3" }
 
+# async
+tokio = { version = "1.43" }
+
 # encoding / decoding 
 hex = "0.4.3"
 base64 = "0.22.0"
@@ -66,6 +69,7 @@ jiff = { version = "0.2", features = [] }
 
 # logging
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # error handling
 thiserror = "2.0"
@@ -77,6 +81,9 @@ redb = "2.4"
 # ids
 nid = "3.0"
 
+# dirs
+dirs = "6.0"
+
 # derive stuff
 derive_more = { version = "2.0" }
 strum = { version = "0.27", features = ["derive"] }
@@ -84,6 +91,7 @@ strum = { version = "0.27", features = ["derive"] }
 # serde
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_urlencoded = "0.7"
 
 ## MARK: MAIN CRATE DEPENDENCIES
 [dependencies]
@@ -118,26 +126,26 @@ rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }
 
 # actors
 act-zero = { version = "0.4.0", features = ["default-tokio"] }
-act-zero-ext = { version = "0.1.0", git = "https://github.com/praveenperera/act-zero-ext" }
+act-zero-ext = "0.2.0"
 
 # async 
-tokio = { version = "1.38", features = ["rt"] }
+tokio = { workspace = true, features = ["rt"] }
 async-trait = "0.1.81"
 futures = "0.3.30"
 tryhard = "0.5"
 
 # crypto
-rand = "0.9"
+rand = { workspace = true }
 zeroize = "1.8.1"
 
 # hashing
-sha2 = "0.10.8"
+sha2 = { workspace = true }
 argon2 = { version = "0.5.0", features = ["password-hash"] }
 
 # concurrency
 flume = { version = "0.11", features = ["async"] }
-parking_lot = { version = "0.12.1", features = ["deadlock_detection"] }
-once_cell = "1.19.0"
+parking_lot = { workspace = true, features = ["deadlock_detection"] }
+once_cell = { workspace = true }
 
 # error handling
 eyre = { workspace = true }
@@ -145,12 +153,12 @@ thiserror = { workspace = true }
 
 
 # logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing-log = "0.2"
 
 # dirs
-dirs = "6.0"
+dirs = { workspace = true }
 
 # database
 redb = { workspace = true }
@@ -159,7 +167,7 @@ redb = { workspace = true }
 nid = "3.0"
 
 # derive stuff
-derive_more = { version = "2.0", features = [
+derive_more = { workspace = true, features = [
     "display",
     "add",
     "mul",
@@ -184,7 +192,7 @@ jiff = { workspace = true, features = [] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 cbor4ii = { version = "1.0", features = ["serde1"] }
-serde_urlencoded = "0.7"
+serde_urlencoded = { workspace = true }
 
 zerocopy = { version = "0.8", features = ["derive"] }
 uniffi = { workspace = true, features = ["tokio"] }
@@ -241,7 +249,7 @@ uniffi = { workspace = true, features = ["build"] }
 tempfile = "3.19"
 pretty_assertions = "1.4.1"
 
-tokio = { version = "1.43", features = ["rt", "test-util", "macros"] }
+tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
 
 
