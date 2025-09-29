@@ -15,6 +15,7 @@ use bitcoin::{
 };
 use serde::Deserialize;
 use strum::IntoEnumIterator as _;
+use url::Url;
 
 use crate::{Network, amount::Amount, transaction::TransactionDirection};
 
@@ -142,10 +143,7 @@ impl Address {
 
 impl AddressWithNetwork {
     pub fn try_new(str: &str) -> Result<Self, Error> {
-        let str = str.trim();
-        let str = str.trim_start_matches("bitcoin:");
-
-        let (address_str, amount) = extract_amount(str);
+        let (address_str, amount) = parse_bitcoin_uri(str)?;
 
         let address: BdkAddress<NetworkUnchecked> =
             address_str.parse().map_err(|_| Error::InvalidAddress)?;
@@ -175,26 +173,52 @@ impl AddressWithNetwork {
     }
 }
 
-fn extract_amount(full_qr: &str) -> (&str, Option<Amount>) {
-    let Some(pos) = full_qr.find("?amount=") else { return (full_qr, None) };
+fn parse_bitcoin_uri(input: &str) -> Result<(String, Option<Amount>), Error> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err(Error::EmptyAddress);
+    }
 
-    let address = &full_qr[..pos];
+    let has_scheme = input
+        .split_once(':')
+        .map(|(scheme, _)| scheme.eq_ignore_ascii_case("bitcoin"))
+        .unwrap_or(false);
 
-    let number_start = pos + 8;
-    let mut number_end = number_start;
-    for char in full_qr[number_start..].chars() {
-        if char.is_ascii_digit() || char == '.' {
-            number_end += 1;
-        } else {
-            break;
+    let normalized = if has_scheme { input.to_string() } else { format!("bitcoin:{input}") };
+
+    let url = Url::parse(&normalized).map_err(|_| Error::InvalidAddress)?;
+
+    if !url.scheme().eq_ignore_ascii_case("bitcoin") {
+        return Err(Error::InvalidAddress);
+    }
+
+    let mut address = String::new();
+
+    if let Some(host) = url.host_str() {
+        address.push_str(host);
+    }
+
+    let path = url.path();
+    if !path.is_empty() && path != "/" {
+        let trimmed_path = path.trim_start_matches('/');
+        if !trimmed_path.is_empty() {
+            if !address.is_empty() && !address.ends_with('/') {
+                address.push('/');
+            }
+            address.push_str(trimmed_path);
         }
     }
 
-    let number = &full_qr[number_start..number_end];
-    let Ok(amount_float) = number.parse::<f64>() else { return (address, None) };
-    let Ok(amount) = Amount::from_btc(amount_float) else { return (address, None) };
+    if address.is_empty() {
+        return Err(Error::EmptyAddress);
+    }
 
-    (address, Some(amount))
+    let amount = url.query_pairs().find(|(key, _)| key == "amount").and_then(|(_, value)| {
+        let value = value.trim();
+        value.parse::<f64>().ok().and_then(|btc| Amount::from_btc(btc).ok())
+    });
+
+    Ok((address, amount))
 }
 
 #[uniffi::export]
@@ -409,35 +433,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_amount_no_amount() {
+    fn test_parse_bitcoin_uri_no_amount() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f";
-        let (a, amount) = extract_amount(a);
+        let (a, amount) = parse_bitcoin_uri(a).unwrap();
         assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
         assert_eq!(amount, None);
     }
 
     #[test]
-    fn test_extract_amount_with_amount() {
+    fn test_parse_bitcoin_uri_with_amount() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001";
-        let (a, amount) = extract_amount(a);
+        let (a, amount) = parse_bitcoin_uri(a).unwrap();
         assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
         assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
     }
 
     #[test]
-    fn test_extract_amount_with_amount_and_spaces() {
+    fn test_parse_bitcoin_uri_with_amount_and_spaces() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.001  ";
-        let (a, amount) = extract_amount(a);
+        let (a, amount) = parse_bitcoin_uri(a).unwrap();
         assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
         assert_eq!(amount, Some(Amount::from_btc(0.001).unwrap()));
     }
 
     #[test]
-    fn test_extract_amount_with_amount_and_other_query_params() {
+    fn test_parse_bitcoin_uri_with_amount_and_other_query_params() {
         let a = "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?amount=0.002&foo=bar";
-        let (a, amount) = extract_amount(a);
+        let (a, amount) = parse_bitcoin_uri(a).unwrap();
         assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
         assert_eq!(amount, Some(Amount::from_btc(0.002).unwrap()));
+    }
+
+    #[test]
+    fn test_parse_bitcoin_uri_with_scheme_and_unused_params() {
+        let a = "bitcoin://bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f?label=Donation&foo=bar";
+        let (a, amount) = parse_bitcoin_uri(a).unwrap();
+        assert_eq!(a, "bc1q0g0vn4yqyk0zjwxw0zv5pltyy9jm89vclxgsv3f");
+        assert_eq!(amount, None);
     }
 
     #[test]
@@ -483,5 +515,33 @@ mod tests {
 
         assert!(address_with_network.is_ok());
         assert(address_with_network.unwrap(), Some(Amount::from_btc(0.002).unwrap()));
+    }
+
+    #[test]
+    fn test_address_with_network_label_query_only() {
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?label=Donation%20For%20Cove",
+        );
+
+        assert!(address_with_network.is_ok());
+        let address_with_network = address_with_network.unwrap();
+        assert_eq!(
+            address_with_network.address.to_string(),
+            "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm"
+        );
+        assert_eq!(address_with_network.network, Network::Bitcoin);
+        assert_eq!(address_with_network.amount, None);
+
+        let address_with_network = AddressWithNetwork::try_new(
+            "bitcoin://bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?label=Donation",
+        )
+        .unwrap();
+
+        assert_eq!(
+            address_with_network.address.to_string(),
+            "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm"
+        );
+        assert_eq!(address_with_network.network, Network::Bitcoin);
+        assert_eq!(address_with_network.amount, None);
     }
 }

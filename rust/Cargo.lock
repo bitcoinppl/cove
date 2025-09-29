@@ -850,6 +850,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "uniffi 0.29.3 (git+https://github.com/mozilla/uniffi-rs)",
+ "url",
 ]
 
 [[package]]
