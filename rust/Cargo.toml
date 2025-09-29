@@ -126,7 +126,7 @@ rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }
 
 # actors
 act-zero = { version = "0.4.0", features = ["default-tokio"] }
-act-zero-ext = { version = "0.1.0", git = "https://github.com/praveenperera/act-zero-ext" }
+act-zero-ext = "0.2.0"
 
 # async 
 tokio = { workspace = true, features = ["rt"] }
