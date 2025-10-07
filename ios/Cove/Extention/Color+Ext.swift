@@ -126,7 +126,7 @@ extension Color {
             format: "#%02lX%02lX%02lX",
             lround(r * 255),
             lround(g * 255),
-            lround(b * 255),
+            lround(b * 255)
         )
 
         if a == 1 {

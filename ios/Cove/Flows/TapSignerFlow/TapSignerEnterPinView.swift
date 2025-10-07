@@ -88,7 +88,7 @@ struct TapSignerEnterPin: View {
                         .sendConfirm(
                             id: record.walletId(),
                             details: record.confirmDetails(),
-                            signedPsbt: signedPsbt,
+                            signedPsbt: signedPsbt
                         )
 
                     await MainActor.run {

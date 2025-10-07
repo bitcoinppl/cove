@@ -591,7 +591,7 @@ struct SendFlowSetAmountScreen: View {
             let manager = WalletManager(preview: "preview_only")
 
             SendFlowSetAmountScreen(
-                id: WalletId(),
+                id: WalletId()
             )
             .environment(manager)
             .environment(AppManager.shared)
@@ -606,7 +606,7 @@ struct SendFlowSetAmountScreen: View {
             let manager = WalletManager(preview: "preview_only")
 
             SendFlowSetAmountScreen(
-                id: WalletId(),
+                id: WalletId()
             )
             .environment(manager)
             .environment(AppManager.shared)

@@ -247,7 +247,7 @@ private struct SectionCard: View {
         .environment(
             SendFlowPresenter(
                 app: AppManager.shared,
-                manager: WalletManager(preview: "preview_only"),
+                manager: WalletManager(preview: "preview_only")
             )
         )
     }
