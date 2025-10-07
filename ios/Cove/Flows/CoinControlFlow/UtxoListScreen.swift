@@ -221,7 +221,7 @@ struct UtxoListScreen: View {
                         RouteFactory()
                             .coinControlSend(
                                 id: manager.rust.id(),
-                                utxos: manager.rust.selectedUtxos(),
+                                utxos: manager.rust.selectedUtxos()
                             )
                     )
                 }
