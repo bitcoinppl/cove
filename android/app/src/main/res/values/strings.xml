@@ -79,4 +79,10 @@
     <string name="label_main">Main</string>
     <string name="btn_change_speed">Change speed</string>
     <string name="label_total_spending">Total Spending</string>
+    <string name="label_you_are_sending">You\'re sending</string>
+    <string name="label_amount_they_will_receive">The amount they will receive</string>
+    <string name="label_address">Address</string>
+    <string name="label_they_will_receive">They\'ll receive</string>
+    <string name="label_you_will_pay">You\'ll pay</string>
+    <string name="action_swipe_to_send">Swipe to Send</string>
 </resources>
