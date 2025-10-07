@@ -39,7 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cove.R
+import org.bitcoinppl.cove.R
 import kotlinx.coroutines.launch
 
 // Animation duration in milliseconds for swipe button returning to start position when swipe is incomplete.
@@ -132,6 +132,7 @@ fun SendConfirmationScreen(
                 )
                 Column(
                     modifier = Modifier
+                        .fillMaxHeight()
                         .background(Color(0xFFFFFFFF))
                         .padding(horizontal = 16.dp)
                 ) {
@@ -452,8 +453,7 @@ private fun SwipeToSendStub(
                     isDragging = false
                     scope.launch {
                         animOffset.snapTo(rawOffset)
-                        val max = (trackWidthPx - knobSizePx).coerceAtLeast(0f)
-                        if (rawOffset >= max * SWIPE_COMPLETE_THRESHOLD) {
+                        if (rawOffset >= maxOffsetPx * SWIPE_COMPLETE_THRESHOLD) {
                             animOffset.snapTo(max)
                             if (!completed) {
                                 completed = true
