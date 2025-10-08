@@ -85,4 +85,9 @@
     <string name="label_they_will_receive">They\'ll receive</string>
     <string name="label_you_will_pay">You\'ll pay</string>
     <string name="action_swipe_to_send">Swipe to Send</string>
+    <string name="title_network_fee">Network Fee</string>
+    <string name="label_fee_fast">Fast</string>
+    <string name="label_fee_medium">Medium</string>
+    <string name="label_fee_slow">Slow</string>
+    <string name="btn_customize_fee">Customize Fee</string>
 </resources>
