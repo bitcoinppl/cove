@@ -89,5 +89,8 @@
     <string name="label_fee_fast">Fast</string>
     <string name="label_fee_medium">Medium</string>
     <string name="label_fee_slow">Slow</string>
+    <string name="label_fee_custom">Custom</string>
     <string name="btn_customize_fee">Customize Fee</string>
+    <string name="title_set_custom_network_fee">Set Custom Network Fee</string>
+    <string name="btn_done">Done</string>
 </resources>

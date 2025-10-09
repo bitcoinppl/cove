@@ -1,7 +1,6 @@
 package org.bitcoinppl.cove.send.network_fee
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -16,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.views.ImageButton
+import java.util.Locale
 
 enum class FeePriority(
     val displayNameRes: Int,
@@ -23,7 +23,8 @@ enum class FeePriority(
 ) {
     FAST(R.string.label_fee_fast, Color(0xFF4CAF50)),
     MEDIUM(R.string.label_fee_medium, Color(0xFFFFEB3B)),
-    SLOW(R.string.label_fee_slow, Color(0xFFFF9800))
+    SLOW(R.string.label_fee_slow, Color(0xFFFF9800)),
+    CUSTOM(R.string.label_fee_custom, Color(0xFF3B82F6))
 }
 
 data class FeeOption(
@@ -68,12 +69,29 @@ private fun NetworkFeeContentPreview() {
     )
 }
 
+@Preview(showBackground = true)
+@Composable
+private fun CustomNetworkFeeContentPreview() {
+    CustomNetworkFeeBottomSheet(
+        feeRate = 8.02f,
+        feeAmount = "1128 sats",
+        dollarAmount = "≈ $1.28",
+        timeEstimate = "10 minutes",
+        feeRateLabel = "satoshi/vbyte",
+        onFeeRateChanged = { },
+        onDone = { }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview(showBackground = true)
 @Composable
 private fun NetworkFeeBottomSheetPreview() {
     var showBottomSheet by remember { mutableStateOf(false) }
+    var showCustomFeeSheet by remember { mutableStateOf(false) }
     var selectedPriority by remember { mutableStateOf(FeePriority.MEDIUM) }
+    var feeRate by remember { mutableFloatStateOf(8.02f) }
+    var customFeeOption by remember { mutableStateOf<FeeOption?>(null) }
     val sampleFeeOptions = listOf(
         FeeOption(
             priority = FeePriority.FAST,
@@ -97,12 +115,17 @@ private fun NetworkFeeBottomSheetPreview() {
             dollarAmount = "≈ $0.34"
         )
     )
+    val allFeeOptions = if (customFeeOption != null) {
+        sampleFeeOptions + customFeeOption!!
+    } else {
+        sampleFeeOptions
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Button(
             onClick = { showBottomSheet = true },
             modifier = Modifier.align(Alignment.Center)
         ) {
-            Text("Show Bottom Sheet")
+            Text("Show Network Fee Bottom Sheet")
         }
         if (showBottomSheet) {
             val bottomSheetState = rememberModalBottomSheetState(
@@ -116,12 +139,48 @@ private fun NetworkFeeBottomSheetPreview() {
                 shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
             ) {
                 NetworkFeeBottomSheet(
-                    feeOptions = sampleFeeOptions,
+                    feeOptions = allFeeOptions,
                     selectedPriority = selectedPriority,
                     onFeeOptionSelected = { option ->
                         selectedPriority = option.priority
                     },
-                    onCustomizeFee = { },
+                    onCustomizeFee = {
+                        showBottomSheet = false
+                        showCustomFeeSheet = true
+                    },
+                )
+            }
+        }
+        if (showCustomFeeSheet) {
+            val bottomSheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = true
+            )
+            ModalBottomSheet(
+                onDismissRequest = { showCustomFeeSheet = false },
+                sheetState = bottomSheetState,
+                containerColor = Color.White,
+                dragHandle = null,
+                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+            ) {
+                CustomNetworkFeeBottomSheet(
+                    feeRate = feeRate,
+                    feeAmount = "1128 sats",
+                    dollarAmount = "≈ $1.28",
+                    timeEstimate = "10 minutes",
+                    feeRateLabel = "satoshi/vbyte",
+                    onFeeRateChanged = { feeRate = it },
+                    onDone = {
+                        customFeeOption = FeeOption(
+                            priority = FeePriority.CUSTOM,
+                            timeEstimate = "10 minutes",
+                            feeAmount = "1,128 sats",
+                            feeRate = String.format(Locale.US, "%.2f sats/vbyte", feeRate),
+                            dollarAmount = "≈ $1.28"
+                        )
+                        selectedPriority = FeePriority.CUSTOM
+                        showCustomFeeSheet = false
+                        showBottomSheet = true
+                    }
                 )
             }
         }
@@ -135,16 +194,14 @@ fun NetworkFeeBottomSheet(
     selectedPriority: FeePriority,
     onFeeOptionSelected: (FeeOption) -> Unit,
     onCustomizeFee: () -> Unit,
-    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp, 8.dp, 16.dp, 24.dp)
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
             Box(
@@ -174,7 +231,6 @@ fun NetworkFeeBottomSheet(
                 onClick = {
                     onFeeOptionSelected(option)
                 },
-                modifier.padding(vertical = 8.dp)
             )
         }
         Spacer(modifier = Modifier.height(24.dp))
@@ -195,12 +251,12 @@ private fun FeeOptionCard(
     feeOption: FeeOption,
     isSelected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier
+        onClick = onClick,
+        modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .padding(vertical = 8.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) Color(0xFF525C6B) else Color(0xFFF1F1F3)
@@ -275,5 +331,136 @@ private fun FeeOptionCard(
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CustomNetworkFeeBottomSheet(
+    feeRate: Float,
+    feeAmount: String,
+    dollarAmount: String,
+    timeEstimate: String,
+    feeRateLabel: String,
+    onFeeRateChanged: (Float) -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp, 8.dp, 16.dp, 24.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(4.dp)
+                    .background(
+                        Color(0xFFD1D5DB),
+                        RoundedCornerShape(2.dp)
+                    )
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = stringResource(R.string.title_set_custom_network_fee),
+            color = Color(0xFF101010),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = feeRateLabel,
+            color = Color(0xFF6B7280),
+            fontSize = 16.sp,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = String.format(Locale.US, "%.2f", feeRate),
+                color = Color(0xFF101010),
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .background(
+                        color = Color(0xFFD1D5DB),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            Color(0xFF3B82F6),
+                            RoundedCornerShape(4.dp)
+                        )
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = timeEstimate,
+                    color = Color(0xFF6B7280),
+                    fontSize = 14.sp
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Slider(
+            value = feeRate,
+            onValueChange = onFeeRateChanged,
+            valueRange = 1f..20f,
+            modifier = Modifier.fillMaxWidth(),
+            colors = SliderDefaults.colors(
+                thumbColor = Color(0xFF3B82F6),
+                activeTrackColor = Color(0xFF3B82F6),
+                inactiveTrackColor = Color(0xFFD1D5DB)
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = feeAmount,
+                color = Color(0xFF101010),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = dollarAmount,
+                color = Color(0xFF6B7280),
+                fontSize = 14.sp
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(
+            modifier = Modifier.fillMaxWidth(),
+            thickness = 1.dp,
+            color = Color(0xFFE5E7EB)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        ImageButton(
+            onClick = onDone,
+            text = stringResource(R.string.btn_done),
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF0D1B2A),
+                contentColor = Color.White,
+            ),
+        )
     }
 }
