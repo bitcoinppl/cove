@@ -1,6 +1,6 @@
 [bindings.swift]
-cdylib_name = "covenfcffi"
+cdylib_name = "covedeviceffi"
 
 [bindings.kotlin]
 package_name = "org.bitcoinppl.cove"
-cdylib_name = "covenfcffi"
+cdylib_name = "covedeviceffi"

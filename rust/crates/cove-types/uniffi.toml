@@ -3,6 +3,6 @@ generate_module_maps = true
 cdylib_name = "cove_types_ffi"
 
 [bindings.kotlin]
-package_name = "org.bitcoinppl.cove_types"
+package_name = "org.bitcoinppl.cove"
 cdylib_name = "cove_types_ffi"
 
