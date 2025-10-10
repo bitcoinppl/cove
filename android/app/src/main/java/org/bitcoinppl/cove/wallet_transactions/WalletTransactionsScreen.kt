@@ -50,8 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.*
 import org.bitcoinppl.cove.views.ImageButton
 
 enum class TransactionType { SENT, RECEIVED }
@@ -101,11 +100,11 @@ fun WalletTransactionsScreen(
     satsAmount: String = "1,166,369 SATS",
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    val listBg = if (isDarkList) Color(0xFF151515) else Color(0xFFFFFFFF)
-    val listCard = if (isDarkList) Color(0xFF3C3C3E) else Color(0xFF514F50)
-    val primaryText = if (isDarkList) Color(0xFFEDEDED) else Color(0xFF1D1C1E)
-    val secondaryText = if (isDarkList) Color(0xFF8E8E93) else Color(0xFF8E8E93)
-    val dividerColor = if (isDarkList) Color(0x0DFFFFFF) else Color(0x0D000000)
+    val listBg = if (isDarkList) ListBackgroundDark else ListBackgroundLight
+    val listCard = if (isDarkList) ListCardDark else ListCardAlternative
+    val primaryText = if (isDarkList) TextPrimaryDark else TextPrimaryLight
+    val secondaryText = TextSecondary
+    val dividerColor = if (isDarkList) DividerDarkAlpha else DividerLightAlpha
 
     Scaffold(
         containerColor = MidnightBlue,
@@ -362,7 +361,7 @@ private fun TransactionWidget(
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = amount,
-                color = if (type == TransactionType.RECEIVED) Color(0xFF2DC24E) else primaryText,
+                color = if (type == TransactionType.RECEIVED) TransactionReceived else primaryText,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Normal
             )
@@ -383,7 +382,7 @@ private fun BalanceWidget(hidden: Boolean, usdAmount: String, satsAmount: String
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = if (isHidden) "$———" else usdAmount,
-            color = Color(0xB3FFFFFF),
+            color = Color.White.copy(alpha = 0.7f),
             fontSize = 16.sp
         )
 
@@ -399,7 +398,7 @@ private fun BalanceWidget(hidden: Boolean, usdAmount: String, satsAmount: String
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                     contentDescription = if (isHidden) "Show" else "Hide",
-                    tint = Color(0xB3FFFFFF)
+                    tint = Color.White.copy(alpha = 0.7f)
                 )
             }
         }

@@ -67,8 +67,7 @@ import com.example.cove.R
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.*
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import kotlin.math.hypot
@@ -134,8 +133,8 @@ fun HotWalletVerifyScreen(
     var travelDistance by remember { mutableStateOf(1f) }
     var overlayVisible by remember { mutableStateOf(false) }
 
-    val correctColor = Color(0xFF4CAF50)
-    val incorrectColor = Color(0xFFF44336)
+    val correctColor = SuccessGreen
+    val incorrectColor = ErrorRed
 
     LaunchedEffect(animatingWord) {
         animatingWord?.let { word ->

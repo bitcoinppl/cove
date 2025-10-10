@@ -33,8 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.bitcoinppl.cove.ui.theme.colorGray
-import org.bitcoinppl.cove.ui.theme.colorTextGray
+import org.bitcoinppl.cove.ui.theme.*
 
 
 @Preview
@@ -51,7 +50,7 @@ fun ThemedSwitch(isChecked: Boolean, onCheckChanged: ((Boolean) -> Unit)) {
         onCheckedChange = onCheckChanged,
         colors = SwitchDefaults.colors(
             checkedThumbColor = Color.White,
-            checkedTrackColor = Color.Blue,
+            checkedTrackColor = LinkBlue,
             uncheckedThumbColor = Color.White,
             uncheckedTrackColor = Color.LightGray,
         )
