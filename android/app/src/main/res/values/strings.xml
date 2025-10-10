@@ -91,6 +91,11 @@
     <string name="label_fee_slow">Slow</string>
     <string name="label_fee_custom">Custom</string>
     <string name="btn_customize_fee">Customize Fee</string>
+    <string name="title_advanced_details">Advanced Details</string>
+    <string name="subtitle_advanced_details">View current transaction breakdown</string>
+    <string name="label_utxos_used">UTXOs Used</string>
+    <string name="label_sent_to_self">Sent To Self</string>
+    <string name="label_fee">Fee</string>
     <string name="title_set_custom_network_fee">Set Custom Network Fee</string>
     <string name="btn_done">Done</string>
 </resources>
