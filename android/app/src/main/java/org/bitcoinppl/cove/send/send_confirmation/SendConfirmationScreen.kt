@@ -330,7 +330,7 @@ private fun SummaryWidget(
             key = stringResource(R.string.label_network_fee),
             value = networkFee,
             valueColor = CoveColor.TextSecondary,
-            keyColor = TextSecondary
+            keyColor = CoveColor.TextSecondary
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
