@@ -9,10 +9,14 @@ alias wt := watch-test
 alias wtest := watch-test
 alias wb := watch-build
 
-# build aliases
+# build aliases ios
 alias bi := build-ios
 alias bir := build-ios-release
 alias bidd := build-ios-debug-device
+
+# build aliases android
+alias b := build-android
+alias bar := build-android-release
 
 default:
     just --list
@@ -65,12 +69,32 @@ xcode-reset:
     cd ios && xcode-build-server config -project *.xcodeproj -scheme Cove
     open ios/Cove.xcodeproj
 
+watch-build profile="debug" device="false":
+    watchexec --exts rs just build-ios {{profile}} {{device}}
+
+test test="" flags="":
+    cd rust && cargo nextest run {{test}} --workspace {{flags}}
+
+ctest test="" flags="":
+    cd rust && cargo test {{test}} --workspace -- {{flags}} 
+
+btest test="":
+    cd rust && bacon nextest -- {{test}} --workspace
+
+watch-test test="" flags="":
+    watchexec --exts rs just test {{test}} {{flags}}
+
+# build android
 build-android:
     bash scripts/build-android.sh
+
+build-android-release:
+    bash scripts/build-android.sh release
 
 run-android: build-android
     bash scripts/run-android.sh
 
+# build ios
 build-ios profile="debug" device="false" sign="false":
     #!/usr/bin/env bash
     if bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}; then
@@ -88,17 +112,3 @@ build-ios-debug-device:
 run-ios: build-ios
     bash scripts/run-ios.sh
 
-watch-build profile="debug" device="false":
-    watchexec --exts rs just build-ios {{profile}} {{device}}
-
-test test="" flags="":
-    cd rust && cargo nextest run {{test}} --workspace {{flags}}
-
-ctest test="" flags="":
-    cd rust && cargo test {{test}} --workspace -- {{flags}} 
-
-btest test="":
-    cd rust && bacon nextest -- {{test}} --workspace
-
-watch-test test="" flags="":
-    watchexec --exts rs just test {{test}} {{flags}}

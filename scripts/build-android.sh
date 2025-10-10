@@ -1,35 +1,97 @@
 #!/bin/bash
-set -ex
+set -e
+set -o pipefail
+
 cd rust
- 
-# Set up cargo-ndk and add the Android targets
-cargo install cargo-ndk
-rustup target add aarch64-linux-android \
-    armv7-linux-androideabi \
-    i686-linux-android \
+
+################################################################################
+############################### ARG PARSING ####################################
+################################################################################
+
+BUILD_TYPE=${1:-release}
+
+if [[ "$BUILD_TYPE" == "release" || "$BUILD_TYPE" == "--release-smaller" ]]; then
+    BUILD_FLAG="--release"
+    BUILD_TYPE="release"
+elif [[ "$BUILD_TYPE" == "debug" || "$BUILD_TYPE" == "--debug" ]]; then
+    BUILD_FLAG=""
+    BUILD_TYPE="debug"
+else
+    BUILD_FLAG="--profile $BUILD_TYPE"
+fi
+
+################################################################################
+############################### PREP WORK ######################################
+################################################################################
+
+if ! command -v cargo-ndk >/dev/null 2>&1; then
+    echo "cargo-ndk not found, installing..."
+    cargo install cargo-ndk
+fi
+
+TARGETS=(
+    aarch64-linux-android
     x86_64-linux-android
- 
-# Build the dylib
-cargo build
+)
 
-# Build the Android libraries in jniLibs for arm64
+declare -A ABI_DIRS=(
+    [aarch64-linux-android]=arm64-v8a
+    [x86_64-linux-android]=x86_64
+)
+
+JNI_LIBS_DIR="../android/app/src/main/jniLibs"
+ANDROID_KOTLIN_DIR="../android/app/src/main/java"
+BINDINGS_DIR="./bindings/kotlin"
+
+mkdir -p "$JNI_LIBS_DIR"
+mkdir -p "$ANDROID_KOTLIN_DIR"
+rm -rf "$BINDINGS_DIR" || true
+mkdir -p "$BINDINGS_DIR"
+
+################################################################################
+############################### BUILDING #######################################
+################################################################################
+
 export CFLAGS="-D__ANDROID_MIN_SDK_VERSION__=21"
-cargo ndk --target aarch64-linux-android build --release
+for TARGET in "${TARGETS[@]}"; do
+    echo "Building for target: ${TARGET} with build type: ${BUILD_TYPE}"
+    rustup target add "$TARGET"
+    cargo ndk --target "$TARGET" build $BUILD_FLAG
 
+    TARGET_DIR="./target/$TARGET/$BUILD_TYPE"
+    DYNAMIC_LIB_PATH="$TARGET_DIR/libcove.so"
+    if [[ ! -f "$DYNAMIC_LIB_PATH" ]]; then
+        echo "Missing dynamic library at $DYNAMIC_LIB_PATH" >&2
+        exit 1
+    fi
 
-# Build the Android libraries in jniLibs for x86_64
-export CFLAGS="-D__ANDROID_MIN_SDK_VERSION__=21"
-cargo ndk --target x86_64-linux-android build --release 
+    ABI="${ABI_DIRS[$TARGET]}"
+    if [[ -z "$ABI" ]]; then
+        echo "Unable to map target $TARGET to an Android ABI directory" >&2
+        exit 1
+    fi
 
-# Copy jnilibs to expected location
-mkdir -p ../android/app/src/main/jniLibs/arm64-v8a
-mkdir -p ../android/app/src/main/jniLibs/x86_64
+    mkdir -p "$JNI_LIBS_DIR/$ABI"
+    cp "$DYNAMIC_LIB_PATH" "$JNI_LIBS_DIR/$ABI/libcoveffi.so"
+done
 
-cp target/aarch64-linux-android/release/libcove.so ../android/app/src/main/jniLibs/arm64-v8a/libcoveffi.so
-cp target/x86_64-linux-android/release/libcove.so ../android/app/src/main/jniLibs/x86_64/libcoveffi.so
+################################################################################
+############################### BINDINGS #######################################
+################################################################################
 
-# Create Kotlin bindings
-cargo run -p uniffi_cli generate \
-    --library target/aarch64-linux-android/release/libcove.so \
+DYNAMIC_LIB_PATH="./target/${TARGETS[0]}/$BUILD_TYPE/libcove.so"
+if [[ ! -f "$DYNAMIC_LIB_PATH" ]]; then
+    echo "Missing dynamic library at $DYNAMIC_LIB_PATH" >&2
+    exit 1
+fi
+
+echo "Generating Kotlin bindings into $BINDINGS_DIR"
+cargo run -p uniffi_cli \
+    -- generate "$DYNAMIC_LIB_PATH" \
+    --library \
     --language kotlin \
-    --out-dir ../android/app/src/main/java \
+    --out-dir "$BINDINGS_DIR"
+
+echo "Copying Kotlin bindings into Android project at $ANDROID_KOTLIN_DIR"
+rm -f "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/cove.kt"
+cp -R "$BINDINGS_DIR"/. "$ANDROID_KOTLIN_DIR"/
