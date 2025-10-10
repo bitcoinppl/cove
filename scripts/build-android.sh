@@ -90,6 +90,7 @@ cargo run -p uniffi_cli \
     -- generate "$DYNAMIC_LIB_PATH" \
     --library \
     --language kotlin \
+    --no-format \
     --out-dir "$BINDINGS_DIR"
 
 echo "Copying Kotlin bindings into Android project at $ANDROID_KOTLIN_DIR"
