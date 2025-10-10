@@ -33,8 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.bitcoinppl.cove.ui.theme.colorGray
-import org.bitcoinppl.cove.ui.theme.colorTextGray
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 
 @Preview
@@ -51,7 +50,7 @@ fun ThemedSwitch(isChecked: Boolean, onCheckChanged: ((Boolean) -> Unit)) {
         onCheckedChange = onCheckChanged,
         colors = SwitchDefaults.colors(
             checkedThumbColor = Color.White,
-            checkedTrackColor = Color.Blue,
+            checkedTrackColor = CoveColor.LinkBlue,
             uncheckedThumbColor = Color.White,
             uncheckedTrackColor = Color.LightGray,
         )
@@ -106,7 +105,7 @@ fun InfoRow(label: String, text: String) {
                 .fillMaxWidth()
                 .weight(1f),
             style = MaterialTheme.typography.bodyLarge,
-            color = colorTextGray,
+            color = CoveColor.TextGray,
             textAlign = TextAlign.End,
         )
     }
@@ -142,12 +141,12 @@ fun ClickableInfoRow(label: String, text: String, icon: ImageVector, onClick: ()
                 .fillMaxWidth()
                 .weight(1f),
             style = MaterialTheme.typography.bodyLarge,
-            color = colorTextGray,
+            color = CoveColor.TextGray,
             textAlign = TextAlign.End,
         )
         Icon(
             imageVector = icon,
-            tint = colorGray,
+            tint = CoveColor.TextGray,
             contentDescription = "Forward",
         )
     }
@@ -156,7 +155,7 @@ fun ClickableInfoRow(label: String, text: String, icon: ImageVector, onClick: ()
 @Composable
 fun CardItem(
     title: String,
-    titleColor: Color? = colorTextGray,
+    titleColor: Color? = CoveColor.TextGray,
     allCaps: Boolean? = false,
     content: @Composable() () -> Unit
 ) {

@@ -40,6 +40,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import kotlinx.coroutines.launch
 
 // Animation duration in milliseconds for swipe button returning to start position when swipe is incomplete.
@@ -47,9 +48,9 @@ private const val SWIPE_RETURN_DURATION_MS = 500
 // Progress threshold (0.0-1.0) at which swipe is considered complete and triggers the action.
 private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
 // Target text color (white) that text animates to during swipe gesture.
-private val SWIPE_BUTTON_TEXT_COLOR_TARGET = Color(0xFFffffff)
+private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 // Target background color (cyan) that button background animates to during swipe gesture.
-private val SWIPE_BUTTON_BG_COLOR_TARGET = Color(0xFF00BCD4)
+private val SWIPE_BUTTON_BG_COLOR_TARGET = CoveColor.SwipeButtonBg
 
 @Preview(showBackground = true)
 @Composable
@@ -91,7 +92,7 @@ fun SendConfirmationScreen(
     willPay: String,
 ) {
     Scaffold(
-        containerColor = Color(0xFF0D1B2A),
+        containerColor = CoveColor.BackgroundDark,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -133,7 +134,7 @@ fun SendConfirmationScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .background(Color(0xFFFFFFFF))
+                        .background(CoveColor.BackgroundLight)
                         .padding(horizontal = 16.dp)
                 ) {
                     AmountWidget(
@@ -142,7 +143,7 @@ fun SendConfirmationScreen(
                         dollarText = dollarEquivalentText,
                         accountShort = accountShort,
                     )
-                    HorizontalDivider(color = Color(0xFFE5E5EA), thickness = 1.dp)
+                    HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     SummaryWidget(
                         address = address,
                         networkFee = networkFee,
@@ -153,10 +154,10 @@ fun SendConfirmationScreen(
                     SwipeToSendStub(
                         text = stringResource(R.string.action_swipe_to_send),
                         onComplete = onSwipeToSend,
-                        containerColor = Color(0xFFE9E9EF),
+                        containerColor = CoveColor.SurfaceLight,
                         targetContainerColor = SWIPE_BUTTON_BG_COLOR_TARGET,
-                        knobColor = Color(0xFF0D1B2A),
-                        textColor = Color(0xFF0D1B2A),
+                        knobColor = CoveColor.BackgroundDark,
+                        textColor = CoveColor.BackgroundDark,
                         targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -189,7 +190,7 @@ private fun BalanceWidget(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_balance),
-                    color = Color(0xB3FFFFFF),
+                    color = Color.White.copy(alpha = 0.7f),
                     fontSize = 14.sp
                 )
                 Spacer(Modifier.height(4.dp))
@@ -234,14 +235,14 @@ private fun AmountWidget(
         Spacer(Modifier.height(16.dp))
         Text(
             stringResource(R.string.label_you_are_sending),
-            color = Color(0xFF101010),
+            color = CoveColor.TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_amount_they_will_receive),
-            color = Color(0xFF8F8F95),
+            color = CoveColor.TextSecondary,
             fontSize = 14.sp
         )
         Spacer(Modifier.height(24.dp))
@@ -252,7 +253,7 @@ private fun AmountWidget(
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     text = amount,
-                    color = Color(0xFF000000),
+                    color = CoveColor.TextPrimary,
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Right,
@@ -261,12 +262,12 @@ private fun AmountWidget(
             }
             Spacer(Modifier.width(32.dp))
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-4).dp)) {
-                Text(denomination, color = Color(0xFF101010), fontSize = 18.sp, maxLines = 1)
+                Text(denomination, color = CoveColor.TextPrimary, fontSize = 18.sp, maxLines = 1)
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.Filled.ArrowDropDown,
                     contentDescription = null,
-                    tint = Color(0xFF101010),
+                    tint = CoveColor.TextPrimary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -274,7 +275,7 @@ private fun AmountWidget(
         Spacer(Modifier.height(12.dp))
         Text(
             dollarText,
-            color = Color(0xFF8F8F95),
+            color = CoveColor.TextSecondary,
             fontSize = 20.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
@@ -287,16 +288,16 @@ private fun AmountWidget(
             Icon(
                 Icons.Filled.CurrencyBitcoin,
                 contentDescription = null,
-                tint = Color(0xFFF59E0B),
+                tint = CoveColor.WarningOrange,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(Modifier.size(12.dp))
             Column(horizontalAlignment = Alignment.Start) {
-                Text(accountShort, color = Color(0xFF8F8F95), fontSize = 14.sp)
+                Text(accountShort, color = CoveColor.TextSecondary, fontSize = 14.sp)
                 Spacer(Modifier.size(4.dp))
                 Text(
                     stringResource(R.string.label_main),
-                    color = Color(0xFF101010),
+                    color = CoveColor.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -320,34 +321,34 @@ private fun SummaryWidget(
         KeyValueRow(
             key = stringResource(R.string.label_address),
             value = address,
-            valueColor = Color(0xFF101010),
-            keyColor = Color(0xFF8F8F95),
+            valueColor = CoveColor.TextPrimary,
+            keyColor = CoveColor.TextSecondary,
             boldValue = true
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
             key = stringResource(R.string.label_network_fee),
             value = networkFee,
-            valueColor = Color(0xFF8F8F95),
-            keyColor = Color(0xFF8F8F95)
+            valueColor = CoveColor.TextSecondary,
+            keyColor = CoveColor.TextSecondary
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
             key = stringResource(R.string.label_they_will_receive),
             value = willReceive,
-            valueColor = Color(0xFF101010),
+            valueColor = CoveColor.TextPrimary,
             boldValue = true,
             boldKey = true,
-            keyColor = Color(0xFF101010)
+            keyColor = CoveColor.TextPrimary
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
             key = stringResource(R.string.label_you_will_pay),
             value = willPay,
-            valueColor = Color(0xFF101010),
+            valueColor = CoveColor.TextPrimary,
             boldValue = true,
             boldKey = true,
-            keyColor = Color(0xFF101010)
+            keyColor = CoveColor.TextPrimary
         )
         Spacer(Modifier.height(20.dp))
     }
@@ -454,7 +455,7 @@ private fun SwipeToSendStub(
                     scope.launch {
                         animOffset.snapTo(rawOffset)
                         if (rawOffset >= maxOffsetPx * SWIPE_COMPLETE_THRESHOLD) {
-                            animOffset.snapTo(max)
+                            animOffset.snapTo(maxOffsetPx)
                             if (!completed) {
                                 completed = true
                                 onComplete()

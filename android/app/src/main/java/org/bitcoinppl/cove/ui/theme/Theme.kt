@@ -17,17 +17,17 @@ import androidx.core.view.WindowCompat
 import com.example.cove.ui.theme.Typography
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80,
-    surfaceContainer = cardBackgroundColorLight
+    primary = CoveColor.midnightBlue,
+    secondary = CoveColor.duskBlue,
+    tertiary = CoveColor.btnPrimary,
+    surfaceContainer = CoveColor.ListCardDark
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-    surfaceContainer = cardBackgroundColorDark,
+    primary = CoveColor.midnightBlue,
+    secondary = CoveColor.btnPrimary,
+    tertiary = CoveColor.coveLightGray,
+    surfaceContainer = CoveColor.ListCardLight,
     /* Other default colors to override
     background = Color(0xFFFFFBFE),
     surface = Color(0xFFFFFBFE),

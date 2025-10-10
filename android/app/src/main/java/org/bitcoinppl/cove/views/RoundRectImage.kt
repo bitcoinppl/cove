@@ -18,12 +18,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.cove.R
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 
 @Composable
 fun RoundRectImage(
     size: Dp? = 40.dp,
-    backgroundColor: Color? = Color.Gray,
+    backgroundColor: Color? = CoveColor.TextSecondary,
     painter: Painter,
     contentDescription: String? = null,
     cornerRadius: Dp? = 4.dp,

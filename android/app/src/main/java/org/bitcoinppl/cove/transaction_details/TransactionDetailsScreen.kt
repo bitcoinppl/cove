@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.tooling.preview.Preview
@@ -233,7 +233,7 @@ fun TransactionDetailsScreen(
     val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
     val sub = if (isDark) Color(0xFFB8B8B8) else Color(0xFF8F8F95)
     val checkCircle = if (isDark) Color(0xFF0F0F12) else Color(0xFF0F1012)
-    val chipBg = Color(0xFF1FC35C)
+    val chipBg = CoveColor.TransactionReceived
 
     val ringColors: List<Color> = if (isDark) {
         listOf(
@@ -457,8 +457,8 @@ fun TransactionDetailsScreen(
                         text = stringResource(R.string.btn_view_in_explorer),
                         onClick = onViewInExplorer,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isDark) Color(0xFF4B4F58) else MidnightBlue,
-                            contentColor = if (isDark) Color(0xFFE5E7EB) else Color.White
+                            containerColor = if (isDark) CoveColor.SurfaceDark else CoveColor.midnightBlue,
+                            contentColor = if (isDark) CoveColor.BorderLight else Color.White
                         ),
                         modifier = Modifier
                             .fillMaxWidth()

@@ -14,6 +14,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 import java.util.Locale
 
@@ -21,10 +22,10 @@ enum class FeePriority(
     val displayNameRes: Int,
     val color: Color
 ) {
-    FAST(R.string.label_fee_fast, Color(0xFF4CAF50)),
-    MEDIUM(R.string.label_fee_medium, Color(0xFFFFEB3B)),
-    SLOW(R.string.label_fee_slow, Color(0xFFFF9800)),
-    CUSTOM(R.string.label_fee_custom, Color(0xFF3B82F6))
+    FAST(R.string.label_fee_fast, CoveColor.FeeFast),
+    MEDIUM(R.string.label_fee_medium, CoveColor.FeeMedium),
+    SLOW(R.string.label_fee_slow, CoveColor.FeeSlow),
+    CUSTOM(R.string.label_fee_custom, CoveColor.FeeCustom)
 }
 
 data class FeeOption(
@@ -209,7 +210,7 @@ fun NetworkFeeBottomSheet(
                     .width(36.dp)
                     .height(4.dp)
                     .background(
-                        Color(0xFFD1D5DB),
+                        CoveColor.BorderLight,
                         RoundedCornerShape(2.dp)
                     )
             )
@@ -217,7 +218,7 @@ fun NetworkFeeBottomSheet(
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.title_network_fee),
-            color = Color(0xFF101010),
+            color = CoveColor.TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.fillMaxWidth(),
@@ -239,7 +240,7 @@ fun NetworkFeeBottomSheet(
             text = stringResource(R.string.btn_customize_fee),
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF0D1B2A),
+                containerColor = CoveColor.BackgroundDark,
                 contentColor = Color.White,
             ),
         )
@@ -259,11 +260,11 @@ private fun FeeOptionCard(
             .padding(vertical = 8.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFF525C6B) else Color(0xFFF1F1F3)
+            containerColor = if (isSelected) CoveColor.SurfaceDark else CoveColor.SurfaceLight
         ),
         border = androidx.compose.foundation.BorderStroke(
             width = 1.dp,
-            color = Color(0xFFD1D5DB)
+            color = CoveColor.BorderLight
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isSelected) 4.dp else 1.dp
@@ -279,7 +280,7 @@ private fun FeeOptionCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(feeOption.priority.displayNameRes),
-                        color = if (isSelected) Color.White else Color(0xFF000000),
+                        color = if (isSelected) Color.White else CoveColor.TextPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -288,7 +289,7 @@ private fun FeeOptionCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .background(
-                                color = if (isSelected) Color(0xFF6B7280) else Color(0xFFD1D5DB),
+                                color = if (isSelected) CoveColor.BorderMedium else CoveColor.BorderLight,
                                 shape = RoundedCornerShape(12.dp)
                             )
                             .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -304,7 +305,7 @@ private fun FeeOptionCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = feeOption.timeEstimate,
-                            color = if (isSelected) Color(0xFFD1D5DB) else Color(0xFF6B7280),
+                            color = if (isSelected) CoveColor.BorderLight else CoveColor.BorderMedium,
                             fontSize = 14.sp
                         )
                     }
@@ -312,21 +313,21 @@ private fun FeeOptionCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = feeOption.feeRate,
-                    color = if (isSelected) Color(0xFFD1D5DB) else Color(0xFF374151),
+                    color = if (isSelected) CoveColor.BorderLight else CoveColor.BorderDark,
                     fontSize = 14.sp
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = feeOption.feeAmount,
-                    color = if (isSelected) Color.White else Color(0xFF000000),
+                    color = if (isSelected) Color.White else CoveColor.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = feeOption.dollarAmount,
-                    color = if (isSelected) Color(0xFFD1D5DB) else Color(0xFF6B7280),
+                    color = if (isSelected) CoveColor.BorderLight else CoveColor.BorderMedium,
                     fontSize = 14.sp
                 )
             }
@@ -359,7 +360,7 @@ fun CustomNetworkFeeBottomSheet(
                     .width(36.dp)
                     .height(4.dp)
                     .background(
-                        Color(0xFFD1D5DB),
+                        CoveColor.BorderLight,
                         RoundedCornerShape(2.dp)
                     )
             )
@@ -367,7 +368,7 @@ fun CustomNetworkFeeBottomSheet(
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.title_set_custom_network_fee),
-            color = Color(0xFF101010),
+            color = CoveColor.TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.fillMaxWidth(),
@@ -376,7 +377,7 @@ fun CustomNetworkFeeBottomSheet(
         Spacer(modifier = Modifier.height(32.dp))
         Text(
             text = feeRateLabel,
-            color = Color(0xFF6B7280),
+            color = CoveColor.BorderMedium,
             fontSize = 16.sp,
             modifier = Modifier.fillMaxWidth()
         )
@@ -388,7 +389,7 @@ fun CustomNetworkFeeBottomSheet(
         ) {
             Text(
                 text = String.format(Locale.US, "%.2f", feeRate),
-                color = Color(0xFF101010),
+                color = CoveColor.TextPrimary,
                 fontSize = 48.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -396,7 +397,7 @@ fun CustomNetworkFeeBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .background(
-                        color = Color(0xFFD1D5DB),
+                        color = CoveColor.BorderLight,
                         shape = RoundedCornerShape(12.dp)
                     )
                     .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -405,14 +406,14 @@ fun CustomNetworkFeeBottomSheet(
                     modifier = Modifier
                         .size(8.dp)
                         .background(
-                            Color(0xFF3B82F6),
+                            CoveColor.SliderActive,
                             RoundedCornerShape(4.dp)
                         )
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = timeEstimate,
-                    color = Color(0xFF6B7280),
+                    color = CoveColor.BorderMedium,
                     fontSize = 14.sp
                 )
             }
@@ -424,9 +425,9 @@ fun CustomNetworkFeeBottomSheet(
             valueRange = 1f..20f,
             modifier = Modifier.fillMaxWidth(),
             colors = SliderDefaults.colors(
-                thumbColor = Color(0xFF3B82F6),
-                activeTrackColor = Color(0xFF3B82F6),
-                inactiveTrackColor = Color(0xFFD1D5DB)
+                thumbColor = CoveColor.SliderActive,
+                activeTrackColor = CoveColor.SliderActive,
+                inactiveTrackColor = CoveColor.SliderInactive
             )
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -436,13 +437,13 @@ fun CustomNetworkFeeBottomSheet(
         ) {
             Text(
                 text = feeAmount,
-                color = Color(0xFF101010),
+                color = CoveColor.TextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
                 text = dollarAmount,
-                color = Color(0xFF6B7280),
+                color = CoveColor.BorderMedium,
                 fontSize = 14.sp
             )
         }
@@ -450,7 +451,7 @@ fun CustomNetworkFeeBottomSheet(
         HorizontalDivider(
             modifier = Modifier.fillMaxWidth(),
             thickness = 1.dp,
-            color = Color(0xFFE5E7EB)
+            color = CoveColor.BorderLight
         )
         Spacer(modifier = Modifier.height(24.dp))
         ImageButton(
@@ -458,7 +459,7 @@ fun CustomNetworkFeeBottomSheet(
             text = stringResource(R.string.btn_done),
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF0D1B2A),
+                containerColor = CoveColor.BackgroundDark,
                 contentColor = Color.White,
             ),
         )

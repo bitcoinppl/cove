@@ -36,6 +36,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 
 @Preview()
@@ -86,11 +87,8 @@ fun SendScreen(
     totalSpendingFiat: String,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    val midnightBlue = Color(0xFF0D1B2A)
-    val lightBg = Color(0xFFFFFFFF)
-
     Scaffold(
-        containerColor = midnightBlue,
+        containerColor = CoveColor.BackgroundDark,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -135,7 +133,7 @@ fun SendScreen(
                         .fillMaxWidth()
                         .weight(1f)
                         .clip(RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp))
-                        .background(lightBg)
+                        .background(CoveColor.BackgroundLight)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp)
                 ) {
@@ -144,12 +142,12 @@ fun SendScreen(
                         denomination = amountDenomination,
                         dollarText = dollarEquivalentText,
                     )
-                    HorizontalDivider(color = Color(0xFFE5E5EA), thickness = 1.dp)
+                    HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     AddressWidget(
                         onScanQr = onScanQr,
                         initialAddress = initialAddress
                     )
-                    HorizontalDivider(color = Color(0xFFE5E5EA), thickness = 1.dp)
+                    HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     SpendingWidget(
                         accountShort = accountShort,
                         feeEta = feeEta,
@@ -163,7 +161,7 @@ fun SendScreen(
                         text = stringResource(R.string.btn_next),
                         onClick = onNext,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = midnightBlue,
+                            containerColor = CoveColor.BackgroundDark,
                             contentColor = Color.White
                         ),
                         modifier = Modifier
@@ -197,7 +195,7 @@ private fun BalanceWidget(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_balance),
-                    color = Color(0xB3FFFFFF),
+                    color = Color.White.copy(alpha = 0.7f),
                     fontSize = 14.sp
                 )
                 Spacer(Modifier.height(4.dp))
@@ -242,14 +240,14 @@ private fun AmountWidget(
         Spacer(Modifier.height(20.dp))
         Text(
             stringResource(R.string.label_enter_amount),
-            color = Color(0xFF101010),
+            color = CoveColor.TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_how_much_to_send),
-            color = Color(0xFF8F8F95),
+            color = CoveColor.TextSecondary,
             fontSize = 14.sp
         )
         Spacer(Modifier.height(24.dp))
@@ -262,7 +260,7 @@ private fun AmountWidget(
                     value = amount,
                     onValueChange = { amount = it },
                     textStyle = TextStyle(
-                        color = Color(0xFF000000),
+                        color = CoveColor.TextPrimary,
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Right
@@ -273,12 +271,12 @@ private fun AmountWidget(
             }
             Spacer(Modifier.width(32.dp))
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-4).dp)) {
-                Text(denomination, color = Color(0xFF101010), fontSize = 18.sp, maxLines = 1)
+                Text(denomination, color = CoveColor.TextPrimary, fontSize = 18.sp, maxLines = 1)
                 Spacer(Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.Filled.ArrowDropDown,
                     contentDescription = null,
-                    tint = Color(0xFF101010),
+                    tint = CoveColor.TextPrimary,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -286,7 +284,7 @@ private fun AmountWidget(
         Spacer(Modifier.height(8.dp))
         Text(
             dollarText,
-            color = Color(0xFF8F8F95),
+            color = CoveColor.TextSecondary,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
@@ -307,14 +305,14 @@ private fun AddressWidget(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_enter_address),
-                    color = Color(0xFF101010),
+                    color = CoveColor.TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(R.string.label_where_send_to),
-                    color = Color(0xFF8F8F95),
+                    color = CoveColor.TextSecondary,
                     fontSize = 14.sp
                 )
             }
@@ -323,7 +321,7 @@ private fun AddressWidget(
                 modifier = Modifier.offset(x = 8.dp)
 
             ) {
-                Icon(Icons.Filled.QrCode2, contentDescription = null, tint = Color(0xFF6F6F75))
+                Icon(Icons.Filled.QrCode2, contentDescription = null, tint = CoveColor.IconGray)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -331,7 +329,7 @@ private fun AddressWidget(
             value = address,
             onValueChange = { address = it },
             textStyle = TextStyle(
-                color = Color(0xFF101010),
+                color = CoveColor.TextPrimary,
                 fontSize = 15.sp,
                 lineHeight = 20.sp,
                 fontWeight = FontWeight.Medium,
@@ -356,7 +354,7 @@ private fun SpendingWidget(
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(R.string.label_account),
-                color = Color(0xFF8F8F95),
+                color = CoveColor.TextSecondary,
                 fontSize = 14.sp,
                 modifier = Modifier.weight(1f)
             )
@@ -364,16 +362,16 @@ private fun SpendingWidget(
                 Icon(
                     Icons.Filled.CurrencyBitcoin,
                     contentDescription = null,
-                    tint = Color(0xFFF59E0B),
+                    tint = CoveColor.WarningOrange,
                     modifier = Modifier.size(28.dp)
                 )
                 Spacer(Modifier.size(8.dp))
                 Column(horizontalAlignment = Alignment.Start) {
-                    Text(accountShort, color = Color(0xFF8F8F95), fontSize = 14.sp)
+                    Text(accountShort, color = CoveColor.TextSecondary, fontSize = 14.sp)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         stringResource(R.string.label_main),
-                        color = Color(0xFF101010),
+                        color = CoveColor.TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -385,16 +383,16 @@ private fun SpendingWidget(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_network_fee),
-                    color = Color(0xFF8F8F95),
+                    color = CoveColor.TextSecondary,
                     fontSize = 14.sp
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(feeEta, color = Color(0xFF8F8F95), fontSize = 12.sp)
+                    Text(feeEta, color = CoveColor.TextSecondary, fontSize = 12.sp)
                     Spacer(Modifier.size(4.dp))
                     Text(
                         stringResource(R.string.btn_change_speed),
-                        color = Color(0xFF007AFF),
+                        color = CoveColor.LinkBlue,
                         fontSize = 12.sp,
                         modifier = Modifier
                             .clickable(onClick = onChangeSpeed)
@@ -402,13 +400,13 @@ private fun SpendingWidget(
                     )
                 }
             }
-            Text(feeAmount, color = Color(0xFF8F8F95), fontSize = 14.sp)
+            Text(feeAmount, color = CoveColor.TextSecondary, fontSize = 14.sp)
         }
         Spacer(Modifier.height(24.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Text(
                 stringResource(R.string.label_total_spending),
-                color = Color(0xFF101010),
+                color = CoveColor.TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
@@ -416,14 +414,14 @@ private fun SpendingWidget(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     totalSpendingCrypto,
-                    color = Color(0xFF101010),
+                    color = CoveColor.TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     totalSpendingFiat,
-                    color = Color(0xFF8F8F95),
+                    color = CoveColor.TextSecondary,
                     fontSize = 12.sp,
                     textAlign = TextAlign.End
                 )

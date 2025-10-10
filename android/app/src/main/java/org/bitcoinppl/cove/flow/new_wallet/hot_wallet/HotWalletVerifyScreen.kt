@@ -67,8 +67,7 @@ import com.example.cove.R
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import kotlin.math.hypot
@@ -134,8 +133,8 @@ fun HotWalletVerifyScreen(
     var travelDistance by remember { mutableStateOf(1f) }
     var overlayVisible by remember { mutableStateOf(false) }
 
-    val correctColor = Color(0xFF4CAF50)
-    val incorrectColor = Color(0xFFF44336)
+    val correctColor = CoveColor.SuccessGreen
+    val incorrectColor = CoveColor.ErrorRed
 
     LaunchedEffect(animatingWord) {
         animatingWord?.let { word ->
@@ -184,7 +183,7 @@ fun HotWalletVerifyScreen(
     }
 
     Scaffold(
-        containerColor = MidnightBlue,
+        containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -366,8 +365,8 @@ fun HotWalletVerifyScreen(
                         text = stringResource(R.string.btn_show_words),
                         onClick = onShowWords,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = BtnPrimary,
-                            contentColor = MidnightBlue
+                            containerColor = CoveColor.btnPrimary,
+                            contentColor = CoveColor.midnightBlue
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -392,8 +391,8 @@ fun HotWalletVerifyScreen(
                 val remaining = hypot(targetPosition.x - animationX.value, targetPosition.y - animationY.value)
                 val threshold = if (isCorrect) AnimationConfig.colorFlipThresholdFractionCorrect else AnimationConfig.colorFlipThresholdFractionIncorrect
                 val nearTarget = travelDistance > 0f && (remaining / travelDistance) < threshold.coerceIn(0f, 1f)
-                val overlayBg = if (nearTarget) (if (isCorrect) correctColor else incorrectColor) else BtnPrimary
-                val overlayText = if (nearTarget) Color.White else MidnightBlue
+                val overlayBg = if (nearTarget) (if (isCorrect) correctColor else incorrectColor) else CoveColor.btnPrimary
+                val overlayText = if (nearTarget) Color.White else CoveColor.midnightBlue
 
                 Box(
                     modifier = Modifier
@@ -430,8 +429,8 @@ private fun OptionChip(
     onPositionCaptured: (androidx.compose.ui.geometry.Offset) -> Unit = {},
 ) {
     val shape = RoundedCornerShape(14.dp)
-    val bg = if (selected) Color.White else BtnPrimary
-    val textColor = if (selected) MidnightBlue else MidnightBlue
+    val bg = if (selected) Color.White else CoveColor.btnPrimary
+    val textColor = if (selected) CoveColor.midnightBlue else CoveColor.midnightBlue
 
     Box(
         modifier = modifier
