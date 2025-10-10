@@ -96,3 +96,8 @@ cargo run -p uniffi_cli \
 echo "Copying Kotlin bindings into Android project at $ANDROID_KOTLIN_DIR"
 rm -f "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/cove.kt"
 cp -R "$BINDINGS_DIR"/. "$ANDROID_KOTLIN_DIR"/
+
+# fix duplicate declarations by removing FFI infrastructure from sub-crate files
+# only keep the actual type definitions, use FFI infrastructure from main cove.kt
+echo "Removing duplicate FFI infrastructure from sub-crate files"
+python3 "../scripts/strip_ffi_duplicates.py" "$ANDROID_KOTLIN_DIR"/org/bitcoinppl/cove/cove_*.kt

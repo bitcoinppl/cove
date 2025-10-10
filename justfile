@@ -86,7 +86,7 @@ watch-test test="" flags="":
 
 # build android
 build-android:
-    bash scripts/build-android.sh
+    bash scripts/build-android.sh debug
 
 build-android-release:
     bash scripts/build-android.sh release
