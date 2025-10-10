@@ -352,7 +352,7 @@ struct CoveApp: App {
             ShareSheetHandler.presentShareSheet(for: url)
             return
         }
-        
+
         let fileHandler = FileHandler(filePath: url.absoluteString)
 
         do {

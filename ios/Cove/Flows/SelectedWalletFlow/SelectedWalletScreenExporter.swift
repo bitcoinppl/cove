@@ -1,34 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-private enum AlertState: Equatable {
-    case exportSuccess
-    case unableToImportLabels(String)
-    case unableToExportLabels(String)
-}
-
-private struct ExportableDocument: FileDocument {
-    static var readableContentTypes = [UTType.jsonl, UTType.json, UTType.plainText]
-    var text: String
-
-    init(text: String) {
-        self.text = text
-    }
-
-    init(configuration: ReadConfiguration) throws {
-        if let data = configuration.file.regularFileContents {
-            text = String(decoding: data, as: UTF8.self)
-        } else {
-            text = ""
-        }
-    }
-
-    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
-        let data = Data(text.utf8)
-        return FileWrapper(regularFileWithContents: data)
-    }
-}
-
 struct SelctedWalletScreenExporterView: View {
     public enum Exporting: Equatable {
         case labels
@@ -43,16 +15,41 @@ struct SelctedWalletScreenExporterView: View {
 
     var body: some View {
         VStack {}
-            .fileExporter(
-                isPresented: Binding(
-                    get: { exporting != nil },
-                    set: { if !$0 { exporting = nil } }
-                ),
-                document: makeFileDocument(),
-                contentType: makeContentType(),
-                defaultFilename: makeDefaultFilename(),
-                onCompletion: handle
-            )
+            .onChange(of: exporting) { _, newValue in
+                guard let exportType = newValue else { return }
+                handleExport(exportType)
+            }
+    }
+
+    private func handleExport(_ exportType: Exporting) {
+        let (content, filename) = makeExportData(exportType)
+
+        ShareSheetHandler.presentShareSheet(
+            data: content,
+            filename: filename,
+            utType: .plainText
+        ) { success in
+            handleCompletion(exportType: exportType, success: success)
+        }
+    }
+
+    private func makeExportData(_ exportType: Exporting) -> (content: String, filename: String) {
+        switch exportType {
+        case .labels:
+            let content = exportLabelContent()
+            let filename = labelManager.exportDefaultFileName(name: metadata.name)
+            return (content, filename)
+
+        case let .backup(exportingBackup):
+            let content = hexEncode(bytes: exportingBackup.backup)
+            let prefix = exportingBackup.tapSigner.identFileNamePrefix()
+            let filename = "\(prefix)_backup.txt"
+            return (content, filename)
+
+        case let .transactions(csv):
+            let filename = "\(metadata.name.lowercased())_transactions.csv"
+            return (csv, filename)
+        }
     }
 
     private func exportLabelContent() -> String {
@@ -65,84 +62,31 @@ struct SelctedWalletScreenExporterView: View {
                     message: "Error exporting labels \(error.localizedDescription)"
                 )
             )
-
             return ""
         }
     }
 
-    private func makeFileDocument() -> ExportableDocument? {
-        switch exporting {
-        case let .backup(exportingBackup):
-            let data = exportingBackup.backup
-            return ExportableDocument(text: hexEncode(bytes: data))
-        case let .transactions(csv):
-            return ExportableDocument(text: csv)
-        case .labels:
-            return ExportableDocument(text: exportLabelContent())
-        case .none:
-            return .none
-        }
-    }
+    private func handleCompletion(exportType: Exporting, success: Bool) {
+        // reset exporting state
+        exporting = nil
 
-    // pick UTType
-    private func makeContentType() -> UTType {
-        switch exporting {
-        case .labels:
-            .jsonl
-        case .backup:
-            .plainText
-        case .transactions:
-            .plainText
-        case .none:
-            .data
-        }
-    }
+        // only show alerts on success, not on cancellation
+        guard success else { return }
 
-    // pick filename
-    private func makeDefaultFilename() -> String {
-        switch exporting {
+        switch exportType {
         case .labels:
-            return labelManager.exportDefaultFileName(name: metadata.name)
-        case let .backup(exportingBackup):
-            let prefix = exportingBackup.tapSigner.identFileNamePrefix()
-            return "\(prefix)_backup.txt"
-        case .transactions:
-            return "\(metadata.name.lowercased())_transactions.csv"
-        case .none:
-            return "impossible"
-        }
-    }
-
-    // handle the result based on which export it was
-    private func handle(_ result: Result<URL, Error>) {
-        switch exporting {
-        case .labels:
-            switch result {
-            case .success:
-                app.alertState = .init(
-                    .general(title: "Success!", message: "Your labels have been exported!")
-                )
-            case let .failure(error):
-                app.alertState = .init(
-                    .general(title: "Ooops something went wrong", message: "Unable to export labels \(error.localizedDescription)")
-                )
-            }
+            app.alertState = .init(
+                .general(title: "Success!", message: "Your labels have been exported!")
+            )
 
         case .backup:
-            switch result {
-            case .success:
-                app.sheetState = .none
-                app.alertState = .init(
-                    .general(
-                        title: "Backup Saved!",
-                        message: "Your backup has been saved successfully!"
-                    )
+            app.sheetState = .none
+            app.alertState = .init(
+                .general(
+                    title: "Backup Saved!",
+                    message: "Your backup has been saved successfully!"
                 )
-            case let .failure(error):
-                app.alertState = .init(
-                    .general(title: "Saving Backup Failed!", message: error.localizedDescription)
-                )
-            }
+            )
 
         case .transactions:
             app.sheetState = .none
@@ -152,12 +96,6 @@ struct SelctedWalletScreenExporterView: View {
                     message: "Your transactions have been succesfully exported"
                 )
             )
-
-        case .none:
-            break
         }
-
-        // reset
-        exporting = nil
     }
 }
