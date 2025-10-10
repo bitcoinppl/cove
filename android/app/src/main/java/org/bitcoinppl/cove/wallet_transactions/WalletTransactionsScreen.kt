@@ -50,7 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.*
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 
 enum class TransactionType { SENT, RECEIVED }
@@ -100,14 +100,14 @@ fun WalletTransactionsScreen(
     satsAmount: String = "1,166,369 SATS",
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    val listBg = if (isDarkList) ListBackgroundDark else ListBackgroundLight
-    val listCard = if (isDarkList) ListCardDark else ListCardAlternative
-    val primaryText = if (isDarkList) TextPrimaryDark else TextPrimaryLight
-    val secondaryText = TextSecondary
-    val dividerColor = if (isDarkList) DividerDarkAlpha else DividerLightAlpha
+    val listBg = if (isDarkList) CoveColor.ListBackgroundDark else CoveColor.ListBackgroundLight
+    val listCard = if (isDarkList) CoveColor.ListCardDark else CoveColor.ListCardAlternative
+    val primaryText = if (isDarkList) CoveColor.TextPrimaryDark else CoveColor.TextPrimaryLight
+    val secondaryText = CoveColor.TextSecondary
+    val dividerColor = if (isDarkList) CoveColor.DividerDarkAlpha else CoveColor.DividerLightAlpha
 
     Scaffold(
-        containerColor = MidnightBlue,
+        containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -190,8 +190,8 @@ fun WalletTransactionsScreen(
                             },
                             onClick = onSend,
                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = BtnPrimary,
-                                contentColor = MidnightBlue
+                                containerColor = CoveColor.btnPrimary,
+                                contentColor = CoveColor.midnightBlue
                             ),
                             modifier = Modifier.weight(1f)
                         )
@@ -205,8 +205,8 @@ fun WalletTransactionsScreen(
                             },
                             onClick = onReceive,
                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = BtnPrimary,
-                                contentColor = MidnightBlue
+                                containerColor = CoveColor.btnPrimary,
+                                contentColor = CoveColor.midnightBlue
                             ),
                             modifier = Modifier.weight(1f)
                         )
@@ -361,7 +361,7 @@ private fun TransactionWidget(
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = amount,
-                color = if (type == TransactionType.RECEIVED) TransactionReceived else primaryText,
+                color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Normal
             )

@@ -61,7 +61,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.*
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -184,9 +184,9 @@ fun UtxoListScreen(
         String.format(Locale.US, "%,d SATS", sum)
     } else ""
 
-    val listBg = ListBackgroundLight
-    val listCard = ListCardLight
-    val secondaryText = TextSecondary
+    val listBg = CoveColor.ListBackgroundLight
+    val listCard = CoveColor.ListCardLight
+    val secondaryText = CoveColor.TextSecondary
 
     Scaffold(
         containerColor = listBg,
@@ -194,8 +194,8 @@ fun UtxoListScreen(
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.Transparent,
-                    actionIconContentColor = TextPrimary,
-                    navigationIconContentColor = TextPrimary,
+                    actionIconContentColor = CoveColor.TextPrimary,
+                    navigationIconContentColor = CoveColor.TextPrimary,
                 ),
                 title = { Text("") },
                 navigationIcon = {
@@ -237,7 +237,7 @@ fun UtxoListScreen(
 
                 Text(
                     stringResource(R.string.title_manage_utxos),
-                    color = TextPrimary,
+                    color = CoveColor.TextPrimary,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     lineHeight = 36.sp,
@@ -282,7 +282,7 @@ fun UtxoListScreen(
                                 text = if (selected.isNotEmpty()) stringResource(R.string.deselect_all) else stringResource(
                                     R.string.select_all
                                 ),
-                                color = LinkBlue,
+                                color = CoveColor.LinkBlue,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.clickable {
@@ -309,7 +309,7 @@ fun UtxoListScreen(
                                 )
                                 if (index != utxos.lastIndex) {
                                     HorizontalDivider(
-                                        color = DividerLight,
+                                        color = CoveColor.DividerLight,
                                         thickness = 0.5.dp,
                                         modifier = Modifier.padding(start = 52.dp)
                                     )
@@ -369,8 +369,8 @@ fun UtxoListScreen(
                         ) else stringResource(R.string.continue_button),
                         onClick = onContinue,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (anySelected) MidnightBlue else ButtonDisabled,
-                            contentColor = if (anySelected) Color.White else ButtonDisabledText
+                            containerColor = if (anySelected) CoveColor.midnightBlue else CoveColor.ButtonDisabled,
+                            contentColor = if (anySelected) Color.White else CoveColor.ButtonDisabledText
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -402,7 +402,7 @@ private fun UtxoItemRow(
                 Text(
                     text = item.label,
                     fontWeight = FontWeight.Normal,
-                    color = TextPrimary,
+                    color = CoveColor.TextPrimary,
                     fontSize = 14.sp
                 )
                 if (item.isChange) {
@@ -462,7 +462,7 @@ private fun SelectionCircle(selected: Boolean) {
 }
 
 @Composable
-private fun ChangeBadge(tintColor: Color = WarningOrange) {
+private fun ChangeBadge(tintColor: Color = CoveColor.WarningOrange) {
     Icon(
         imageVector = Icons.Filled.Link,
         contentDescription = null,
@@ -511,8 +511,8 @@ private fun SortChip(
     arrowUp: Boolean = false
 ) {
     val bg =
-        if (selected) LinkBlue else SurfaceLight
-    val txt = if (selected) Color.White else ButtonDisabledText
+        if (selected) CoveColor.LinkBlue else CoveColor.SurfaceLight
+    val txt = if (selected) Color.White else CoveColor.ButtonDisabledText
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
@@ -545,7 +545,7 @@ private fun SortChip(
 @Composable
 private fun SearchBar(onQueryChange: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
-    val bg = SurfaceLight
+    val bg = CoveColor.SurfaceLight
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -557,7 +557,7 @@ private fun SearchBar(onQueryChange: (String) -> Unit) {
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = null,
-            tint = BorderMedium,
+            tint = CoveColor.BorderMedium,
             modifier = Modifier.size(20.dp)
         )
         Spacer(Modifier.width(8.dp))
