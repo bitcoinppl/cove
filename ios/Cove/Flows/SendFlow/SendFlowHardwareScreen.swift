@@ -252,13 +252,13 @@ struct SendFlowHardwareScreen: View {
     func handleFileImport(result: Result<URL, Error>) {
         do {
             let file = try result.get()
-            
+
             // check if file should be opened with share sheet instead
             if ShareSheetHandler.shouldUseShareSheet(for: file) {
                 ShareSheetHandler.presentShareSheet(for: file)
                 return
             }
-            
+
             let fileContents = try FileReader(for: file).read()
 
             let (txnRecord, signedTransaction) = try txnRecordAndSignedTxn(fileContents)
