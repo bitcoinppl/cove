@@ -2,6 +2,12 @@
 package_name = "org.bitcoinppl.cove.tapcard"
 cdylib_name = "tap_card"
 
+[bindings.kotlin.external_packages]
+cove_types = "org.bitcoinppl.cove.types"
+cove_device = "org.bitcoinppl.cove.device"
+cove_nfc = "org.bitcoinppl.cove.nfc"
+cove_util = "org.bitcoinppl.cove.util"
+
 [bindings.swift]
 cdylib_name = "tap_card"
 ffi_module_name = "tap_cardFFI"

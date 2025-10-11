@@ -54,6 +54,7 @@ import org.bitcoinppl.cove.types.AddressInfo
 import org.bitcoinppl.cove.types.AddressInfoWithDerivation
 import org.bitcoinppl.cove.types.AddressWithNetwork
 import org.bitcoinppl.cove.types.Amount
+import org.bitcoinppl.cove.types.BitcoinUnit
 import org.bitcoinppl.cove.types.BlockSizeLast
 import org.bitcoinppl.cove.types.ColorSchemeSelection
 import org.bitcoinppl.cove.types.ConfirmDetails
@@ -72,6 +73,7 @@ import org.bitcoinppl.cove.types.FfiConverterTypeAddressInfo
 import org.bitcoinppl.cove.types.FfiConverterTypeAddressInfoWithDerivation
 import org.bitcoinppl.cove.types.FfiConverterTypeAddressWithNetwork
 import org.bitcoinppl.cove.types.FfiConverterTypeAmount
+import org.bitcoinppl.cove.types.FfiConverterTypeBitcoinUnit
 import org.bitcoinppl.cove.types.FfiConverterTypeBlockSizeLast
 import org.bitcoinppl.cove.types.FfiConverterTypeColorSchemeSelection
 import org.bitcoinppl.cove.types.FfiConverterTypeConfirmDetails
@@ -89,7 +91,6 @@ import org.bitcoinppl.cove.types.FfiConverterTypeSentAndReceived
 import org.bitcoinppl.cove.types.FfiConverterTypeSplitOutput
 import org.bitcoinppl.cove.types.FfiConverterTypeTransactionDirection
 import org.bitcoinppl.cove.types.FfiConverterTypeTxId
-import org.bitcoinppl.cove.types.FfiConverterTypeUnit
 import org.bitcoinppl.cove.types.FfiConverterTypeUtxo
 import org.bitcoinppl.cove.types.FfiConverterTypeUtxoList
 import org.bitcoinppl.cove.types.FfiConverterTypeUtxoType
@@ -101,7 +102,6 @@ import org.bitcoinppl.cove.types.SentAndReceived
 import org.bitcoinppl.cove.types.SplitOutput
 import org.bitcoinppl.cove.types.TransactionDirection
 import org.bitcoinppl.cove.types.TxId
-import org.bitcoinppl.cove.types.Unit
 import org.bitcoinppl.cove.types.Utxo
 import org.bitcoinppl.cove.types.UtxoList
 import org.bitcoinppl.cove.types.UtxoType
@@ -118,6 +118,7 @@ import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressInfo
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressInfoWithDerivation
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressWithNetwork
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferAmount
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferBitcoinUnit
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferBlockSizeLast
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferColorSchemeSelection
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferConfirmDetails
@@ -135,7 +136,6 @@ import org.bitcoinppl.cove.types.RustBuffer as RustBufferSentAndReceived
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferSplitOutput
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferTransactionDirection
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferTxId
-import org.bitcoinppl.cove.types.RustBuffer as RustBufferUnit
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferUtxo
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferUtxoList
 import org.bitcoinppl.cove.types.RustBuffer as RustBufferUtxoType
@@ -1889,10 +1889,10 @@ internal interface UniffiLib : Library {
             uniffiCallbackInterfaceSendFlowManagerReconciler.register(lib)
             uniffiCallbackInterfaceTapcardTransportProtocol.register(lib)
             uniffiCallbackInterfaceWalletManagerReconciler.register(lib)
+            org.bitcoinppl.cove.types.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.nfc.uniffiEnsureInitialized()
             org.bitcoinppl.cove.device.uniffiEnsureInitialized()
             org.bitcoinppl.cove.tapcard.uniffiEnsureInitialized()
-            org.bitcoinppl.cove.nfc.uniffiEnsureInitialized()
-            org.bitcoinppl.cove.types.uniffiEnsureInitialized()
             // Loading of library with integrity check done.
             lib
         }
@@ -2441,7 +2441,7 @@ fun uniffi_cove_fn_method_rustcoincontrolmanager_reload_labels(`ptr`: Long,
 fun uniffi_cove_fn_method_rustcoincontrolmanager_selected_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_cove_fn_method_rustcoincontrolmanager_unit(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
-): RustBufferUnit.ByValue
+): RustBufferBitcoinUnit.ByValue
 fun uniffi_cove_fn_method_rustcoincontrolmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_cove_fn_clone_rustimportwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -2696,7 +2696,7 @@ fun uniffi_cove_fn_method_transactiondetails_amount_fiat(`ptr`: Long,
 ): Long
 fun uniffi_cove_fn_method_transactiondetails_amount_fiat_fmt(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_amount_fmt(`ptr`: Long,`unit`: RustBufferUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_cove_fn_method_transactiondetails_amount_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_cove_fn_method_transactiondetails_block_number(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -2706,7 +2706,7 @@ fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`ptr`: Long,
 ): RustBuffer.ByValue
 fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_fee_fmt(`ptr`: Long,`unit`: RustBufferUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_cove_fn_method_transactiondetails_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_cove_fn_method_transactiondetails_is_confirmed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
@@ -2716,7 +2716,7 @@ fun uniffi_cove_fn_method_transactiondetails_is_sent(`ptr`: Long,uniffi_out_err:
 ): Byte
 fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(`ptr`: Long,
 ): Long
-fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(`ptr`: Long,`unit`: RustBufferUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_cove_fn_method_transactiondetails_transaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -3739,7 +3739,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos() != 6695.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_unit() != 56844.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_unit() != 91.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_utxos() != 48699.toShort()) {
@@ -4018,7 +4018,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fiat_fmt() != 60211.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 770.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_amount_fmt() != 37638.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_block_number() != 61262.toShort()) {
@@ -4033,7 +4033,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 62198.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 1256.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 21035.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_is_confirmed() != 54031.toShort()) {
@@ -4048,7 +4048,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt() != 62275.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 7229.toShort()) {
+    if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fmt() != 32923.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_transaction_label() != 1186.toShort()) {
@@ -16673,7 +16673,7 @@ public interface RustCoinControlManagerInterface {
     
     fun `selectedUtxos`(): List<Utxo>
     
-    fun `unit`(): Unit
+    fun `unit`(): BitcoinUnit
     
     fun `utxos`(): List<Utxo>
     
@@ -16863,8 +16863,8 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
     }
     
 
-    override fun `unit`(): Unit {
-            return FfiConverterTypeUnit.lift(
+    override fun `unit`(): BitcoinUnit {
+            return FfiConverterTypeBitcoinUnit.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_fn_method_rustcoincontrolmanager_unit(
@@ -20638,7 +20638,7 @@ public interface TransactionDetailsInterface {
     
     suspend fun `amountFiatFmt`(): kotlin.String
     
-    fun `amountFmt`(`unit`: Unit): kotlin.String
+    fun `amountFmt`(`unit`: BitcoinUnit): kotlin.String
     
     fun `blockNumber`(): kotlin.UInt?
     
@@ -20648,7 +20648,7 @@ public interface TransactionDetailsInterface {
     
     suspend fun `feeFiatFmt`(): kotlin.String
     
-    fun `feeFmt`(`unit`: Unit): kotlin.String?
+    fun `feeFmt`(`unit`: BitcoinUnit): kotlin.String?
     
     fun `isConfirmed`(): kotlin.Boolean
     
@@ -20658,7 +20658,7 @@ public interface TransactionDetailsInterface {
     
     suspend fun `sentSansFeeFiatFmt`(): kotlin.String
     
-    fun `sentSansFeeFmt`(`unit`: Unit): kotlin.String?
+    fun `sentSansFeeFmt`(`unit`: BitcoinUnit): kotlin.String?
     
     fun `transactionLabel`(): kotlin.String?
     
@@ -20846,13 +20846,13 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     )
     }
 
-    override fun `amountFmt`(`unit`: Unit): kotlin.String {
+    override fun `amountFmt`(`unit`: BitcoinUnit): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_amount_fmt(
         it,
-        FfiConverterTypeUnit.lower(`unit`),_status)
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
     )
@@ -20919,13 +20919,13 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     )
     }
 
-    override fun `feeFmt`(`unit`: Unit): kotlin.String? {
+    override fun `feeFmt`(`unit`: BitcoinUnit): kotlin.String? {
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_fee_fmt(
         it,
-        FfiConverterTypeUnit.lower(`unit`),_status)
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
     )
@@ -20992,13 +20992,13 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     )
     }
 
-    override fun `sentSansFeeFmt`(`unit`: Unit): kotlin.String? {
+    override fun `sentSansFeeFmt`(`unit`: BitcoinUnit): kotlin.String? {
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fmt(
         it,
-        FfiConverterTypeUnit.lower(`unit`),_status)
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
     )
@@ -24789,7 +24789,7 @@ data class WalletMetadata (
     , 
     var `masterFingerprint`: Fingerprint?
     , 
-    var `selectedUnit`: Unit
+    var `selectedUnit`: BitcoinUnit
     , 
     var `sensitiveVisible`: kotlin.Boolean
     , 
@@ -24864,7 +24864,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterBoolean.read(buf),
             FfiConverterTypeNetwork.read(buf),
             FfiConverterOptionalTypeFingerprint.read(buf),
-            FfiConverterTypeUnit.read(buf),
+            FfiConverterTypeBitcoinUnit.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterTypeWalletType.read(buf),
@@ -24886,7 +24886,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterBoolean.allocationSize(value.`verified`) +
             FfiConverterTypeNetwork.allocationSize(value.`network`) +
             FfiConverterOptionalTypeFingerprint.allocationSize(value.`masterFingerprint`) +
-            FfiConverterTypeUnit.allocationSize(value.`selectedUnit`) +
+            FfiConverterTypeBitcoinUnit.allocationSize(value.`selectedUnit`) +
             FfiConverterBoolean.allocationSize(value.`sensitiveVisible`) +
             FfiConverterBoolean.allocationSize(value.`detailsExpanded`) +
             FfiConverterTypeWalletType.allocationSize(value.`walletType`) +
@@ -24907,7 +24907,7 @@ public object FfiConverterTypeWalletMetadata: FfiConverterRustBuffer<WalletMetad
             FfiConverterBoolean.write(value.`verified`, buf)
             FfiConverterTypeNetwork.write(value.`network`, buf)
             FfiConverterOptionalTypeFingerprint.write(value.`masterFingerprint`, buf)
-            FfiConverterTypeUnit.write(value.`selectedUnit`, buf)
+            FfiConverterTypeBitcoinUnit.write(value.`selectedUnit`, buf)
             FfiConverterBoolean.write(value.`sensitiveVisible`, buf)
             FfiConverterBoolean.write(value.`detailsExpanded`, buf)
             FfiConverterTypeWalletType.write(value.`walletType`, buf)
@@ -27392,7 +27392,7 @@ sealed class CoinControlManagerReconcileMessage: Disposable  {
     }
     
     data class UpdateUnit(
-        val v1: Unit) : CoinControlManagerReconcileMessage()
+        val v1: BitcoinUnit) : CoinControlManagerReconcileMessage()
         
     {
         
@@ -27480,7 +27480,7 @@ public object FfiConverterTypeCoinControlManagerReconcileMessage : FfiConverterR
                 FfiConverterTypeAmount.read(buf),
                 )
             7 -> CoinControlManagerReconcileMessage.UpdateUnit(
-                FfiConverterTypeUnit.read(buf),
+                FfiConverterTypeBitcoinUnit.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -27533,7 +27533,7 @@ public object FfiConverterTypeCoinControlManagerReconcileMessage : FfiConverterR
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeUnit.allocationSize(value.v1)
+                + FfiConverterTypeBitcoinUnit.allocationSize(value.v1)
             )
         }
     }
@@ -27572,7 +27572,7 @@ public object FfiConverterTypeCoinControlManagerReconcileMessage : FfiConverterR
             }
             is CoinControlManagerReconcileMessage.UpdateUnit -> {
                 buf.putInt(7)
-                FfiConverterTypeUnit.write(value.v1, buf)
+                FfiConverterTypeBitcoinUnit.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -33037,8 +33037,8 @@ sealed class SendFlowManagerAction: Disposable  {
     }
     
     data class NotifySelectedUnitedChanged(
-        val `old`: Unit, 
-        val `new`: Unit) : SendFlowManagerAction()
+        val `old`: BitcoinUnit, 
+        val `new`: BitcoinUnit) : SendFlowManagerAction()
         
     {
         
@@ -33311,8 +33311,8 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterString.read(buf),
                 )
             12 -> SendFlowManagerAction.NotifySelectedUnitedChanged(
-                FfiConverterTypeUnit.read(buf),
-                FfiConverterTypeUnit.read(buf),
+                FfiConverterTypeBitcoinUnit.read(buf),
+                FfiConverterTypeBitcoinUnit.read(buf),
                 )
             13 -> SendFlowManagerAction.NotifyBtcOrFiatChanged(
                 FfiConverterTypeFiatOrBtc.read(buf),
@@ -33428,8 +33428,8 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeUnit.allocationSize(value.`old`)
-                + FfiConverterTypeUnit.allocationSize(value.`new`)
+                + FfiConverterTypeBitcoinUnit.allocationSize(value.`old`)
+                + FfiConverterTypeBitcoinUnit.allocationSize(value.`new`)
             )
         }
         is SendFlowManagerAction.NotifyBtcOrFiatChanged -> {
@@ -33562,8 +33562,8 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             }
             is SendFlowManagerAction.NotifySelectedUnitedChanged -> {
                 buf.putInt(12)
-                FfiConverterTypeUnit.write(value.`old`, buf)
-                FfiConverterTypeUnit.write(value.`new`, buf)
+                FfiConverterTypeBitcoinUnit.write(value.`old`, buf)
+                FfiConverterTypeBitcoinUnit.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyBtcOrFiatChanged -> {
@@ -37610,7 +37610,7 @@ sealed class WalletManagerAction: Disposable  {
     }
     
     data class UpdateUnit(
-        val v1: Unit) : WalletManagerAction()
+        val v1: BitcoinUnit) : WalletManagerAction()
         
     {
         
@@ -37746,7 +37746,7 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
                 FfiConverterTypeWalletColor.read(buf),
                 )
             3 -> WalletManagerAction.UpdateUnit(
-                FfiConverterTypeUnit.read(buf),
+                FfiConverterTypeBitcoinUnit.read(buf),
                 )
             4 -> WalletManagerAction.UpdateFiatOrBtc(
                 FfiConverterTypeFiatOrBtc.read(buf),
@@ -37787,7 +37787,7 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeUnit.allocationSize(value.v1)
+                + FfiConverterTypeBitcoinUnit.allocationSize(value.v1)
             )
         }
         is WalletManagerAction.UpdateFiatOrBtc -> {
@@ -37869,7 +37869,7 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             }
             is WalletManagerAction.UpdateUnit -> {
                 buf.putInt(3)
-                FfiConverterTypeUnit.write(value.v1, buf)
+                FfiConverterTypeBitcoinUnit.write(value.v1, buf)
                 Unit
             }
             is WalletManagerAction.UpdateFiatOrBtc -> {

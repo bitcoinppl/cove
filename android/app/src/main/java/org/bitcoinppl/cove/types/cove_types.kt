@@ -1416,7 +1416,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_all_networks() != 39283.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_all_units() != 10986.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_all_units() != 5321.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_color_scheme_selection_capitalized_string() != 21781.toShort()) {
@@ -1443,7 +1443,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_preview_new_utxo_list() != 38611.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_unit_to_string() != 52878.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_unit_to_string() != 13028.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_utxo_date() != 4098.toShort()) {
@@ -1521,10 +1521,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_amount_btc_string_with_unit() != 14319.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string() != 40458.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string() != 51437.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 13588.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_amount_fmt_string_with_unit() != 26917.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_amount_sats_string() != 10854.toShort()) {
@@ -1689,7 +1689,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount() != 29531.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 30361.toShort()) {
+    if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount_fmt() != 63143.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_sentandreceived_direction() != 45513.toShort()) {
@@ -3516,9 +3516,9 @@ public interface AmountInterface {
     
     fun `btcStringWithUnit`(): kotlin.String
     
-    fun `fmtString`(`unit`: Unit): kotlin.String
+    fun `fmtString`(`unit`: BitcoinUnit): kotlin.String
     
-    fun `fmtStringWithUnit`(`unit`: Unit): kotlin.String
+    fun `fmtStringWithUnit`(`unit`: BitcoinUnit): kotlin.String
     
     fun `satsString`(): kotlin.String
     
@@ -3675,26 +3675,26 @@ open class Amount: Disposable, AutoCloseable, AmountInterface
     }
     
 
-    override fun `fmtString`(`unit`: Unit): kotlin.String {
+    override fun `fmtString`(`unit`: BitcoinUnit): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_fmt_string(
         it,
-        FfiConverterTypeUnit.lower(`unit`),_status)
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
     )
     }
     
 
-    override fun `fmtStringWithUnit`(`unit`: Unit): kotlin.String {
+    override fun `fmtStringWithUnit`(`unit`: BitcoinUnit): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_types_fn_method_amount_fmt_string_with_unit(
         it,
-        FfiConverterTypeUnit.lower(`unit`),_status)
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
     )
@@ -7128,7 +7128,7 @@ public interface SentAndReceivedInterface {
     
     fun `amount`(): Amount
     
-    fun `amountFmt`(`unit`: Unit): kotlin.String
+    fun `amountFmt`(`unit`: BitcoinUnit): kotlin.String
     
     fun `direction`(): TransactionDirection
     
@@ -7252,13 +7252,13 @@ open class SentAndReceived: Disposable, AutoCloseable, SentAndReceivedInterface
     }
     
 
-    override fun `amountFmt`(`unit`: Unit): kotlin.String {
+    override fun `amountFmt`(`unit`: BitcoinUnit): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_types_fn_method_sentandreceived_amount_fmt(
         it,
-        FfiConverterTypeUnit.lower(`unit`),_status)
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
     )
@@ -8786,6 +8786,36 @@ public object FfiConverterTypeAddressError : FfiConverterRustBuffer<AddressExcep
 
 
 
+enum class BitcoinUnit {
+    
+    BTC,
+    SAT;
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBitcoinUnit: FfiConverterRustBuffer<BitcoinUnit> {
+    override fun read(buf: ByteBuffer) = try {
+        BitcoinUnit.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: BitcoinUnit) = 4UL
+
+    override fun write(value: BitcoinUnit, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
 enum class ColorSchemeSelection {
     
     LIGHT,
@@ -9490,36 +9520,6 @@ public object FfiConverterTypeTransactionDirection: FfiConverterRustBuffer<Trans
 
 
 
-enum class Unit {
-    
-    BTC,
-    SAT;
-    companion object
-}
-
-
-/**
- * @suppress
- */
-public object FfiConverterTypeUnit: FfiConverterRustBuffer<Unit> {
-    override fun read(buf: ByteBuffer) = try {
-        Unit.values()[buf.getInt() - 1]
-    } catch (e: IndexOutOfBoundsException) {
-        throw RuntimeException("invalid enum value, something is very wrong!!", e)
-    }
-
-    override fun allocationSize(value: Unit) = 4UL
-
-    override fun write(value: Unit, buf: ByteBuffer) {
-        buf.putInt(value.ordinal + 1)
-    }
-}
-
-
-
-
-
-
 enum class UtxoType {
     
     OUTPUT,
@@ -9765,6 +9765,34 @@ public object FfiConverterSequenceTypeUtxo: FfiConverterRustBuffer<List<Utxo>> {
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeBitcoinUnit: FfiConverterRustBuffer<List<BitcoinUnit>> {
+    override fun read(buf: ByteBuffer): List<BitcoinUnit> {
+        val len = buf.getInt()
+        return List<BitcoinUnit>(len) {
+            FfiConverterTypeBitcoinUnit.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<BitcoinUnit>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeBitcoinUnit.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<BitcoinUnit>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeBitcoinUnit.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeColorSchemeSelection: FfiConverterRustBuffer<List<ColorSchemeSelection>> {
     override fun read(buf: ByteBuffer): List<ColorSchemeSelection> {
         val len = buf.getInt()
@@ -9811,34 +9839,6 @@ public object FfiConverterSequenceTypeNetwork: FfiConverterRustBuffer<List<Netwo
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeNetwork.write(it, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
-public object FfiConverterSequenceTypeUnit: FfiConverterRustBuffer<List<Unit>> {
-    override fun read(buf: ByteBuffer): List<Unit> {
-        val len = buf.getInt()
-        return List<Unit>(len) {
-            FfiConverterTypeUnit.read(buf)
-        }
-    }
-
-    override fun allocationSize(value: List<Unit>): ULong {
-        val sizeForLength = 4UL
-        val sizeForItems = value.map { FfiConverterTypeUnit.allocationSize(it) }.sum()
-        return sizeForLength + sizeForItems
-    }
-
-    override fun write(value: List<Unit>, buf: ByteBuffer) {
-        buf.putInt(value.size)
-        value.iterator().forEach {
-            FfiConverterTypeUnit.write(it, buf)
         }
     }
 }
@@ -9921,8 +9921,8 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
     )
     }
     
- fun `allUnits`(): List<Unit> {
-            return FfiConverterSequenceTypeUnit.lift(
+ fun `allUnits`(): List<BitcoinUnit> {
+            return FfiConverterSequenceTypeBitcoinUnit.lift(
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_types_fn_func_all_units(
     
@@ -10011,12 +10011,12 @@ public typealias FfiConverterTypeWalletId = FfiConverterString fun `addressIsEqu
     )
     }
     
- fun `unitToString`(`unit`: Unit): kotlin.String {
+ fun `unitToString`(`unit`: BitcoinUnit): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_cove_types_fn_func_unit_to_string(
     
-        FfiConverterTypeUnit.lower(`unit`),_status)
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     )
     }
