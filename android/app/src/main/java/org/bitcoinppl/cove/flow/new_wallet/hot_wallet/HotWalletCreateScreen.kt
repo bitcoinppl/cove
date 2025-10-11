@@ -38,8 +38,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.RecoveryWords
@@ -71,7 +70,7 @@ fun HotWalletCreateScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     recoveryWords: List<String> = emptyList(),
 ) {
-    Scaffold(containerColor = MidnightBlue, topBar = {
+    Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
         CenterAlignedTopAppBar(
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = Color.Transparent,
@@ -169,8 +168,8 @@ fun HotWalletCreateScreen(
                         text = stringResource(R.string.btn_next),
                         onClick = onOpenNewHotWallet,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = BtnPrimary,
-                            contentColor = MidnightBlue
+                            containerColor = CoveColor.btnPrimary,
+                            contentColor = CoveColor.midnightBlue
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )

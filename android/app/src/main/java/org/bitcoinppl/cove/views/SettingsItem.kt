@@ -18,7 +18,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.colorGray
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @Preview
 @Composable
@@ -84,7 +84,7 @@ fun SettingsItem(
                 modifier = Modifier.size(40.dp),
                 imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
                 contentDescription = "Go",
-                tint = colorGray
+                tint = CoveColor.IconGray
             )
     }
 }

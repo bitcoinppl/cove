@@ -32,8 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -114,12 +113,12 @@ private fun RecoveryWordChip(
     onClick: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(14.dp)
-    val borderColor = if (selected) MidnightBlue else Color.Transparent
+    val borderColor = if (selected) CoveColor.midnightBlue else Color.Transparent
     Box(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 46.dp)
-            .background(BtnPrimary, shape)
+            .background(CoveColor.btnPrimary, shape)
             .border(width = 1.dp, color = borderColor, shape = shape)
             .clickable(enabled = onClick != null) { onClick?.invoke() }
             .padding(horizontal = 14.dp, vertical = 14.dp)
@@ -130,12 +129,12 @@ private fun RecoveryWordChip(
         ) {
             Text(
                 text = "$index.",
-                color = MidnightBlue,
+                color = CoveColor.midnightBlue,
             )
             Spacer(Modifier.width(8.dp))
             Text(
                 text = word,
-                color = MidnightBlue,
+                color = CoveColor.midnightBlue,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,

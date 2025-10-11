@@ -38,8 +38,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 
@@ -66,7 +65,7 @@ fun NewWalletSelectScreen(
     onOpenNfcScan: () -> Unit,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
-    Scaffold(containerColor = MidnightBlue, topBar = {
+    Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
         CenterAlignedTopAppBar(
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
             containerColor = Color.Transparent,
@@ -170,7 +169,7 @@ fun NewWalletSelectScreen(
                                 // todo
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = BtnPrimary, contentColor = MidnightBlue
+                                containerColor = CoveColor.btnPrimary, contentColor = CoveColor.midnightBlue
                             ),
                             modifier = Modifier.weight(1f),
                         )
@@ -185,7 +184,7 @@ fun NewWalletSelectScreen(
                             },
                             onClick = onOpenNewHotWallet,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = BtnPrimary, contentColor = MidnightBlue
+                                containerColor = CoveColor.btnPrimary, contentColor = CoveColor.midnightBlue
                             ),
                             modifier = Modifier.weight(1f),
                         )

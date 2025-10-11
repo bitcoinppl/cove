@@ -2274,9 +2274,9 @@ public interface AddressInterface {
     fun `spacedOut`(): kotlin.String
     
     fun `string`(): kotlin.String
-    
-    fun `toString`(): kotlin.String
-    
+
+    override fun `toString`(): kotlin.String
+
     fun `unformatted`(): kotlin.String
     
     companion object

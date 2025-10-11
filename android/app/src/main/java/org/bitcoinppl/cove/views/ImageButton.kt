@@ -19,8 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @Composable
 fun ImageButton(
@@ -62,7 +61,7 @@ private fun PreviewImageButton() {
         },
         onClick = {},
         colors = ButtonDefaults.buttonColors(
-            containerColor = BtnPrimary, contentColor = MidnightBlue
+            containerColor = CoveColor.btnPrimary, contentColor = CoveColor.midnightBlue
         ),
     )
 }
