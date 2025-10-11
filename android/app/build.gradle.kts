@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cove"
+    namespace = "org.bitcoinppl.cove"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.cove"
+        applicationId = "org.bitcoinppl.cove"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

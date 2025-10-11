@@ -46,7 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.cove.R
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.WalletColor
 import org.bitcoinppl.cove.views.CardItem
 import org.bitcoinppl.cove.views.ClickableInfoRow
