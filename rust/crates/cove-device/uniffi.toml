@@ -2,11 +2,11 @@
 cdylib_name = "covedeviceffi"
 
 [bindings.kotlin]
-package_name = "org.bitcoinppl.cove.device"
+package_name = "org.bitcoinppl.cove_core.device"
 cdylib_name = "covedeviceffi"
 
 [bindings.kotlin.external_packages]
-cove_types = "org.bitcoinppl.cove.types"
-cove_nfc = "org.bitcoinppl.cove.nfc"
-cove_tap_card = "org.bitcoinppl.cove.tapcard"
-cove_util = "org.bitcoinppl.cove.util"
+cove_types = "org.bitcoinppl.cove_core.types"
+cove_nfc = "org.bitcoinppl.cove_core.nfc"
+cove_tap_card = "org.bitcoinppl.cove_core.tapcard"
+cove_util = "org.bitcoinppl.cove_core.util"
