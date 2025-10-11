@@ -4,12 +4,12 @@ use std::fmt::Display;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, uniffi::Enum, strum::EnumIter,
 )]
-pub enum Unit {
+pub enum BitcoinUnit {
     Btc,
     Sat,
 }
 
-impl Default for Unit {
+impl Default for BitcoinUnit {
     fn default() -> Self {
         Self::Btc
     }
@@ -17,30 +17,30 @@ impl Default for Unit {
 
 use strum::IntoEnumIterator;
 
-impl Unit {
+impl BitcoinUnit {
     pub fn toggle(self) -> Self {
         match self {
-            Unit::Btc => Unit::Sat,
-            Unit::Sat => Unit::Btc,
+            BitcoinUnit::Btc => BitcoinUnit::Sat,
+            BitcoinUnit::Sat => BitcoinUnit::Btc,
         }
     }
 }
 
 #[uniffi::export]
-fn all_units() -> Vec<Unit> {
-    Unit::iter().collect()
+fn all_units() -> Vec<BitcoinUnit> {
+    BitcoinUnit::iter().collect()
 }
 
 #[uniffi::export]
-fn unit_to_string(unit: Unit) -> String {
+fn unit_to_string(unit: BitcoinUnit) -> String {
     unit.to_string()
 }
 
-impl Display for Unit {
+impl Display for BitcoinUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Unit::Btc => write!(f, "BTC"),
-            Unit::Sat => write!(f, "SATS"),
+            BitcoinUnit::Btc => write!(f, "BTC"),
+            BitcoinUnit::Sat => write!(f, "SATS"),
         }
     }
 }

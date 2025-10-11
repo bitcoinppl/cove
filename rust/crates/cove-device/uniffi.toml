@@ -2,5 +2,5 @@
 cdylib_name = "covedeviceffi"
 
 [bindings.kotlin]
-package_name = "org.bitcoinppl.cove"
+package_name = "org.bitcoinppl.cove.device"
 cdylib_name = "covedeviceffi"

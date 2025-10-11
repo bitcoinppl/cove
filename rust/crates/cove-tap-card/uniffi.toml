@@ -1,5 +1,5 @@
 [bindings.kotlin]
-package_name = "org.bitcoinppl.cove"
+package_name = "org.bitcoinppl.cove.tapcard"
 cdylib_name = "tap_card"
 
 [bindings.swift]

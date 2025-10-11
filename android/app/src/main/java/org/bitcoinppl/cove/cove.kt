@@ -38,108 +38,108 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import org.bitcoinppl.cove.Address
-import org.bitcoinppl.cove.AddressAndAmount
-import org.bitcoinppl.cove.AddressException
-import org.bitcoinppl.cove.AddressIndex
-import org.bitcoinppl.cove.AddressInfo
-import org.bitcoinppl.cove.AddressInfoWithDerivation
-import org.bitcoinppl.cove.AddressWithNetwork
-import org.bitcoinppl.cove.Amount
-import org.bitcoinppl.cove.BlockSizeLast
-import org.bitcoinppl.cove.ColorSchemeSelection
-import org.bitcoinppl.cove.ConfirmDetails
-import org.bitcoinppl.cove.FeeRate
-import org.bitcoinppl.cove.FeeRateOptionWithTotalFee
-import org.bitcoinppl.cove.FeeRateOptions
-import org.bitcoinppl.cove.FeeRateOptionsWithTotalFee
-import org.bitcoinppl.cove.FeeSpeed
-import org.bitcoinppl.cove.FfiColor
-import org.bitcoinppl.cove.FfiColorScheme
-import org.bitcoinppl.cove.FfiConverterTypeAddress
-import org.bitcoinppl.cove.FfiConverterTypeAddressAndAmount
-import org.bitcoinppl.cove.FfiConverterTypeAddressError
-import org.bitcoinppl.cove.FfiConverterTypeAddressIndex
-import org.bitcoinppl.cove.FfiConverterTypeAddressInfo
-import org.bitcoinppl.cove.FfiConverterTypeAddressInfoWithDerivation
-import org.bitcoinppl.cove.FfiConverterTypeAddressWithNetwork
-import org.bitcoinppl.cove.FfiConverterTypeAmount
-import org.bitcoinppl.cove.FfiConverterTypeBlockSizeLast
-import org.bitcoinppl.cove.FfiConverterTypeColorSchemeSelection
-import org.bitcoinppl.cove.FfiConverterTypeConfirmDetails
-import org.bitcoinppl.cove.FfiConverterTypeFeeRate
-import org.bitcoinppl.cove.FfiConverterTypeFeeRateOptionWithTotalFee
-import org.bitcoinppl.cove.FfiConverterTypeFeeRateOptions
-import org.bitcoinppl.cove.FfiConverterTypeFeeRateOptionsWithTotalFee
-import org.bitcoinppl.cove.FfiConverterTypeFeeSpeed
-import org.bitcoinppl.cove.FfiConverterTypeFfiColor
-import org.bitcoinppl.cove.FfiConverterTypeFfiColorScheme
-import org.bitcoinppl.cove.FfiConverterTypeKeychainError
-import org.bitcoinppl.cove.FfiConverterTypeNetwork
-import org.bitcoinppl.cove.FfiConverterTypeNfcMessage
-import org.bitcoinppl.cove.FfiConverterTypeOutPoint
-import org.bitcoinppl.cove.FfiConverterTypePsbt
-import org.bitcoinppl.cove.FfiConverterTypeSentAndReceived
-import org.bitcoinppl.cove.FfiConverterTypeSplitOutput
-import org.bitcoinppl.cove.FfiConverterTypeTapCardParseError
-import org.bitcoinppl.cove.FfiConverterTypeTapSigner
-import org.bitcoinppl.cove.FfiConverterTypeTransactionDirection
-import org.bitcoinppl.cove.FfiConverterTypeTxId
-import org.bitcoinppl.cove.FfiConverterTypeUnit
-import org.bitcoinppl.cove.FfiConverterTypeUtxo
-import org.bitcoinppl.cove.FfiConverterTypeUtxoList
-import org.bitcoinppl.cove.FfiConverterTypeUtxoType
-import org.bitcoinppl.cove.FfiConverterTypeWalletId
-import org.bitcoinppl.cove.KeychainException
-import org.bitcoinppl.cove.Network
-import org.bitcoinppl.cove.NfcMessage
-import org.bitcoinppl.cove.OutPoint
-import org.bitcoinppl.cove.Psbt
-import org.bitcoinppl.cove.SentAndReceived
-import org.bitcoinppl.cove.SplitOutput
-import org.bitcoinppl.cove.TapCardParseException
-import org.bitcoinppl.cove.TapSigner
-import org.bitcoinppl.cove.TransactionDirection
-import org.bitcoinppl.cove.TxId
-import org.bitcoinppl.cove.Unit
-import org.bitcoinppl.cove.Utxo
-import org.bitcoinppl.cove.UtxoList
-import org.bitcoinppl.cove.UtxoType
-import org.bitcoinppl.cove.WalletId
-import org.bitcoinppl.cove.RustBuffer as RustBufferAddress
-import org.bitcoinppl.cove.RustBuffer as RustBufferAddressAndAmount
-import org.bitcoinppl.cove.RustBuffer as RustBufferAddressError
-import org.bitcoinppl.cove.RustBuffer as RustBufferAddressIndex
-import org.bitcoinppl.cove.RustBuffer as RustBufferAddressInfo
-import org.bitcoinppl.cove.RustBuffer as RustBufferAddressInfoWithDerivation
-import org.bitcoinppl.cove.RustBuffer as RustBufferAddressWithNetwork
-import org.bitcoinppl.cove.RustBuffer as RustBufferAmount
-import org.bitcoinppl.cove.RustBuffer as RustBufferBlockSizeLast
-import org.bitcoinppl.cove.RustBuffer as RustBufferColorSchemeSelection
-import org.bitcoinppl.cove.RustBuffer as RustBufferConfirmDetails
-import org.bitcoinppl.cove.RustBuffer as RustBufferFeeRate
-import org.bitcoinppl.cove.RustBuffer as RustBufferFeeRateOptionWithTotalFee
-import org.bitcoinppl.cove.RustBuffer as RustBufferFeeRateOptions
-import org.bitcoinppl.cove.RustBuffer as RustBufferFeeRateOptionsWithTotalFee
-import org.bitcoinppl.cove.RustBuffer as RustBufferFeeSpeed
-import org.bitcoinppl.cove.RustBuffer as RustBufferFfiColor
-import org.bitcoinppl.cove.RustBuffer as RustBufferFfiColorScheme
-import org.bitcoinppl.cove.RustBuffer as RustBufferKeychainError
-import org.bitcoinppl.cove.RustBuffer as RustBufferNetwork
-import org.bitcoinppl.cove.RustBuffer as RustBufferNfcMessage
-import org.bitcoinppl.cove.RustBuffer as RustBufferOutPoint
-import org.bitcoinppl.cove.RustBuffer as RustBufferPsbt
-import org.bitcoinppl.cove.RustBuffer as RustBufferSentAndReceived
-import org.bitcoinppl.cove.RustBuffer as RustBufferSplitOutput
-import org.bitcoinppl.cove.RustBuffer as RustBufferTapCardParseError
-import org.bitcoinppl.cove.RustBuffer as RustBufferTapSigner
-import org.bitcoinppl.cove.RustBuffer as RustBufferTransactionDirection
-import org.bitcoinppl.cove.RustBuffer as RustBufferTxId
-import org.bitcoinppl.cove.RustBuffer as RustBufferUnit
-import org.bitcoinppl.cove.RustBuffer as RustBufferUtxo
-import org.bitcoinppl.cove.RustBuffer as RustBufferUtxoList
-import org.bitcoinppl.cove.RustBuffer as RustBufferUtxoType
-import org.bitcoinppl.cove.RustBuffer as RustBufferWalletId
+import org.bitcoinppl.cove.device.FfiConverterTypeKeychainError
+import org.bitcoinppl.cove.device.KeychainException
+import org.bitcoinppl.cove.nfc.FfiConverterTypeNfcMessage
+import org.bitcoinppl.cove.nfc.NfcMessage
+import org.bitcoinppl.cove.tapcard.FfiConverterTypeTapCardParseError
+import org.bitcoinppl.cove.tapcard.FfiConverterTypeTapSigner
+import org.bitcoinppl.cove.tapcard.TapCardParseException
+import org.bitcoinppl.cove.tapcard.TapSigner
+import org.bitcoinppl.cove.types.Address
+import org.bitcoinppl.cove.types.AddressAndAmount
+import org.bitcoinppl.cove.types.AddressException
+import org.bitcoinppl.cove.types.AddressIndex
+import org.bitcoinppl.cove.types.AddressInfo
+import org.bitcoinppl.cove.types.AddressInfoWithDerivation
+import org.bitcoinppl.cove.types.AddressWithNetwork
+import org.bitcoinppl.cove.types.Amount
+import org.bitcoinppl.cove.types.BlockSizeLast
+import org.bitcoinppl.cove.types.ColorSchemeSelection
+import org.bitcoinppl.cove.types.ConfirmDetails
+import org.bitcoinppl.cove.types.FeeRate
+import org.bitcoinppl.cove.types.FeeRateOptionWithTotalFee
+import org.bitcoinppl.cove.types.FeeRateOptions
+import org.bitcoinppl.cove.types.FeeRateOptionsWithTotalFee
+import org.bitcoinppl.cove.types.FeeSpeed
+import org.bitcoinppl.cove.types.FfiColor
+import org.bitcoinppl.cove.types.FfiColorScheme
+import org.bitcoinppl.cove.types.FfiConverterTypeAddress
+import org.bitcoinppl.cove.types.FfiConverterTypeAddressAndAmount
+import org.bitcoinppl.cove.types.FfiConverterTypeAddressError
+import org.bitcoinppl.cove.types.FfiConverterTypeAddressIndex
+import org.bitcoinppl.cove.types.FfiConverterTypeAddressInfo
+import org.bitcoinppl.cove.types.FfiConverterTypeAddressInfoWithDerivation
+import org.bitcoinppl.cove.types.FfiConverterTypeAddressWithNetwork
+import org.bitcoinppl.cove.types.FfiConverterTypeAmount
+import org.bitcoinppl.cove.types.FfiConverterTypeBlockSizeLast
+import org.bitcoinppl.cove.types.FfiConverterTypeColorSchemeSelection
+import org.bitcoinppl.cove.types.FfiConverterTypeConfirmDetails
+import org.bitcoinppl.cove.types.FfiConverterTypeFeeRate
+import org.bitcoinppl.cove.types.FfiConverterTypeFeeRateOptionWithTotalFee
+import org.bitcoinppl.cove.types.FfiConverterTypeFeeRateOptions
+import org.bitcoinppl.cove.types.FfiConverterTypeFeeRateOptionsWithTotalFee
+import org.bitcoinppl.cove.types.FfiConverterTypeFeeSpeed
+import org.bitcoinppl.cove.types.FfiConverterTypeFfiColor
+import org.bitcoinppl.cove.types.FfiConverterTypeFfiColorScheme
+import org.bitcoinppl.cove.types.FfiConverterTypeNetwork
+import org.bitcoinppl.cove.types.FfiConverterTypeOutPoint
+import org.bitcoinppl.cove.types.FfiConverterTypePsbt
+import org.bitcoinppl.cove.types.FfiConverterTypeSentAndReceived
+import org.bitcoinppl.cove.types.FfiConverterTypeSplitOutput
+import org.bitcoinppl.cove.types.FfiConverterTypeTransactionDirection
+import org.bitcoinppl.cove.types.FfiConverterTypeTxId
+import org.bitcoinppl.cove.types.FfiConverterTypeUnit
+import org.bitcoinppl.cove.types.FfiConverterTypeUtxo
+import org.bitcoinppl.cove.types.FfiConverterTypeUtxoList
+import org.bitcoinppl.cove.types.FfiConverterTypeUtxoType
+import org.bitcoinppl.cove.types.FfiConverterTypeWalletId
+import org.bitcoinppl.cove.types.Network
+import org.bitcoinppl.cove.types.OutPoint
+import org.bitcoinppl.cove.types.Psbt
+import org.bitcoinppl.cove.types.SentAndReceived
+import org.bitcoinppl.cove.types.SplitOutput
+import org.bitcoinppl.cove.types.TransactionDirection
+import org.bitcoinppl.cove.types.TxId
+import org.bitcoinppl.cove.types.Unit
+import org.bitcoinppl.cove.types.Utxo
+import org.bitcoinppl.cove.types.UtxoList
+import org.bitcoinppl.cove.types.UtxoType
+import org.bitcoinppl.cove.types.WalletId
+import org.bitcoinppl.cove.device.RustBuffer as RustBufferKeychainError
+import org.bitcoinppl.cove.nfc.RustBuffer as RustBufferNfcMessage
+import org.bitcoinppl.cove.tapcard.RustBuffer as RustBufferTapCardParseError
+import org.bitcoinppl.cove.tapcard.RustBuffer as RustBufferTapSigner
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddress
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressAndAmount
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressError
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressIndex
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressInfo
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressInfoWithDerivation
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAddressWithNetwork
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferAmount
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferBlockSizeLast
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferColorSchemeSelection
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferConfirmDetails
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferFeeRate
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferFeeRateOptionWithTotalFee
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferFeeRateOptions
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferFeeRateOptionsWithTotalFee
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferFeeSpeed
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferFfiColor
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferFfiColorScheme
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferNetwork
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferOutPoint
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferPsbt
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferSentAndReceived
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferSplitOutput
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferTransactionDirection
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferTxId
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferUnit
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferUtxo
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferUtxoList
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferUtxoType
+import org.bitcoinppl.cove.types.RustBuffer as RustBufferWalletId
 
 // This is a helper for safely working with byte buffers returned from the Rust code.
 // A rust-owned buffer is represented by its capacity, its current length, and a
@@ -1889,7 +1889,10 @@ internal interface UniffiLib : Library {
             uniffiCallbackInterfaceSendFlowManagerReconciler.register(lib)
             uniffiCallbackInterfaceTapcardTransportProtocol.register(lib)
             uniffiCallbackInterfaceWalletManagerReconciler.register(lib)
-            org.bitcoinppl.cove.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.device.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.tapcard.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.nfc.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.types.uniffiEnsureInitialized()
             // Loading of library with integrity check done.
             lib
         }
@@ -41472,7 +41475,7 @@ public typealias FfiConverterTypeTimestamp = FfiConverterULong
 
 object KeychainExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<KeychainException> {
     override fun lift(error_buf: RustBuffer.ByValue): KeychainException =
-        org.bitcoinppl.cove.KeychainException.ErrorHandler.lift(
+        org.bitcoinppl.cove.device.KeychainException.ErrorHandler.lift(
             RustBufferKeychainError.ByValue().apply {
                 capacity = error_buf.capacity
                 len = error_buf.len
@@ -41485,7 +41488,7 @@ object KeychainExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<
 
 object TapCardParseExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<TapCardParseException> {
     override fun lift(error_buf: RustBuffer.ByValue): TapCardParseException =
-        org.bitcoinppl.cove.TapCardParseException.ErrorHandler.lift(
+        org.bitcoinppl.cove.tapcard.TapCardParseException.ErrorHandler.lift(
             RustBufferTapCardParseError.ByValue().apply {
                 capacity = error_buf.capacity
                 len = error_buf.len
@@ -41498,7 +41501,7 @@ object TapCardParseExceptionExternalErrorHandler : UniffiRustCallStatusErrorHand
 
 object AddressExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<AddressException> {
     override fun lift(error_buf: RustBuffer.ByValue): AddressException =
-        org.bitcoinppl.cove.AddressException.ErrorHandler.lift(
+        org.bitcoinppl.cove.types.AddressException.ErrorHandler.lift(
             RustBufferAddressError.ByValue().apply {
                 capacity = error_buf.capacity
                 len = error_buf.len
