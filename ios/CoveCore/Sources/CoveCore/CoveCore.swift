@@ -128,9 +128,9 @@ public extension SetupCmdResponse {
     var error: TapSignerReaderError? {
         switch self {
         case .complete: .none
-        case let .continueFromInit(continueCmd): continueCmd.error
-        case let .continueFromBackup(continueCmd): continueCmd.error
-        case let .continueFromDerive(continueCmd): continueCmd.error
+        case let .init(continueCmd): continueCmd.error
+        case let .backup(continueCmd): continueCmd.error
+        case let .derive(continueCmd): continueCmd.error
         }
     }
 }
@@ -191,7 +191,7 @@ public extension WalletMetadata {
     }
 
     func identOrFingerprint() -> String {
-        if case let .tapSigner(t) = hardwareMetadata {
+        if case let .tapSignerCard(t) = hardwareMetadata {
             return t.fullCardIdent()
         }
 

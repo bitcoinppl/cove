@@ -1147,7 +1147,7 @@ impl RustSendFlowManager {
 
             let amount = match state.max_selected.is_some() {
                 true => AmountOrMax::Max,
-                false => AmountOrMax::Amount(Amount::from_sat(amount_sats).into()),
+                false => AmountOrMax::Amt(Amount::from_sat(amount_sats).into()),
             };
 
             let address = address
@@ -1159,7 +1159,7 @@ impl RustSendFlowManager {
 
         let actor = self.wallet_actor();
         let psbt = match amount {
-            AmountOrMax::Amount(amount) => {
+            AmountOrMax::Amt(amount) => {
                 let amount = amount.as_ref().0;
                 call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()
             }

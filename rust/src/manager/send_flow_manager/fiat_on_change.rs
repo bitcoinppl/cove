@@ -46,7 +46,7 @@ pub enum SendFlowFiatOnChangeError {
     InvalidFiatAmount { error: String, input: String },
 
     #[error("converter error: {0}")]
-    ConverterError(#[from] ConverterError),
+    Converter(#[from] ConverterError),
 }
 
 impl FiatOnChangeHandler {

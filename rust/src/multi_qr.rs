@@ -64,7 +64,7 @@ pub enum MultiQrError {
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum MultiQrScanResult {
-    SeedQr(Arc<SeedQr>),
+    Seed(Arc<SeedQr>),
     Single(String),
     CompletedBBqr(Arc<BbqrJoined>),
     InProgressBBqr(u32),
@@ -112,7 +112,7 @@ impl MultiQr {
         type R = StringOrData;
 
         let result = match (self, qr) {
-            (Self::SeedQr(seed_qr), _) => MultiQrScanResult::SeedQr(Arc::new(seed_qr.clone())),
+            (Self::SeedQr(seed_qr), _) => MultiQrScanResult::Seed(Arc::new(seed_qr.clone())),
             (Self::Single(_), R::String(qr)) => MultiQrScanResult::Single(qr),
             (Self::Bbqr(_, joiner), R::String(qr)) => {
                 let join_result =
@@ -149,7 +149,7 @@ impl MultiQr {
         groups_of: u8,
     ) -> Result<Option<Vec<Vec<String>>>, MultiQrError> {
         let words: Option<Vec<Vec<String>>> = match self.handle_scan_result(qr)? {
-            MultiQrScanResult::SeedQr(seed_qr) => {
+            MultiQrScanResult::Seed(seed_qr) => {
                 let mnemonic = seed_qr.mnemonic();
                 let grouped = mnemonic.grouped_plain_words_of(groups_of as usize);
 

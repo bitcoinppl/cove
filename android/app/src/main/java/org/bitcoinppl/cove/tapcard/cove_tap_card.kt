@@ -1524,7 +1524,7 @@ public object FfiConverterTypeSatsCardState: FfiConverterRustBuffer<SatsCardStat
 
 sealed class TapCard: Disposable  {
     
-    data class SatsCard(
+    data class Sats(
         val v1: SatsCard) : TapCard()
         
     {
@@ -1533,7 +1533,7 @@ sealed class TapCard: Disposable  {
         companion object
     }
     
-    data class TapSigner(
+    data class Tap(
         val v1: TapSigner) : TapCard()
         
     {
@@ -1547,14 +1547,14 @@ sealed class TapCard: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is TapCard.SatsCard -> {
+            is TapCard.Sats -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is TapCard.TapSigner -> {
+            is TapCard.Tap -> {
                 
     Disposable.destroy(
         this.v1
@@ -1573,10 +1573,10 @@ sealed class TapCard: Disposable  {
 public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
     override fun read(buf: ByteBuffer): TapCard {
         return when(buf.getInt()) {
-            1 -> TapCard.SatsCard(
+            1 -> TapCard.Sats(
                 FfiConverterTypeSatsCard.read(buf),
                 )
-            2 -> TapCard.TapSigner(
+            2 -> TapCard.Tap(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -1584,14 +1584,14 @@ public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
     }
 
     override fun allocationSize(value: TapCard) = when(value) {
-        is TapCard.SatsCard -> {
+        is TapCard.Sats -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeSatsCard.allocationSize(value.v1)
             )
         }
-        is TapCard.TapSigner -> {
+        is TapCard.Tap -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -1602,12 +1602,12 @@ public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
 
     override fun write(value: TapCard, buf: ByteBuffer) {
         when(value) {
-            is TapCard.SatsCard -> {
+            is TapCard.Sats -> {
                 buf.putInt(1)
                 FfiConverterTypeSatsCard.write(value.v1, buf)
                 Unit
             }
-            is TapCard.TapSigner -> {
+            is TapCard.Tap -> {
                 buf.putInt(2)
                 FfiConverterTypeTapSigner.write(value.v1, buf)
                 Unit

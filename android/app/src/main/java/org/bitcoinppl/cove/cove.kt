@@ -1889,10 +1889,10 @@ internal interface UniffiLib : Library {
             uniffiCallbackInterfaceSendFlowManagerReconciler.register(lib)
             uniffiCallbackInterfaceTapcardTransportProtocol.register(lib)
             uniffiCallbackInterfaceWalletManagerReconciler.register(lib)
-            org.bitcoinppl.cove.types.uniffiEnsureInitialized()
-            org.bitcoinppl.cove.nfc.uniffiEnsureInitialized()
-            org.bitcoinppl.cove.device.uniffiEnsureInitialized()
             org.bitcoinppl.cove.tapcard.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.device.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.nfc.uniffiEnsureInitialized()
+            org.bitcoinppl.cove.types.uniffiEnsureInitialized()
             // Loading of library with integrity check done.
             lib
         }
@@ -25041,7 +25041,7 @@ public object FfiConverterTypeAfterPinAction : FfiConverterRustBuffer<AfterPinAc
 
 sealed class AmountOrMax: Disposable  {
     
-    data class Amount(
+    data class Amt(
         val v1: Amount) : AmountOrMax()
         
     {
@@ -25058,7 +25058,7 @@ sealed class AmountOrMax: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is AmountOrMax.Amount -> {
+            is AmountOrMax.Amt -> {
                 
     Disposable.destroy(
         this.v1
@@ -25079,7 +25079,7 @@ sealed class AmountOrMax: Disposable  {
 public object FfiConverterTypeAmountOrMax : FfiConverterRustBuffer<AmountOrMax>{
     override fun read(buf: ByteBuffer): AmountOrMax {
         return when(buf.getInt()) {
-            1 -> AmountOrMax.Amount(
+            1 -> AmountOrMax.Amt(
                 FfiConverterTypeAmount.read(buf),
                 )
             2 -> AmountOrMax.Max
@@ -25088,7 +25088,7 @@ public object FfiConverterTypeAmountOrMax : FfiConverterRustBuffer<AmountOrMax>{
     }
 
     override fun allocationSize(value: AmountOrMax) = when(value) {
-        is AmountOrMax.Amount -> {
+        is AmountOrMax.Amt -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -25105,7 +25105,7 @@ public object FfiConverterTypeAmountOrMax : FfiConverterRustBuffer<AmountOrMax>{
 
     override fun write(value: AmountOrMax, buf: ByteBuffer) {
         when(value) {
-            is AmountOrMax.Amount -> {
+            is AmountOrMax.Amt -> {
                 buf.putInt(1)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
@@ -26197,7 +26197,7 @@ sealed class AuthManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class DatabaseException(
+    class Database(
         
         val v1: DatabaseException
         ) : AuthManagerException() {
@@ -26227,7 +26227,7 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
             2 -> AuthManagerException.DecoySet(
                 FfiConverterTypeTrickPinError.read(buf),
                 )
-            3 -> AuthManagerException.DatabaseException(
+            3 -> AuthManagerException.Database(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -26246,7 +26246,7 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
                 4UL
                 + FfiConverterTypeTrickPinError.allocationSize(value.v1)
             )
-            is AuthManagerException.DatabaseException -> (
+            is AuthManagerException.Database -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeDatabaseError.allocationSize(value.v1)
@@ -26266,7 +26266,7 @@ public object FfiConverterTypeAuthManagerError : FfiConverterRustBuffer<AuthMana
                 FfiConverterTypeTrickPinError.write(value.v1, buf)
                 Unit
             }
-            is AuthManagerException.DatabaseException -> {
+            is AuthManagerException.Database -> {
                 buf.putInt(3)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
@@ -29254,7 +29254,7 @@ public object FfiConverterTypeGlobalFlagTableError : FfiConverterRustBuffer<Glob
 
 sealed class HardwareWalletMetadata: Disposable  {
     
-    data class TapSigner(
+    data class TapSignerCard(
         val v1: TapSigner) : HardwareWalletMetadata()
         
     {
@@ -29268,7 +29268,7 @@ sealed class HardwareWalletMetadata: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is HardwareWalletMetadata.TapSigner -> {
+            is HardwareWalletMetadata.TapSignerCard -> {
                 
     Disposable.destroy(
         this.v1
@@ -29287,7 +29287,7 @@ sealed class HardwareWalletMetadata: Disposable  {
 public object FfiConverterTypeHardwareWalletMetadata : FfiConverterRustBuffer<HardwareWalletMetadata>{
     override fun read(buf: ByteBuffer): HardwareWalletMetadata {
         return when(buf.getInt()) {
-            1 -> HardwareWalletMetadata.TapSigner(
+            1 -> HardwareWalletMetadata.TapSignerCard(
                 FfiConverterTypeTapSigner.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -29295,7 +29295,7 @@ public object FfiConverterTypeHardwareWalletMetadata : FfiConverterRustBuffer<Ha
     }
 
     override fun allocationSize(value: HardwareWalletMetadata) = when(value) {
-        is HardwareWalletMetadata.TapSigner -> {
+        is HardwareWalletMetadata.TapSignerCard -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -29306,7 +29306,7 @@ public object FfiConverterTypeHardwareWalletMetadata : FfiConverterRustBuffer<Ha
 
     override fun write(value: HardwareWalletMetadata, buf: ByteBuffer) {
         when(value) {
-            is HardwareWalletMetadata.TapSigner -> {
+            is HardwareWalletMetadata.TapSignerCard -> {
                 buf.putInt(1)
                 FfiConverterTypeTapSigner.write(value.v1, buf)
                 Unit
@@ -29647,7 +29647,7 @@ sealed class ImportWalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class KeychainException(
+    class Keychain(
         
         val v1: KeychainException
         ) : ImportWalletException() {
@@ -29663,7 +29663,7 @@ sealed class ImportWalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class DatabaseException(
+    class Database(
         
         val v1: DatabaseException
         ) : ImportWalletException() {
@@ -29701,13 +29701,13 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
             2 -> ImportWalletException.InvalidWordGroup(
                 FfiConverterString.read(buf),
                 )
-            3 -> ImportWalletException.KeychainException(
+            3 -> ImportWalletException.Keychain(
                 FfiConverterTypeKeychainError.read(buf),
                 )
             4 -> ImportWalletException.WalletAlreadyExists(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            5 -> ImportWalletException.DatabaseException(
+            5 -> ImportWalletException.Database(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
             6 -> ImportWalletException.BdkException(
@@ -29729,7 +29729,7 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is ImportWalletException.KeychainException -> (
+            is ImportWalletException.Keychain -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeKeychainError.allocationSize(value.v1)
@@ -29739,7 +29739,7 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
-            is ImportWalletException.DatabaseException -> (
+            is ImportWalletException.Database -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeDatabaseError.allocationSize(value.v1)
@@ -29764,7 +29764,7 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is ImportWalletException.KeychainException -> {
+            is ImportWalletException.Keychain -> {
                 buf.putInt(3)
                 FfiConverterTypeKeychainError.write(value.v1, buf)
                 Unit
@@ -29774,7 +29774,7 @@ public object FfiConverterTypeImportWalletError : FfiConverterRustBuffer<ImportW
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
-            is ImportWalletException.DatabaseException -> {
+            is ImportWalletException.Database -> {
                 buf.putInt(5)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
@@ -30440,7 +30440,7 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
     
-    data class HardwareExport(
+    data class Hardware(
         val v1: HardwareExport) : MultiFormat()
         
     {
@@ -30449,7 +30449,7 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
     
-    data class Mnemonic(
+    data class Mnem(
         val v1: Mnemonic) : MultiFormat()
         
     {
@@ -30467,7 +30467,7 @@ sealed class MultiFormat: Disposable  {
         companion object
     }
     
-    data class Bip329Labels(
+    data class Labels(
         val v1: Bip329Labels) : MultiFormat()
         
     {
@@ -30512,14 +30512,14 @@ sealed class MultiFormat: Disposable  {
     )
                 
             }
-            is MultiFormat.HardwareExport -> {
+            is MultiFormat.Hardware -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is MultiFormat.Mnemonic -> {
+            is MultiFormat.Mnem -> {
                 
     Disposable.destroy(
         this.v1
@@ -30533,7 +30533,7 @@ sealed class MultiFormat: Disposable  {
     )
                 
             }
-            is MultiFormat.Bip329Labels -> {
+            is MultiFormat.Labels -> {
                 
     Disposable.destroy(
         this.v1
@@ -30569,16 +30569,16 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
             1 -> MultiFormat.Address(
                 FfiConverterTypeAddressWithNetwork.read(buf),
                 )
-            2 -> MultiFormat.HardwareExport(
+            2 -> MultiFormat.Hardware(
                 FfiConverterTypeHardwareExport.read(buf),
                 )
-            3 -> MultiFormat.Mnemonic(
+            3 -> MultiFormat.Mnem(
                 FfiConverterTypeMnemonic.read(buf),
                 )
             4 -> MultiFormat.Transaction(
                 FfiConverterTypeBitcoinTransaction.read(buf),
                 )
-            5 -> MultiFormat.Bip329Labels(
+            5 -> MultiFormat.Labels(
                 FfiConverterTypeBip329Labels.read(buf),
                 )
             6 -> MultiFormat.TapSignerReady(
@@ -30599,14 +30599,14 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 + FfiConverterTypeAddressWithNetwork.allocationSize(value.v1)
             )
         }
-        is MultiFormat.HardwareExport -> {
+        is MultiFormat.Hardware -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeHardwareExport.allocationSize(value.v1)
             )
         }
-        is MultiFormat.Mnemonic -> {
+        is MultiFormat.Mnem -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -30620,7 +30620,7 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 + FfiConverterTypeBitcoinTransaction.allocationSize(value.v1)
             )
         }
-        is MultiFormat.Bip329Labels -> {
+        is MultiFormat.Labels -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -30650,12 +30650,12 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 FfiConverterTypeAddressWithNetwork.write(value.v1, buf)
                 Unit
             }
-            is MultiFormat.HardwareExport -> {
+            is MultiFormat.Hardware -> {
                 buf.putInt(2)
                 FfiConverterTypeHardwareExport.write(value.v1, buf)
                 Unit
             }
-            is MultiFormat.Mnemonic -> {
+            is MultiFormat.Mnem -> {
                 buf.putInt(3)
                 FfiConverterTypeMnemonic.write(value.v1, buf)
                 Unit
@@ -30665,7 +30665,7 @@ public object FfiConverterTypeMultiFormat : FfiConverterRustBuffer<MultiFormat>{
                 FfiConverterTypeBitcoinTransaction.write(value.v1, buf)
                 Unit
             }
-            is MultiFormat.Bip329Labels -> {
+            is MultiFormat.Labels -> {
                 buf.putInt(5)
                 FfiConverterTypeBip329Labels.write(value.v1, buf)
                 Unit
@@ -31012,7 +31012,7 @@ public object FfiConverterTypeMultiQrError : FfiConverterRustBuffer<MultiQrExcep
 
 sealed class MultiQrScanResult: Disposable  {
     
-    data class SeedQr(
+    data class Seed(
         val v1: SeedQr) : MultiQrScanResult()
         
     {
@@ -31053,7 +31053,7 @@ sealed class MultiQrScanResult: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is MultiQrScanResult.SeedQr -> {
+            is MultiQrScanResult.Seed -> {
                 
     Disposable.destroy(
         this.v1
@@ -31093,7 +31093,7 @@ sealed class MultiQrScanResult: Disposable  {
 public object FfiConverterTypeMultiQrScanResult : FfiConverterRustBuffer<MultiQrScanResult>{
     override fun read(buf: ByteBuffer): MultiQrScanResult {
         return when(buf.getInt()) {
-            1 -> MultiQrScanResult.SeedQr(
+            1 -> MultiQrScanResult.Seed(
                 FfiConverterTypeSeedQr.read(buf),
                 )
             2 -> MultiQrScanResult.Single(
@@ -31110,7 +31110,7 @@ public object FfiConverterTypeMultiQrScanResult : FfiConverterRustBuffer<MultiQr
     }
 
     override fun allocationSize(value: MultiQrScanResult) = when(value) {
-        is MultiQrScanResult.SeedQr -> {
+        is MultiQrScanResult.Seed -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -31142,7 +31142,7 @@ public object FfiConverterTypeMultiQrScanResult : FfiConverterRustBuffer<MultiQr
 
     override fun write(value: MultiQrScanResult, buf: ByteBuffer) {
         when(value) {
-            is MultiQrScanResult.SeedQr -> {
+            is MultiQrScanResult.Seed -> {
                 buf.putInt(1)
                 FfiConverterTypeSeedQr.write(value.v1, buf)
                 Unit
@@ -31636,7 +31636,7 @@ sealed class PendingWalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class WalletCreationException(
+    class Creation(
         
         val v1: WalletCreationException
         ) : PendingWalletManagerException() {
@@ -31663,7 +31663,7 @@ public object FfiConverterTypePendingWalletManagerError : FfiConverterRustBuffer
             1 -> PendingWalletManagerException.BdkException(
                 FfiConverterString.read(buf),
                 )
-            2 -> PendingWalletManagerException.WalletCreationException(
+            2 -> PendingWalletManagerException.Creation(
                 FfiConverterTypeWalletCreationError.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -31677,7 +31677,7 @@ public object FfiConverterTypePendingWalletManagerError : FfiConverterRustBuffer
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is PendingWalletManagerException.WalletCreationException -> (
+            is PendingWalletManagerException.Creation -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeWalletCreationError.allocationSize(value.v1)
@@ -31692,7 +31692,7 @@ public object FfiConverterTypePendingWalletManagerError : FfiConverterRustBuffer
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is PendingWalletManagerException.WalletCreationException -> {
+            is PendingWalletManagerException.Creation -> {
                 buf.putInt(2)
                 FfiConverterTypeWalletCreationError.write(value.v1, buf)
                 Unit
@@ -31809,7 +31809,7 @@ sealed class Route: Disposable  {
         companion object
     }
     
-    data class TransactionDetails(
+    data class TxDetails(
         val `id`: WalletId, 
         val `details`: TransactionDetails) : Route()
         
@@ -31880,7 +31880,7 @@ sealed class Route: Disposable  {
     )
                 
             }
-            is Route.TransactionDetails -> {
+            is Route.TxDetails -> {
                 
     Disposable.destroy(
         this.`id`,
@@ -31931,7 +31931,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
             6 -> Route.SecretWords(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            7 -> Route.TransactionDetails(
+            7 -> Route.TxDetails(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterTypeTransactionDetails.read(buf),
                 )
@@ -31988,7 +31988,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
         }
-        is Route.TransactionDetails -> {
+        is Route.TxDetails -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -32044,7 +32044,7 @@ public object FfiConverterTypeRoute : FfiConverterRustBuffer<Route>{
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
-            is Route.TransactionDetails -> {
+            is Route.TxDetails -> {
                 buf.putInt(7)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterTypeTransactionDetails.write(value.`details`, buf)
@@ -32589,7 +32589,7 @@ sealed class SendFlowException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class WalletManagerException(
+    class WalletManager(
         
         val v1: WalletManagerException
         ) : SendFlowException() {
@@ -32645,7 +32645,7 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             12 -> SendFlowException.UnableToSaveUnsignedTransaction(
                 FfiConverterString.read(buf),
                 )
-            13 -> SendFlowException.WalletManagerException(
+            13 -> SendFlowException.WalletManager(
                 FfiConverterTypeWalletManagerError.read(buf),
                 )
             14 -> SendFlowException.UnableToGetFeeDetails(
@@ -32712,7 +32712,7 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is SendFlowException.WalletManagerException -> (
+            is SendFlowException.WalletManager -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeWalletManagerError.allocationSize(value.v1)
@@ -32782,7 +32782,7 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is SendFlowException.WalletManagerException -> {
+            is SendFlowException.WalletManager -> {
                 buf.putInt(13)
                 FfiConverterTypeWalletManagerError.write(value.v1, buf)
                 Unit
@@ -32889,7 +32889,7 @@ sealed class SendFlowFiatOnChangeError {
         companion object
     }
     
-    data class ConverterException(
+    data class Converter(
         val v1: ConverterException) : SendFlowFiatOnChangeError()
         
     {
@@ -32913,7 +32913,7 @@ public object FfiConverterTypeSendFlowFiatOnChangeError : FfiConverterRustBuffer
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            2 -> SendFlowFiatOnChangeError.ConverterException(
+            2 -> SendFlowFiatOnChangeError.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -32929,7 +32929,7 @@ public object FfiConverterTypeSendFlowFiatOnChangeError : FfiConverterRustBuffer
                 + FfiConverterString.allocationSize(value.`input`)
             )
         }
-        is SendFlowFiatOnChangeError.ConverterException -> {
+        is SendFlowFiatOnChangeError.Converter -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -32946,7 +32946,7 @@ public object FfiConverterTypeSendFlowFiatOnChangeError : FfiConverterRustBuffer
                 FfiConverterString.write(value.`input`, buf)
                 Unit
             }
-            is SendFlowFiatOnChangeError.ConverterException -> {
+            is SendFlowFiatOnChangeError.Converter -> {
                 buf.putInt(2)
                 FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit
@@ -34486,7 +34486,7 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
 
 sealed class SetupCmdResponse: Disposable  {
     
-    data class ContinueFromInit(
+    data class Init(
         val v1: ContinueFromInit) : SetupCmdResponse()
         
     {
@@ -34495,7 +34495,7 @@ sealed class SetupCmdResponse: Disposable  {
         companion object
     }
     
-    data class ContinueFromBackup(
+    data class Backup(
         val v1: ContinueFromBackup) : SetupCmdResponse()
         
     {
@@ -34504,7 +34504,7 @@ sealed class SetupCmdResponse: Disposable  {
         companion object
     }
     
-    data class ContinueFromDerive(
+    data class Derive(
         val v1: ContinueFromDerive) : SetupCmdResponse()
         
     {
@@ -34527,21 +34527,21 @@ sealed class SetupCmdResponse: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is SetupCmdResponse.ContinueFromInit -> {
+            is SetupCmdResponse.Init -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is SetupCmdResponse.ContinueFromBackup -> {
+            is SetupCmdResponse.Backup -> {
                 
     Disposable.destroy(
         this.v1
     )
                 
             }
-            is SetupCmdResponse.ContinueFromDerive -> {
+            is SetupCmdResponse.Derive -> {
                 
     Disposable.destroy(
         this.v1
@@ -34567,13 +34567,13 @@ sealed class SetupCmdResponse: Disposable  {
 public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmdResponse>{
     override fun read(buf: ByteBuffer): SetupCmdResponse {
         return when(buf.getInt()) {
-            1 -> SetupCmdResponse.ContinueFromInit(
+            1 -> SetupCmdResponse.Init(
                 FfiConverterTypeContinueFromInit.read(buf),
                 )
-            2 -> SetupCmdResponse.ContinueFromBackup(
+            2 -> SetupCmdResponse.Backup(
                 FfiConverterTypeContinueFromBackup.read(buf),
                 )
-            3 -> SetupCmdResponse.ContinueFromDerive(
+            3 -> SetupCmdResponse.Derive(
                 FfiConverterTypeContinueFromDerive.read(buf),
                 )
             4 -> SetupCmdResponse.Complete(
@@ -34584,21 +34584,21 @@ public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmd
     }
 
     override fun allocationSize(value: SetupCmdResponse) = when(value) {
-        is SetupCmdResponse.ContinueFromInit -> {
+        is SetupCmdResponse.Init -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeContinueFromInit.allocationSize(value.v1)
             )
         }
-        is SetupCmdResponse.ContinueFromBackup -> {
+        is SetupCmdResponse.Backup -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
                 + FfiConverterTypeContinueFromBackup.allocationSize(value.v1)
             )
         }
-        is SetupCmdResponse.ContinueFromDerive -> {
+        is SetupCmdResponse.Derive -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -34616,17 +34616,17 @@ public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmd
 
     override fun write(value: SetupCmdResponse, buf: ByteBuffer) {
         when(value) {
-            is SetupCmdResponse.ContinueFromInit -> {
+            is SetupCmdResponse.Init -> {
                 buf.putInt(1)
                 FfiConverterTypeContinueFromInit.write(value.v1, buf)
                 Unit
             }
-            is SetupCmdResponse.ContinueFromBackup -> {
+            is SetupCmdResponse.Backup -> {
                 buf.putInt(2)
                 FfiConverterTypeContinueFromBackup.write(value.v1, buf)
                 Unit
             }
-            is SetupCmdResponse.ContinueFromDerive -> {
+            is SetupCmdResponse.Derive -> {
                 buf.putInt(3)
                 FfiConverterTypeContinueFromDerive.write(value.v1, buf)
                 Unit
@@ -36823,7 +36823,7 @@ sealed class WalletCreationException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class MultiFormatException(
+    class MultiFormat(
         
         val v1: MultiFormatException
         ) : WalletCreationException() {
@@ -36862,7 +36862,7 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
             5 -> WalletCreationException.Import(
                 FfiConverterString.read(buf),
                 )
-            6 -> WalletCreationException.MultiFormatException(
+            6 -> WalletCreationException.MultiFormat(
                 FfiConverterTypeMultiFormatError.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -36896,7 +36896,7 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is WalletCreationException.MultiFormatException -> (
+            is WalletCreationException.MultiFormat -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeMultiFormatError.allocationSize(value.v1)
@@ -36931,7 +36931,7 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletCreationException.MultiFormatException -> {
+            is WalletCreationException.MultiFormat -> {
                 buf.putInt(6)
                 FfiConverterTypeMultiFormatError.write(value.v1, buf)
                 Unit
@@ -37165,7 +37165,7 @@ sealed class WalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class KeychainException(
+    class Keychain(
         
         val v1: KeychainException
         ) : WalletException() {
@@ -37173,7 +37173,7 @@ sealed class WalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class DatabaseException(
+    class Database(
         
         val v1: DatabaseException
         ) : WalletException() {
@@ -37209,7 +37209,7 @@ sealed class WalletException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class MultiFormatException(
+    class MultiFormat(
         
         val v1: MultiFormatException
         ) : WalletException() {
@@ -37253,10 +37253,10 @@ public object FfiConverterTypeWalletError : FfiConverterRustBuffer<WalletExcepti
             4 -> WalletException.LoadException(
                 FfiConverterString.read(buf),
                 )
-            5 -> WalletException.KeychainException(
+            5 -> WalletException.Keychain(
                 FfiConverterTypeKeychainError.read(buf),
                 )
-            6 -> WalletException.DatabaseException(
+            6 -> WalletException.Database(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
             7 -> WalletException.WalletNotFound()
@@ -37267,7 +37267,7 @@ public object FfiConverterTypeWalletError : FfiConverterRustBuffer<WalletExcepti
             10 -> WalletException.WalletAlreadyExists(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            11 -> WalletException.MultiFormatException(
+            11 -> WalletException.MultiFormat(
                 FfiConverterTypeMultiFormatError.read(buf),
                 )
             12 -> WalletException.DescriptorKeyParseException(
@@ -37299,12 +37299,12 @@ public object FfiConverterTypeWalletError : FfiConverterRustBuffer<WalletExcepti
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is WalletException.KeychainException -> (
+            is WalletException.Keychain -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeKeychainError.allocationSize(value.v1)
             )
-            is WalletException.DatabaseException -> (
+            is WalletException.Database -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeDatabaseError.allocationSize(value.v1)
@@ -37327,7 +37327,7 @@ public object FfiConverterTypeWalletError : FfiConverterRustBuffer<WalletExcepti
                 4UL
                 + FfiConverterTypeWalletId.allocationSize(value.v1)
             )
-            is WalletException.MultiFormatException -> (
+            is WalletException.MultiFormat -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeMultiFormatError.allocationSize(value.v1)
@@ -37362,12 +37362,12 @@ public object FfiConverterTypeWalletError : FfiConverterRustBuffer<WalletExcepti
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletException.KeychainException -> {
+            is WalletException.Keychain -> {
                 buf.putInt(5)
                 FfiConverterTypeKeychainError.write(value.v1, buf)
                 Unit
             }
-            is WalletException.DatabaseException -> {
+            is WalletException.Database -> {
                 buf.putInt(6)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
@@ -37390,7 +37390,7 @@ public object FfiConverterTypeWalletError : FfiConverterRustBuffer<WalletExcepti
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
-            is WalletException.MultiFormatException -> {
+            is WalletException.MultiFormat -> {
                 buf.putInt(11)
                 FfiConverterTypeMultiFormatError.write(value.v1, buf)
                 Unit
@@ -38083,7 +38083,7 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
-    class ConverterException(
+    class Converter(
         
         val v1: ConverterException
         ) : WalletManagerException() {
@@ -38202,7 +38202,7 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             20 -> WalletManagerException.SignAndBroadcastException(
                 FfiConverterString.read(buf),
                 )
-            21 -> WalletManagerException.ConverterException(
+            21 -> WalletManagerException.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
             22 -> WalletManagerException.UnknownException(
@@ -38324,7 +38324,7 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is WalletManagerException.ConverterException -> (
+            is WalletManagerException.Converter -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeConverterError.allocationSize(value.v1)
@@ -38457,7 +38457,7 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.ConverterException -> {
+            is WalletManagerException.Converter -> {
                 buf.putInt(21)
                 FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit

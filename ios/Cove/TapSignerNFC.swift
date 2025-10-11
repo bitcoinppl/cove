@@ -16,7 +16,7 @@ class TapSignerNFC {
 
     init(_ card: TapSigner) {
         Log.debug("Initializing TapSignerNFC")
-        nfc = TapCardNFC(tapcard: .tapSigner(card))
+        nfc = TapCardNFC(tapcard: .tap(card))
     }
 
     public func setupTapSigner(factoryPin: String, newPin: String, chainCode: Data? = nil) async
@@ -188,11 +188,11 @@ class TapSignerNFC {
     > {
         let cmd: SetupCmd? =
             switch response {
-            case let .continueFromInit(c):
+            case let .init(c):
                 c.continueCmd
-            case let .continueFromBackup(c):
+            case let .backup(c):
                 c.continueCmd
-            case let .continueFromDerive(c):
+            case let .derive(c):
                 c.continueCmd
             case .complete:
                 .none
@@ -331,11 +331,11 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         do {
             let transport = TapCardTransport(session: session, tag: tag)
             switch tapcard {
-            case .satsCard:
+            case .sats:
                 ( // TODO: Implement SatsCardReader
                 )
 
-            case .tapSigner:
+            case .tap:
                 let tapSignerReader = try await TapSignerReader(
                     transport: transport, cmd: tapSignerCmd
                 )

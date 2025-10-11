@@ -119,7 +119,7 @@ pub fn parse_card(url_encoded: &str) -> Result<TapCard> {
         let tap_signer =
             TapSigner { state, card_ident, nonce, signature, pubkey: Arc::new(pubkey) };
 
-        return Ok(TapCard::TapSigner(tap_signer.into()));
+        return Ok(TapCard::Tap(tap_signer.into()));
     }
 
     // It's a SatsCard
@@ -130,7 +130,7 @@ pub fn parse_card(url_encoded: &str) -> Result<TapCard> {
 
     let state = parse_sats_card_state(state_field)?;
 
-    Ok(TapCard::SatsCard(SatsCard { state, slot_number, address_suffix, nonce, signature }))
+    Ok(TapCard::Sats(SatsCard { state, slot_number, address_suffix, nonce, signature }))
 }
 
 // Helper function to parse state

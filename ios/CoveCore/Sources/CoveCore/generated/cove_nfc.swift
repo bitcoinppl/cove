@@ -352,19 +352,29 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
+// Initial value and increment amount for handles. 
+// These ensure that SWIFT handles always have the lowest bit set
+fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
+fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
+
 fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
     // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
     private let lock = NSLock()
     private var map: [UInt64: T] = [:]
-    private var currentHandle: UInt64 = 1
+    private var currentHandle: UInt64 = UNIFFI_HANDLEMAP_INITIAL
 
     func insert(obj: T) -> UInt64 {
         lock.withLock {
-            let handle = currentHandle
-            currentHandle += 1
-            map[handle] = obj
-            return handle
+            return doInsert(obj)
         }
+    }
+
+    // Low-level insert function, this assumes `lock` is held.
+    private func doInsert(_ obj: T) -> UInt64 {
+        let handle = currentHandle
+        currentHandle += UNIFFI_HANDLEMAP_DELTA
+        map[handle] = obj
+        return handle
     }
 
      func get(handle: UInt64) throws -> T {
@@ -373,6 +383,15 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
                 throw UniffiInternalError.unexpectedStaleHandle
             }
             return obj
+        }
+    }
+
+     func clone(handle: UInt64) throws -> UInt64 {
+        try lock.withLock {
+            guard let obj = map[handle] else {
+                throw UniffiInternalError.unexpectedStaleHandle
+            }
+            return doInsert(obj)
         }
     }
 
@@ -547,13 +566,13 @@ public protocol FfiNfcReaderProtocol: AnyObject, Sendable {
     
 }
 open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
+    fileprivate let handle: UInt64
 
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
@@ -563,43 +582,39 @@ open class FfiNfcReader: FfiNfcReaderProtocol, @unchecked Sendable {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_ffinfcreader(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_nfc_fn_clone_ffinfcreader(self.handle, $0) }
     }
 public convenience init() {
-    let pointer =
+    let handle =
         try! rustCall() {
     uniffi_cove_nfc_fn_constructor_ffinfcreader_new($0
     )
 }
-    self.init(unsafeFromRawPointer: pointer)
+    self.init(unsafeFromHandle: handle)
 }
 
     deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_nfc_fn_free_ffinfcreader(pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_free_ffinfcreader(handle, $0) }
     }
 
     
@@ -607,14 +622,16 @@ public convenience init() {
     
 open func dataFromRecords(records: [NdefRecord]) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(self.uniffiClonePointer(),
+    uniffi_cove_nfc_fn_method_ffinfcreader_data_from_records(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceTypeNdefRecord.lower(records),$0
     )
 })
 }
     
 open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTypeResumeError_lift) {
-    uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(self.uniffiClonePointer(),
+    uniffi_cove_nfc_fn_method_ffinfcreader_is_resumeable(
+            self.uniffiCloneHandle(),
         FfiConverterData.lower(data),$0
     )
 }
@@ -622,21 +639,24 @@ open func isResumeable(data: Data)throws   {try rustCallWithError(FfiConverterTy
     
 open func isStarted() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_is_started(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_ffinfcreader_is_started(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
 open func messageInfo() -> MessageInfo?  {
     return try!  FfiConverterOptionTypeMessageInfo.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_message_info(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_ffinfcreader_message_info(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
 open func parse(data: Data)throws  -> ParseResult  {
     return try  FfiConverterTypeParseResult_lift(try rustCallWithError(FfiConverterTypeNfcReaderError_lift) {
-    uniffi_cove_nfc_fn_method_ffinfcreader_parse(self.uniffiClonePointer(),
+    uniffi_cove_nfc_fn_method_ffinfcreader_parse(
+            self.uniffiCloneHandle(),
         FfiConverterData.lower(data),$0
     )
 })
@@ -644,13 +664,13 @@ open func parse(data: Data)throws  -> ParseResult  {
     
 open func stringFromRecord(record: NdefRecord) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(self.uniffiClonePointer(),
+    uniffi_cove_nfc_fn_method_ffinfcreader_string_from_record(
+            self.uniffiCloneHandle(),
         FfiConverterTypeNdefRecord_lower(record),$0
     )
 })
 }
     
-
 }
 
 
@@ -658,48 +678,42 @@ open func stringFromRecord(record: NdefRecord) -> String?  {
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeFfiNfcReader: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = FfiNfcReader
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> FfiNfcReader {
-        return FfiNfcReader(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> FfiNfcReader {
+        return FfiNfcReader(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: FfiNfcReader) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: FfiNfcReader) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiNfcReader {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: FfiNfcReader, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
 
+
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFfiNfcReader_lift(_ pointer: UnsafeMutableRawPointer) throws -> FfiNfcReader {
-    return try FfiConverterTypeFfiNfcReader.lift(pointer)
+public func FfiConverterTypeFfiNfcReader_lift(_ handle: UInt64) throws -> FfiNfcReader {
+    return try FfiConverterTypeFfiNfcReader.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeFfiNfcReader_lower(_ value: FfiNfcReader) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeFfiNfcReader_lower(_ value: FfiNfcReader) -> UInt64 {
     return FfiConverterTypeFfiNfcReader.lower(value)
 }
 
@@ -716,13 +730,13 @@ public protocol NdefRecordReaderProtocol: AnyObject, Sendable {
     
 }
 open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
+    fileprivate let handle: UInt64
 
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
@@ -732,44 +746,40 @@ open class NdefRecordReader: NdefRecordReaderProtocol, @unchecked Sendable {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_ndefrecordreader(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_nfc_fn_clone_ndefrecordreader(self.handle, $0) }
     }
 public convenience init(record: NdefRecord) {
-    let pointer =
+    let handle =
         try! rustCall() {
     uniffi_cove_nfc_fn_constructor_ndefrecordreader_new(
         FfiConverterTypeNdefRecord_lower(record),$0
     )
 }
-    self.init(unsafeFromRawPointer: pointer)
+    self.init(unsafeFromHandle: handle)
 }
 
     deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_nfc_fn_free_ndefrecordreader(pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_free_ndefrecordreader(handle, $0) }
     }
 
     
@@ -777,19 +787,20 @@ public convenience init(record: NdefRecord) {
     
 open func id() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ndefrecordreader_id(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_ndefrecordreader_id(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
 open func type() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_ndefrecordreader_type_(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_ndefrecordreader_type_(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
-
 }
 
 
@@ -797,48 +808,42 @@ open func type() -> String?  {
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNdefRecordReader: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = NdefRecordReader
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NdefRecordReader {
-        return NdefRecordReader(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> NdefRecordReader {
+        return NdefRecordReader(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: NdefRecordReader) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: NdefRecordReader) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NdefRecordReader {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: NdefRecordReader, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
 
+
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNdefRecordReader_lift(_ pointer: UnsafeMutableRawPointer) throws -> NdefRecordReader {
-    return try FfiConverterTypeNdefRecordReader.lift(pointer)
+public func FfiConverterTypeNdefRecordReader_lift(_ handle: UInt64) throws -> NdefRecordReader {
+    return try FfiConverterTypeNdefRecordReader.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeNdefRecordReader_lower(_ value: NdefRecordReader) -> UInt64 {
     return FfiConverterTypeNdefRecordReader.lower(value)
 }
 
@@ -857,13 +862,13 @@ public protocol NfcConstProtocol: AnyObject, Sendable {
     
 }
 open class NfcConst: NfcConstProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
+    fileprivate let handle: UInt64
 
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
@@ -873,43 +878,39 @@ open class NfcConst: NfcConstProtocol, @unchecked Sendable {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_nfcconst(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_nfc_fn_clone_nfcconst(self.handle, $0) }
     }
 public convenience init() {
-    let pointer =
+    let handle =
         try! rustCall() {
     uniffi_cove_nfc_fn_constructor_nfcconst_new($0
     )
 }
-    self.init(unsafeFromRawPointer: pointer)
+    self.init(unsafeFromHandle: handle)
 }
 
     deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_nfc_fn_free_nfcconst(pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_free_nfcconst(handle, $0) }
     }
 
     
@@ -917,26 +918,28 @@ public convenience init() {
     
 open func bytesPerBlock() -> UInt16  {
     return try!  FfiConverterUInt16.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_nfcconst_bytes_per_block(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
 open func numberOfBlocksPerChunk() -> UInt16  {
     return try!  FfiConverterUInt16.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_nfcconst_number_of_blocks_per_chunk(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
 open func totalBytesPerChunk() -> UInt16  {
     return try!  FfiConverterUInt16.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_nfcconst_total_bytes_per_chunk(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
-
 }
 
 
@@ -944,48 +947,42 @@ open func totalBytesPerChunk() -> UInt16  {
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNfcConst: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = NfcConst
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcConst {
-        return NfcConst(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> NfcConst {
+        return NfcConst(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: NfcConst) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcConst {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: NfcConst, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
 
+
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNfcConst_lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcConst {
-    return try FfiConverterTypeNfcConst.lift(pointer)
+public func FfiConverterTypeNfcConst_lift(_ handle: UInt64) throws -> NfcConst {
+    return try FfiConverterTypeNfcConst.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeNfcConst_lower(_ value: NfcConst) -> UInt64 {
     return FfiConverterTypeNfcConst.lower(value)
 }
 
@@ -1008,13 +1005,13 @@ public protocol NfcMessageProtocol: AnyObject, Sendable {
  * A NFC message, could contain a string, data (bytes) or both
  */
 open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
+    fileprivate let handle: UInt64
 
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
@@ -1024,36 +1021,32 @@ open class NfcMessage: NfcMessageProtocol, @unchecked Sendable {
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_cove_nfc_fn_clone_nfcmessage(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_nfc_fn_clone_nfcmessage(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
     deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_cove_nfc_fn_free_nfcmessage(pointer, $0) }
+        try! rustCall { uniffi_cove_nfc_fn_free_nfcmessage(handle, $0) }
     }
 
     
@@ -1070,19 +1063,20 @@ public static func tryNew(string: String? = nil, data: Data? = nil)throws  -> Nf
     
 open func data() -> Data?  {
     return try!  FfiConverterOptionData.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcmessage_data(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_nfcmessage_data(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
 open func string() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_cove_nfc_fn_method_nfcmessage_string(self.uniffiClonePointer(),$0
+    uniffi_cove_nfc_fn_method_nfcmessage_string(
+            self.uniffiCloneHandle(),$0
     )
 })
 }
     
-
 }
 
 
@@ -1090,48 +1084,42 @@ open func string() -> String?  {
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeNfcMessage: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = NfcMessage
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcMessage {
-        return NfcMessage(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> NfcMessage {
+        return NfcMessage(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: NfcMessage) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: NfcMessage) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NfcMessage {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: NfcMessage, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
 
+
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNfcMessage_lift(_ pointer: UnsafeMutableRawPointer) throws -> NfcMessage {
-    return try FfiConverterTypeNfcMessage.lift(pointer)
+public func FfiConverterTypeNfcMessage_lift(_ handle: UInt64) throws -> NfcMessage {
+    return try FfiConverterTypeNfcMessage.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeNfcMessage_lower(_ value: NfcMessage) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeNfcMessage_lower(_ value: NfcMessage) -> UInt64 {
     return FfiConverterTypeNfcMessage.lower(value)
 }
 
@@ -1167,6 +1155,9 @@ public struct MessageInfo {
 #if compiler(>=6)
 extension MessageInfo: Sendable {}
 #endif
+
+
+
 
 
 extension MessageInfo: Equatable, Hashable {
@@ -1251,6 +1242,9 @@ public struct NdefHeader {
 #if compiler(>=6)
 extension NdefHeader: Sendable {}
 #endif
+
+
+
 
 
 extension NdefHeader: Equatable, Hashable {
@@ -1369,6 +1363,9 @@ extension NdefRecord: Sendable {}
 #endif
 
 
+
+
+
 extension NdefRecord: Equatable, Hashable {
     public static func ==(lhs: NdefRecord, rhs: NdefRecord) -> Bool {
         if lhs.header != rhs.header {
@@ -1453,6 +1450,9 @@ extension ParsingContext: Sendable {}
 #endif
 
 
+
+
+
 extension ParsingContext: Equatable, Hashable {
     public static func ==(lhs: ParsingContext, rhs: ParsingContext) -> Bool {
         if lhs.messageInfo != rhs.messageInfo {
@@ -1529,6 +1529,9 @@ extension ParsingMessage: Sendable {}
 #endif
 
 
+
+
+
 extension ParsingMessage: Equatable, Hashable {
     public static func ==(lhs: ParsingMessage, rhs: ParsingMessage) -> Bool {
         if lhs.messageInfo != rhs.messageInfo {
@@ -1601,6 +1604,9 @@ extension TextPayload: Sendable {}
 #endif
 
 
+
+
+
 extension TextPayload: Equatable, Hashable {
     public static func ==(lhs: TextPayload, rhs: TextPayload) -> Bool {
         if lhs.format != rhs.format {
@@ -1668,9 +1674,8 @@ public enum NdefPayload {
     )
     case data(Data
     )
+
 }
-
-
 #if compiler(>=6)
 extension NdefPayload: Sendable {}
 #endif
@@ -1728,7 +1733,11 @@ public func FfiConverterTypeNdefPayload_lower(_ value: NdefPayload) -> RustBuffe
 }
 
 
+
+
 extension NdefPayload: Equatable, Hashable {}
+
+
 
 
 
@@ -1748,9 +1757,8 @@ public enum NdefType {
     case unknown
     case unchanged
     case reserved
+
 }
-
-
 #if compiler(>=6)
 extension NdefType: Sendable {}
 #endif
@@ -1840,7 +1848,11 @@ public func FfiConverterTypeNdefType_lower(_ value: NdefType) -> RustBuffer {
 }
 
 
+
+
 extension NdefType: Equatable, Hashable {}
+
+
 
 
 
@@ -2022,9 +2034,8 @@ public enum ParseResult {
      */
     case incomplete(ParsingMessage
     )
+
 }
-
-
 #if compiler(>=6)
 extension ParseResult: Sendable {}
 #endif
@@ -2083,7 +2094,11 @@ public func FfiConverterTypeParseResult_lower(_ value: ParseResult) -> RustBuffe
 }
 
 
+
+
 extension ParseResult: Equatable, Hashable {}
+
+
 
 
 
@@ -2099,9 +2114,8 @@ public enum ParserState {
     case parsing(ParsingContext
     )
     case complete
+
 }
-
-
 #if compiler(>=6)
 extension ParserState: Sendable {}
 #endif
@@ -2163,7 +2177,11 @@ public func FfiConverterTypeParserState_lower(_ value: ParserState) -> RustBuffe
 }
 
 
+
+
 extension ParserState: Equatable, Hashable {}
+
+
 
 
 
@@ -2292,9 +2310,8 @@ public enum TextPayloadFormat {
     
     case utf8
     case utf16
+
 }
-
-
 #if compiler(>=6)
 extension TextPayloadFormat: Sendable {}
 #endif
@@ -2348,7 +2365,11 @@ public func FfiConverterTypeTextPayloadFormat_lower(_ value: TextPayloadFormat) 
 }
 
 
+
+
 extension TextPayloadFormat: Equatable, Hashable {}
+
+
 
 
 
@@ -2493,7 +2514,7 @@ private enum InitializationResult {
 // the code inside is only computed once.
 private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
-    let bindings_contract_version = 29
+    let bindings_contract_version = 30
     // Get the scaffolding contract version by calling the into the dylib
     let scaffolding_contract_version = ffi_cove_nfc_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
@@ -2550,7 +2571,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_nfc_checksum_constructor_nfcconst_new() != 53215) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 28935) {
+    if (uniffi_cove_nfc_checksum_constructor_nfcmessage_try_new() != 48899) {
         return InitializationResult.apiChecksumMismatch
     }
 

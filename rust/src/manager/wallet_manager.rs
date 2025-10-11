@@ -207,7 +207,7 @@ pub enum WalletManagerError {
     SignAndBroadcastError(String),
 
     #[error(transparent)]
-    ConverterError(#[from] ConverterError),
+    Converter(#[from] ConverterError),
 
     #[error("Unknown error: {0}")]
     UnknownError(String),

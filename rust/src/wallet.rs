@@ -51,10 +51,10 @@ pub enum WalletError {
     LoadError(String),
 
     #[error("failed to save in keychain: {0}")]
-    KeychainError(#[from] KeychainError),
+    Keychain(#[from] KeychainError),
 
     #[error("failed to save in database: {0}")]
-    DatabaseError(#[from] database::Error),
+    Database(#[from] database::Error),
 
     #[error("wallet not found")]
     WalletNotFound,
@@ -69,7 +69,7 @@ pub enum WalletError {
     WalletAlreadyExists(WalletId),
 
     #[error(transparent)]
-    MultiFormatError(#[from] MultiFormatError),
+    MultiFormat(#[from] MultiFormatError),
 
     #[error("failed to parse descriptor: {0}")]
     DescriptorKeyParseError(String),
@@ -195,7 +195,7 @@ impl Wallet {
         let mut metadata = Database::global()
             .wallets
             .get(&id, network, mode)
-            .map_err(WalletError::DatabaseError)?
+            .map_err(WalletError::Database)?
             .ok_or(WalletError::WalletNotFound)?;
 
         // set and save the origin if not set
@@ -347,7 +347,7 @@ impl Wallet {
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);
         metadata.name = "TAPSIGNER".to_string();
         metadata.wallet_mode = mode;
-        metadata.hardware_metadata = Some(HardwareWalletMetadata::TapSigner(tap_signer));
+        metadata.hardware_metadata = Some(HardwareWalletMetadata::TapSignerCard(tap_signer));
         metadata.origin = descriptors.origin().ok();
         metadata.master_fingerprint = Some(Arc::new(fingerprint));
         metadata.wallet_type = WalletType::Cold;
