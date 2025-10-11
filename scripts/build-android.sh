@@ -94,5 +94,11 @@ cargo run -p uniffi_cli \
     --out-dir "$BINDINGS_DIR"
 
 echo "Copying Kotlin bindings into Android project at $ANDROID_KOTLIN_DIR"
+# remove only generated binding files, not user code
 rm -f "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/cove.kt"
+rm -rf "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/device"
+rm -rf "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/nfc"
+rm -rf "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/tapcard"
+rm -rf "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/types"
+rm -rf "$ANDROID_KOTLIN_DIR/org/bitcoinppl/cove/util"
 cp -R "$BINDINGS_DIR"/. "$ANDROID_KOTLIN_DIR"/

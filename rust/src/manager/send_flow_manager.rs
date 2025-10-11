@@ -36,7 +36,7 @@ use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
     psbt::Psbt,
-    unit::Unit,
+    unit::BitcoinUnit,
     utxo::{Utxo, UtxoList},
 };
 use cove_util::format::NumberFormatter as _;
@@ -134,7 +134,7 @@ pub enum SendFlowManagerAction {
     NotifyEnteringAddressChanged(String),
 
     // front end lets the one of the values were changed
-    NotifySelectedUnitedChanged { old: Unit, new: Unit },
+    NotifySelectedUnitedChanged { old: BitcoinUnit, new: BitcoinUnit },
     NotifyBtcOrFiatChanged { old: FiatOrBtc, new: FiatOrBtc },
     NotifyScanCodeChanged { old: String, new: String },
     NotifyPricesChanged(Arc<PriceResponse>),
@@ -258,11 +258,11 @@ impl RustSendFlowManager {
         let send_amount = self.send_amount().unwrap_or(Amount::ZERO);
 
         match selected_unit {
-            Unit::Btc => {
+            BitcoinUnit::Btc => {
                 let string = send_amount.as_btc().thousands();
                 if string.contains("e") { send_amount.btc_string() } else { string.to_string() }
             }
-            Unit::Sat => send_amount.as_sats().thousands_int().to_string(),
+            BitcoinUnit::Sat => send_amount.as_sats().thousands_int().to_string(),
         }
     }
 
@@ -293,8 +293,8 @@ impl RustSendFlowManager {
         };
 
         match self.state.lock().metadata.selected_unit {
-            Unit::Btc => format!("{} BTC", total_spent.as_btc().thousands()),
-            Unit::Sat => format!("{} sats", total_spent.as_sats().thousands_int()),
+            BitcoinUnit::Btc => format!("{} BTC", total_spent.as_btc().thousands()),
+            BitcoinUnit::Sat => format!("{} sats", total_spent.as_sats().thousands_int()),
         }
     }
 
@@ -324,8 +324,8 @@ impl RustSendFlowManager {
 
         let total_fee = selected_fee_rate.total_fee();
         match self.state.lock().metadata.selected_unit {
-            Unit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
-            Unit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
+            BitcoinUnit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
+            BitcoinUnit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
         }
     }
 
@@ -907,8 +907,8 @@ impl RustSendFlowManager {
 
             FiatOrBtc::Btc => {
                 let amount_string = match unit {
-                    Unit::Btc => amount.btc_string(),
-                    Unit::Sat => amount.as_sats().thousands_int(),
+                    BitcoinUnit::Btc => amount.btc_string(),
+                    BitcoinUnit::Sat => amount.as_sats().thousands_int(),
                 };
 
                 self.set_and_send_entering_btc_amount(amount_string, &mut sender);
@@ -984,11 +984,11 @@ impl RustSendFlowManager {
 
             let unit = self.state.lock().metadata.selected_unit;
             match (amount, unit) {
-                (Some(amount), Unit::Sat) => {
+                (Some(amount), BitcoinUnit::Sat) => {
                     let entering_btc_amount = amount.as_sats().thousands_int().to_string();
                     self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
                 }
-                (Some(amount_sats), Unit::Btc) => {
+                (Some(amount_sats), BitcoinUnit::Btc) => {
                     let entering_btc_amount = amount_sats.as_btc().thousands().to_string();
                     self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
                 }
@@ -1010,8 +1010,8 @@ impl RustSendFlowManager {
 
         let unit = self.state.lock().metadata.selected_unit;
         let amount = match unit {
-            Unit::Btc => Amount::from_btc(amount).ok()?,
-            Unit::Sat => Amount::from_sat(amount as u64),
+            BitcoinUnit::Btc => Amount::from_btc(amount).ok()?,
+            BitcoinUnit::Sat => Amount::from_sat(amount as u64),
         }
         .max(MIN_SEND_AMOUNT.into());
 
@@ -1294,7 +1294,7 @@ impl RustSendFlowManager {
         Some(fees)
     }
 
-    fn handle_selected_unit_changed(self: &Arc<Self>, old: Unit, new: Unit) {
+    fn handle_selected_unit_changed(self: &Arc<Self>, old: BitcoinUnit, new: BitcoinUnit) {
         let mut sender = DeferredSender::new(self.reconciler.clone());
         self.state.lock().metadata.selected_unit = new;
 
@@ -1326,11 +1326,11 @@ impl RustSendFlowManager {
         };
 
         match new {
-            Unit::Btc => {
+            BitcoinUnit::Btc => {
                 let amount_string = Amount::from_sat(amount_sats).btc_string();
                 self.set_and_send_entering_btc_amount(amount_string, &mut sender);
             }
-            Unit::Sat => {
+            BitcoinUnit::Sat => {
                 let amount_string = amount_sats.thousands_int();
                 self.set_and_send_entering_btc_amount(amount_string, &mut sender);
             }
@@ -1352,8 +1352,8 @@ impl RustSendFlowManager {
                 let amount = Amount::from_sat(amount_sats);
 
                 let amount_fmt = match self.state.lock().metadata.selected_unit {
-                    Unit::Btc => amount.btc_string(),
-                    Unit::Sat => amount.sats_string(),
+                    BitcoinUnit::Btc => amount.btc_string(),
+                    BitcoinUnit::Sat => amount.sats_string(),
                 };
 
                 self.set_and_send_entering_btc_amount(amount_fmt.clone(), &mut sender);

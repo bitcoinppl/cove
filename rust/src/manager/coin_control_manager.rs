@@ -10,7 +10,7 @@ use bdk_wallet::LocalOutput;
 use cove_types::{
     OutPoint, WalletId,
     amount::Amount,
-    unit::Unit,
+    unit::BitcoinUnit,
     utxo::{Utxo, UtxoType},
 };
 use parking_lot::Mutex;
@@ -55,7 +55,7 @@ pub enum CoinControlManagerReconcileMessage {
     UpdateSearch(String),
     UpdateSelectedUtxos { utxos: Vec<Arc<OutPoint>>, total_value: Arc<Amount> },
     UpdateTotalSelectedAmount(Arc<Amount>),
-    UpdateUnit(Unit),
+    UpdateUnit(BitcoinUnit),
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -84,7 +84,7 @@ impl RustCoinControlManager {
     }
 
     #[uniffi::method]
-    pub fn unit(&self) -> Unit {
+    pub fn unit(&self) -> BitcoinUnit {
         self.state.lock().unit
     }
 
