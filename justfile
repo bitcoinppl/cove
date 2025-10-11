@@ -15,7 +15,7 @@ alias bir := build-ios-release
 alias bidd := build-ios-debug-device
 
 # build aliases android
-alias b := build-android
+alias ba := build-android
 alias bar := build-android-release
 
 default:
