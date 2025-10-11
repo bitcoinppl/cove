@@ -265,7 +265,7 @@ struct UnconfirmedTransactionView: View {
                     let details = try await manager.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
                         PopupManager.dismiss()
-                    navigate(Route.txDetails(id: metadata.id, details: details))
+                        navigate(Route.txDetails(id: metadata.id, details: details))
                     }
                 } catch {
                     Log.error(

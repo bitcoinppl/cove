@@ -618,8 +618,6 @@ public protocol AddressProtocol: AnyObject, Sendable {
     
     func string()  -> String
     
-    func toString()  -> String
-    
     func unformatted()  -> String
     
 }
@@ -713,14 +711,6 @@ open func spacedOut() -> String  {
 open func string() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_cove_types_fn_method_address_string(
-            self.uniffiCloneHandle(),$0
-    )
-})
-}
-    
-open func toString() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_cove_types_fn_method_address_tostring(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -5649,9 +5639,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_string() != 18040) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_method_address_tostring() != 596) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_address_unformatted() != 42481) {

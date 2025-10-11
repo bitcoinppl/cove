@@ -305,10 +305,8 @@ impl TapSignerReader {
         let backup = match backup_response {
             Ok(backup) => backup,
             Err(error) => {
-                let response = SetupCmdResponse::Init(ContinueFromInit {
-                    continue_cmd: cmd,
-                    error,
-                });
+                let response =
+                    SetupCmdResponse::Init(ContinueFromInit { continue_cmd: cmd, error });
 
                 *self.last_response.lock() = Some(response.clone().into());
                 return response;
