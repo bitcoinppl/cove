@@ -285,11 +285,6 @@ impl Address {
     fn unformatted(&self) -> String {
         self.to_string()
     }
-
-    #[uniffi::method(name = "toString")]
-    fn ffi_to_string(&self) -> String {
-        self.to_string()
-    }
 }
 
 #[uniffi::export]
