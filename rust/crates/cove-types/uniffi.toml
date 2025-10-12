@@ -4,7 +4,7 @@ cdylib_name = "cove_types_ffi"
 
 [bindings.kotlin]
 package_name = "org.bitcoinppl.cove_core.types"
-cdylib_name = "cove_types_ffi"
+cdylib_name = "coveffi"
 
 [bindings.kotlin.external_packages]
 cove_device = "org.bitcoinppl.cove_core.device"

@@ -386,7 +386,7 @@ private fun findLibraryName(componentName: String): String {
     if (libOverride != null) {
         return libOverride
     }
-    return "coveutilffi"
+    return "coveffi"
 }
 
 private inline fun <reified Lib : Library> loadIndirect(

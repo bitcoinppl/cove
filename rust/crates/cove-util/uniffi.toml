@@ -3,7 +3,7 @@ cdylib_name = "coveutilffi"
 
 [bindings.kotlin]
 package_name = "org.bitcoinppl.cove_core.util"
-cdylib_name = "coveutilffi"
+cdylib_name = "coveffi"
 
 [bindings.kotlin.external_packages]
 cove_types = "org.bitcoinppl.cove_core.types"

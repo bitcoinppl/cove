@@ -1889,10 +1889,10 @@ internal interface UniffiLib : Library {
             uniffiCallbackInterfaceSendFlowManagerReconciler.register(lib)
             uniffiCallbackInterfaceTapcardTransportProtocol.register(lib)
             uniffiCallbackInterfaceWalletManagerReconciler.register(lib)
-            org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
             org.bitcoinppl.cove_core.types.uniffiEnsureInitialized()
-            org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
             org.bitcoinppl.cove_core.tapcard.uniffiEnsureInitialized()
+            org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
+            org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
             // Loading of library with integrity check done.
             lib
         }
