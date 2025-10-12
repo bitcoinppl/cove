@@ -43,22 +43,22 @@ import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.RecoveryWords
 
-
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
 private fun HotWalletCreateScreenPreview() {
     val snack = remember { SnackbarHostState() }
-    val demo = listOf(
-        "lemon", "provide", "buffalo", "diet", "thing", "trouble",
-        "city", "stomach", "duck", "end", "estate", "wide",
-        "note", "drum", "apple", "river", "smile", "paper",
-        "train", "light", "sound", "wolf", "pencil", "stone"
-    )
+    val demo =
+        listOf(
+            "lemon", "provide", "buffalo", "diet", "thing", "trouble",
+            "city", "stomach", "duck", "end", "estate", "wide",
+            "note", "drum", "apple", "river", "smile", "paper",
+            "train", "light", "sound", "wolf", "pencil", "stone",
+        )
     HotWalletCreateScreen(
         onBack = {},
         onOpenNewHotWallet = {},
         snackbarHostState = snack,
-        recoveryWords = demo
+        recoveryWords = demo,
     )
 }
 
@@ -72,25 +72,26 @@ fun HotWalletCreateScreen(
 ) {
     Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
         CenterAlignedTopAppBar(
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = Color.Transparent,
-                titleContentColor = Color.White,
-                actionIconContentColor = Color.White,
-                navigationIconContentColor = Color.White
-            ),
+            colors =
+                TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                ),
             title = {
                 Text(
                     stringResource(R.string.title_wallet_backup),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
                 )
             },
             navigationIcon = {
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                        contentDescription = "Back"
+                        contentDescription = "Back",
                     )
                 }
             },
@@ -100,41 +101,45 @@ fun HotWalletCreateScreen(
     }, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
 
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.TopCenter)
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter),
             )
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(vertical = 20.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 RecoveryWords(
                     words = recoveryWords,
                     modifier = Modifier.fillMaxWidth(),
-                    onSelectionChanged = { }
+                    onSelectionChanged = { },
                 )
 
                 // Section below grid
                 Column(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
                 ) {
                     Spacer(Modifier.weight(1f))
                     Row(
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         DashDotsIndicator(
                             count = 4,
@@ -147,19 +152,19 @@ fun HotWalletCreateScreen(
                         color = Color.White,
                         fontSize = 34.sp,
                         fontWeight = FontWeight.SemiBold,
-                        lineHeight = 38.sp
+                        lineHeight = 38.sp,
                     )
 
                     Text(
                         text = stringResource(R.string.label_recovery_words_body),
                         color = Color.White.copy(alpha = 0.8f),
-                        lineHeight = 20.sp
+                        lineHeight = 20.sp,
                     )
 
                     Text(
                         text = stringResource(R.string.label_recovery_words_secure_note),
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
 
                     HorizontalDivider(color = Color.White.copy(alpha = 0.35f), thickness = 1.dp)
@@ -167,16 +172,15 @@ fun HotWalletCreateScreen(
                     ImageButton(
                         text = stringResource(R.string.btn_next),
                         onClick = onOpenNewHotWallet,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CoveColor.btnPrimary,
-                            contentColor = CoveColor.midnightBlue
-                        ),
-                        modifier = Modifier.fillMaxWidth()
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = CoveColor.btnPrimary,
+                                contentColor = CoveColor.midnightBlue,
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
         }
     }
 }
-
-

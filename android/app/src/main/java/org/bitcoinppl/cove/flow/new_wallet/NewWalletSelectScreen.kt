@@ -42,7 +42,6 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
 
-
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
 private fun NewWalletSelectScreenPreview() {
@@ -52,7 +51,7 @@ private fun NewWalletSelectScreenPreview() {
         onOpenNewHotWallet = {},
         onOpenQrScan = {},
         onOpenNfcScan = {},
-        snackbarHostState = snack
+        snackbarHostState = snack,
     )
 }
 
@@ -67,71 +66,79 @@ fun NewWalletSelectScreen(
 ) {
     Scaffold(containerColor = CoveColor.midnightBlue, topBar = {
         CenterAlignedTopAppBar(
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-            containerColor = Color.Transparent,
-            titleContentColor = Color.White,
-            actionIconContentColor = Color.White,
-            navigationIconContentColor = Color.White
-        ), title = {
-            Text(
-                stringResource(R.string.title_wallet_add),
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }, navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                    contentDescription = "Back"
+            colors =
+                TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                ),
+            title = {
+                Text(
+                    stringResource(R.string.title_wallet_add),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-            }
-        }, actions = {
-            IconButton(onClick = onOpenQrScan) {
-                Icon(
-                    painter = painterResource(id = R.drawable.icon_qr_code),
-                    contentDescription = "Scan QR"
-                )
-            }
-            IconButton(onClick = {
-                onOpenNfcScan()
-            }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.icon_contactless),
-                    contentDescription = "NFC"
-                )
-            }
-        })
+            },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                        contentDescription = "Back",
+                    )
+                }
+            },
+            actions = {
+                IconButton(onClick = onOpenQrScan) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.icon_qr_code),
+                        contentDescription = "Scan QR",
+                    )
+                }
+                IconButton(onClick = {
+                    onOpenNfcScan()
+                }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.icon_contactless),
+                        contentDescription = "NFC",
+                    )
+                }
+            },
+        )
     }, snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
 
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 36.dp)
-                    .heightIn(min = 0.dp, max = (0.75f * 720).dp)
-                    .align(Alignment.TopCenter)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 36.dp)
+                        .heightIn(min = 0.dp, max = (0.75f * 720).dp)
+                        .align(Alignment.TopCenter),
             )
 
             Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-                    .fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                        .fillMaxWidth(),
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(28.dp)
+                    verticalArrangement = Arrangement.spacedBy(28.dp),
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         DashDotsIndicator(
                             count = 4,
@@ -145,32 +152,34 @@ fun NewWalletSelectScreen(
                         color = Color.White,
                         fontSize = 34.sp,
                         fontWeight = FontWeight.SemiBold,
-                        lineHeight = 38.sp
+                        lineHeight = 38.sp,
                     )
 
                     HorizontalDivider(
-                        color = Color.White.copy(alpha = 0.35f), thickness = 1.dp
+                        color = Color.White.copy(alpha = 0.35f),
+                        thickness = 1.dp,
                     )
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         ImageButton(
                             text = stringResource(R.string.btn_hardware_wallet),
                             leading = {
                                 Icon(
                                     painter = painterResource(R.drawable.icon_currency_bitcoin),
-                                    contentDescription = null
+                                    contentDescription = null,
                                 )
-
                             },
                             onClick = {
                                 // todo
                             },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary, contentColor = CoveColor.midnightBlue
-                            ),
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = CoveColor.btnPrimary,
+                                    contentColor = CoveColor.midnightBlue,
+                                ),
                             modifier = Modifier.weight(1f),
                         )
 
@@ -179,13 +188,15 @@ fun NewWalletSelectScreen(
                             leading = {
                                 Icon(
                                     painter = painterResource(R.drawable.icon_phone_device), // placeholder "phone"
-                                    contentDescription = null
+                                    contentDescription = null,
                                 )
                             },
                             onClick = onOpenNewHotWallet,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary, contentColor = CoveColor.midnightBlue
-                            ),
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = CoveColor.btnPrimary,
+                                    contentColor = CoveColor.midnightBlue,
+                                ),
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -194,7 +205,3 @@ fun NewWalletSelectScreen(
         }
     }
 }
-
-
-
-

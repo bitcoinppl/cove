@@ -45,7 +45,7 @@ fun ImageButton(
                 text,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -60,8 +60,10 @@ private fun PreviewImageButton() {
             Icon(Icons.Default.Call, contentDescription = null)
         },
         onClick = {},
-        colors = ButtonDefaults.buttonColors(
-            containerColor = CoveColor.btnPrimary, contentColor = CoveColor.midnightBlue
-        ),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = CoveColor.btnPrimary,
+                contentColor = CoveColor.midnightBlue,
+            ),
     )
 }

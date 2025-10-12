@@ -74,51 +74,52 @@ data class UtxoUi(
     val address: String,
     val amount: String,
     val date: Date,
-    val isChange: Boolean = false
+    val isChange: Boolean = false,
 )
 
 enum class UtxoSort { DATE, NAME, AMOUNT, CHANGE }
 
 @Composable
-private fun sampleUtxos(): List<UtxoUi> = listOf(
-    UtxoUi(
-        "1",
-        stringResource(R.string.change_address),
-        "tb1qf 60lxh n...p42 hdakp w7",
-        "301,191 SATS",
-        Calendar.getInstance().apply { set(2025, Calendar.JUNE, 16) }.time,
-        isChange = true
-    ),
-    UtxoUi(
-        "2",
-        stringResource(R.string.receive_address),
-        "tb1q0 z6fej u...xlnx9 t05v 26",
-        "10,001 SATS",
-        Calendar.getInstance().apply { set(2025, Calendar.JUNE, 15) }.time
-    ),
-    UtxoUi(
-        "3",
-        stringResource(R.string.receive_address),
-        "tb1qd yqdec...9kw9 d59lp 3c",
-        "20,000 SATS",
-        Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time
-    ),
-    UtxoUi(
-        "4",
-        stringResource(R.string.receive_address),
-        "tb1qt 6djy y...p w7z4 0jgn5 e0",
-        "10,000 SATS",
-        Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time
-    ),
-    UtxoUi(
-        "5",
-        stringResource(R.string.change_address),
-        "tb1qr l3fvk f...xmlx h2x6u t7",
-        "748,040 SATS",
-        Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time,
-        isChange = true
+private fun sampleUtxos(): List<UtxoUi> =
+    listOf(
+        UtxoUi(
+            "1",
+            stringResource(R.string.change_address),
+            "tb1qf 60lxh n...p42 hdakp w7",
+            "301,191 SATS",
+            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 16) }.time,
+            isChange = true,
+        ),
+        UtxoUi(
+            "2",
+            stringResource(R.string.receive_address),
+            "tb1q0 z6fej u...xlnx9 t05v 26",
+            "10,001 SATS",
+            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 15) }.time,
+        ),
+        UtxoUi(
+            "3",
+            stringResource(R.string.receive_address),
+            "tb1qd yqdec...9kw9 d59lp 3c",
+            "20,000 SATS",
+            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time,
+        ),
+        UtxoUi(
+            "4",
+            stringResource(R.string.receive_address),
+            "tb1qt 6djy y...p w7z4 0jgn5 e0",
+            "10,000 SATS",
+            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time,
+        ),
+        UtxoUi(
+            "5",
+            stringResource(R.string.change_address),
+            "tb1qr l3fvk f...xmlx h2x6u t7",
+            "748,040 SATS",
+            Calendar.getInstance().apply { set(2025, Calendar.JUNE, 10) }.time,
+            isChange = true,
+        ),
     )
-)
 
 @Preview(showBackground = true, backgroundColor = 0xFFF2F2F7)
 @Composable
@@ -137,7 +138,7 @@ private fun UtxoListNoneSelectedPreview() {
         onDeselectAll = { chosen = emptySet() },
         onSortChange = {},
         onContinue = {},
-        snackbarHostState = snack
+        snackbarHostState = snack,
     )
 }
 
@@ -158,7 +159,7 @@ private fun UtxoListSomeSelectedPreview() {
         onDeselectAll = { chosen = emptySet() },
         onSortChange = {},
         onContinue = {},
-        snackbarHostState = snack
+        snackbarHostState = snack,
     )
 }
 
@@ -178,11 +179,15 @@ fun UtxoListScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val anySelected = selected.isNotEmpty()
-    val totalSelectedAmount = if (anySelected) {
-        val sum = utxos.filter { selected.contains(it.id) }
-            .sumOf { it.amount.filter { ch -> ch.isDigit() }.toLongOrNull() ?: 0L }
-        String.format(Locale.US, "%,d SATS", sum)
-    } else ""
+    val totalSelectedAmount =
+        if (anySelected) {
+            val sum =
+                utxos.filter { selected.contains(it.id) }
+                    .sumOf { it.amount.filter { ch -> ch.isDigit() }.toLongOrNull() ?: 0L }
+            String.format(Locale.US, "%,d SATS", sum)
+        } else {
+            ""
+        }
 
     val listBg = CoveColor.ListBackgroundLight
     val listCard = CoveColor.ListCardLight
@@ -192,17 +197,18 @@ fun UtxoListScreen(
         containerColor = listBg,
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    actionIconContentColor = CoveColor.TextPrimary,
-                    navigationIconContentColor = CoveColor.TextPrimary,
-                ),
+                colors =
+                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        actionIconContentColor = CoveColor.TextPrimary,
+                        navigationIconContentColor = CoveColor.TextPrimary,
+                    ),
                 title = { Text("") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     }
                 },
@@ -210,46 +216,48 @@ fun UtxoListScreen(
                     IconButton(onClick = onMore) {
                         Icon(
                             Icons.Filled.MoreVert,
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     }
-                }
+                },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.TopCenter)
-                    .graphicsLayer(alpha = 0.25f),
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter)
+                        .graphicsLayer(alpha = 0.25f),
             )
 
             Column(modifier = Modifier.fillMaxSize()) {
-
                 Text(
                     stringResource(R.string.title_manage_utxos),
                     color = CoveColor.TextPrimary,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     lineHeight = 36.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                 ) {
                     SearchBar {}
                     Spacer(modifier = Modifier.height(16.dp))
@@ -259,35 +267,43 @@ fun UtxoListScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 16.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(horizontal = 16.dp),
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
                             text = stringResource(R.string.list_of_utxos),
                             color = secondaryText,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Normal,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                         if (utxos.isNotEmpty()) {
                             Text(
-                                text = if (selected.isNotEmpty()) stringResource(R.string.deselect_all) else stringResource(
-                                    R.string.select_all
-                                ),
+                                text =
+                                    if (selected.isNotEmpty()) {
+                                        stringResource(R.string.deselect_all)
+                                    } else {
+                                        stringResource(
+                                            R.string.select_all,
+                                        )
+                                    },
                                 color = CoveColor.LinkBlue,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
-                                modifier = Modifier.clickable {
-                                    if (selected.isNotEmpty()) onDeselectAll() else onSelectAll()
-                                }
+                                modifier =
+                                    Modifier.clickable {
+                                        if (selected.isNotEmpty()) onDeselectAll() else onSelectAll()
+                                    },
                             )
                         }
                     }
@@ -295,10 +311,11 @@ fun UtxoListScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Surface(
-                        modifier = Modifier
-                            .fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(),
                         color = listCard,
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(16.dp),
                     ) {
                         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             utxos.forEachIndexed { index, item ->
@@ -311,7 +328,7 @@ fun UtxoListScreen(
                                     HorizontalDivider(
                                         color = CoveColor.DividerLight,
                                         thickness = 0.5.dp,
-                                        modifier = Modifier.padding(start = 52.dp)
+                                        modifier = Modifier.padding(start = 52.dp),
                                     )
                                 }
                             }
@@ -322,12 +339,13 @@ fun UtxoListScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             totalSelectedAmount,
-                            modifier = Modifier
-                                .fillMaxWidth(),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth(),
                             color = secondaryText,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }
                 }
@@ -335,44 +353,51 @@ fun UtxoListScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.utxo_description),
                         color = secondaryText,
                         fontSize = 14.sp,
                         lineHeight = 18.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     ) {
                         ChangeBadge(tintColor = secondaryText)
                         Spacer(Modifier.width(8.dp))
                         Text(
                             stringResource(R.string.denotes_utxo_change),
                             color = secondaryText,
-                            fontSize = 14.sp
+                            fontSize = 14.sp,
                         )
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
                     ImageButton(
-                        text = if (anySelected) stringResource(
-                            R.string.continue_with_count,
-                            selected.size
-                        ) else stringResource(R.string.continue_button),
+                        text =
+                            if (anySelected) {
+                                stringResource(
+                                    R.string.continue_with_count,
+                                    selected.size,
+                                )
+                            } else {
+                                stringResource(R.string.continue_button)
+                            },
                         onClick = onContinue,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (anySelected) CoveColor.midnightBlue else CoveColor.ButtonDisabled,
-                            contentColor = if (anySelected) Color.White else CoveColor.ButtonDisabledText
-                        ),
-                        modifier = Modifier.fillMaxWidth()
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = if (anySelected) CoveColor.midnightBlue else CoveColor.ButtonDisabled,
+                                contentColor = if (anySelected) Color.White else CoveColor.ButtonDisabledText,
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
@@ -389,11 +414,12 @@ private fun UtxoItemRow(
     onToggle: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp)
-            .clickable { onToggle() },
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+                .clickable { onToggle() },
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         SelectionCircle(selected = selected)
         Spacer(Modifier.width(12.dp))
@@ -403,7 +429,7 @@ private fun UtxoItemRow(
                     text = item.label,
                     fontWeight = FontWeight.Normal,
                     color = CoveColor.TextPrimary,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
                 )
                 if (item.isChange) {
                     Spacer(Modifier.width(4.dp))
@@ -416,7 +442,7 @@ private fun UtxoItemRow(
                 color = Color(0xFF8E8E93),
                 fontSize = 12.sp,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Column(horizontalAlignment = Alignment.End) {
@@ -424,13 +450,13 @@ private fun UtxoItemRow(
                 item.amount,
                 fontWeight = FontWeight.Normal,
                 fontSize = 14.sp,
-                color = Color(0xFF000000)
+                color = Color(0xFF000000),
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 SimpleDateFormat("MMM d, yyyy", Locale.US).format(item.date),
                 color = Color(0xFF8E8E93),
-                fontSize = 12.sp
+                fontSize = 12.sp,
             )
         }
     }
@@ -439,23 +465,24 @@ private fun UtxoItemRow(
 @Composable
 private fun SelectionCircle(selected: Boolean) {
     Box(
-        modifier = Modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .border(
-                width = 2.dp,
-                color = if (selected) Color(0xFF007AFF) else Color(0xFFD1D1D6),
-                shape = CircleShape
-            )
-            .background(if (selected) Color(0xFF007AFF) else Color.Transparent),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .border(
+                    width = 2.dp,
+                    color = if (selected) Color(0xFF007AFF) else Color(0xFFD1D1D6),
+                    shape = CircleShape,
+                )
+                .background(if (selected) Color(0xFF007AFF) else Color.Transparent),
+        contentAlignment = Alignment.Center,
     ) {
         if (selected) {
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(14.dp),
             )
         }
     }
@@ -467,38 +494,43 @@ private fun ChangeBadge(tintColor: Color = CoveColor.WarningOrange) {
         imageVector = Icons.Filled.Link,
         contentDescription = null,
         tint = tintColor,
-        modifier = Modifier.size(16.dp)
+        modifier = Modifier.size(16.dp),
     )
 }
 
 @Composable
-private fun SortRow(currentSort: UtxoSort, onSortChange: (UtxoSort) -> Unit) {
+private fun SortRow(
+    currentSort: UtxoSort,
+    onSortChange: (UtxoSort) -> Unit,
+) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         SortChip(
             label = stringResource(R.string.sort_date),
             selected = currentSort == UtxoSort.DATE,
             onClick = { onSortChange(UtxoSort.DATE) },
             showArrow = true,
-            arrowUp = false
+            arrowUp = false,
         )
         SortChip(
             label = stringResource(R.string.sort_name),
             selected = currentSort == UtxoSort.NAME,
-            onClick = { onSortChange(UtxoSort.NAME) })
+            onClick = { onSortChange(UtxoSort.NAME) },
+        )
         SortChip(
             label = stringResource(R.string.sort_amount),
             selected = currentSort == UtxoSort.AMOUNT,
             onClick = { onSortChange(UtxoSort.AMOUNT) },
             showArrow = true,
-            arrowUp = true
+            arrowUp = true,
         )
         SortChip(
             label = stringResource(R.string.sort_change),
             selected = currentSort == UtxoSort.CHANGE,
-            onClick = { onSortChange(UtxoSort.CHANGE) })
+            onClick = { onSortChange(UtxoSort.CHANGE) },
+        )
     }
 }
 
@@ -508,27 +540,28 @@ private fun SortChip(
     selected: Boolean,
     onClick: () -> Unit,
     showArrow: Boolean = false,
-    arrowUp: Boolean = false
+    arrowUp: Boolean = false,
 ) {
     val bg =
         if (selected) CoveColor.LinkBlue else CoveColor.SurfaceLight
     val txt = if (selected) Color.White else CoveColor.ButtonDisabledText
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(bg)
-            .clickable { onClick() }
-            .padding(
-                horizontal = 12.dp,
-                vertical = 8.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(bg)
+                .clickable { onClick() }
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 8.dp,
+                ),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
             fontSize = 14.sp,
             color = txt,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
         )
         if (showArrow && selected) {
             Spacer(Modifier.width(4.dp))
@@ -536,7 +569,7 @@ private fun SortChip(
                 imageVector = if (arrowUp) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(16.dp),
             )
         }
     }
@@ -547,18 +580,19 @@ private fun SearchBar(onQueryChange: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val bg = CoveColor.SurfaceLight
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(bg)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(bg)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = Icons.Filled.Search,
             contentDescription = null,
             tint = CoveColor.BorderMedium,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(20.dp),
         )
         Spacer(Modifier.width(8.dp))
         BasicTextField(
@@ -567,10 +601,11 @@ private fun SearchBar(onQueryChange: (String) -> Unit) {
                 query = newValue
                 onQueryChange(newValue)
             },
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = Color(0xFF000000),
-                fontSize = 17.sp
-            ),
+            textStyle =
+                MaterialTheme.typography.bodyMedium.copy(
+                    color = Color(0xFF000000),
+                    fontSize = 17.sp,
+                ),
             singleLine = true,
             modifier = Modifier.weight(1f),
             decorationBox = { innerTextField ->
@@ -578,11 +613,11 @@ private fun SearchBar(onQueryChange: (String) -> Unit) {
                     Text(
                         stringResource(R.string.search_utxos),
                         color = Color(0xFF8E8E93),
-                        fontSize = 17.sp
+                        fontSize = 17.sp,
                     )
                 }
                 innerTextField()
-            }
+            },
         )
     }
 }

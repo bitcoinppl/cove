@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 
-
 @Composable
 fun RoundRectImage(
     size: Dp? = 40.dp,
@@ -28,20 +27,21 @@ fun RoundRectImage(
     painter: Painter,
     contentDescription: String? = null,
     cornerRadius: Dp? = 4.dp,
-    imageTint: Color? = Color.White
+    imageTint: Color? = Color.White,
 ) {
     Box(
-        modifier = Modifier
-            .size(size!!)
-            .background(color = backgroundColor!!, shape = RoundedCornerShape(cornerRadius!!)),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .size(size!!)
+                .background(color = backgroundColor!!, shape = RoundedCornerShape(cornerRadius!!)),
+        contentAlignment = Alignment.Center,
     ) {
         Image(
             painter = painter,
             contentDescription = contentDescription,
             modifier = Modifier.fillMaxSize(fraction = 0.5f),
             contentScale = ContentScale.Fit,
-            colorFilter = ColorFilter.tint(imageTint!!)
+            colorFilter = ColorFilter.tint(imageTint!!),
         )
     }
 }
@@ -54,4 +54,3 @@ fun PreviewPainter() {
         contentDescription = "Profile Icon",
     )
 }
-

@@ -2,24 +2,24 @@ package org.bitcoinppl.cove.send
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,51 +91,55 @@ fun SendScreen(
         containerColor = CoveColor.BackgroundDark,
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                ),
+                colors =
+                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                    ),
                 title = { Text("") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
-                }
+                },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-40).dp)
-                    .graphicsLayer(alpha = 0.25f)
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-40).dp)
+                        .graphicsLayer(alpha = 0.25f),
             )
             Column(modifier = Modifier.fillMaxSize()) {
                 BalanceWidget(
                     amount = balanceAmount,
                     denomination = balanceDenomination,
                     isHidden = isBalanceHidden,
-                    onToggleVisibility = onToggleBalanceVisibility
+                    onToggleVisibility = onToggleBalanceVisibility,
                 )
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp))
-                        .background(CoveColor.BackgroundLight)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp))
+                            .background(CoveColor.BackgroundLight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
                 ) {
                     AmountWidget(
                         initialAmount = amountText,
@@ -145,7 +149,7 @@ fun SendScreen(
                     HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     AddressWidget(
                         onScanQr = onScanQr,
-                        initialAddress = initialAddress
+                        initialAddress = initialAddress,
                     )
                     HorizontalDivider(color = CoveColor.DividerLight, thickness = 1.dp)
                     SpendingWidget(
@@ -160,13 +164,15 @@ fun SendScreen(
                     ImageButton(
                         text = stringResource(R.string.btn_next),
                         onClick = onNext,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CoveColor.BackgroundDark,
-                            contentColor = Color.White
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 24.dp)
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = CoveColor.BackgroundDark,
+                                contentColor = Color.White,
+                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 24.dp),
                     )
                 }
             }
@@ -182,21 +188,23 @@ private fun BalanceWidget(
     onToggleVisibility: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp)
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
     ) {
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth(),
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_balance),
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -211,18 +219,18 @@ private fun BalanceWidget(
                         denomination,
                         color = Color.White,
                         fontSize = 14.sp,
-                        modifier = Modifier.offset(y = (-4).dp)
+                        modifier = Modifier.offset(y = (-4).dp),
                     )
                 }
             }
             IconButton(
                 onClick = onToggleVisibility,
-                modifier = Modifier.offset(y = 8.dp, x = 8.dp)
+                modifier = Modifier.offset(y = 8.dp, x = 8.dp),
             ) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                     contentDescription = null,
-                    tint = Color.White
+                    tint = Color.White,
                 )
             }
         }
@@ -242,31 +250,32 @@ private fun AmountWidget(
             stringResource(R.string.label_enter_amount),
             color = CoveColor.TextPrimary,
             fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_how_much_to_send),
             color = CoveColor.TextSecondary,
-            fontSize = 14.sp
+            fontSize = 14.sp,
         )
         Spacer(Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom
+            verticalAlignment = Alignment.Bottom,
         ) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 BasicTextField(
                     value = amount,
                     onValueChange = { amount = it },
-                    textStyle = TextStyle(
-                        color = CoveColor.TextPrimary,
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Right
-                    ),
+                    textStyle =
+                        TextStyle(
+                            color = CoveColor.TextPrimary,
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Right,
+                        ),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
             Spacer(Modifier.width(32.dp))
@@ -277,7 +286,7 @@ private fun AmountWidget(
                     imageVector = Icons.Filled.ArrowDropDown,
                     contentDescription = null,
                     tint = CoveColor.TextPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -287,7 +296,7 @@ private fun AmountWidget(
             color = CoveColor.TextSecondary,
             fontSize = 16.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(24.dp))
     }
@@ -313,13 +322,12 @@ private fun AddressWidget(
                 Text(
                     stringResource(R.string.label_where_send_to),
                     color = CoveColor.TextSecondary,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
                 )
             }
             IconButton(
                 onClick = onScanQr,
-                modifier = Modifier.offset(x = 8.dp)
-
+                modifier = Modifier.offset(x = 8.dp),
             ) {
                 Icon(Icons.Filled.QrCode2, contentDescription = null, tint = CoveColor.IconGray)
             }
@@ -328,13 +336,14 @@ private fun AddressWidget(
         BasicTextField(
             value = address,
             onValueChange = { address = it },
-            textStyle = TextStyle(
-                color = CoveColor.TextPrimary,
-                fontSize = 15.sp,
-                lineHeight = 20.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-            modifier = Modifier.fillMaxWidth()
+            textStyle =
+                TextStyle(
+                    color = CoveColor.TextPrimary,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(24.dp))
     }
@@ -356,14 +365,14 @@ private fun SpendingWidget(
                 stringResource(R.string.label_account),
                 color = CoveColor.TextSecondary,
                 fontSize = 14.sp,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Filled.CurrencyBitcoin,
                     contentDescription = null,
                     tint = CoveColor.WarningOrange,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(28.dp),
                 )
                 Spacer(Modifier.size(8.dp))
                 Column(horizontalAlignment = Alignment.Start) {
@@ -373,7 +382,7 @@ private fun SpendingWidget(
                         stringResource(R.string.label_main),
                         color = CoveColor.TextPrimary,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
@@ -384,7 +393,7 @@ private fun SpendingWidget(
                 Text(
                     stringResource(R.string.label_network_fee),
                     color = CoveColor.TextSecondary,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -394,9 +403,10 @@ private fun SpendingWidget(
                         stringResource(R.string.btn_change_speed),
                         color = CoveColor.LinkBlue,
                         fontSize = 12.sp,
-                        modifier = Modifier
-                            .clickable(onClick = onChangeSpeed)
-                            .padding(4.dp)
+                        modifier =
+                            Modifier
+                                .clickable(onClick = onChangeSpeed)
+                                .padding(4.dp),
                     )
                 }
             }
@@ -409,21 +419,21 @@ private fun SpendingWidget(
                 color = CoveColor.TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     totalSpendingCrypto,
                     color = CoveColor.TextPrimary,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     totalSpendingFiat,
                     color = CoveColor.TextSecondary,
                     fontSize = 12.sp,
-                    textAlign = TextAlign.End
+                    textAlign = TextAlign.End,
                 )
             }
         }

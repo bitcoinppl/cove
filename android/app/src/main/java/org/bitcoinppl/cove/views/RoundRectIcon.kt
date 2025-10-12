@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.ui.theme.CoveColor
 
-
 @Composable
 fun RoundRectIcon(
     size: Dp? = 40.dp,
@@ -26,21 +25,21 @@ fun RoundRectIcon(
     imageVector: ImageVector,
     contentDescription: String? = null,
     cornerRadius: Dp = 4.dp,
-    imageTint: Color = Color.White
+    imageTint: Color = Color.White,
 ) {
     Box(
-        modifier = Modifier
-            .size(size!!)
-            .background(color = backgroundColor!!, shape = RoundedCornerShape(cornerRadius)),
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .size(size!!)
+                .background(color = backgroundColor!!, shape = RoundedCornerShape(cornerRadius)),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = imageVector,
             contentDescription = contentDescription,
             tint = imageTint,
-            modifier = Modifier.fillMaxSize(0.7f)
+            modifier = Modifier.fillMaxSize(0.7f),
         )
-
     }
 }
 

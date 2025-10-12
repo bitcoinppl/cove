@@ -22,8 +22,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,7 +40,7 @@ private fun RecoveryWordsPager(
     words: List<String>,
     modifier: Modifier = Modifier,
     selected: Set<Int> = emptySet(),
-    onToggleIndex: ((Int) -> Unit)? = null
+    onToggleIndex: ((Int) -> Unit)? = null,
 ) {
     val pageSize = 12
     val pageCount = (words.size + pageSize - 1) / pageSize
@@ -49,8 +49,8 @@ private fun RecoveryWordsPager(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalPager(
             state = pagerState,
-            pageSpacing = 16.dp,                       // <— gap between pages
-            contentPadding = PaddingValues(horizontal = 16.dp)
+            pageSpacing = 16.dp, // <— gap between pages
+            contentPadding = PaddingValues(horizontal = 16.dp),
         ) { page ->
             val start = page * pageSize
             val end = minOf(start + pageSize, words.size)
@@ -59,7 +59,7 @@ private fun RecoveryWordsPager(
                 words = pageWords,
                 startIndexOffset = start,
                 selected = selected,
-                onToggleIndex = onToggleIndex
+                onToggleIndex = onToggleIndex,
             )
         }
         Spacer(Modifier.height(16.dp))
@@ -68,11 +68,11 @@ private fun RecoveryWordsPager(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             DotsIndicator(
                 count = maxOf(pageCount, 1),
-                currentIndex = pagerState.currentPage
+                currentIndex = pagerState.currentPage,
             )
         }
     }
@@ -84,13 +84,13 @@ private fun RecoveryWordsGrid(
     startIndexOffset: Int,
     modifier: Modifier = Modifier,
     selected: Set<Int> = emptySet(),
-    onToggleIndex: ((Int) -> Unit)? = null
+    onToggleIndex: ((Int) -> Unit)? = null,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth(),
     ) {
         itemsIndexed(words) { idx, word ->
             val globalIndex = startIndexOffset + idx + 1
@@ -98,7 +98,7 @@ private fun RecoveryWordsGrid(
                 index = globalIndex,
                 word = word,
                 selected = selected.contains(globalIndex),
-                onClick = { onToggleIndex?.invoke(globalIndex) }
+                onClick = { onToggleIndex?.invoke(globalIndex) },
             )
         }
     }
@@ -110,22 +110,23 @@ private fun RecoveryWordChip(
     index: Int,
     word: String,
     selected: Boolean = false,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(14.dp)
     val borderColor = if (selected) CoveColor.midnightBlue else Color.Transparent
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 46.dp)
-            .background(CoveColor.btnPrimary, shape)
-            .border(width = 1.dp, color = borderColor, shape = shape)
-            .clickable(enabled = onClick != null) { onClick?.invoke() }
-            .padding(horizontal = 14.dp, vertical = 14.dp)
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .heightIn(min = 46.dp)
+                .background(CoveColor.btnPrimary, shape)
+                .border(width = 1.dp, color = borderColor, shape = shape)
+                .clickable(enabled = onClick != null) { onClick?.invoke() }
+                .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = "$index.",
@@ -139,7 +140,7 @@ private fun RecoveryWordChip(
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -149,7 +150,7 @@ private fun RecoveryWordChip(
 fun RecoveryWords(
     words: List<String>,
     modifier: Modifier = Modifier,
-    onSelectionChanged: (Set<Int>) -> Unit = {}
+    onSelectionChanged: (Set<Int>) -> Unit = {},
 ) {
     var selected by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val toggle: (Int) -> Unit = { idx ->
@@ -160,26 +161,27 @@ fun RecoveryWords(
         words = words,
         modifier = modifier,
         selected = selected,
-        onToggleIndex = toggle
+        onToggleIndex = toggle,
     )
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0D1B2A)
 @Composable
 private fun RecoveryWordsPreview() {
-    val demo = listOf(
-        "lemon","provide","buffalo","diet","thing","trouble",
-        "city","stomach","duck","end","estate","wide",
-        "note","drum","apple","river","smile","paper",
-        "train","light","sound","wolf","pencil","stone"
-    )
+    val demo =
+        listOf(
+            "lemon", "provide", "buffalo", "diet", "thing", "trouble",
+            "city", "stomach", "duck", "end", "estate", "wide",
+            "note", "drum", "apple", "river", "smile", "paper",
+            "train", "light", "sound", "wolf", "pencil", "stone",
+        )
     var last by remember { mutableStateOf<Set<Int>>(emptySet()) }
     Column(Modifier.padding(16.dp)) {
         RecoveryWords(words = demo, onSelectionChanged = { last = it })
         Spacer(Modifier.height(12.dp))
         Text(
             text = "Selected: ${last.sorted().joinToString()}",
-            color = Color.White
+            color = Color.White,
         )
     }
 }

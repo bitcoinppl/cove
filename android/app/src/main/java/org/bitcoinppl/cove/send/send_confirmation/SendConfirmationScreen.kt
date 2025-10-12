@@ -1,8 +1,8 @@
 package org.bitcoinppl.cove.send.send_confirmation
 
 import android.util.Log
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -39,16 +39,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
-import kotlinx.coroutines.launch
 
 // Animation duration in milliseconds for swipe button returning to start position when swipe is incomplete.
 private const val SWIPE_RETURN_DURATION_MS = 500
+
 // Progress threshold (0.0-1.0) at which swipe is considered complete and triggers the action.
 private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
+
 // Target text color (white) that text animates to during swipe gesture.
 private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
+
 // Target background color (cyan) that button background animates to during swipe gesture.
 private val SWIPE_BUTTON_BG_COLOR_TARGET = CoveColor.SwipeButtonBg
 
@@ -95,47 +98,51 @@ fun SendConfirmationScreen(
         containerColor = CoveColor.BackgroundDark,
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                ),
+                colors =
+                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                    ),
                 title = { Text("") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
-                }
+                },
             )
-        }
+        },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-40).dp)
-                    .graphicsLayer(alpha = 0.25f)
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-40).dp)
+                        .graphicsLayer(alpha = 0.25f),
             )
             Column(modifier = Modifier.fillMaxSize()) {
                 BalanceWidget(
                     amount = balanceAmount,
                     denomination = balanceDenomination,
                     isHidden = isBalanceHidden,
-                    onToggleVisibility = onToggleBalanceVisibility
+                    onToggleVisibility = onToggleBalanceVisibility,
                 )
                 Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .background(CoveColor.BackgroundLight)
-                        .padding(horizontal = 16.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .background(CoveColor.BackgroundLight)
+                            .padding(horizontal = 16.dp),
                 ) {
                     AmountWidget(
                         amount = sendingAmount,
@@ -159,9 +166,10 @@ fun SendConfirmationScreen(
                         knobColor = CoveColor.BackgroundDark,
                         textColor = CoveColor.BackgroundDark,
                         targetTextColor = SWIPE_BUTTON_TEXT_COLOR_TARGET,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 24.dp)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 24.dp),
                     )
                 }
             }
@@ -177,21 +185,23 @@ private fun BalanceWidget(
     onToggleVisibility: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp)
-            .padding(horizontal = 16.dp, vertical = 20.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
     ) {
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth(),
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     stringResource(R.string.label_balance),
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -206,18 +216,18 @@ private fun BalanceWidget(
                         denomination,
                         color = Color.White,
                         fontSize = 14.sp,
-                        modifier = Modifier.offset(y = (-4).dp)
+                        modifier = Modifier.offset(y = (-4).dp),
                     )
                 }
             }
             IconButton(
                 onClick = onToggleVisibility,
-                modifier = Modifier.offset(y = 8.dp, x = 8.dp)
+                modifier = Modifier.offset(y = 8.dp, x = 8.dp),
             ) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                     contentDescription = null,
-                    tint = Color.White
+                    tint = Color.White,
                 )
             }
         }
@@ -237,18 +247,18 @@ private fun AmountWidget(
             stringResource(R.string.label_you_are_sending),
             color = CoveColor.TextPrimary,
             fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.label_amount_they_will_receive),
             color = CoveColor.TextSecondary,
-            fontSize = 14.sp
+            fontSize = 14.sp,
         )
         Spacer(Modifier.height(24.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom
+            verticalAlignment = Alignment.Bottom,
         ) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
@@ -257,7 +267,7 @@ private fun AmountWidget(
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
             Spacer(Modifier.width(32.dp))
@@ -268,7 +278,7 @@ private fun AmountWidget(
                     imageVector = Icons.Filled.ArrowDropDown,
                     contentDescription = null,
                     tint = CoveColor.TextPrimary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -278,18 +288,18 @@ private fun AmountWidget(
             color = CoveColor.TextSecondary,
             fontSize = 20.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(28.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 Icons.Filled.CurrencyBitcoin,
                 contentDescription = null,
                 tint = CoveColor.WarningOrange,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.size(12.dp))
             Column(horizontalAlignment = Alignment.Start) {
@@ -299,7 +309,7 @@ private fun AmountWidget(
                     stringResource(R.string.label_main),
                     color = CoveColor.TextPrimary,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -315,7 +325,7 @@ private fun SummaryWidget(
     willPay: String,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Spacer(Modifier.height(28.dp))
         KeyValueRow(
@@ -323,14 +333,14 @@ private fun SummaryWidget(
             value = address,
             valueColor = CoveColor.TextPrimary,
             keyColor = CoveColor.TextSecondary,
-            boldValue = true
+            boldValue = true,
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
             key = stringResource(R.string.label_network_fee),
             value = networkFee,
             valueColor = CoveColor.TextSecondary,
-            keyColor = CoveColor.TextSecondary
+            keyColor = CoveColor.TextSecondary,
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
@@ -339,7 +349,7 @@ private fun SummaryWidget(
             valueColor = CoveColor.TextPrimary,
             boldValue = true,
             boldKey = true,
-            keyColor = CoveColor.TextPrimary
+            keyColor = CoveColor.TextPrimary,
         )
         Spacer(Modifier.height(20.dp))
         KeyValueRow(
@@ -348,7 +358,7 @@ private fun SummaryWidget(
             valueColor = CoveColor.TextPrimary,
             boldValue = true,
             boldKey = true,
-            keyColor = CoveColor.TextPrimary
+            keyColor = CoveColor.TextPrimary,
         )
         Spacer(Modifier.height(20.dp))
     }
@@ -365,14 +375,14 @@ private fun KeyValueRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             key,
             color = keyColor,
             fontSize = 14.sp,
             fontWeight = if (boldKey) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         Text(
             value,
@@ -380,7 +390,7 @@ private fun KeyValueRow(
             fontSize = 14.sp,
             fontWeight = if (boldValue) FontWeight.SemiBold else FontWeight.Normal,
             textAlign = TextAlign.Right,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
     }
 }
@@ -407,67 +417,69 @@ private fun SwipeToSendStub(
     val maxOffsetPx = (trackWidthPx - knobSizePx).coerceAtLeast(0f)
     val currentOffset = if (isDragging) rawOffset else animOffset.value
     val progress = if (maxOffsetPx <= 0f) 0f else (currentOffset / maxOffsetPx).coerceIn(0f, 1f)
-    val dragState = rememberDraggableState { delta ->
-        if (!completed) {
-            rawOffset = (rawOffset + delta).coerceIn(0f, maxOffsetPx)
+    val dragState =
+        rememberDraggableState { delta ->
+            if (!completed) {
+                rawOffset = (rawOffset + delta).coerceIn(0f, maxOffsetPx)
+            }
         }
-    }
     val scope = rememberCoroutineScope()
     val infinite = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infinite.animateFloat(
         initialValue = 0.6f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(animation = tween(900), repeatMode = RepeatMode.Reverse),
-        label = "pulseAlpha"
+        label = "pulseAlpha",
     )
     Box(
-        modifier = modifier
-            .height(64.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .background(
-                androidx.compose.ui.graphics.lerp(
-                    containerColor,
-                    targetContainerColor,
-                    progress
+        modifier =
+            modifier
+                .height(64.dp)
+                .clip(RoundedCornerShape(32.dp))
+                .background(
+                    androidx.compose.ui.graphics.lerp(
+                        containerColor,
+                        targetContainerColor,
+                        progress,
+                    ),
                 )
-            )
-            .onGloballyPositioned { coords ->
-                trackWidthPx = coords.size.width.toFloat()
-                rawOffset = rawOffset.coerceIn(0f, (trackWidthPx - knobSizePx).coerceAtLeast(0f))
-                scope.launch {
-                    animOffset.snapTo(
-                        animOffset.value.coerceIn(
-                            0f,
-                            (trackWidthPx - knobSizePx).coerceAtLeast(0f)
-                        )
-                    )
-                }
-            }
-            .draggable(
-                state = dragState,
-                orientation = Orientation.Horizontal,
-                enabled = true,
-                onDragStarted = {
-                    isDragging = true
-                },
-                onDragStopped = {
-                    isDragging = false
+                .onGloballyPositioned { coords ->
+                    trackWidthPx = coords.size.width.toFloat()
+                    rawOffset = rawOffset.coerceIn(0f, (trackWidthPx - knobSizePx).coerceAtLeast(0f))
                     scope.launch {
-                        animOffset.snapTo(rawOffset)
-                        if (rawOffset >= maxOffsetPx * SWIPE_COMPLETE_THRESHOLD) {
-                            animOffset.snapTo(maxOffsetPx)
-                            if (!completed) {
-                                completed = true
-                                onComplete()
-                            }
-                        } else {
-                            animOffset.animateTo(0f, tween(SWIPE_RETURN_DURATION_MS))
-                            rawOffset = 0f
-                        }
+                        animOffset.snapTo(
+                            animOffset.value.coerceIn(
+                                0f,
+                                (trackWidthPx - knobSizePx).coerceAtLeast(0f),
+                            ),
+                        )
                     }
                 }
-            ),
-        contentAlignment = Alignment.Center
+                .draggable(
+                    state = dragState,
+                    orientation = Orientation.Horizontal,
+                    enabled = true,
+                    onDragStarted = {
+                        isDragging = true
+                    },
+                    onDragStopped = {
+                        isDragging = false
+                        scope.launch {
+                            animOffset.snapTo(rawOffset)
+                            if (rawOffset >= maxOffsetPx * SWIPE_COMPLETE_THRESHOLD) {
+                                animOffset.snapTo(maxOffsetPx)
+                                if (!completed) {
+                                    completed = true
+                                    onComplete()
+                                }
+                            } else {
+                                animOffset.animateTo(0f, tween(SWIPE_RETURN_DURATION_MS))
+                                rawOffset = 0f
+                            }
+                        }
+                    },
+                ),
+        contentAlignment = Alignment.Center,
     ) {
         val displayColor = androidx.compose.ui.graphics.lerp(textColor, targetTextColor, progress)
         Text(
@@ -476,23 +488,24 @@ private fun SwipeToSendStub(
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.align(Alignment.Center)
+            modifier = Modifier.align(Alignment.Center),
         )
 
         Box(
-            modifier = Modifier
-                .size(knobSizeDp)
-                .align(Alignment.CenterStart)
-                .graphicsLayer { translationX = currentOffset }
-                .clip(CircleShape)
-                .background(knobColor),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .size(knobSizeDp)
+                    .align(Alignment.CenterStart)
+                    .graphicsLayer { translationX = currentOffset }
+                    .clip(CircleShape)
+                    .background(knobColor),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.graphicsLayer(alpha = if (!isDragging && progress == 0f) pulseAlpha else 1f)
+                modifier = Modifier.graphicsLayer(alpha = if (!isDragging && progress == 0f) pulseAlpha else 1f),
             )
         }
     }

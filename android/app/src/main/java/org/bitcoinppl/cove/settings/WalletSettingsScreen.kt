@@ -58,53 +58,56 @@ import org.bitcoinppl.cove.views.SwitchRow
 @Composable
 fun WalletSettingsScreen(wallet: TempWalletMock) {
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(WindowInsets.safeDrawing.asPaddingValues()),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = @Composable {
             TopAppBar(
                 title = {
                     Box(
                         modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             style = MaterialTheme.typography.bodyLarge,
                             text = wallet.settings.name,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        //TODO:navigate back to Settings
+                        // TODO:navigate back to Settings
                     }) {
                         Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = { },
-                modifier = Modifier.height(56.dp)
+                modifier = Modifier.height(56.dp),
             )
         },
         content = { paddingValues ->
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp)
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(paddingValues)
+                        .padding(horizontal = 16.dp),
             ) {
                 CardItem(stringResource(R.string.title_wallet_information), allCaps = true) {
                     Column(
-                        modifier = Modifier
-                            .padding(vertical = 8.dp)
-                            .padding(start = 8.dp),
+                        modifier =
+                            Modifier
+                                .padding(vertical = 8.dp)
+                                .padding(start = 8.dp),
                     ) {
                         InfoRow(stringResource(R.string.label_wallet_network), wallet.networkName)
                         ListSpacer()
                         InfoRow(
                             stringResource(R.string.label_wallet_fingerprint),
-                            wallet.fingerPrint
+                            wallet.fingerPrint,
                         )
                         ListSpacer()
                         InfoRow(stringResource(R.string.label_wallet_type), wallet.walletType)
@@ -112,25 +115,26 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                 }
                 CardItem(title = stringResource(R.string.title_wallet_settings), allCaps = true) {
                     Column(
-                        modifier = Modifier
-                            .padding(vertical = 8.dp)
-                            .padding(start = 8.dp),
+                        modifier =
+                            Modifier
+                                .padding(vertical = 8.dp)
+                                .padding(start = 8.dp),
                     ) {
                         ClickableInfoRow(
                             stringResource(R.string.label_wallet_name),
                             wallet.settings.name,
-                            Icons.AutoMirrored.Default.KeyboardArrowRight
+                            Icons.AutoMirrored.Default.KeyboardArrowRight,
                         ) {
-                            //TODO:NAME CHANGE?
+                            // TODO:NAME CHANGE?
                         }
                         ListSpacer()
                         WalletColorSelector(wallet.settings.colorId)
                         ListSpacer()
                         SwitchRow(
                             stringResource(R.string.label_wallet_show_transaction_labels),
-                            wallet.settings.showLabels
+                            wallet.settings.showLabels,
                         ) { isChecked ->
-                            //TODO: changeSettings of wallet
+                            // TODO: changeSettings of wallet
                         }
                     }
                 }
@@ -138,32 +142,35 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                 CardItem(
                     title = stringResource(R.string.title_wallet_danger_zone),
                     allCaps = true,
-                    titleColor = Color.Black
+                    titleColor = Color.Black,
                 ) {
                     Column(
-                        modifier = Modifier
-                            .padding(vertical = 8.dp)
-                            .padding(start = 8.dp),
+                        modifier =
+                            Modifier
+                                .padding(vertical = 8.dp)
+                                .padding(start = 8.dp),
                     ) {
                         Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(all = 8.dp)
-                                .clickable(true) {
-                                    //TODO:SHOW SECRETS wallet flow
-                                },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(all = 8.dp)
+                                    .clickable(true) {
+                                        // TODO:SHOW SECRETS wallet flow
+                                    },
                             text = stringResource(R.string.label_wallet_view_secrets),
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Start,
                         )
                         ListSpacer()
                         Text(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(all = 8.dp)
-                                .clickable(true) {
-                                    //TODO:DELETE wallet flow
-                                },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(all = 8.dp)
+                                    .clickable(true) {
+                                        // TODO:DELETE wallet flow
+                                    },
                             text = stringResource(R.string.label_wallet_delete),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error,
@@ -172,7 +179,7 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
                     }
                 }
             }
-        }
+        },
     )
 }
 
@@ -181,9 +188,12 @@ fun WalletSettingsScreen(wallet: TempWalletMock) {
 fun WalletSettingsScreenPreview() {
     WalletSettingsScreen(
         TempWalletMock(
-            id = "Id_!@#@!", networkName = "Signet", fingerPrint = "AsSdf322", walletType = "HOT",
-            WalletSettings(name = "MyWallet", WalletColor.LIGHT_RED.id, true)
-        )
+            id = "Id_!@#@!",
+            networkName = "Signet",
+            fingerPrint = "AsSdf322",
+            walletType = "HOT",
+            WalletSettings(name = "MyWallet", WalletColor.LIGHT_RED.id, true),
+        ),
     )
 }
 
@@ -197,7 +207,7 @@ fun WalletColorSelectorPreview() {
 private fun WalletColorSelector(selectedColorId: Int) {
     var selectedColor by remember {
         mutableStateOf(
-            WalletColor.getWalletColorById(selectedColorId) ?: WalletColor.LIGHT_BLUE
+            WalletColor.getWalletColorById(selectedColorId) ?: WalletColor.LIGHT_BLUE,
         )
     }
 
@@ -207,69 +217,74 @@ private fun WalletColorSelector(selectedColorId: Int) {
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(8.dp)
+            .padding(8.dp),
     ) {
         Text(
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth(),
             text = stringResource(R.string.label_wallet_color),
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Start,
         )
         Row(
-            modifier = Modifier
-                .fillMaxWidth(), verticalAlignment = Alignment.CenterVertically
+            modifier =
+                Modifier
+                    .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 Modifier
                     .aspectRatio(1f)
                     .background(
                         color = selectedColor.color,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
                     ).weight(1f),
             )
-
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5), // 5 per row, adjust as needed
                 userScrollEnabled = false,
-
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 200.dp)
-                    .padding(4.dp)
-                    .weight(3f),
-                contentPadding = PaddingValues(2.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .padding(4.dp)
+                        .weight(3f),
+                contentPadding = PaddingValues(2.dp),
             ) {
                 items(WalletColor.entries.size) { index ->
                     val walletColor = WalletColor.entries[index]
 
                     Box(
-                        modifier = Modifier
-                            .padding(4.dp)
-                            .aspectRatio(1f)
-                            .size(48.dp) // circle size
-                            .clickable { selectedColor = walletColor }
+                        modifier =
+                            Modifier
+                                .padding(4.dp)
+                                .aspectRatio(1f)
+                                .size(48.dp) // circle size
+                                .clickable { selectedColor = walletColor },
                     ) {
                         // If selected → border first
                         if (walletColor == selectedColor) {
                             Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .padding(3.dp) // creates space between border and circle
-                                    .border(
-                                        width = 3.dp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        shape = CircleShape
-                                    )
+                                modifier =
+                                    Modifier
+                                        .matchParentSize()
+                                        .padding(3.dp) // creates space between border and circle
+                                        .border(
+                                            width = 3.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = CircleShape,
+                                        ),
                             )
                         }
 
                         // color circle
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(walletColor.color, CircleShape)
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(walletColor.color, CircleShape),
                         )
                     }
                 }
@@ -278,24 +293,23 @@ private fun WalletColorSelector(selectedColorId: Int) {
     }
 }
 
-
 @Composable
 private fun ListSpacer() {
     CustomSpacer(height = 8.dp, paddingValues = PaddingValues(start = 8.dp))
 }
 
-//TODO:Remove and change to a real Wallet from CoveLib
+// TODO:Remove and change to a real Wallet from CoveLib
 data class TempWalletMock(
     val id: String,
     val networkName: String,
     val fingerPrint: String,
     val walletType: String,
-    val settings: WalletSettings
+    val settings: WalletSettings,
 )
 
-//TODO:Remove and change to a real Wallet from CoveLib
+// TODO:Remove and change to a real Wallet from CoveLib
 data class WalletSettings(
     val name: String,
     val colorId: Int,
-    val showLabels: Boolean
+    val showLabels: Boolean,
 )

@@ -35,25 +35,26 @@ fun DashDotsIndicator(
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(spacing),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         repeat(count) { i ->
             val isActive = i == currentIndex.coerceIn(0, count - 1)
 
             val width by animateDpAsState(
                 targetValue = if (isActive) dashWidth else dotSize,
-                label = "DashDotsWidth"
+                label = "DashDotsWidth",
             )
             val color by animateColorAsState(
                 targetValue = if (isActive) activeColor else inactiveColor,
-                label = "DashDotsColor"
+                label = "DashDotsColor",
             )
 
             Box(
-                modifier = Modifier
-                    .height(dotSize)
-                    .width(width)
-                    .background(color = color, shape = RoundedCornerShape(percent = 50))
+                modifier =
+                    Modifier
+                        .height(dotSize)
+                        .width(width)
+                        .background(color = color, shape = RoundedCornerShape(percent = 50)),
             )
         }
     }
@@ -65,7 +66,7 @@ fun DotsIndicator(
     currentIndex: Int,
     modifier: Modifier = Modifier,
     dotSize: Dp = 6.dp,
-    activeDotSize: Dp = 8.dp,                 // slightly larger active dot
+    activeDotSize: Dp = 8.dp, // slightly larger active dot
     spacing: Dp = 6.dp,
     activeColor: Color = Color.White,
     inactiveColor: Color = Color.White.copy(alpha = 0.35f),
@@ -75,24 +76,25 @@ fun DotsIndicator(
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(spacing),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         repeat(count) { i ->
             val isActive = i == currentIndex.coerceIn(0, count - 1)
 
             val size by animateDpAsState(
                 targetValue = if (isActive) activeDotSize else dotSize,
-                label = "DotSizeAnim"
+                label = "DotSizeAnim",
             )
             val color by animateColorAsState(
                 targetValue = if (isActive) activeColor else inactiveColor,
-                label = "DotColorAnim"
+                label = "DotColorAnim",
             )
 
             Box(
-                modifier = Modifier
-                    .size(size)
-                    .background(color = color, shape = CircleShape)
+                modifier =
+                    Modifier
+                        .size(size)
+                        .background(color = color, shape = CircleShape),
             )
         }
     }
@@ -101,8 +103,8 @@ fun DotsIndicator(
 @Preview
 @Composable
 private fun PreviewDashDotsIndicator() {
-        DashDotsIndicator(
-            currentIndex = 1,
-            count = 5,
-        )
+    DashDotsIndicator(
+        currentIndex = 1,
+        count = 5,
+    )
 }

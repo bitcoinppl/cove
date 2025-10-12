@@ -37,79 +37,86 @@ import org.bitcoinppl.cove.views.SettingsItem
 @Composable
 fun SettingsScreen() {
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(WindowInsets.safeDrawing.asPaddingValues()),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(WindowInsets.safeDrawing.asPaddingValues()),
         topBar = @Composable {
             TopAppBar(
                 title = {
                     Box(
                         modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             style = MaterialTheme.typography.bodyLarge,
                             text = stringResource(R.string.title_settings),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        //TODO:navigate back
+                        // TODO:navigate back
                     }) {
                         Icon(Icons.AutoMirrored.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = { },
-                modifier = Modifier.height(56.dp)
+                modifier = Modifier.height(56.dp),
             )
         },
         content = { paddingValues ->
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp)
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(paddingValues)
+                        .padding(horizontal = 16.dp),
             ) {
                 CardItem(stringResource(R.string.title_settings_general)) {
                     Column(
-                        modifier = Modifier
-                            .padding(vertical = 8.dp)
-                            .padding(start = 8.dp)
+                        modifier =
+                            Modifier
+                                .padding(vertical = 8.dp)
+                                .padding(start = 8.dp),
                     ) {
                         SettingsItem(
                             stringResource(R.string.title_settings_network),
                             iconResId = R.drawable.icon_network,
                             onClick = {
-                                //TODO:Navigate to general Settings screen
-                            })
+                                // TODO:Navigate to general Settings screen
+                            },
+                        )
                         Spacer()
                         SettingsItem(
                             stringResource(R.string.title_settings_appearance),
                             iconResId = R.drawable.icon_appearance,
                             onClick = {
-                                //TODO:Navigate to appearance Settings screen
-                            })
+                                // TODO:Navigate to appearance Settings screen
+                            },
+                        )
                         Spacer()
                         SettingsItem(
                             stringResource(R.string.title_settings_node),
                             iconResId = R.drawable.icon_node,
                             onClick = {
-                                //TODO:Navigate to node Settings screen
-                            })
+                                // TODO:Navigate to node Settings screen
+                            },
+                        )
                         Spacer()
                         SettingsItem(
                             stringResource(R.string.title_settings_currency),
                             iconResId = R.drawable.icon_currency,
                             onClick = {
-                                //TODO:Navigate to currency Settings screen
-                            })
+                                // TODO:Navigate to currency Settings screen
+                            },
+                        )
                     }
                 }
             }
-        }
+        },
     )
 }
 
