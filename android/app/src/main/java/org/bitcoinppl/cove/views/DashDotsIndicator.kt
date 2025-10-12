@@ -60,13 +60,14 @@ fun DashDotsIndicator(
     }
 }
 
+// slightly larger active dot
 @Composable
 fun DotsIndicator(
     count: Int,
     currentIndex: Int,
     modifier: Modifier = Modifier,
     dotSize: Dp = 6.dp,
-    activeDotSize: Dp = 8.dp, // slightly larger active dot
+    activeDotSize: Dp = 8.dp,
     spacing: Dp = 6.dp,
     activeColor: Color = Color.White,
     inactiveColor: Color = Color.White.copy(alpha = 0.35f),

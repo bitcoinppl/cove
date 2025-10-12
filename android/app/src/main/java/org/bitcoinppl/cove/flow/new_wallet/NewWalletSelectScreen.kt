@@ -183,11 +183,12 @@ fun NewWalletSelectScreen(
                             modifier = Modifier.weight(1f),
                         )
 
+                        // placeholder "phone"
                         ImageButton(
                             text = stringResource(R.string.btn_on_this_device),
                             leading = {
                                 Icon(
-                                    painter = painterResource(R.drawable.icon_phone_device), // placeholder "phone"
+                                    painter = painterResource(R.drawable.icon_phone_device),
                                     contentDescription = null,
                                 )
                             },

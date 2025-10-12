@@ -242,8 +242,9 @@ private fun WalletColorSelector(selectedColorId: Int) {
                     ).weight(1f),
             )
 
+            // 5 per row, adjust as needed
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5), // 5 per row, adjust as needed
+                columns = GridCells.Fixed(5),
                 userScrollEnabled = false,
                 modifier =
                     Modifier

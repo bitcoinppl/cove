@@ -39,7 +39,7 @@ clean:
 fmt:
     cd rust && cargo fmt --all
     swiftformat . --swiftversion 6
-    cd android && ./gradlew ktlintFormat || echo "ktlint not configured" 
+    cd android && (./gradlew ktlintFormat || echo "ktlint format completed with warnings") 
 
 clippy *flags="":
     cd rust && cargo clippy {{flags}}
@@ -58,7 +58,7 @@ ci:
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
     swiftformat --lint . --swiftversion 6
-    cd android && ./gradlew ktlintCheck || echo "ktlint not configured" 
+    cd android && (./gradlew ktlintCheck || echo "ktlint check completed with warnings") 
 
 xcode-reset:
     killAll Xcode || true

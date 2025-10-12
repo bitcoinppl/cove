@@ -47,9 +47,10 @@ private fun RecoveryWordsPager(
     val pagerState = rememberPagerState(pageCount = { maxOf(pageCount, 1) })
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // gap between pages
         HorizontalPager(
             state = pagerState,
-            pageSpacing = 16.dp, // <— gap between pages
+            pageSpacing = 16.dp,
             contentPadding = PaddingValues(horizontal = 16.dp),
         ) { page ->
             val start = page * pageSize
