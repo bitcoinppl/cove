@@ -262,8 +262,8 @@ mod tests {
         let tap_card = TapCard::parse(url);
         assert!(tap_card.is_ok());
 
-        assert!(matches!(tap_card.clone().unwrap(), TapCard::TapSigner(_)));
-        let TapCard::TapSigner(tap_signer) = tap_card.unwrap() else { panic!("not a tap signer") };
+        assert!(matches!(tap_card.clone().unwrap(), TapCard::Tap(_)));
+        let TapCard::Tap(tap_signer) = tap_card.unwrap() else { panic!("not a tap signer") };
 
         assert_eq!(tap_signer.state, TapSignerState::Sealed);
         assert_eq!(tap_signer.card_ident, "04d74fb1dfee7a4d");
@@ -276,9 +276,9 @@ mod tests {
         let tap_card = TapCard::parse(card);
 
         assert!(tap_card.is_ok());
-        assert!(matches!(tap_card.clone().unwrap(), TapCard::SatsCard(_)));
+        assert!(matches!(tap_card.clone().unwrap(), TapCard::Sats(_)));
 
-        let TapCard::SatsCard(sats_card) = tap_card.unwrap() else { panic!("not a tap signer") };
+        let TapCard::Sats(sats_card) = tap_card.unwrap() else { panic!("not a tap signer") };
 
         assert_eq!(sats_card.state, SatsCardState::Sealed);
         assert_eq!(sats_card.nonce, "ab78fd50637f8f5a");
@@ -303,7 +303,7 @@ mod tests {
         assert!(tap_card.is_ok());
 
         let ts = match tap_card.unwrap() {
-            TapCard::TapSigner(ts) => ts,
+            TapCard::Tap(ts) => ts,
             _ => panic!("not a tap signer"),
         };
 

@@ -27,8 +27,8 @@ bacon:
 bcheck:
     cd rust && bacon check
 
-check:
-    cd rust && cargo check
+check *flags="--workspace --all-targets --all-features":
+    cd rust && cargo check {{flags}}
 
 clean:
     cd rust && cargo clean && \
