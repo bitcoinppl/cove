@@ -63,10 +63,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import com.example.cove.R
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.DashDotsIndicator
 import org.bitcoinppl.cove.views.ImageButton
@@ -91,11 +91,12 @@ object AnimationConfig {
 @Composable
 private fun HotWalletVerifyScreenPreview() {
     val snack = remember { SnackbarHostState() }
-    val options = listOf(
-        "cargo", "city", "dash", "donate",
-        "exclude", "lemon", "october", "provide",
-        "top", "undo", "wide", "farm"
-    )
+    val options =
+        listOf(
+            "cargo", "city", "dash", "donate",
+            "exclude", "lemon", "october", "provide",
+            "top", "undo", "wide", "farm",
+        )
     HotWalletVerifyScreen(
         onBack = {},
         onShowWords = {},
@@ -104,7 +105,7 @@ private fun HotWalletVerifyScreenPreview() {
         questionIndex = 3,
         correctWord = "october",
         options = options,
-        onCorrectSelected = { word -> Log.d("HotWalletPreview", "onCorrectSelected: $word") }
+        onCorrectSelected = { word -> Log.d("HotWalletPreview", "onCorrectSelected: $word") },
     )
 }
 
@@ -161,13 +162,13 @@ fun HotWalletVerifyScreen(
                 launch {
                     animationX.animateTo(
                         targetValue = targetPosition.x,
-                        animationSpec = tween(moveMs, easing = LinearEasing)
+                        animationSpec = tween(moveMs, easing = LinearEasing),
                     )
                 }
                 launch {
                     animationY.animateTo(
                         targetValue = targetPosition.y,
-                        animationSpec = tween(moveMs, easing = LinearEasing)
+                        animationSpec = tween(moveMs, easing = LinearEasing),
                     )
                 }
             }
@@ -186,63 +187,68 @@ fun HotWalletVerifyScreen(
         containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                ),
+                colors =
+                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                    ),
                 title = {
                     Text(
                         stringResource(R.string.title_verify_recovery_words),
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Back",
                         )
                     }
                 },
-                actions = {}
+                actions = {},
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .onGloballyPositioned { coords ->
-                    val pos = coords.positionInRoot()
-                    rootOffset = androidx.compose.ui.geometry.Offset(pos.x, pos.y)
-                }
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .onGloballyPositioned { coords ->
+                        val pos = coords.positionInRoot()
+                        rootOffset = androidx.compose.ui.geometry.Offset(pos.x, pos.y)
+                    },
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.TopCenter)
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter),
             )
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 20.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(vertical = 20.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.Top,
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Spacer(Modifier.height(12.dp))
 
@@ -252,7 +258,7 @@ fun HotWalletVerifyScreen(
                         fontSize = 22.sp,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
                     )
 
                     Spacer(Modifier.height(24.dp))
@@ -261,19 +267,21 @@ fun HotWalletVerifyScreen(
                         val cellWidth = (maxWidth - 12.dp * 3) / 4
                         Box(
                             modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center,
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .width(cellWidth)
-                                    .height(chipHeight)
-                                    .onGloballyPositioned { coordinates ->
-                                        val pos = coordinates.positionInRoot()
-                                        targetPosition = androidx.compose.ui.geometry.Offset(
-                                            pos.x - rootOffset.x,
-                                            pos.y - rootOffset.y
-                                        )
-                                    }
+                                modifier =
+                                    Modifier
+                                        .width(cellWidth)
+                                        .height(chipHeight)
+                                        .onGloballyPositioned { coordinates ->
+                                            val pos = coordinates.positionInRoot()
+                                            targetPosition =
+                                                androidx.compose.ui.geometry.Offset(
+                                                    pos.x - rootOffset.x,
+                                                    pos.y - rootOffset.y,
+                                                )
+                                        },
                             ) { }
                         }
                     }
@@ -283,8 +291,9 @@ fun HotWalletVerifyScreen(
                     HorizontalDivider(
                         color = Color.White,
                         thickness = 1.dp,
-                        modifier = Modifier
-                            .width(160.dp)
+                        modifier =
+                            Modifier
+                                .width(160.dp),
                     )
 
                     Spacer(Modifier.height(24.dp))
@@ -298,16 +307,18 @@ fun HotWalletVerifyScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             contentPadding = PaddingValues(0.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             itemsIndexed(
                                 options,
-                                key = { idx, value -> "word-$idx-$value" }) { _, word ->
+                                key = { idx, value -> "word-$idx-$value" },
+                            ) { _, word ->
                                 if (animatingWord == word && overlayVisible) {
                                     Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(46.dp)
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .height(46.dp),
                                     ) { }
                                 } else {
                                     OptionChip(
@@ -319,11 +330,14 @@ fun HotWalletVerifyScreen(
                                             }
                                         },
                                         onPositionCaptured = { position ->
-                                            wordPositions = wordPositions + (word to androidx.compose.ui.geometry.Offset(
-                                                position.x - rootOffset.x,
-                                                position.y - rootOffset.y
-                                            ))
-                                        }
+                                            wordPositions = wordPositions + (
+                                                word to
+                                                    androidx.compose.ui.geometry.Offset(
+                                                        position.x - rootOffset.x,
+                                                        position.y - rootOffset.y,
+                                                    )
+                                            )
+                                        },
                                     )
                                 }
                             }
@@ -333,9 +347,10 @@ fun HotWalletVerifyScreen(
 
                 Column(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DashDotsIndicator(
@@ -350,13 +365,13 @@ fun HotWalletVerifyScreen(
                         color = Color.White,
                         fontSize = 34.sp,
                         fontWeight = FontWeight.SemiBold,
-                        lineHeight = 38.sp
+                        lineHeight = 38.sp,
                     )
 
                     Text(
                         text = stringResource(R.string.label_verify_words_body),
                         color = Color.White.copy(alpha = 0.8f),
-                        lineHeight = 20.sp
+                        lineHeight = 20.sp,
                     )
 
                     HorizontalDivider(color = Color.White.copy(alpha = 0.35f), thickness = 1.dp)
@@ -364,21 +379,22 @@ fun HotWalletVerifyScreen(
                     ImageButton(
                         text = stringResource(R.string.btn_show_words),
                         onClick = onShowWords,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CoveColor.btnPrimary,
-                            contentColor = CoveColor.midnightBlue
-                        ),
-                        modifier = Modifier.fillMaxWidth()
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = CoveColor.btnPrimary,
+                                contentColor = CoveColor.midnightBlue,
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
                     )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
+                        horizontalArrangement = Arrangement.Center,
                     ) {
                         TextButton(onClick = onSkip) {
                             Text(
                                 text = stringResource(R.string.btn_skip_verification),
-                                color = Color.White.copy(alpha = 0.9f)
+                                color = Color.White.copy(alpha = 0.9f),
                             )
                         }
                     }
@@ -395,24 +411,25 @@ fun HotWalletVerifyScreen(
                 val overlayText = if (nearTarget) Color.White else CoveColor.midnightBlue
 
                 Box(
-                    modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                animationX.value.roundToInt(),
-                                animationY.value.roundToInt()
-                            )
-                        }
-                        .width(actualChipWidth)
-                        .height(chipHeight)
-                        .background(overlayBg, RoundedCornerShape(14.dp))
-                        .zIndex(10f),
-                    contentAlignment = Alignment.Center
+                    modifier =
+                        Modifier
+                            .offset {
+                                IntOffset(
+                                    animationX.value.roundToInt(),
+                                    animationY.value.roundToInt(),
+                                )
+                            }
+                            .width(actualChipWidth)
+                            .height(chipHeight)
+                            .background(overlayBg, RoundedCornerShape(14.dp))
+                            .zIndex(10f),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = word,
                         color = overlayText,
                         fontWeight = FontWeight.Medium,
-                        maxLines = 1
+                        maxLines = 1,
                     )
                 }
             }
@@ -433,21 +450,23 @@ private fun OptionChip(
     val textColor = if (selected) CoveColor.midnightBlue else CoveColor.midnightBlue
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(46.dp),
-        contentAlignment = Alignment.Center
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(46.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(shape)
-                .background(bg, shape)
-                .clickable { onClick() }
-                .onGloballyPositioned { coordinates ->
-                    onPositionCaptured(coordinates.positionInRoot())
-                },
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .clip(shape)
+                    .background(bg, shape)
+                    .clickable { onClick() }
+                    .onGloballyPositioned { coordinates ->
+                        onPositionCaptured(coordinates.positionInRoot())
+                    },
+            contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = text,
@@ -456,7 +475,7 @@ private fun OptionChip(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 14.dp)
+                modifier = Modifier.padding(horizontal = 14.dp),
             )
         }
     }

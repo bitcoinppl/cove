@@ -25,7 +25,7 @@ struct UtxoListScreen: View {
         let walletId = walletManager.walletMetadata.id
 
         if let details = walletManager.transactionDetails[txId] {
-            return navigate(Route.transactionDetails(id: walletId, details: details))
+            return navigate(Route.txDetails(id: walletId, details: details))
         }
 
         MiddlePopup(state: .loading).showAndStack()
@@ -34,7 +34,7 @@ struct UtxoListScreen: View {
                 let details = try await walletManager.transactionDetails(for: txId)
                 await MainActor.run {
                     PopupManager.dismiss()
-                    navigate(Route.transactionDetails(id: walletId, details: details))
+                    navigate(Route.txDetails(id: walletId, details: details))
                 }
             } catch {
                 Log.error(

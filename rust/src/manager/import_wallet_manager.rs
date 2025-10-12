@@ -56,13 +56,13 @@ pub enum ImportWalletError {
     InvalidWordGroup(String),
 
     #[error("failed to save wallet to keychain: {0}")]
-    KeychainError(#[from] KeychainError),
+    Keychain(#[from] KeychainError),
 
     #[error("wallet already exists")]
     WalletAlreadyExists(WalletId),
 
     #[error("failed to save wallet: {0}")]
-    DatabaseError(#[from] database::Error),
+    Database(#[from] database::Error),
 
     #[error("failed to create wallet: {0}")]
     BdkError(String),

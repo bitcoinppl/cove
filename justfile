@@ -9,10 +9,14 @@ alias wt := watch-test
 alias wtest := watch-test
 alias wb := watch-build
 
-# build aliases
+# build aliases ios
 alias bi := build-ios
 alias bir := build-ios-release
 alias bidd := build-ios-debug-device
+
+# build aliases android
+alias ba := build-android
+alias bar := build-android-release
 
 default:
     just --list
@@ -23,8 +27,8 @@ bacon:
 bcheck:
     cd rust && bacon check
 
-check:
-    cd rust && cargo check
+check *flags="--workspace --all-targets --all-features":
+    cd rust && cargo check {{flags}}
 
 clean:
     cd rust && cargo clean && \
@@ -35,7 +39,7 @@ clean:
 fmt:
     cd rust && cargo fmt --all
     swiftformat . --swiftversion 6
-    cd android && ./gradlew ktlintFormat || echo "ktlint not configured" 
+    cd android && ./gradlew ktlintFormat 
 
 clippy *flags="":
     cd rust && cargo clippy {{flags}}
@@ -47,13 +51,14 @@ xcode-clean:
     rm -rf ~/Library/Caches/org.swift.swiftpm
     cd ios && xcodebuild clean
 
-ci: 
+ci:
     just fmt
     cd rust && cargo clippy --all-targets --all-features
     just test
     cd rust && cargo clippy --all-targets --all-features -- -D warnings
     cd rust && cargo fmt --check
-    swiftformat --lint . --swiftversion 6 
+    swiftformat --lint . --swiftversion 6
+    cd android && ./gradlew ktlintCheck
 
 xcode-reset:
     killAll Xcode || true
@@ -65,12 +70,32 @@ xcode-reset:
     cd ios && xcode-build-server config -project *.xcodeproj -scheme Cove
     open ios/Cove.xcodeproj
 
+watch-build profile="debug" device="false":
+    watchexec --exts rs just build-ios {{profile}} {{device}}
+
+test test="" flags="":
+    cd rust && cargo nextest run {{test}} --workspace {{flags}}
+
+ctest test="" flags="":
+    cd rust && cargo test {{test}} --workspace -- {{flags}} 
+
+btest test="":
+    cd rust && bacon nextest -- {{test}} --workspace
+
+watch-test test="" flags="":
+    watchexec --exts rs just test {{test}} {{flags}}
+
+# build android
 build-android:
-    bash scripts/build-android.sh
+    bash scripts/build-android.sh debug
+
+build-android-release:
+    bash scripts/build-android.sh release
 
 run-android: build-android
     bash scripts/run-android.sh
 
+# build ios
 build-ios profile="debug" device="false" sign="false":
     #!/usr/bin/env bash
     if bash scripts/build-ios.sh {{profile}} {{device}} {{sign}}; then
@@ -88,17 +113,3 @@ build-ios-debug-device:
 run-ios: build-ios
     bash scripts/run-ios.sh
 
-watch-build profile="debug" device="false":
-    watchexec --exts rs just build-ios {{profile}} {{device}}
-
-test test="" flags="":
-    cd rust && cargo nextest run {{test}} --workspace {{flags}}
-
-ctest test="" flags="":
-    cd rust && cargo test {{test}} --workspace -- {{flags}} 
-
-btest test="":
-    cd rust && bacon nextest -- {{test}} --workspace
-
-watch-test test="" flags="":
-    watchexec --exts rs just test {{test}} {{flags}}

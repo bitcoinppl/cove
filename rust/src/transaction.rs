@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub type Amount = cove_types::amount::Amount;
-pub type Unit = cove_types::unit::Unit;
+pub type Unit = cove_types::unit::BitcoinUnit;
 pub type FeeRate = cove_types::fees::FeeRate;
 pub type SentAndReceived = cove_types::transaction::sent_and_received::SentAndReceived;
 pub type TransactionDirection = cove_types::transaction::TransactionDirection;

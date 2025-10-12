@@ -136,7 +136,7 @@ pub enum WalletType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum HardwareWalletMetadata {
-    TapSigner(Arc<TapSigner>),
+    TapSignerCard(Arc<TapSigner>),
 }
 
 #[derive(
@@ -252,7 +252,7 @@ impl InternalOnlyMetadata {
 
 impl HardwareWalletMetadata {
     pub fn is_tap_signer(&self) -> bool {
-        matches!(self, HardwareWalletMetadata::TapSigner(_))
+        matches!(self, HardwareWalletMetadata::TapSignerCard(_))
     }
 }
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
-use cove_types::{amount::Amount, unit::Unit};
+use cove_types::{amount::Amount, unit::BitcoinUnit};
 use cove_util::format::{self, NumberFormatter as _};
 use tracing::debug;
 
@@ -72,7 +72,7 @@ impl BtcOnChangeHandler {
         // decimal points `.` count
         let number_of_periods = new.chars().filter(|c| *c == '.').count();
 
-        if unit == Unit::Sat && number_of_periods > 0 {
+        if unit == BitcoinUnit::Sat && number_of_periods > 0 {
             return Changeset { entering_amount_btc: Some(old.to_string()), ..Default::default() };
         }
 
@@ -106,8 +106,10 @@ impl BtcOnChangeHandler {
         // ---------------------------------------------------------------------
 
         let amount = match self.metadata.selected_unit {
-            Unit::Sat => unformatted.parse::<u64>().ok().map(Amount::from_sat),
-            Unit::Btc => unformatted.parse::<f64>().ok().and_then(|v| Amount::from_btc(v).ok()),
+            BitcoinUnit::Sat => unformatted.parse::<u64>().ok().map(Amount::from_sat),
+            BitcoinUnit::Btc => {
+                unformatted.parse::<f64>().ok().and_then(|v| Amount::from_btc(v).ok())
+            }
         };
 
         let amount = match amount {
@@ -142,8 +144,8 @@ impl BtcOnChangeHandler {
         }
 
         let entering_amount_btc = match self.metadata.selected_unit {
-            Unit::Sat => Some(amount.as_sats().thousands_int()),
-            Unit::Btc => format::btc_typing(&unformatted),
+            BitcoinUnit::Sat => Some(amount.as_sats().thousands_int()),
+            BitcoinUnit::Btc => format::btc_typing(&unformatted),
         };
 
         if let Some(entering_amount_btc) = entering_amount_btc

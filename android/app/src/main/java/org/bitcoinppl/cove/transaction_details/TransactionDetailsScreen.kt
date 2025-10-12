@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.transaction_details
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -16,10 +17,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -50,19 +50,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cove.R
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.tooling.preview.Preview
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,9 +74,10 @@ enum class TxType { Sent, Received }
 @Composable
 private fun TxDetailsSentLightPreview() {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
     ) {
         TransactionDetailsWidget(
             txType = TxType.Sent,
@@ -97,14 +98,16 @@ private fun TxDetailsSentLightPreview() {
 @Composable
 private fun TxDetailsReceivedDarkPreview() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF000000))
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF000000)),
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
         ) {
             TransactionDetailsWidget(
                 txType = TxType.Received,
@@ -134,7 +137,7 @@ private fun TransactionSentLightPreview() {
         txType = TxType.Sent,
         txAmountPrimary = "152,724 SATS",
         txAmountSecondary = "≈ $177.02",
-        date = Date()
+        date = Date(),
     )
 }
 
@@ -150,7 +153,7 @@ private fun TransactionReceivedDarkPreview() {
         txType = TxType.Received,
         txAmountPrimary = "152,724 SATS",
         txAmountSecondary = "≈ $177.02",
-        date = Date()
+        date = Date(),
     )
 }
 
@@ -235,23 +238,25 @@ fun TransactionDetailsScreen(
     val checkCircle = if (isDark) Color(0xFF0F0F12) else Color(0xFF0F1012)
     val chipBg = CoveColor.TransactionReceived
 
-    val ringColors: List<Color> = if (isDark) {
-        listOf(
-            Color.White.copy(alpha = 0.60f),
-            Color.White.copy(alpha = 0.35f),
-            Color.White.copy(alpha = 0.18f),
-        )
-    } else {
-        listOf(
-            Color.Black.copy(alpha = 0.50f),
-            Color.Black.copy(alpha = 0.30f),
-            Color.Black.copy(alpha = 0.15f),
-        )
-    }
+    val ringColors: List<Color> =
+        if (isDark) {
+            listOf(
+                Color.White.copy(alpha = 0.60f),
+                Color.White.copy(alpha = 0.35f),
+                Color.White.copy(alpha = 0.18f),
+            )
+        } else {
+            listOf(
+                Color.Black.copy(alpha = 0.50f),
+                Color.Black.copy(alpha = 0.30f),
+                Color.Black.copy(alpha = 0.15f),
+            )
+        }
 
-    val headerTitle = title ?: stringResource(
-        id = if (txType == TxType.Sent) R.string.title_transaction_sent else R.string.title_transaction_received
-    )
+    val headerTitle =
+        title ?: stringResource(
+            id = if (txType == TxType.Sent) R.string.title_transaction_sent else R.string.title_transaction_received,
+        )
     val actionLabelRes =
         if (txType == TxType.Sent) R.string.label_transaction_sent else R.string.label_transaction_received
     val actionIcon = if (txType == TxType.Sent) Icons.Filled.NorthEast else Icons.Filled.SouthWest
@@ -259,57 +264,64 @@ fun TransactionDetailsScreen(
     val dateFormatter = SimpleDateFormat("MMMM d, yyyy 'at' h:mm a", Locale.getDefault())
     val formattedDate = date?.let { dateFormatter.format(it) } ?: ""
 
-    val message = if (formattedDate.isNotEmpty()) {
-        stringResource(
-            id = if (txType == TxType.Sent) R.string.label_transaction_sent_on else R.string.label_transaction_received_on,
-            formattedDate
-        )
-    } else ""
+    val message =
+        if (formattedDate.isNotEmpty()) {
+            stringResource(
+                id = if (txType == TxType.Sent) R.string.label_transaction_sent_on else R.string.label_transaction_received_on,
+                formattedDate,
+            )
+        } else {
+            ""
+        }
 
     Scaffold(
         containerColor = bg,
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = fg,
-                    actionIconContentColor = fg,
-                    navigationIconContentColor = fg,
-                ),
+                colors =
+                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = fg,
+                        actionIconContentColor = fg,
+                        navigationIconContentColor = fg,
+                    ),
                 title = { Text("") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null
+                            contentDescription = null,
                         )
                     }
-                }
+                },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.TopCenter)
-                    .offset(y = (-60).dp)
-                    .graphicsLayer(alpha = if (isDark) 0.75f else 0.15f),
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-60).dp)
+                        .graphicsLayer(alpha = if (isDark) 0.75f else 0.15f),
             )
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                        .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(16.dp))
@@ -328,29 +340,31 @@ fun TransactionDetailsScreen(
                     color = fg,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.SemiBold,
-                    lineHeight = 36.sp
+                    lineHeight = 36.sp,
                 )
 
                 Spacer(Modifier.height(4.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { onAddLabel() }
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onAddLabel() },
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .background(chipBg),
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(chipBg),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(14.dp),
                         )
                     }
                     Spacer(Modifier.size(8.dp))
@@ -364,7 +378,7 @@ fun TransactionDetailsScreen(
                     color = sub,
                     fontSize = 16.sp,
                     textAlign = TextAlign.Center,
-                    lineHeight = 22.sp
+                    lineHeight = 22.sp,
                 )
 
                 Spacer(Modifier.height(32.dp))
@@ -374,7 +388,7 @@ fun TransactionDetailsScreen(
                     color = fg,
                     fontSize = 36.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    lineHeight = 44.sp
+                    lineHeight = 44.sp,
                 )
 
                 Spacer(Modifier.height(4.dp))
@@ -382,7 +396,7 @@ fun TransactionDetailsScreen(
                 Text(
                     txAmountSecondary,
                     color = fg,
-                    fontSize = 18.sp
+                    fontSize = 18.sp,
                 )
 
                 Spacer(Modifier.height(32.dp))
@@ -392,17 +406,17 @@ fun TransactionDetailsScreen(
                         onClick = {},
                         shape = RoundedCornerShape(24.dp),
                         border = BorderStroke(1.dp, fg),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = fg)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = fg),
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(actionIcon, contentDescription = null)
                             Spacer(Modifier.size(8.dp))
                             Text(
                                 text = stringResource(actionLabelRes),
                                 fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp
+                                fontSize = 16.sp,
                             )
                         }
                     }
@@ -410,20 +424,21 @@ fun TransactionDetailsScreen(
                     Button(
                         onClick = {},
                         shape = RoundedCornerShape(24.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Black,
-                            contentColor = Color.White
-                        ),
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = Color.Black,
+                                contentColor = Color.White,
+                            ),
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(actionIcon, contentDescription = null)
                             Spacer(Modifier.size(8.dp))
                             Text(
                                 text = stringResource(actionLabelRes),
                                 fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp
+                                fontSize = 16.sp,
                             )
                         }
                     }
@@ -448,34 +463,37 @@ fun TransactionDetailsScreen(
                 }
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     ImageButton(
                         text = stringResource(R.string.btn_view_in_explorer),
                         onClick = onViewInExplorer,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isDark) CoveColor.SurfaceDark else CoveColor.midnightBlue,
-                            contentColor = if (isDark) CoveColor.BorderLight else Color.White
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = if (isDark) CoveColor.SurfaceDark else CoveColor.midnightBlue,
+                                contentColor = if (isDark) CoveColor.BorderLight else Color.White,
+                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(),
                     )
 
                     Spacer(Modifier.height(12.dp))
 
                     TextButton(
                         onClick = onShowDetails,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
                     ) {
                         Text(
                             text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
                             color = sub,
                             fontSize = 14.sp,
                             textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }
@@ -504,10 +522,11 @@ private fun TransactionDetailsWidget(
 
     Spacer(Modifier.height(48.dp))
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(dividerColor)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(dividerColor),
     )
     Spacer(Modifier.height(24.dp))
 
@@ -518,7 +537,7 @@ private fun TransactionDetailsWidget(
             Text(
                 addressLabel,
                 color = if (isDark) Color(0xFFB8B8B8) else Color(0xFF6F6F75),
-                fontSize = 16.sp
+                fontSize = 16.sp,
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -526,7 +545,7 @@ private fun TransactionDetailsWidget(
                 color = fg,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
-                lineHeight = 24.sp
+                lineHeight = 24.sp,
             )
             if (!addressExtra.isNullOrEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -534,17 +553,18 @@ private fun TransactionDetailsWidget(
                     Text(addressExtra, color = sub, fontSize = 14.sp)
                     Spacer(Modifier.size(4.dp))
                     Box(
-                        modifier = Modifier
-                            .size(14.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1FC35C)),
-                        contentAlignment = Alignment.Center
+                        modifier =
+                            Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1FC35C)),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(10.dp)
+                            modifier = Modifier.size(10.dp),
                         )
                     }
                 }
@@ -552,10 +572,11 @@ private fun TransactionDetailsWidget(
         }
         Spacer(Modifier.height(24.dp))
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(dividerColor)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(dividerColor),
         )
         Spacer(Modifier.height(24.dp))
     }
@@ -566,7 +587,7 @@ private fun TransactionDetailsWidget(
         secondary = networkFeeSecondary,
         isDark = isDark,
         showInfoIcon = true,
-        onInfoClick = onNetworkFeeInfo
+        onInfoClick = onNetworkFeeInfo,
     )
     Spacer(Modifier.height(24.dp))
 
@@ -574,15 +595,16 @@ private fun TransactionDetailsWidget(
         label = stringResource(R.string.label_recipient_receives),
         primary = recipientReceivesPrimary,
         secondary = recipientReceivesSecondary,
-        isDark = isDark
+        isDark = isDark,
     )
     Spacer(Modifier.height(24.dp))
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(dividerColor)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(dividerColor),
     )
     Spacer(Modifier.height(24.dp))
 
@@ -591,7 +613,7 @@ private fun TransactionDetailsWidget(
         primary = totalSpentPrimary,
         secondary = totalSpentSecondary,
         isDark = isDark,
-        isTotal = true
+        isTotal = true,
     )
     Spacer(Modifier.height(72.dp))
 }
@@ -610,27 +632,29 @@ private fun DetailsWidget(
     val sub = if (isDark) Color(0xFF8F8F95) else Color(0xFF6F6F75)
     val fg = if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
 
-    val labelColor = if (isTotal) {
-        if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
-    } else {
-        if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
-    }
+    val labelColor =
+        if (isTotal) {
+            if (isDark) Color(0xFFEFEFEF) else Color(0xFF101010)
+        } else {
+            if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
+        }
 
-    val primaryColor = if (isTotal) {
-        fg
-    } else {
-        if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
-    }
+    val primaryColor =
+        if (isTotal) {
+            fg
+        } else {
+            if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF)
+        }
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         ) {
             Text(
                 label,
                 color = labelColor,
-                fontSize = 18.sp
+                fontSize = 18.sp,
             )
             if (showInfoIcon) {
                 Spacer(Modifier.width(8.dp))
@@ -642,9 +666,9 @@ private fun DetailsWidget(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = null,
                             tint = if (isDark) Color(0xFFB8B8B8) else Color(0xFF9CA3AF),
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(16.dp),
                         )
-                    }
+                    },
                 )
             }
         }
@@ -658,7 +682,6 @@ private fun DetailsWidget(
     }
 }
 
-
 @Composable
 private fun CheckWithRingsWidget(
     diameter: Dp,
@@ -668,7 +691,7 @@ private fun CheckWithRingsWidget(
 ) {
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(diameter)
+        modifier = Modifier.size(diameter),
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val canvasMin = min(size.width, size.height)
@@ -685,19 +708,21 @@ private fun CheckWithRingsWidget(
                 drawCircle(
                     color = color,
                     radius = r,
-                    style = Stroke(
-                        width = stroke,
-                        cap = StrokeCap.Round
-                    )
+                    style =
+                        Stroke(
+                            width = stroke,
+                            cap = StrokeCap.Round,
+                        ),
                 )
             }
         }
         Box(
-            modifier = Modifier
-                .size(diameter * 0.7f)
-                .clip(CircleShape)
-                .background(circleColor),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .size(diameter * 0.7f)
+                    .clip(CircleShape)
+                    .background(circleColor),
+            contentAlignment = Alignment.Center,
         ) {
             Canvas(modifier = Modifier.size(diameter * 0.36f)) {
                 val stroke = 3.dp.toPx()
@@ -708,14 +733,14 @@ private fun CheckWithRingsWidget(
                     start = Offset(w * 0.1f, h * 0.55f),
                     end = Offset(w * 0.4f, h * 0.85f),
                     strokeWidth = stroke,
-                    cap = StrokeCap.Round
+                    cap = StrokeCap.Round,
                 )
                 drawLine(
                     color = checkColor,
                     start = Offset(w * 0.4f, h * 0.85f),
                     end = Offset(w * 0.9f, h * 0.15f),
                     strokeWidth = stroke,
-                    cap = StrokeCap.Round
+                    cap = StrokeCap.Round,
                 )
             }
         }

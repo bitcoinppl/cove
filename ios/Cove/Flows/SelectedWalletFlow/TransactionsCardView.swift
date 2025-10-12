@@ -151,7 +151,7 @@ struct ConfirmedTransactionView: View {
     private func goToTransactionDetails() {
         let txId = txn.id()
         if let details = manager.transactionDetails[txId] {
-            return navigate(Route.transactionDetails(id: metadata.id, details: details))
+            return navigate(Route.txDetails(id: metadata.id, details: details))
         }
 
         MiddlePopup(state: .loading).showAndStack()
@@ -160,7 +160,7 @@ struct ConfirmedTransactionView: View {
                 let details = try await manager.transactionDetails(for: txId)
                 await MainActor.run {
                     PopupManager.dismiss()
-                    navigate(Route.transactionDetails(id: metadata.id, details: details))
+                    navigate(Route.txDetails(id: metadata.id, details: details))
                 }
             } catch {
                 Log.error(
@@ -265,7 +265,7 @@ struct UnconfirmedTransactionView: View {
                     let details = try await manager.rust.transactionDetails(txId: txn.id())
                     await MainActor.run {
                         PopupManager.dismiss()
-                        navigate(Route.transactionDetails(id: metadata.id, details: details))
+                        navigate(Route.txDetails(id: metadata.id, details: details))
                     }
                 } catch {
                     Log.error(

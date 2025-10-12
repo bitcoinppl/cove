@@ -9,17 +9,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import com.example.cove.Manager
-import org.bitcoinppl.cove.AutoComplete
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove_core.AutoComplete
+import org.bitcoinppl.cove_core.Bip39AutoComplete
 
 @Composable
 fun CoveApp(Manager: Manager = Manager()) {
     Box(
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
     ) {
         Button(
-            onClick = { }
+            onClick = { },
         ) {
             Text(text = Bip39AutoComplete().autocomplete(word = "da")[0], color = Color.White, fontSize = 32.sp)
         }

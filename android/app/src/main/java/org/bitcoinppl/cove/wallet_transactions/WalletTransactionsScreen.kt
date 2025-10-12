@@ -16,14 +16,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.NorthEast
-import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,9 +33,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,7 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.cove.R
+import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.ImageButton
 
@@ -66,7 +66,7 @@ private fun WalletTransactionsLightPreview() {
         onQrCode = {},
         onMore = {},
         isDarkList = false,
-        snackbarHostState = snack
+        snackbarHostState = snack,
     )
 }
 
@@ -82,7 +82,7 @@ private fun WalletTransactionsDarkPreview() {
         onMore = {},
         isDarkList = true,
         initialBalanceHidden = true,
-        snackbarHostState = snack
+        snackbarHostState = snack,
     )
 }
 
@@ -110,25 +110,26 @@ fun WalletTransactionsScreen(
         containerColor = CoveColor.midnightBlue,
         topBar = {
             CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                    navigationIconContentColor = Color.White
-                ),
+                colors =
+                    TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                    ),
                 title = {
                     Text(
                         "Main",
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.Filled.Menu,
-                            contentDescription = "Menu"
+                            contentDescription = "Menu",
                         )
                     }
                 },
@@ -136,47 +137,50 @@ fun WalletTransactionsScreen(
                     IconButton(onClick = onQrCode) {
                         Icon(
                             imageVector = Icons.Filled.QrCode2,
-                            contentDescription = "QR Code"
+                            contentDescription = "QR Code",
                         )
                     }
                     IconButton(onClick = onMore) {
                         Icon(
                             imageVector = Icons.Filled.MoreVert,
-                            contentDescription = "More"
+                            contentDescription = "More",
                         )
                     }
-                }
+                },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter),
             )
 
             Column(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) {
                     BalanceWidget(
                         usdAmount = usdAmount,
                         satsAmount = satsAmount,
-                        hidden = initialBalanceHidden
+                        hidden = initialBalanceHidden,
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -185,47 +189,50 @@ fun WalletTransactionsScreen(
                             leading = {
                                 Icon(
                                     imageVector = Icons.Filled.NorthEast,
-                                    contentDescription = null
+                                    contentDescription = null,
                                 )
                             },
                             onClick = onSend,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary,
-                                contentColor = CoveColor.midnightBlue
-                            ),
-                            modifier = Modifier.weight(1f)
+                            colors =
+                                androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = CoveColor.btnPrimary,
+                                    contentColor = CoveColor.midnightBlue,
+                                ),
+                            modifier = Modifier.weight(1f),
                         )
                         ImageButton(
                             text = stringResource(R.string.btn_receive),
                             leading = {
                                 Icon(
                                     imageVector = Icons.Filled.SouthWest,
-                                    contentDescription = null
+                                    contentDescription = null,
                                 )
                             },
                             onClick = onReceive,
-                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                containerColor = CoveColor.btnPrimary,
-                                contentColor = CoveColor.midnightBlue
-                            ),
-                            modifier = Modifier.weight(1f)
+                            colors =
+                                androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = CoveColor.btnPrimary,
+                                    contentColor = CoveColor.midnightBlue,
+                                ),
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
 
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)  // Fill remaining space
-                        .background(listBg)
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f) // Fill remaining space
+                            .background(listBg)
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.title_transactions),
                         color = secondaryText,
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
 
                     TransactionWidget(
@@ -235,7 +242,7 @@ fun WalletTransactionsScreen(
                         balanceAfter = "2,196,795",
                         listCard = listCard,
                         primaryText = primaryText,
-                        secondaryText = secondaryText
+                        secondaryText = secondaryText,
                     )
                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
 
@@ -246,7 +253,7 @@ fun WalletTransactionsScreen(
                         balanceAfter = "2,194,934",
                         listCard = listCard,
                         primaryText = primaryText,
-                        secondaryText = secondaryText
+                        secondaryText = secondaryText,
                     )
                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
 
@@ -257,7 +264,7 @@ fun WalletTransactionsScreen(
                         balanceAfter = "2,194,932",
                         listCard = listCard,
                         primaryText = primaryText,
-                        secondaryText = secondaryText
+                        secondaryText = secondaryText,
                     )
                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
 
@@ -268,7 +275,7 @@ fun WalletTransactionsScreen(
                         balanceAfter = "2,188,783",
                         listCard = listCard,
                         primaryText = primaryText,
-                        secondaryText = secondaryText
+                        secondaryText = secondaryText,
                     )
                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
 
@@ -279,7 +286,7 @@ fun WalletTransactionsScreen(
                         balanceAfter = "2,180,942",
                         listCard = listCard,
                         primaryText = primaryText,
-                        secondaryText = secondaryText
+                        secondaryText = secondaryText,
                     )
                     HorizontalDivider(color = dividerColor, thickness = 0.5.dp)
 
@@ -290,7 +297,7 @@ fun WalletTransactionsScreen(
                         balanceAfter = "2,180,939",
                         listCard = listCard,
                         primaryText = primaryText,
-                        secondaryText = secondaryText
+                        secondaryText = secondaryText,
                     )
 
                     Spacer(Modifier.height(12.dp))
@@ -310,31 +317,34 @@ private fun TransactionWidget(
     primaryText: Color,
     secondaryText: Color,
 ) {
-    val title = stringResource(
-        when (type) {
-            TransactionType.SENT -> R.string.label_transaction_sent
-            TransactionType.RECEIVED -> R.string.label_transaction_received
-        }
-    )
+    val title =
+        stringResource(
+            when (type) {
+                TransactionType.SENT -> R.string.label_transaction_sent
+                TransactionType.RECEIVED -> R.string.label_transaction_received
+            },
+        )
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(listCard),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(listCard),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = if (type == TransactionType.SENT) Icons.Filled.NorthEast else Icons.Filled.SouthWest,
                 contentDescription = title,
                 tint = Color.White,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(24.dp),
             )
         }
 
@@ -342,19 +352,19 @@ private fun TransactionWidget(
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = title,
                 color = primaryText,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
             )
             Text(
                 text = date,
                 color = secondaryText,
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Normal
+                fontWeight = FontWeight.Normal,
             )
         }
 
@@ -363,27 +373,31 @@ private fun TransactionWidget(
                 text = amount,
                 color = if (type == TransactionType.RECEIVED) CoveColor.TransactionReceived else primaryText,
                 fontSize = 20.sp,
-                fontWeight = FontWeight.Normal
+                fontWeight = FontWeight.Normal,
             )
             Text(
                 text = balanceAfter,
                 color = secondaryText,
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Normal
+                fontWeight = FontWeight.Normal,
             )
         }
     }
 }
 
 @Composable
-private fun BalanceWidget(hidden: Boolean, usdAmount: String, satsAmount: String) {
+private fun BalanceWidget(
+    hidden: Boolean,
+    usdAmount: String,
+    satsAmount: String,
+) {
     var isHidden by remember { mutableStateOf(hidden) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = if (isHidden) "$———" else usdAmount,
             color = Color.White.copy(alpha = 0.7f),
-            fontSize = 16.sp
+            fontSize = 16.sp,
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -392,13 +406,13 @@ private fun BalanceWidget(hidden: Boolean, usdAmount: String, satsAmount: String
                 color = Color.White,
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
             )
             IconButton(onClick = { isHidden = !isHidden }) {
                 Icon(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                     contentDescription = if (isHidden) "Show" else "Hide",
-                    tint = Color.White.copy(alpha = 0.7f)
+                    tint = Color.White.copy(alpha = 0.7f),
                 )
             }
         }

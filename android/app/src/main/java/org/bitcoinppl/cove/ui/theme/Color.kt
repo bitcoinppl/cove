@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.ui.theme
 
-import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color as ComposeColor
 
 /**
@@ -17,10 +16,10 @@ object CoveColor {
     // neutral colors
     val almostGray = ComposeColor(0xFF787880)
     val almostWhite = ComposeColor(0xFFEBEDF0)
-    val coveBg = ComposeColor(0xFFFFFFFF)  // light mode
-    val coveBgDark = ComposeColor(0xFF191919)  // dark mode
-    val midnightBtn = ComposeColor(0xFF1C2536)  // light mode
-    val midnightBtnDark = ComposeColor(0xFF4A4A4D)  // dark mode
+    val coveBg = ComposeColor(0xFFFFFFFF) // light mode
+    val coveBgDark = ComposeColor(0xFF191919) // dark mode
+    val midnightBtn = ComposeColor(0xFF1C2536) // light mode
+    val midnightBtnDark = ComposeColor(0xFF4A4A4D) // dark mode
 
     // wallet colors (pastel palette matching iOS)
     val beige = ComposeColor(0xFFFFB36E)

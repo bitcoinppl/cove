@@ -1,5 +1,5 @@
 use super::TransactionDirection;
-use crate::{amount::Amount, unit::Unit};
+use crate::{amount::Amount, unit::BitcoinUnit};
 use bitcoin::Amount as BdkAmount;
 use rand::Rng as _;
 
@@ -55,15 +55,15 @@ impl SentAndReceived {
     }
 
     #[uniffi::method]
-    pub fn amount_fmt(&self, unit: Unit) -> String {
+    pub fn amount_fmt(&self, unit: BitcoinUnit) -> String {
         let prefix = match &self.direction {
             TransactionDirection::Incoming => "",
             TransactionDirection::Outgoing => "-",
         };
 
         match unit {
-            Unit::Btc => format!("{prefix}{}", self.amount().btc_string_with_unit()),
-            Unit::Sat => format!("{prefix}{}", self.amount().sats_string_with_unit()),
+            BitcoinUnit::Btc => format!("{prefix}{}", self.amount().btc_string_with_unit()),
+            BitcoinUnit::Sat => format!("{prefix}{}", self.amount().sats_string_with_unit()),
         }
     }
 

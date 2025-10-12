@@ -41,7 +41,7 @@ pub enum SendFlowError {
     UnableToSaveUnsignedTransaction(String),
 
     #[error(transparent)]
-    WalletManagerError(#[from] WalletManagerError),
+    WalletManager(#[from] WalletManagerError),
 
     #[error("unable to get fee details: {0}")]
     UnableToGetFeeDetails(String),

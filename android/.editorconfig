@@ -1,0 +1,13 @@
+root = true
+
+[*.{kt,kts}]
+# disable rules that conflict with compose conventions
+ktlint_standard_function-naming = disabled
+ktlint_standard_filename = disabled
+ktlint_standard_package-name = disabled
+ktlint_standard_no-wildcard-imports = disabled
+ktlint_standard_comment-wrapping = disabled
+ktlint_standard_max-line-length = disabled
+ktlint_standard_function-signature = disabled
+ktlint_standard_argument-list-wrapping = disabled
+ktlint_standard_parameter-list-wrapping = disabled

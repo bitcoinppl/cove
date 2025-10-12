@@ -1,0 +1,12 @@
+[bindings.swift]
+cdylib_name = "coveutilffi"
+
+[bindings.kotlin]
+package_name = "org.bitcoinppl.cove_core.util"
+cdylib_name = "coveffi"
+
+[bindings.kotlin.external_packages]
+cove_types = "org.bitcoinppl.cove_core.types"
+cove_device = "org.bitcoinppl.cove_core.device"
+cove_nfc = "org.bitcoinppl.cove_core.nfc"
+cove_tap_card = "org.bitcoinppl.cove_core.tapcard"

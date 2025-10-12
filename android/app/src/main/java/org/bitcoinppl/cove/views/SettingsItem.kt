@@ -13,12 +13,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.cove.R
-import org.bitcoinppl.cove.ui.theme.colorGray
+import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @Preview
 @Composable
@@ -49,29 +48,34 @@ fun SettingsItem(
     onClick: (() -> Unit)? = null,
     isSwitch: Boolean = false,
     switchCheckedState: Boolean = false,
-    onCheckChanged: ((Boolean) -> Unit)? = null
+    onCheckChanged: ((Boolean) -> Unit)? = null,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (onClick != null) Modifier.clickable(onClick = onClick)
-                else Modifier
-            )
-            .padding(vertical = 4.dp, horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(vertical = 4.dp, horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         RoundRectImage(
             painter = painterResource(id = iconResId),
-            cornerRadius = 8.dp
+            cornerRadius = 8.dp,
         )
 
         Text(
             text = title,
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp)
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
         )
 
         if (isSwitch) {
@@ -79,12 +83,13 @@ fun SettingsItem(
                 isChecked = switchCheckedState,
                 onCheckChanged = onCheckChanged ?: {},
             )
-        } else
+        } else {
             Icon(
                 modifier = Modifier.size(40.dp),
                 imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
                 contentDescription = "Go",
-                tint = colorGray
+                tint = CoveColor.IconGray,
             )
+        }
     }
 }

@@ -21,7 +21,7 @@ pub enum PendingWalletManagerError {
     BdkError(String),
 
     #[error("failed to save wallet to keychain: {0}")]
-    WalletCreationError(#[from] WalletCreationError),
+    Creation(#[from] WalletCreationError),
 }
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -72,7 +72,7 @@ pub enum WalletCreationError {
     Import(String),
 
     #[error(transparent)]
-    MultiFormatError(#[from] MultiFormatError),
+    MultiFormat(#[from] MultiFormatError),
 }
 
 #[uniffi::export]
@@ -186,11 +186,11 @@ impl From<crate::wallet::WalletError> for WalletCreationError {
         use crate::wallet::WalletError;
 
         match error {
-            WalletError::KeychainError(error) => Self::Keychain(error),
-            WalletError::DatabaseError(error) => Self::Database(error),
+            WalletError::Keychain(error) => Self::Keychain(error),
+            WalletError::Database(error) => Self::Database(error),
             WalletError::BdkError(error) => Self::Bdk(error),
             WalletError::PersistError(error) => Self::Persist(error),
-            WalletError::MultiFormatError(error) => Self::MultiFormatError(error),
+            WalletError::MultiFormat(error) => Self::MultiFormat(error),
             WalletError::ParseXpubError(error) => Self::Import(error.to_string()),
             WalletError::WalletAlreadyExists(id) => {
                 Self::Import(format!("wallet already exists: {id}"))

@@ -19,8 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove.ui.theme.BtnPrimary
-import org.bitcoinppl.cove.ui.theme.MidnightBlue
+import org.bitcoinppl.cove.ui.theme.CoveColor
 
 @Composable
 fun ImageButton(
@@ -46,7 +45,7 @@ fun ImageButton(
                 text,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -61,8 +60,10 @@ private fun PreviewImageButton() {
             Icon(Icons.Default.Call, contentDescription = null)
         },
         onClick = {},
-        colors = ButtonDefaults.buttonColors(
-            containerColor = BtnPrimary, contentColor = MidnightBlue
-        ),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = CoveColor.btnPrimary,
+                contentColor = CoveColor.midnightBlue,
+            ),
     )
 }

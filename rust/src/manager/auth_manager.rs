@@ -61,7 +61,7 @@ pub enum AuthManagerError {
     DecoySet(TrickPinError),
 
     #[error("There was a database error: {0}")]
-    DatabaseError(#[from] database::Error),
+    Database(#[from] database::Error),
 }
 
 #[uniffi::export]

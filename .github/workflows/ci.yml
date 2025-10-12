@@ -32,6 +32,18 @@ jobs:
       - name: SwiftFormat
         run: swiftformat --lint . --reporter github-actions-log --swiftversion 6 --exclude ios/CoveCore
 
+  ktlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Run ktlint
+        run: cd android && ./gradlew ktlintCheck
+
   test:
     strategy:
       matrix:

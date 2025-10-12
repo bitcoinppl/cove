@@ -96,9 +96,9 @@ pub enum TapSignerResponse {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, uniffi::Enum)]
 pub enum SetupCmdResponse {
-    ContinueFromInit(ContinueFromInit),
-    ContinueFromBackup(ContinueFromBackup),
-    ContinueFromDerive(ContinueFromDerive),
+    Init(ContinueFromInit),
+    Backup(ContinueFromBackup),
+    Derive(ContinueFromDerive),
     Complete(TapSignerSetupComplete),
 }
 
@@ -230,14 +230,14 @@ impl TapSignerReader {
         response: SetupCmdResponse,
     ) -> Result<SetupCmdResponse, Error> {
         match response {
-            SetupCmdResponse::ContinueFromInit(c) => self.init_backup_change(c.continue_cmd).await,
+            SetupCmdResponse::Init(c) => self.init_backup_change(c.continue_cmd).await,
 
-            SetupCmdResponse::ContinueFromBackup(c) => {
+            SetupCmdResponse::Backup(c) => {
                 let response = self.derive_and_change(c.continue_cmd, c.backup).await;
                 Ok(response)
             }
 
-            SetupCmdResponse::ContinueFromDerive(c) => {
+            SetupCmdResponse::Derive(c) => {
                 let response = self.setup_change_pin(c.continue_cmd, c.backup, c.derive_info).await;
                 Ok(response)
             }
@@ -305,10 +305,8 @@ impl TapSignerReader {
         let backup = match backup_response {
             Ok(backup) => backup,
             Err(error) => {
-                let response = SetupCmdResponse::ContinueFromInit(ContinueFromInit {
-                    continue_cmd: cmd,
-                    error,
-                });
+                let response =
+                    SetupCmdResponse::Init(ContinueFromInit { continue_cmd: cmd, error });
 
                 *self.last_response.lock() = Some(response.clone().into());
                 return response;
@@ -322,7 +320,7 @@ impl TapSignerReader {
         let derive_info = match self.derive(&cmd.factory_pin).await {
             Ok(derive) => derive,
             Err(error) => {
-                let response = SetupCmdResponse::ContinueFromBackup(ContinueFromBackup {
+                let response = SetupCmdResponse::Backup(ContinueFromBackup {
                     backup,
                     continue_cmd: cmd,
                     error,
@@ -346,7 +344,7 @@ impl TapSignerReader {
         let change_response = self.change(&cmd.new_pin, &cmd.factory_pin).await;
 
         if let Err(error) = change_response {
-            let response = SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
+            let response = SetupCmdResponse::Derive(ContinueFromDerive {
                 backup,
                 derive_info,
                 continue_cmd: cmd,
@@ -599,7 +597,7 @@ mod ffi {
             chain_code: generate_random_chain_code(),
         };
 
-        SetupCmdResponse::ContinueFromDerive(ContinueFromDerive {
+        SetupCmdResponse::Derive(ContinueFromDerive {
             backup,
             derive_info: derive_info(),
             continue_cmd: Arc::new(setup_cmd),

@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.ui.theme.CoveColor
 
-
 @Preview
 @Composable
 fun ThemedSwitchPreview() {
@@ -44,34 +43,42 @@ fun ThemedSwitchPreview() {
 }
 
 @Composable
-fun ThemedSwitch(isChecked: Boolean, onCheckChanged: ((Boolean) -> Unit)) {
+fun ThemedSwitch(
+    isChecked: Boolean,
+    onCheckChanged: ((Boolean) -> Unit),
+) {
     Switch(
         checked = isChecked,
         onCheckedChange = onCheckChanged,
-        colors = SwitchDefaults.colors(
-            checkedThumbColor = Color.White,
-            checkedTrackColor = CoveColor.LinkBlue,
-            uncheckedThumbColor = Color.White,
-            uncheckedTrackColor = Color.LightGray,
-        )
+        colors =
+            SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = CoveColor.LinkBlue,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = Color.LightGray,
+            ),
     )
 }
 
-
 @Composable
-fun CustomSpacer(height: Dp? = 1.dp, paddingValues: PaddingValues) {
+fun CustomSpacer(
+    height: Dp? = 1.dp,
+    paddingValues: PaddingValues,
+) {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(height!!)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(height!!),
     ) {
         Spacer(
-            modifier = Modifier
-                .height(1.dp)
-                .fillMaxWidth()
-                .padding(paddingValues)
-                .background(Color.LightGray)
-                .align(Alignment.CenterEnd)
+            modifier =
+                Modifier
+                    .height(1.dp)
+                    .fillMaxWidth()
+                    .padding(paddingValues)
+                    .background(Color.LightGray)
+                    .align(Alignment.CenterEnd),
         )
     }
 }
@@ -83,27 +90,33 @@ fun CustomSpacerPreview() {
 }
 
 @Composable
-fun InfoRow(label: String, text: String) {
+fun InfoRow(
+    label: String,
+    text: String,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceEvenly
+        horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Start,
         )
         Text(
             text = text,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
             style = MaterialTheme.typography.bodyLarge,
             color = CoveColor.TextGray,
             textAlign = TextAlign.End,
@@ -118,28 +131,35 @@ fun InfoRowPreview() {
 }
 
 @Composable
-fun ClickableInfoRow(label: String, text: String, icon: ImageVector, onClick: () -> Unit) {
+fun ClickableInfoRow(
+    label: String,
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp)
-            .clickable(true, onClick = onClick),
-
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp)
+                .clickable(true, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Start,
         )
         Text(
             text = text,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
             style = MaterialTheme.typography.bodyLarge,
             color = CoveColor.TextGray,
             textAlign = TextAlign.End,
@@ -157,11 +177,14 @@ fun CardItem(
     title: String,
     titleColor: Color? = CoveColor.TextGray,
     allCaps: Boolean? = false,
-    content: @Composable() () -> Unit
+    content:
+        @Composable()
+        () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier =
+            Modifier
+                .fillMaxWidth(),
     ) {
         Spacer(modifier = Modifier.height(12.dp))
         Text(
@@ -169,14 +192,16 @@ fun CardItem(
             style = MaterialTheme.typography.bodyLarge,
             color = titleColor!!,
             fontSize = 20.sp,
-            modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+            modifier =
+                Modifier
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-            ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                ),
             shape = RoundedCornerShape(size = 8.dp),
         ) {
             content()
@@ -200,20 +225,21 @@ fun SwitchRowPreview() {
 fun SwitchRow(
     label: String,
     switchCheckedState: Boolean = false,
-    onCheckChanged: ((Boolean) -> Unit)? = null
+    onCheckChanged: ((Boolean) -> Unit)? = null,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        modifier =
+            Modifier
+                .fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp)
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
         )
 
         ThemedSwitch(

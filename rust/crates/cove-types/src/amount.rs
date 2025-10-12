@@ -2,7 +2,7 @@ use bdk_wallet::bitcoin::Amount as BdkAmount;
 use numfmt::{Formatter, Precision};
 use serde::{Deserialize, Serialize};
 
-use crate::unit::Unit;
+use crate::unit::BitcoinUnit;
 
 #[derive(
     Debug,
@@ -59,17 +59,17 @@ impl Amount {
         self.0.to_btc()
     }
 
-    pub fn fmt_string(&self, unit: Unit) -> String {
+    pub fn fmt_string(&self, unit: BitcoinUnit) -> String {
         match unit {
-            Unit::Btc => self.btc_string(),
-            Unit::Sat => self.sats_string(),
+            BitcoinUnit::Btc => self.btc_string(),
+            BitcoinUnit::Sat => self.sats_string(),
         }
     }
 
-    pub fn fmt_string_with_unit(&self, unit: Unit) -> String {
+    pub fn fmt_string_with_unit(&self, unit: BitcoinUnit) -> String {
         match unit {
-            Unit::Btc => self.btc_string_with_unit(),
-            Unit::Sat => self.sats_string_with_unit(),
+            BitcoinUnit::Btc => self.btc_string_with_unit(),
+            BitcoinUnit::Sat => self.sats_string_with_unit(),
         }
     }
 
